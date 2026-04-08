@@ -14,9 +14,9 @@
 ## Folder Structure
 
 ```
-Planning/Logo/
+brand/logo/
 ├── source/          — Master vector files and original archive
-├── web/             — SVG and PNG variants for website use
+├── web/             — SVG and PNG variants for website use (canonical; also copied to apps/web/public for the Next.js app)
 ├── social/          — Profile images and Open Graph assets
 ├── print/           — CMYK-ready files for printed materials
 ├── email-signature/ — Optimized PNGs for email clients

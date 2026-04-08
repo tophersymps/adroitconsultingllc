@@ -13,7 +13,7 @@ This planning pack defines the content, delivery model, commercial framing, and 
 | 3 | `03-Estimated-Project-Timeline.md` | Phase plan and milestone schedule |
 | 4 | `04-SOW-Summary.md` | Statement of Work scope, assumptions, and acceptance criteria |
 | 5 | `05-Tech-Stack-Recommendation.md` | React vs WordPress vs Salesforce Experience Cloud evaluation |
-| 6 | `Logo/00-Logo-Deliverables-Pack.md` | Logo asset pack specification and usage guidelines |
+| 6 | [`../../brand/logo/00-Logo-Deliverables-Pack.md`](../../brand/logo/00-Logo-Deliverables-Pack.md) | Logo asset pack specification and usage guidelines |
 
 ---
 
