@@ -7,61 +7,75 @@ import ScrollReveal from "@/components/effects/ScrollReveal";
 import StaggerChildren from "@/components/effects/StaggerChildren";
 
 export const metadata: Metadata = {
-  title: "Salesforce Consulting",
+  title: "Platform & CRM Strategy",
   description:
-    "Enterprise Salesforce consulting: strategy, implementation, integration, and adoption for complex environments.",
+    "Architect the CRM and platform foundation your business runs on — from Salesforce implementation and optimization to AI readiness and Agentforce planning.",
+  openGraph: {
+    title: "Platform & CRM Strategy | Adroit Consulting",
+    description:
+      "Salesforce architecture, integration, adoption, and AI-readiness consulting for complex enterprise environments.",
+  },
 };
 
 const MODULES = [
   {
-    title: "Salesforce Strategy & Roadmapping",
+    title: "CRM Architecture & Roadmapping",
     items: [
-      "Org assessment and maturity evaluation",
-      "Capability gap analysis across clouds",
-      "Multi-release implementation roadmap",
+      "Org assessment and platform maturity evaluation",
+      "Capability gap analysis across Sales, Service, and Experience Clouds",
+      "Multi-release implementation roadmap tied to business milestones",
     ],
   },
   {
     title: "Implementation & Optimization",
     items: [
-      "Sales Cloud, Service Cloud, Experience Cloud architecture",
+      "Sales Cloud, Service Cloud, and Experience Cloud architecture",
       "Object model design and automation patterns (Flow, Apex, triggers)",
-      "Legacy process redesign inside Salesforce",
+      "Legacy process redesign and technical debt reduction",
     ],
   },
   {
-    title: "Integration & Data",
+    title: "Integration & Data Strategy",
     items: [
-      "API-led integration strategy (MuleSoft, middleware, direct API)",
-      "Data migration, cleansing, and governance",
+      "API-led integration design (MuleSoft, middleware, direct API)",
+      "Data migration, cleansing, and governance frameworks",
       "Reporting and analytics enablement (CRM Analytics, dashboards)",
     ],
   },
   {
     title: "Adoption & Governance",
     items: [
-      "Role-based enablement programs",
+      "Role-based enablement programs and training",
       "Admin center of excellence setup",
       "Release governance, sandbox strategy, and change control",
+    ],
+  },
+  {
+    title: "AI Readiness & Agentforce",
+    items: [
+      "AI maturity assessment and data readiness evaluation",
+      "Agentforce planning, agent design workshops, and early implementation",
+      "Einstein feature enablement and predictive capability rollout",
     ],
   },
 ];
 
 const OUTCOMES = [
+  "A CRM platform that evolves from system of record to system of action",
   "Faster cycle times across sales and service motions",
-  "Improved data quality and reporting confidence",
-  "Better user adoption through process-fit design",
-  "Lower long-term admin and support burden",
+  "Improved data quality, reporting confidence, and decision speed",
+  "Higher user adoption through process-fit design",
+  "AI-ready data and architecture for Agentforce and beyond",
 ];
 
-export default function SalesforceConsulting() {
+export default function PlatformStrategy() {
   return (
     <>
       <HeroSection
-        title="Salesforce Consulting for Complex Enterprise Environments"
-        subtitle="From architecture to adoption, we build Salesforce solutions that support growth, compliance, and operational excellence."
+        title="Architect the Systems Your Business Runs On"
+        subtitle="We design and implement CRM platforms that unify data, automate processes, and position your organization for AI-driven growth."
         primaryCta={{
-          label: "Talk to a Salesforce Architect",
+          label: "Schedule a Platform Assessment",
           href: "/contact",
         }}
         compact
@@ -71,13 +85,16 @@ export default function SalesforceConsulting() {
         <ScrollReveal>
           <div className="mx-auto max-w-3xl">
             <h2 className="text-3xl font-bold tracking-tight text-charcoal sm:text-4xl">
-              Platform Capabilities Connected to Real Business Processes
+              Platform Strategy That Connects Capability to Outcomes
             </h2>
             <p className="mt-6 text-lg leading-relaxed text-slate">
-              Adroit Consulting delivers Salesforce programs that connect platform
-              capabilities to real business processes&nbsp;&mdash; not just feature
-              deployments. We focus on clarity in data models, automation logic, and
-              user experience so teams can work faster with confidence.
+              Adroit delivers CRM programs that connect platform capabilities to
+              real business processes&nbsp;&mdash; not just feature deployments.
+              We focus on clarity in data models, automation logic, and user
+              experience so teams work faster with confidence. And as your
+              platform matures, we help you evaluate and adopt AI capabilities
+              like Agentforce so your CRM evolves from a system of record to a
+              system of action.
             </p>
           </div>
         </ScrollReveal>
@@ -107,12 +124,12 @@ export default function SalesforceConsulting() {
         <StaggerChildren className="mt-8 grid gap-4 md:grid-cols-2" stagger={0.1}>
           {OUTCOMES.map((item) => (
             <ScrollReveal key={item} direction="left">
-              <li className="flex items-start gap-3 text-lg text-slate list-none">
+              <div className="flex items-start gap-3 text-lg text-slate">
                 <svg className="mt-1 h-6 w-6 flex-shrink-0 text-carmine" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <span>{item}</span>
-              </li>
+              </div>
             </ScrollReveal>
           ))}
         </StaggerChildren>
@@ -120,8 +137,8 @@ export default function SalesforceConsulting() {
 
       <ScrollReveal direction="none">
         <CTABlock
-          headline="Build a Salesforce platform your teams actually use."
-          ctaLabel="Request a Salesforce Assessment"
+          headline="Build a platform your teams actually use — and that gets smarter over time."
+          ctaLabel="Request a Platform Assessment"
           ctaHref="/contact"
         />
       </ScrollReveal>

@@ -7,32 +7,37 @@ import ScrollReveal from "@/components/effects/ScrollReveal";
 import StaggerChildren from "@/components/effects/StaggerChildren";
 
 export const metadata: Metadata = {
-  title: "Web Development",
+  title: "Digital Experience",
   description:
-    "Enterprise web development: strategy, design, front-end build, CMS delivery, and CRM integration.",
+    "Build digital experiences that earn trust, drive conversion, and connect directly to your operational systems — with AI-enhanced personalization and performance.",
+  openGraph: {
+    title: "Digital Experience | Adroit Consulting",
+    description:
+      "Enterprise web development, CRM-integrated digital experiences, and AI-enhanced UX for organizations that need more than a website.",
+  },
 };
 
 const MODULES = [
   {
     title: "Strategy & Information Architecture",
     items: [
-      "Audience and messaging alignment",
-      "Conversion-oriented page structures",
-      "Content hierarchy and navigation design",
+      "Audience and messaging alignment for executive buyers",
+      "Conversion-oriented page structures and user flows",
+      "Content hierarchy, navigation design, and SEO foundations",
     ],
   },
   {
     title: "Design & Front-End Development",
     items: [
-      "Premium visual language with accessible UX",
-      "Responsive component systems",
-      "Performance optimization for Core Web Vitals",
+      "Premium visual language with accessible, responsive UX",
+      "Component systems built for maintainability and scale",
+      "Performance optimization for Core Web Vitals and mobile",
     ],
   },
   {
     title: "CMS & Platform Delivery",
     items: [
-      "React/Next.js, WordPress, or Salesforce Experience Cloud implementation",
+      "React/Next.js, WordPress, or Salesforce Experience Cloud",
       "Authoring workflows and content governance",
       "SEO, analytics, and consent instrumentation",
     ],
@@ -40,28 +45,37 @@ const MODULES = [
   {
     title: "Integration & Operations",
     items: [
-      "CRM lead capture integration (Salesforce Web-to-Lead, API, or middleware)",
-      "Forms, automation, and routing pipelines",
-      "Hosting, release management, and support model",
+      "CRM lead capture (Salesforce Web-to-Lead, API, or middleware)",
+      "Forms, automation pipelines, and routing logic",
+      "Hosting, release management, and ongoing support model",
+    ],
+  },
+  {
+    title: "AI-Enhanced Experiences",
+    items: [
+      "Intelligent search and content recommendations",
+      "Personalized user journeys based on behavior and context",
+      "Chatbot integration and AI-driven conversion optimization",
     ],
   },
 ];
 
 const OUTCOMES = [
-  "Stronger executive-level brand perception",
-  "Higher quality inbound conversion flows",
+  "Stronger executive-level brand perception and credibility",
+  "Higher quality inbound leads through optimized conversion flows",
   "Lower content publishing friction for internal teams",
-  "Cleaner handoff from marketing to sales operations",
+  "Seamless handoff from marketing to sales operations via CRM integration",
+  "Digital experiences that adapt, personalize, and perform",
 ];
 
-export default function WebDevelopment() {
+export default function DigitalExperience() {
   return (
     <>
       <HeroSection
-        title="Enterprise Web Development Built for Performance and Credibility"
-        subtitle="We create secure, modern websites that communicate authority, generate qualified demand, and integrate with your business systems."
+        title="Build Digital Experiences That Earn Trust and Drive Conversion"
+        subtitle="We create secure, performant digital experiences that communicate authority, generate qualified demand, and connect directly to your business systems."
         primaryCta={{
-          label: "Discuss Your Web Project",
+          label: "Discuss Your Digital Strategy",
           href: "/contact",
         }}
         compact
@@ -71,13 +85,15 @@ export default function WebDevelopment() {
         <ScrollReveal>
           <div className="mx-auto max-w-3xl">
             <h2 className="text-3xl font-bold tracking-tight text-charcoal sm:text-4xl">
-              Your Website as a Strategic Business Asset
+              Your Digital Presence as a Strategic Business Asset
             </h2>
             <p className="mt-6 text-lg leading-relaxed text-slate">
-              Your website should function as both a strategic brand asset and an
-              operational system. Adroit designs and builds sites that are fast,
-              maintainable, and aligned with enterprise procurement and governance
-              standards.
+              Your digital experience should function as both a strategic brand
+              asset and an operational system. Adroit designs and builds
+              experiences that are fast, maintainable, and aligned with
+              enterprise procurement and governance standards. We build sites
+              that do more than inform&nbsp;&mdash; they adapt, personalize, and
+              connect directly to your operational systems.
             </p>
           </div>
         </ScrollReveal>
@@ -86,7 +102,7 @@ export default function WebDevelopment() {
       <SectionContainer bg="gray">
         <ScrollReveal>
           <h2 className="text-3xl font-bold tracking-tight text-charcoal sm:text-4xl">
-            Service Modules
+            Capabilities
           </h2>
         </ScrollReveal>
         <StaggerChildren className="mt-10 grid gap-8 md:grid-cols-2" stagger={0.12}>
@@ -107,12 +123,12 @@ export default function WebDevelopment() {
         <StaggerChildren className="mt-8 grid gap-4 md:grid-cols-2" stagger={0.1}>
           {OUTCOMES.map((item) => (
             <ScrollReveal key={item} direction="left">
-              <li className="flex items-start gap-3 text-lg text-slate list-none">
+              <div className="flex items-start gap-3 text-lg text-slate">
                 <svg className="mt-1 h-6 w-6 flex-shrink-0 text-carmine" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <span>{item}</span>
-              </li>
+              </div>
             </ScrollReveal>
           ))}
         </StaggerChildren>
@@ -120,8 +136,8 @@ export default function WebDevelopment() {
 
       <ScrollReveal direction="none">
         <CTABlock
-          headline="Build a web presence that reflects enterprise-grade delivery."
-          ctaLabel="Request a Web Strategy Session"
+          headline="Build a digital presence that reflects enterprise-grade delivery."
+          ctaLabel="Request a Digital Strategy Session"
           ctaHref="/contact"
         />
       </ScrollReveal>

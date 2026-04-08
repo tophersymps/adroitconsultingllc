@@ -1,14 +1,14 @@
 export const NAV_LINKS = [
-  { label: "Salesforce Consulting", href: "/salesforce-consulting" },
-  { label: "Process Automation", href: "/business-process-automation" },
-  { label: "Web Development", href: "/web-development" },
+  { label: "Platform & CRM Strategy", href: "/platform-strategy" },
+  { label: "Operational Intelligence", href: "/operational-intelligence" },
+  { label: "Digital Experience", href: "/digital-experience" },
 ] as const;
 
 export const CONTACT_HREF = "/contact";
 
 export const COMPANY = {
   name: "Adroit Consulting",
-  email: "hello@adroitconsulting.com",
+  email: "contact@adroit.io",
   tagline:
-    "Salesforce consulting, business process automation, and enterprise web development.",
+    "Platform strategy, operational intelligence, and AI-enhanced digital experiences for the enterprise.",
 } as const;

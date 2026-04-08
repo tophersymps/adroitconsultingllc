@@ -70,8 +70,17 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="mt-12 border-t border-charcoal-light pt-8 text-center text-sm text-gray-400">
-          &copy; {new Date().getFullYear()} {COMPANY.name}. All rights reserved.
+        <div className="mt-12 flex flex-col items-center gap-3 border-t border-charcoal-light pt-8 text-sm text-gray-400 sm:flex-row sm:justify-between">
+          <p>
+            &copy; {new Date().getFullYear()} {COMPANY.name}. All rights
+            reserved.
+          </p>
+          <Link
+            href="/privacy"
+            className="transition-colors hover:text-white"
+          >
+            Privacy Policy
+          </Link>
         </div>
       </div>
     </footer>
