@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 // ---------------------------------------------------------------------------
-// Simple in-memory rate limiter (resets on redeploy / cold start)
+// Simple in-memory rate limiter (resets on redeploy / cold start) |
 // ---------------------------------------------------------------------------
 const submissions = new Map<string, number[]>();
 const RATE_LIMIT = 3;
