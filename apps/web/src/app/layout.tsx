@@ -21,7 +21,7 @@ export const metadata: Metadata = {
     template: "%s | Adroit Consulting",
   },
   description:
-    "Salesforce consulting, business process automation, and enterprise web development.",
+    "Salesforce consulting, business process automation, and professional web development for growing businesses.",
   icons: {
     icon: [
       { url: "/adroit-favicon-16.png", sizes: "16x16", type: "image/png" },

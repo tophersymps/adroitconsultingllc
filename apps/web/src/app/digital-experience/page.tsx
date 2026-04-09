@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Digital Experience | Adroit Consulting",
     description:
-      "Enterprise web development, CRM-integrated digital experiences, and AI-enhanced UX for organizations that need more than a website.",
+      "Professional web development, Salesforce-integrated digital experiences, and AI-enhanced UX for businesses that need more than a brochure site.",
   },
 };
 
@@ -21,7 +21,7 @@ const MODULES = [
   {
     title: "Strategy & Information Architecture",
     items: [
-      "Audience and messaging alignment for executive buyers",
+      "Audience and messaging alignment for your key buyers",
       "Conversion-oriented page structures and user flows",
       "Content hierarchy, navigation design, and SEO foundations",
     ],
@@ -45,7 +45,7 @@ const MODULES = [
   {
     title: "Integration & Operations",
     items: [
-      "CRM lead capture (Salesforce Web-to-Lead, API, or middleware)",
+      "Lead capture into Salesforce (Web-to-Lead, API, or middleware)",
       "Forms, automation pipelines, and routing logic",
       "Hosting, release management, and ongoing support model",
     ],
@@ -61,10 +61,10 @@ const MODULES = [
 ];
 
 const OUTCOMES = [
-  "Stronger executive-level brand perception and credibility",
+  "Stronger brand perception and credibility with your buyers",
   "Higher quality inbound leads through optimized conversion flows",
   "Lower content publishing friction for internal teams",
-  "Seamless handoff from marketing to sales operations via CRM integration",
+  "Seamless handoff from marketing to sales operations via Salesforce integration",
   "Digital experiences that adapt, personalize, and perform",
 ];
 
@@ -90,10 +90,10 @@ export default function DigitalExperience() {
             <p className="mt-6 text-lg leading-relaxed text-slate">
               Your digital experience should function as both a strategic brand
               asset and an operational system. Adroit designs and builds
-              experiences that are fast, maintainable, and aligned with
-              enterprise procurement and governance standards. We build sites
-              that do more than inform&nbsp;&mdash; they adapt, personalize, and
-              connect directly to your operational systems.
+              experiences that are fast, maintainable, and aligned with security
+              and governance that fit your business. We build sites that do more
+              than inform&nbsp;&mdash; they adapt, personalize, and connect
+              directly to your operational systems.
             </p>
           </div>
         </ScrollReveal>
@@ -136,7 +136,7 @@ export default function DigitalExperience() {
 
       <ScrollReveal direction="none">
         <CTABlock
-          headline="Build a digital presence that reflects enterprise-grade delivery."
+          headline="Build a digital presence that reflects serious, dependable delivery."
           ctaLabel="Request a Digital Strategy Session"
           ctaHref="/contact"
         />

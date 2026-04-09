@@ -19,11 +19,11 @@ declare global {
 }
 
 const SERVICE_OPTIONS = [
-  "Platform & CRM Strategy",
+  "Salesforce Platform Strategy",
   "Operational Intelligence",
   "Digital Experience",
   "AI & Agentforce",
-  "Multi-Service Initiative",
+  "Multiple Services",
 ];
 
 const TIMELINE_OPTIONS = [
@@ -146,7 +146,7 @@ export default function Contact() {
         />
       )}
       <HeroSection
-        title="Let's Plan Your Next Transformation Initiative"
+        title="Let's Talk About Your Next Initiative"
         subtitle="Share your goals and constraints. We'll respond with a focused recommendation and clear next steps."
         compact
       />
@@ -155,10 +155,10 @@ export default function Contact() {
         <div className="mx-auto max-w-2xl">
           <ScrollReveal>
             <p className="text-lg leading-relaxed text-slate">
-              Whether you are planning a CRM transformation, automation
-              initiative, AI adoption, or digital experience modernization, our
-              team can help you define scope, priorities, and execution
-              sequencing. Start the conversation below.
+              Whether you are planning a Salesforce project, automation program,
+              AI adoption, or digital experience work, Adroit can help you define
+              scope, priorities, and execution sequencing. Start the conversation
+              below.
             </p>
           </ScrollReveal>
 
@@ -312,7 +312,7 @@ export default function Contact() {
                 Prefer direct outreach?
               </h2>
               <p className="mt-2 text-base text-slate">
-                Email our consulting team at{" "}
+                Email us at{" "}
                 <a
                   href={`mailto:${COMPANY.email}`}
                   className="font-medium text-navy hover:underline"

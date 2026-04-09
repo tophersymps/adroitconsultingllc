@@ -8,11 +8,11 @@ import StaggerChildren from "@/components/effects/StaggerChildren";
 
 export const metadata: Metadata = {
   description:
-    "Adroit Consulting helps enterprises modernize operations through platform strategy, intelligent automation, and AI-enhanced digital experiences.",
+    "Adroit Consulting helps businesses modernize operations through Salesforce strategy, intelligent automation, and AI-enhanced digital experiences.",
   openGraph: {
-    title: "Adroit Consulting — Enterprise Performance, Transformed",
+    title: "Adroit Consulting — Smarter Operations for Growing Businesses",
     description:
-      "Platform strategy, operational intelligence, and digital experience consulting for organizations ready to modernize with AI.",
+      "Salesforce platform strategy, operational intelligence, and digital experience consulting for organizations ready to modernize with AI — at a pace that fits your business.",
   },
 };
 
@@ -42,9 +42,9 @@ function ExperienceIcon() {
 
 const PILLARS = [
   {
-    title: "Platform & CRM Strategy",
+    title: "Salesforce Platform Strategy",
     description:
-      "Architect the CRM and platform foundation your business runs on — from Salesforce to Agentforce.",
+      "Architect your Salesforce foundation — implementation, integration, and AI readiness from Agentforce to day-to-day operations.",
     href: "/platform-strategy",
     icon: <PlatformIcon />,
   },
@@ -78,7 +78,7 @@ const WHY_ITEMS = [
   {
     title: "AI-Ready Delivery",
     description:
-      "We build platforms and processes with AI readiness in mind — so you can adopt Agentforce, intelligent automation, and predictive capabilities on your timeline.",
+      "We build platforms and processes with AI readiness in mind — so you can adopt Agentforce, intelligent automation, and predictive capabilities on a timeline that fits your business.",
     icon: (
       <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
@@ -86,9 +86,9 @@ const WHY_ITEMS = [
     ),
   },
   {
-    title: "Cross-Functional Execution",
+    title: "Integrated Delivery",
     description:
-      "Strategy, build, integration, and optimization under one team — no handoffs between disconnected vendors.",
+      "Strategy, build, integration, and optimization in one engagement — direct ownership without juggling disconnected vendors.",
     icon: (
       <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
@@ -101,8 +101,8 @@ export default function Home() {
   return (
     <>
       <HeroSection
-        title="Transform Enterprise Performance with Precision Consulting"
-        subtitle="Adroit Consulting helps organizations modernize operations through platform strategy, intelligent automation, and AI-enhanced digital experiences."
+        title="Precision Consulting for Growing Businesses"
+        subtitle="Adroit Consulting helps organizations modernize operations through Salesforce strategy, intelligent automation, and AI-enhanced digital experiences."
         primaryCta={{
           label: "Schedule a Strategy Consultation",
           href: "/contact",
@@ -121,11 +121,12 @@ export default function Home() {
               Strategic Guidance. Technical Architecture. Delivery Discipline.
             </h2>
             <p className="mt-6 text-lg leading-relaxed text-slate">
-              We partner with enterprise teams to eliminate process friction,
-              accelerate digital initiatives, and build AI-ready systems that
-              scale. Our engagements combine strategic guidance, technical
-              architecture, and delivery discipline to move from roadmap to
-              measurable business outcomes.
+              We partner with leadership and operations teams at growing
+              companies to eliminate process friction, accelerate digital
+              initiatives, and build AI-ready systems that scale with you. Our
+              engagements combine strategic guidance, technical architecture, and
+              delivery discipline to move from roadmap to measurable outcomes at
+              your pace.
             </p>
           </div>
         </ScrollReveal>
@@ -138,8 +139,8 @@ export default function Home() {
               How We Help
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-lg text-slate">
-              Three integrated practice areas delivering measurable enterprise
-              outcomes — with AI woven into every engagement.
+              Three integrated practice areas delivering measurable outcomes at
+              your scale — with AI woven into every engagement.
             </p>
           </div>
         </ScrollReveal>

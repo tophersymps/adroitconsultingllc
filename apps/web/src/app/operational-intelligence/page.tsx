@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Operational Intelligence | Adroit Consulting",
     description:
-      "Workflow automation, AI-augmented processes, and operational analytics for enterprises ready to operate smarter.",
+      "Workflow automation, AI-augmented processes, and operational analytics for teams ready to operate smarter.",
   },
 };
 
@@ -37,7 +37,7 @@ const MODULES = [
   {
     title: "Cross-System Integration",
     items: [
-      "CRM-ERP-service desk integration architecture",
+      "Salesforce–ERP–service desk integration architecture",
       "Event-driven process triggers and middleware design",
       "Data synchronization rules and conflict safeguards",
     ],

@@ -7,19 +7,19 @@ import ScrollReveal from "@/components/effects/ScrollReveal";
 import StaggerChildren from "@/components/effects/StaggerChildren";
 
 export const metadata: Metadata = {
-  title: "Platform & CRM Strategy",
+  title: "Salesforce Platform Strategy",
   description:
-    "Architect the CRM and platform foundation your business runs on — from Salesforce implementation and optimization to AI readiness and Agentforce planning.",
+    "Salesforce implementation, architecture, and optimization — from org design and integrations to AI readiness and Agentforce planning.",
   openGraph: {
-    title: "Platform & CRM Strategy | Adroit Consulting",
+    title: "Salesforce Platform Strategy | Adroit Consulting",
     description:
-      "Salesforce architecture, integration, adoption, and AI-readiness consulting for complex enterprise environments.",
+      "Salesforce architecture, integration, adoption, and AI-readiness consulting for growing businesses with real-world complexity.",
   },
 };
 
 const MODULES = [
   {
-    title: "CRM Architecture & Roadmapping",
+    title: "Salesforce Architecture & Roadmapping",
     items: [
       "Org assessment and platform maturity evaluation",
       "Capability gap analysis across Sales, Service, and Experience Clouds",
@@ -61,7 +61,7 @@ const MODULES = [
 ];
 
 const OUTCOMES = [
-  "A CRM platform that evolves from system of record to system of action",
+  "A Salesforce org that evolves from system of record to system of action",
   "Faster cycle times across sales and service motions",
   "Improved data quality, reporting confidence, and decision speed",
   "Higher user adoption through process-fit design",
@@ -72,10 +72,10 @@ export default function PlatformStrategy() {
   return (
     <>
       <HeroSection
-        title="Architect the Systems Your Business Runs On"
-        subtitle="We design and implement CRM platforms that unify data, automate processes, and position your organization for AI-driven growth."
+        title="Architect the Salesforce Foundation Your Business Runs On"
+        subtitle="We design and implement Salesforce solutions that unify data, automate processes, and position your business for AI-driven growth."
         primaryCta={{
-          label: "Schedule a Platform Assessment",
+          label: "Schedule a Salesforce Assessment",
           href: "/contact",
         }}
         compact
@@ -85,16 +85,16 @@ export default function PlatformStrategy() {
         <ScrollReveal>
           <div className="mx-auto max-w-3xl">
             <h2 className="text-3xl font-bold tracking-tight text-charcoal sm:text-4xl">
-              Platform Strategy That Connects Capability to Outcomes
+              Salesforce Strategy That Connects Capability to Outcomes
             </h2>
             <p className="mt-6 text-lg leading-relaxed text-slate">
-              Adroit delivers CRM programs that connect platform capabilities to
-              real business processes&nbsp;&mdash; not just feature deployments.
-              We focus on clarity in data models, automation logic, and user
-              experience so teams work faster with confidence. And as your
-              platform matures, we help you evaluate and adopt AI capabilities
-              like Agentforce so your CRM evolves from a system of record to a
-              system of action.
+              Adroit delivers Salesforce engagements that connect platform
+              capabilities to real business processes&nbsp;&mdash; not just
+              feature deployments. We focus on clarity in data models,
+              automation logic, and user experience so teams work faster with
+              confidence. And as your org matures, we help you evaluate and
+              adopt AI capabilities like Agentforce so your Salesforce CRM
+              evolves from a system of record to a system of action.
             </p>
           </div>
         </ScrollReveal>
@@ -137,8 +137,8 @@ export default function PlatformStrategy() {
 
       <ScrollReveal direction="none">
         <CTABlock
-          headline="Build a platform your teams actually use — and that gets smarter over time."
-          ctaLabel="Request a Platform Assessment"
+          headline="Build a Salesforce org your teams actually use — and that gets smarter over time."
+          ctaLabel="Request a Salesforce Assessment"
           ctaHref="/contact"
         />
       </ScrollReveal>
