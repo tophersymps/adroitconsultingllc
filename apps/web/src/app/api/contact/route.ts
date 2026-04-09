@@ -79,31 +79,6 @@ function splitName(fullName: string): { first: string; last: string } {
 // ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
-export async function GET() {
-  const hasOid = !!process.env.SALESFORCE_OID;
-  const hasRecaptchaSecret = !!process.env.RECAPTCHA_SECRET_KEY;
-  const hasRecaptchaSiteKey = !!process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
-  const nodeEnv = process.env.NODE_ENV;
-
-  return NextResponse.json({
-    status: "diagnostic",
-    env: {
-      NODE_ENV: nodeEnv,
-      SALESFORCE_OID: hasOid ? "SET" : "MISSING",
-      RECAPTCHA_SECRET_KEY: hasRecaptchaSecret ? "SET" : "MISSING",
-      NEXT_PUBLIC_RECAPTCHA_SITE_KEY: hasRecaptchaSiteKey ? "SET" : "MISSING",
-    },
-    notes: [
-      !hasOid && "SALESFORCE_OID is required for lead submission",
-      !hasRecaptchaSecret && "RECAPTCHA_SECRET_KEY is missing — reCAPTCHA will be skipped",
-      hasRecaptchaSecret && !hasRecaptchaSiteKey &&
-        "Secret is set but site key is missing — client won't send tokens, server will reject every request",
-      hasRecaptchaSecret && nodeEnv === "development" &&
-        "reCAPTCHA is configured but skipped in development mode",
-    ].filter(Boolean),
-  });
-}
-
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as FormData;
