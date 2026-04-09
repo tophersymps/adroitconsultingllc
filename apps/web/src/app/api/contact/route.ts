@@ -150,13 +150,32 @@ export async function POST(request: NextRequest) {
       retURL: "https://adroit.io",
     });
 
-    await fetch(
+    const sfResponse = await fetch(
       "https://webto.salesforce.com/servlet/servlet.WebToLead?encoding=UTF-8",
       {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: params.toString(),
+        redirect: "manual",
       },
+    );
+
+    const sfStatus = sfResponse.status;
+    const sfBody = await sfResponse.text().catch(() => "(unable to read body)");
+    const isRedirect = sfStatus >= 300 && sfStatus < 400;
+
+    if (!sfResponse.ok && !isRedirect) {
+      console.error(
+        `Salesforce Web-to-Lead failed — status: ${sfStatus}, body: ${sfBody.slice(0, 500)}`,
+      );
+      return NextResponse.json(
+        { success: false, error: "Your inquiry could not be submitted. Please email us directly." },
+        { status: 502 },
+      );
+    }
+
+    console.log(
+      `Lead submitted for ${body.email} — SF status: ${sfStatus}`,
     );
 
     return NextResponse.json({ success: true });
