@@ -23,11 +23,13 @@ function isRateLimited(ip: string): boolean {
 // ---------------------------------------------------------------------------
 const RECAPTCHA_THRESHOLD = 0.5;
 
-async function verifyRecaptcha(token: string): Promise<boolean> {
+async function verifyRecaptcha(
+  token: string,
+): Promise<{ valid: boolean; detail: Record<string, unknown> }> {
   const secret = process.env.RECAPTCHA_SECRET_KEY;
   if (!secret) {
     console.warn("RECAPTCHA_SECRET_KEY not configured — skipping verification");
-    return true;
+    return { valid: true, detail: { skipped: true } };
   }
 
   const res = await fetch("https://www.google.com/recaptcha/api/siteverify", {
@@ -37,7 +39,10 @@ async function verifyRecaptcha(token: string): Promise<boolean> {
   });
 
   const data = await res.json();
-  return data.success === true && (data.score ?? 0) >= RECAPTCHA_THRESHOLD;
+  console.log("reCAPTCHA verify response:", JSON.stringify(data));
+
+  const valid = data.success === true && (data.score ?? 0) >= RECAPTCHA_THRESHOLD;
+  return { valid, detail: data };
 }
 
 // ---------------------------------------------------------------------------
@@ -74,6 +79,31 @@ function splitName(fullName: string): { first: string; last: string } {
 // ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
+export async function GET() {
+  const hasOid = !!process.env.SALESFORCE_OID;
+  const hasRecaptchaSecret = !!process.env.RECAPTCHA_SECRET_KEY;
+  const hasRecaptchaSiteKey = !!process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
+  const nodeEnv = process.env.NODE_ENV;
+
+  return NextResponse.json({
+    status: "diagnostic",
+    env: {
+      NODE_ENV: nodeEnv,
+      SALESFORCE_OID: hasOid ? "SET" : "MISSING",
+      RECAPTCHA_SECRET_KEY: hasRecaptchaSecret ? "SET" : "MISSING",
+      NEXT_PUBLIC_RECAPTCHA_SITE_KEY: hasRecaptchaSiteKey ? "SET" : "MISSING",
+    },
+    notes: [
+      !hasOid && "SALESFORCE_OID is required for lead submission",
+      !hasRecaptchaSecret && "RECAPTCHA_SECRET_KEY is missing — reCAPTCHA will be skipped",
+      hasRecaptchaSecret && !hasRecaptchaSiteKey &&
+        "Secret is set but site key is missing — client won't send tokens, server will reject every request",
+      hasRecaptchaSecret && nodeEnv === "development" &&
+        "reCAPTCHA is configured but skipped in development mode",
+    ].filter(Boolean),
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as FormData;
@@ -94,8 +124,9 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const captchaValid = await verifyRecaptcha(body.recaptchaToken);
-      if (!captchaValid) {
+      const captcha = await verifyRecaptcha(body.recaptchaToken);
+      if (!captcha.valid) {
+        console.warn("reCAPTCHA rejected:", JSON.stringify(captcha.detail));
         return NextResponse.json(
           { success: false, error: "reCAPTCHA verification failed. Please try again." },
           { status: 403 },
