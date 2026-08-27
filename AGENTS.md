@@ -2,15 +2,22 @@
 
 ## Cursor Cloud specific instructions
 
-This repo is a single Next.js 16 (App Router, React 19, TypeScript, Tailwind v4) marketing site. The only runnable app lives in `apps/web`; run all commands from that directory. Node 22 is required (already present on the VM). Dependencies are refreshed automatically by the startup update script (`npm ci` in `apps/web`).
+This is a monorepo, but the only runnable app is the Next.js site in `apps/web`. Run all
+commands from `apps/web` (not the repo root). Node 22 is required.
 
-Commands (see `apps/web/package.json`), run from `apps/web`:
-- Dev server: `npm run dev` (http://localhost:3000)
-- Build: `npm run build` — Production build: `npm run start`
+Standard commands (see `apps/web/package.json` / `apps/web/README.md`):
+- Dev server: `npm run dev` (serves on http://localhost:3000)
 - Lint: `npm run lint`
+- Build: `npm run build`
 
 Non-obvious notes:
-- Lint currently reports 3 pre-existing errors (React Hooks rules in `contact/page.tsx`, `GoogleAnalytics.tsx`, `CookieConsent.tsx`). These are code issues that exist on `main`, not environment problems — `npm run lint` itself works.
-- There is no automated test framework configured in this repo.
-- All env vars are optional for local dev and are `sync: false` secrets in `render.yaml` (`SALESFORCE_OID`, `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`, `RECAPTCHA_SECRET_KEY`, `NEXT_PUBLIC_GA_MEASUREMENT_ID`, `NEXT_PUBLIC_SITE_URL`). None are needed just to run/browse the site.
-- Contact form (`/contact` → `POST /api/contact`): reCAPTCHA verification is skipped when `NODE_ENV=development`. Validation always runs. Without `SALESFORCE_OID` set, a valid submission returns HTTP 500 `"Contact form is not configured yet."`; set `SALESFORCE_OID` (e.g. `SALESFORCE_OID=... npm run dev`) to get `{"success":true}` and exercise the full lead-capture path. Invalid/placeholder OIDs are silently discarded by Salesforce Web-to-Lead (no real lead created).
+- `npm run lint` currently reports pre-existing `react-hooks` errors in app code
+  (`contact/page.tsx`, `GoogleAnalytics.tsx`, `CookieConsent.tsx`). These are not caused by
+  environment setup and do NOT block `next build` (the Next 16 / Turbopack build does not run
+  ESLint), so `build` and `dev` succeed despite them.
+- The contact form (`/api/contact`) is the site's main interactive flow. It degrades
+  gracefully without secrets: with no `SALESFORCE_OID` set it returns a "Contact form is not
+  configured yet" message; client-side validation still works. To exercise the full success
+  path locally, put `SALESFORCE_OID` (and optionally `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`,
+  `RECAPTCHA_SECRET_KEY`, `NEXT_PUBLIC_GA_MEASUREMENT_ID`, `NEXT_PUBLIC_SITE_URL`) in
+  `apps/web/.env.local` (gitignored). reCAPTCHA verification is skipped in development.
