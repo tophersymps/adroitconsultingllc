@@ -6,7 +6,12 @@
  * if a contract is wrong, the arch task must be re-opened.
  *
  * Mirrors: docs/implementation-plan-quiz-tiers.md (t_cf2e9661)
+ *
+ * Merger addition (t_bf0336b5): re-exports the Adroit site+blog merger
+ * cross-task contract types so steel workers import from the single canonical
+ * contracts.ts path. See ./contracts-merger.ts.
  */
+export * from "./contracts-merger";
 
 /* ------------------------------------------------------------------ */
 /*  Tier quiz identity                                                 */
