@@ -48,9 +48,11 @@ function LoginForm() {
         const data = (await res.json()) as { status?: string; error?: string; message?: string };
 
         if (!res.ok) {
-          // Friendly unconfirmed-email error (US-5): Supabase returns a 401
-          // with a message containing "confirm" for an unconfirmed account.
-          if (mode === "signin" && /confirm/i.test(data.error ?? "")) {
+          // Friendly unconfirmed-email error (US-5): the server returns a
+          // distinct 403 (never the raw GoTrue message, which would be a
+          // no-op here) when the account exists but is unconfirmed. This is
+          // the ONLY way to reach the resend-confirmation recovery path.
+          if (mode === "signin" && res.status === 403) {
             setUnconfirmed(true);
             setError(
               "Your email hasn’t been confirmed yet. Check your inbox for the confirmation link, or resend it below.",

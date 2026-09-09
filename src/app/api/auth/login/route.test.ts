@@ -144,6 +144,59 @@ describe("POST /api/auth/login — H1 hardening (t_bd7ac2a0)", () => {
     expect(JSON.stringify(body)).not.toContain("User already registered");
   });
 
+  it("returns a distinct fixed 403 on sign-in of an unconfirmed email (a11y t_be6b4bd2), never the raw error.message", async () => {
+    mocks.signInWithPassword.mockResolvedValue({
+      error: { message: "Email not confirmed", code: "email_not_confirmed" },
+    });
+    const res = await POST(
+      req({ mode: "signin", email: "unconfirmed@example.com", password: "secret1" }),
+    );
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error).toContain("hasn't been confirmed");
+    // Distinct from the generic 401, and the raw GoTrue detail is never echoed.
+    expect(body.error).not.toBe(GENERIC_SIGNIN_ERROR);
+    expect(JSON.stringify(body)).not.toContain("Email not confirmed");
+    expect(JSON.stringify(body)).not.toContain("email_not_confirmed");
+  });
+
+  it("still returns the fixed generic 401 for a genuine wrong-password sign-in, even if the message text is absent", async () => {
+    mocks.signInWithPassword.mockResolvedValue({
+      error: { message: "Invalid login credentials" },
+    });
+    const res = await POST(
+      req({ mode: "signin", email: "user@example.com", password: "wrongpass" }),
+    );
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.error).toBe(GENERIC_SIGNIN_ERROR);
+  });
+
+  it("does not leak an unconfirmed-email distinction on SIGN-UP (registration enumeration stays closed)", async () => {
+    mocks.signUp.mockResolvedValue({
+      error: { message: "Email not confirmed", code: "email_not_confirmed" },
+    });
+    const res = await POST(
+      req({ mode: "signup", email: "dup@example.com", password: "secret1" }),
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe(GENERIC_SIGNUP_ERROR);
+    expect(JSON.stringify(body)).not.toContain("confirmed");
+  });
+
+  it("keeps the generic 401 for non-confirm sign-in failures that do not mention confirmation", async () => {
+    mocks.signInWithPassword.mockResolvedValue({
+      error: { message: "User is disabled", code: "user_disabled" },
+    });
+    const res = await POST(
+      req({ mode: "signin", email: "disabled@example.com", password: "secret1" }),
+    );
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.error).toBe(GENERIC_SIGNIN_ERROR);
+  });
+
   it("does not leak the raw error.message in the signin 500 fallback path", async () => {
     mocks.signInWithPassword.mockRejectedValue(new Error("secret db detail"));
     const res = await POST(
