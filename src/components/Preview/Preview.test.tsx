@@ -65,7 +65,7 @@ describe("PreviewStrip", () => {
         backHref="/learn/salesforce-architect"
       />,
     );
-    expect(screen.getByRole("link", { name: /Back to Series/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /Back to The Atlas/ })).toHaveAttribute(
       "href",
       "/learn/salesforce-architect",
     );

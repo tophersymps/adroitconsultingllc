@@ -9,6 +9,20 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 
 ## [Unreleased]
 
+### Branding: rename "Learn" label to "The Atlas" (nav/breadcrumb/SEO; routes unchanged, t_df849483)
+
+**What** - Renamed the user-facing label for the structured curriculum hub (sequenced Salesforce/Agentic AI/OmniStudio paths, daily lessons, cert exams) from "Learn" to "The Atlas" in the display surfaces that carry it, pairing with the blog now named "Field Notes". This is a label-text rename ONLY — the route/URL `/learn` (and `/learn/<series>`, exam, certificate, preview paths) is unchanged to avoid redirect/SEO/bookmark risk.
+- `src/lib/nav.ts` — primary nav item `{ label: "Learn", href: "/learn" }` → `{ label: "The Atlas", href: "/learn" }` AND the footer `blog` group's last item `{ label: "Learn", href: "/learn" }` → `{ label: "The Atlas", href: "/learn" }` (hrefs unchanged; single source of truth that the Header renders from, so header chrome updates automatically).
+- `src/app/learn/layout.tsx` — SEO title `"Learn | Adroit Consulting"` → `"The Atlas | Adroit Consulting"`; description substance kept; `path: "/learn"` unchanged.
+- `src/components/Preview/PreviewStrip.tsx` — learn breadcrumb branch `backHref.startsWith("/learn") ? "Series" : "Field Notes"` → `"The Atlas" : "Field Notes"` (backHref `/learn/<series>` → "Back to The Atlas").
+- `src/components/Preview/Preview.test.tsx` — updated the learn-series back-link assertion `Back to Series` → `Back to The Atlas` to match the new label (mirrors the Field Notes test update).
+
+**Why** - Chris chose "The Atlas" as the name for the Adroit Learn section, pairing with the blog renamed "Field Notes".
+
+**Verification** - `npx eslint` on the 4 changed files exit 0 (0 errors/warnings); `npx tsc --noEmit` exit 0 (proves route unions untouched); `npm run build` exit 0; full vitest suite 88 files / 671 tests pass. Runtime: `/` nav renders both "Field Notes" → `/blog` and "The Atlas" → `/learn`; `/learn` renders `<title>The Atlas | Adroit Consulting</title>`; `/` and `/learn` both resolve HTTP 200. `git diff` is label-text only (no href/route/logic changes). The Supabase-gated data routes (`/learn/<series>`, `/preview/learn/[series]/[slug]`) return 500 in this headless copy workspace because `.env` Supabase credentials are absent (`Supabase URL and anon key are required` at client init) — pre-existing and unrelated to this display-only change; the breadcrumb back-link branch is verified via the component test.
+
+**Known issues** - None. In-scope "Learn" strings changed only where they are nav/breadcrumb/SEO chrome labels; the `/learn` hub page's own `<h1>` ("Learn") and internal LearnHub/LearnCardSeries interaction naming are body content / internal naming, intentionally left per the card's Do-Not list. Out-of-scope prose uses of the word "Learn" (lesson-body "Learn why…", generic "Learn more" CTAs) are untouched.
+
 ### Branding: rename "Blog" label to "Field Notes" (nav/footer/breadcrumb/SEO; routes unchanged, t_418bab6d)
 
 **What** - Renamed the user-facing label for the Adroit insights article hub from "Blog" to "Field Notes" in the four display surfaces that carry it. This is a label-text rename ONLY — the route/URL `/blog` (and `/blog/categories`, `/tags`) is unchanged to avoid redirect/SEO/bookmark risk.

@@ -24,7 +24,7 @@ export const NAV: SiteNavModel = {
     { label: "Home", href: "/" },
     { label: "Services", href: "platform-strategy" },
     { label: "Field Notes", href: "/blog" },
-    { label: "Learn", href: "/learn" },
+    { label: "The Atlas", href: "/learn" },
     { label: "Contact", href: "/contact" },
   ],
   /** Dropdown group label + the three service links (bare ServiceSlug). */
@@ -41,7 +41,7 @@ export const NAV: SiteNavModel = {
       { label: "All Posts", href: "/blog" },
       { label: "Categories", href: "/blog/categories" },
       { label: "Tags", href: "/tags" },
-      { label: "Learn", href: "/learn" },
+      { label: "The Atlas", href: "/learn" },
     ],
     services: [
       { label: "Salesforce Platform Strategy", href: "platform-strategy" },
