@@ -115,7 +115,7 @@ export default function Contact() {
 
       const json = await res.json();
 
-      if (!res.ok || !json.success) {
+      if (!res.ok || !json.ok) {
         setErrorMsg(json.error ?? "Something went wrong. Please try again.");
         setStatus("error");
         return;

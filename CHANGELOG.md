@@ -36,6 +36,18 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 
 **Known issues** - `apps/web` (the grafted marketing origin reference) is excluded from the root tsc + eslint; it is removed at the final cutover after the port is QA'd. The merged v2/v2-dev preview origins will need to be added to `src/lib/api-security.ts` `ALLOWED_ORIGINS` once the Vercel relink happens (step 8), before state-changing routes on the preview are exercised. The contact form's in-memory rate limit is per-instance (accepted, matches prior behavior). `src/components/MDX/MDXArticle.tsx` has one pre-existing unused-variable warning.
 
+### Fix: contact form success check gates on `json.ok` not `json.success` (`v2-dev`, t_4e558b40)
+
+**What** - Fixed `src/app/contact/page.tsx` so the client success check reads `json.ok` (matching the `/api/contact` response and the `ContactSubmitResult` contract), not the never-returned `json.success`. Previously `!json.success` was always true, so a genuinely successful lead submission displayed the error message and the "Thank you for your inquiry" success panel was unreachable.
+
+**Why** - `/api/contact` returns `{ ok: true }` on success and `{ ok: false, error, status }` on failure; `json.success` was never present, making the error branch unconditional (QA finding 1, t_cff95740).
+
+**What changed**
++ `src/app/contact/page.tsx` - success branch now checks `!json.ok`.
++ `src/app/contact/page.test.tsx` (new) - regression tests for the success (`{ ok: true }` -> "Thank you for your inquiry") and error (`{ ok: false, error }` -> error panel) branches with a mocked fetch.
+
+**Verified** - `npx tsc --noEmit` exit 0, eslint clean on both changed files, full suite now 645 tests green (was 643). No sibling file had the same `json.success` mismatch for this route (the reCAPTCHA `data.success` in the route is the Google API response, not our contract).
+
 ### Admin drawer: focus-on-open (`fix/admin-drawer-focus-open-t_6bfc64a0`)
 
 **What** — When the mobile off-canvas admin drawer opens (a <md viewport), focus now moves to the first nav link instead of staying on the hamburger trigger. A keyboard-only admin's forward-Tab from an open drawer now walks the drawer's nav links rather than dropping onto page content behind the navy scrim.
