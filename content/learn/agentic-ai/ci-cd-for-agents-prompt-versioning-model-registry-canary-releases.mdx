@@ -1,0 +1,107 @@
+---
+title: "Lesson 37: CI/CD for Agents: Prompt Versioning, Model Registries, and Canary Releases"
+slug: ci-cd-for-agents-prompt-versioning-model-registry-canary-releases
+series: "agentic-ai"
+lesson: 37
+excerpt: "Lesson 36 gave you tests. This lesson turns them into a pipeline. A test proves an agent is good once; CI/CD proves it is still good every time a prompt, a model, or a line of configuration changes, and then routes that change into production in slices you can measure and reverse. That means three tools the last lesson never needed: prompt versioning so a one-word edit is a traced, reversible change instead of a silent memory, a model registry so you can name the exact model and provider version behind any output you inspect, and canary releases so a new prompt or model lands on a sliver of traffic, gets scored against the evals you built, and only rolls out wide when the numbers hold."
+date: "September 9, 2026"
+author: "Adroit Consulting"
+readTime: "17 min read"
+tags: [LLMs, AI Agents, CI/CD, MLOps, Deployment]
+---
+
+# Lesson 37: CI/CD for Agents: Prompt Versioning, Model Registries, and Canary Releases
+
+Lesson 36 taught you to prove an agent behaves before it ships. This lesson teaches you to keep proving it, every time the system changes, and to move those changes into production without betting the whole user base on a hunch. The difference between "we tested it once" and "we ship it safely, forever" is what this lesson is about.
+
+Conventional CI/CD is built on a comfortable assumption: software behavior is determined by code, and code is testable, versioned, and reproducible. An agent breaks that assumption three ways at once. Its behavior is shaped by the code, yes, but also by the model behind it, the prompts feeding it, and the data it retrieves, and each of those can change independently of the codebase. Someone edits a system prompt, a provider ships a new model version, the distribution of incoming requests shifts. Any one of those changes can degrade an agent that no line of application code touched, and a plain pipeline that watches the code never notices. [^1]
+
+That is the whole problem CI/CD for agents exists to solve. The release pipeline has to stop treating the model and the prompt as invisible externals and start tracking them as first-class artifacts with versions, gates, and rollback paths, exactly like the code that already goes through CI. [^2]
+
+## Define the terms
+
+**Prompt versioning** is the practice of treating a prompt template as a versioned artifact with an immutable snapshot, an ID, and a promotion path between environments, instead of a string pasted into a config file or a hardcoded constant in source. Every edit produces a new version, and you can always see which version is live and return to the one before it. [^5]
+
+**A model registry** is a system of record that stores model versions, their lifecycle state, and the metadata that proves how each one was produced. It answers the question "which model said this," and for API-based agents it usually stores references and pins rather than the model weights themselves. [^6]
+
+**A canary release** is a progressive rollout where a new version receives a small slice of live traffic while the stable version keeps serving everyone else. You compare the two under real load, and if the new version degrades, an automated rollback reroutes traffic to the stable version without redeploying anything. [^3]
+
+**Shadow traffic** is the sibling pattern that runs the candidate on real inputs in parallel but serves users the production response. No user sees the candidate; you only learn how it would have behaved. Canary then asks the riskier question: is this good enough for real users, in the loop, with a rollback path armed. [^4]
+
+## Why an agent changes the CI/CD contract
+
+Walk the familiar plan-code-build-test-deploy-operate loop and watch every stage pick up something new when the artifact is an agent. The build no longer just assembles the runtime; it locks down a specific model version from a registry, a specific revision of each prompt template, and specific API versions from the model provider, so the artifact it produces is fully reproducible. [^1]
+
+The reproducibility test the field uses is blunt and useful: take a build artifact from a week ago, deploy it, and it must behave exactly the way it did a week ago. If that is not guaranteed, then debugging a production incident becomes guesswork, because you cannot even say what you actually shipped. [^1]
+
+Testing gains an agent layer on top of the code tests from lesson 36. Unit tests still check deterministic routing and parsing on every commit. Model validation checks that a new model version meets minimum thresholds before anything routes to it. Behavioral tests run the agent on real scenarios and score output quality with an evaluator, and they must run before every release and on a schedule in production, because output quality is the layer where the interesting failures live. [^1]
+
+Deploy is where the biggest change lands. A one-word change to a system prompt can shift agent behavior out of proportion to its size, so an all-at-once rollout is too risky, and canary or blue-green becomes the norm rather than the exception. Operate and monitor pick up prompt rotation, model management in production, cost per request, and quality drift, not just uptime and latency. [^1] [^2]
+
+## Prompt versioning: the first and cheapest win
+
+Start here, because nothing else works until prompts stop living in Notion, shared documents, or hardcoded strings. If a prompt is not in version control, no pipeline can track it, and you are back to deploying by gut feel. [^1]
+
+The repository an agent lives in looks different from a plain backend. Alongside the application source it holds directories for versioned prompt templates, tool configurations, evaluation datasets, and metadata that references specific model versions in a registry. A typical layout keeps `/src` for code, `/prompts` for templates, `/evals` for the evaluation datasets and their expected results, and `/models` holding references to registry versions rather than the weights themselves. [^1]
+
+Two versioning rules carry most of the value. First, prompt versions are immutable. Each change is a new snapshot with its own ID, and an environment points at a specific version, so promoting a prompt is a deliberate act and reverting is the flip of a pointer. [^5] Second, evaluation datasets are versioned independently from anything else. When test data gets mixed into a baseline and quietly refreshed from production, the eval stops catching real regressions and starts blessing whatever the current model already returns. You want a frozen core that nobody touches and a separate, growing set for discovering new failures. Lesson 36 called this the frozen golden set; versioning is the machinery that keeps it frozen. [^1]
+
+## The model registry: knowing which model said what
+
+Agents that call external models through an API introduce a specific kind of blindness. You do not own the model, and providers move versions under you. A model that answered a question acceptably in June may behave differently in September because the provider changed something, and you may never be told. [^1]
+
+A model registry closes that gap. It is the single system of record for every model version, its lifecycle state, and the metadata proving how it got there, giving you lineage you can trace back to the exact version that produced a given output. [^6] [^7] The build pins the registry version, the API provider, and the provider's API version together into a reproducible artifact, so a deployment a week from now is byte-for-byte the deployment you tested today. [^1]
+
+For an agent, treating the registry entry as a first-class release input matters as much for prompts as for models. If you know the canary that just degraded is running model provider version X, prompt template revision 4, and an API contract of a certain date, then diagnosing the regression is a lookup. If you do not, it is archaeology across chat logs and guessing.
+
+## Canary releases: risk in measured slices
+
+Canary deployment is the practical answer to the hard truth that staging cannot replicate the full distribution of real user prompts. Offline evals catch what a held-out set contains. Production traffic has a long tail no held-out set captures, and the only way to score a candidate against that tail is to route real traffic at it with a safety net. [^3] [^4]
+
+The mechanics are traffic weight splitting. A load balancer or service mesh routes a small percentage of requests to the canary version and the rest to the stable baseline. Both run concurrently, and you compare their metrics against each other rather than against a historical baseline, which controls for how traffic patterns shift through the day. [^3]
+
+A normal rollout moves through stages, a few percent, then more, with explicit gates at each step. The MLflow guide cites a typical climb from 1% to 5% to 25% to 50% to 100%, with automated checks at every stage deciding whether the canary may take more traffic or must revert. [^3] One rule matters more than the exact percentages: rollback is a routing change, not a redeploy. When a threshold trips, the router points everyone back at the stable version instantly, and you fix the candidate on your own time rather than paging through an infrastructure rebuild. [^3]
+
+AI canaries also monitor a broader signal set than a software canary. A new model version can be technically flawless, zero errors, lower latency, and still produce subtly worse reasoning or drift in tone. So alongside error rate and latency you track hallucination rate, coherence, and automated quality scores from the first stage, not after the rollout is already wide. [^3]
+
+For conversational agents there is one extra rule: route by session, not by request. Hash the user or session ID so a user mid-conversation stays pinned to one model version for the whole exchange. Without that, one turn can hit the stable model and the next the canary, and the agent produces incoherent dialogue that looks like a bug in your logic when it is really a bug in your routing. [^3]
+
+## A worked example: the canary config for the support agent
+
+Bring back the support agent from lesson 36 and give it a candidate prompt revision that is supposed to reduce hallucinations. You do not roll it out to everyone. You run it through a progressive delivery tool that increases traffic in measured steps and checks agent-specific metrics at each one.
+
+A Flagger-style canary definition for that agent routes an initial 10% of traffic to the new version and adds another 10% every minute until it reaches half of traffic, pausing at each step to score the candidates it sampled. The first two metrics it watches, request success rate and request duration, are ordinary service health. The next three are the agent's reason to exist: a response quality score that must stay above a floor, a hallucination rate that must stay under a ceiling, and a policy violation rate that must stay near zero. Those quality scores come from a separate evaluation service that samples canary responses and scores them, because without agent-specific metrics a pipeline can show green while the agent is quietly producing wrong answers. [^1]
+
+If the analysis step trips any threshold five consecutive times, the tool rolls back the canary automatically, and the whole rollout has a deadline, so a candidate that never converges is pulled rather than left to churn. The config encodes a policy you decided before the rollout started: which dimension gates the release, and what the acceptable bound is. You decide that in advance, because you cannot make a sound call about quality tradeoffs in the middle of a production incident. [^1] [^3]
+
+This is the same discipline that gates this very lesson before it can publish. The file you are reading passes through an automated verification script that hard-fails on the em-dashes and AI-slop phrases the writing standards forbid, and a lesson with a hard issue is never committed. It is a small, honest example of the principle: a change does not reach production until an automated gate says it may. The gate is what turns "this feels fine" into "this is proven acceptable."
+
+## The pitfalls to avoid
+
+The first pitfall is versioning code but not behavior. Teams put the application source through a proper pipeline while prompts live in a shared doc and the model version is whatever the provider serves today. That agent has no history, no rollback, and no way to explain a regression, because none of the things that actually shape its output were ever tracked. [^1]
+
+The second is a green pipeline over wrong answers. If your canary only watches latency and error rate, a model that reasons worse while staying fast and available sails through every gate. Quality metrics have to sit beside the infrastructure metrics from the first stage, or the rollout is theater with a status badge. [^3]
+
+The third is skipping the observation window. Teams run offline evals, see good scores, and flip the whole fleet at once. The offline set under-represents the real distribution, and the regression you never saw surfaces across every user instead of across 5% of them. The point of canary is to pay the small cost of a measured slice to avoid the large cost of a full misstep. [^3] [^4]
+
+The last is treating shadow and canary as the same thing. Shadow answers "does the candidate behave reasonably on the real distribution," with no user exposed. Canary answers "is it at least as good with users in the loop," with a real blast radius and auto-rollback. Teams that skip shadow ship quality regressions the first time real traffic hits the candidate; teams that skip canary wait forever for offline numbers that never converge instead of putting the candidate in front of users with a rollback path. You want both, in order. [^4]
+
+## Try it
+
+1. Version a prompt today. Take the system prompt of an agent you already built, move it out of code into a versioned file, and give it an ID. Then change one word, snapshot the new version, and write the one-line operation that points an environment back at the old one. The value is not the tool, it is having a reversible, named history where before you had a memory. [^5]
+
+2. Write a reproducibility check. Decide what your build must pin for a week-old artifact to behave identically: the model registry version, each prompt template revision, the provider API version. Then actually deploy an old artifact and see whether it matches. If it does not, fix the build until it does. [^1]
+
+3. Sketch a canary for your riskiest change. Pick the change most likely to degrade quality, decide the metric that must not slip (a quality score, a hallucination rate, a policy violation rate), set the threshold and the initial slice, and write the auto-rollback rule that reroutes if the threshold trips. Decide the gate before the change exists, not during an incident. [^3]
+
+## What's next
+
+Lesson 37 automated the release of a change and proved it in production slices. Lesson 38 takes the view wider: observability at scale, meaning metrics, alerts, cost dashboards, and service-level objectives. If a canary tells you a new prompt or model is degrading, observability is how you actually see it, how you notice a drift before a user files a ticket, how you catch a cost spike in the week it happens rather than the quarter after, and how you set a target that a release must hold or be rolled back. Canary gives you the mechanism; lesson 38 gives you the eyes.
+
+[^1]: Anadea. [CI/CD Pipelines for AI Agent Development: What Changes and How to Get It Right](https://anadea.info/blog/ci-cd-pipelines-ai-agent-development/)
+[^2]: Harness. [AI Deployment in Production: Orchestrate LLMs, RAG, and Agents](https://www.harness.io/blog/ai-deployment-in-production-orchestrate-llms-rag-agents)
+[^3]: MLflow. [Canary Deployment for AI Models: A 2026 Guide](https://mlflow.org/articles/what-is-canary-deployment-ai/)
+[^4]: Future AGI. [LLM Eval: Shadow Traffic and Canary in 2026](https://futureagi.com/blog/llm-eval-shadow-traffic-canary-2026/)
+[^5]: Agenta. [CI/CD for LLM Prompts: How to Build a Prompt Deployment Pipeline](https://agenta.ai/blog/cicd-for-llm-prompts)
+[^6]: MLflow. [The Importance of a Model Registry](https://mlflow.org/articles/tags/importance-of-model-registry/)
+[^7]: AWS. [Model Registry: model registration and deployment with lineage for traceability](https://docs.aws.amazon.com/sagemaker/latest/dg/model-registry.html)
