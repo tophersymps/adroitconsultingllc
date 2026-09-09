@@ -16,8 +16,6 @@ import type { ComponentProps } from "react";
 type MDXArticleProps = {
   /** MDX body (frontmatter already stripped + citations linkified). */
   mdx: string;
-  /** "blog" applies the footnote→Sources rename; "learn" keeps remark-gfm default. */
-  kind?: "blog" | "learn";
 };
 
 type FootnoteNode = {
@@ -48,10 +46,7 @@ function renameFootnoteHeading() {
 
 type MDXRemoteProps = ComponentProps<typeof import("next-mdx-remote/rsc").MDXRemote>;
 
-export default async function MDXArticle({
-  mdx,
-  kind = "blog",
-}: MDXArticleProps) {
+export default async function MDXArticle({ mdx }: MDXArticleProps) {
   const [{ MDXRemote }, remarkGfm, Figure] = await Promise.all([
     import("next-mdx-remote/rsc"),
     import("remark-gfm"),

@@ -9,6 +9,16 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 
 ## [Unreleased]
 
+### Cleanup: remove dead `kind` prop from MDXArticle (lint bed, t_6146a0f3)
+
+**What** - `MDXArticle` carried an unused `kind?: "blog" | "learn"` prop (with default `"blog"`) that its body never read, producing an `@typescript-eslint/no-unused-vars` lint warning. Since 2026-08-16 both blog and learn apply the footnote->Sources rename unconditionally, so the blog/learn branch it once drove no longer exists. Removed the prop declaration + doc line and the `kind = "blog"` default, and dropped `kind=` from all 4 call sites that passed it (`PreviewFirstLesson.tsx`, `/preview/blog/[slug]`, `/preview/learn/[series]/[slug]`, `/learn/[series]/[slug]`). `/blog/[slug]/page.tsx` already passed no `kind`.
+
+**Why** - Clean the lint bed on the shipped (merged) repo; the prop was dead code.
+
+**Verification** - `npx eslint src/components/MDX/MDXArticle.tsx` exit 0 (warning gone); `npx tsc --noEmit` exit 0; `npm run build` exit 0. Behavior unchanged: `renameFootnoteHeading()` still applies the Sources rename unconditionally to both blog and learn preview+runtime.
+
+**Known issues** - None.
+
 ### Visual parity: restore company logo in header/footer + home hero particles; remove dead `apps/web` subtree (`cutover/v2-into-main`, t_d4138a75)
 
 **What** - PR #68 (`cutover/v2-into-main` to main) was held by the repo owner: the merged site's header showed a text "A" tile instead of the real company logo, the home hero's animated floating-particle lines were not visible, and the dead legacy `apps/web` monorepo subtree remained in the tree as duplicate/conflicting code. This card restored visual parity with live adroit.io and removed the duplicates.

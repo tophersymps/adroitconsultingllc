@@ -115,7 +115,7 @@ export default function PreviewFirstLesson({
         {/* Readable excerpt — the peek (leading paragraphs), then locked seam */}
         <div className="preview-excerpt relative">
           <article className="article-body max-w-none">
-            <MDXArticle mdx={mdx} kind="learn" />
+            <MDXArticle mdx={mdx} />
           </article>
 
           {/* Locked seam — fade to locked + seam note */}

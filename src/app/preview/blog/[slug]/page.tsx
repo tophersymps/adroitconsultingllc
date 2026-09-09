@@ -174,7 +174,7 @@ export default async function PreviewBlogPage({ params }: Props) {
 
         {/* Article Body — rendered from raw MDX (same renderer as public) */}
         <article className="article-body max-w-[720px] mx-auto px-6 pb-16">
-          <MDXArticle mdx={mdxBody} kind="blog" />
+          <MDXArticle mdx={mdxBody} />
         </article>
       </main>
 

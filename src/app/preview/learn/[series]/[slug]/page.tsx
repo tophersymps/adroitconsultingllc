@@ -166,7 +166,7 @@ export default async function PreviewLearnPage({ params }: Props) {
 
         {/* Article Body — rendered from raw MDX (same renderer as public) */}
         <article className="article-body max-w-[720px] mx-auto px-6 pb-16">
-          <MDXArticle mdx={mdxBody} kind="learn" />
+          <MDXArticle mdx={mdxBody} />
         </article>
       </main>
 

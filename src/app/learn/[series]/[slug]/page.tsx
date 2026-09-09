@@ -235,7 +235,7 @@ export default async function LessonPage({ params }: Props) {
 
         {/* Article Body — rendered from MDX content */}
         <article className="article-body max-w-[720px] mx-auto px-6 pb-16">
-          <MDXArticle mdx={mdxBody} kind="learn" />
+          <MDXArticle mdx={mdxBody} />
 
           {/* Gated Practice Questions section — guests get the CTA placeholder,
               authed users get the interactive LessonQuiz; authed with no
