@@ -75,10 +75,43 @@ describe("/contact client success check (t_4e558b40)", () => {
     const { container } = render(<Contact />);
     fireEvent.submit(container.querySelector("form")!);
 
-    expect(
-      await screen.findByText("reCAPTCHA verification failed. Please try again."),
-    ).toBeInTheDocument();
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("reCAPTCHA verification failed. Please try again.");
     expect(screen.queryByText("Thank you for your inquiry")).not.toBeInTheDocument();
+
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("/contact submit status announcement (t_befe5aac F2)", () => {
+  it("announces the error via role=alert", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        json: async () => ({ ok: false, error: "Something went wrong. Please try again.", status: 400 }),
+      }),
+    );
+    const { container } = render(<Contact />);
+    fireEvent.submit(container.querySelector("form")!);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Something went wrong. Please try again.",
+    );
+    vi.unstubAllGlobals();
+  });
+
+  it("announces success via role=status and moves focus to the success region", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true }) }),
+    );
+    const { container } = render(<Contact />);
+    fireEvent.submit(container.querySelector("form")!);
+
+    const status = await screen.findByRole("status");
+    expect(status).toHaveTextContent("Thank you for your inquiry");
+    // Focus was moved to the success heading for screen-reader + keyboard users.
+    expect(screen.getByRole("heading", { name: "Thank you for your inquiry" })).toHaveFocus();
 
     vi.unstubAllGlobals();
   });
