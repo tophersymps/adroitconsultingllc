@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buildMetadata } from "@/lib/seo";
 import HeroSection from "@/components/Marketing/sections/HeroSection";
 import SectionContainer from "@/components/Marketing/sections/SectionContainer";
 import ServiceModule from "@/components/Marketing/sections/ServiceModule";
@@ -7,11 +8,18 @@ import ScrollReveal from "@/components/Marketing/effects/ScrollReveal";
 import StaggerChildren from "@/components/Marketing/effects/StaggerChildren";
 import MarketingPage from "@/components/Marketing/MarketingPage";
 
-export const metadata: Metadata = {
+const pageSEO = buildMetadata({
   title: "Digital Experience",
   description:
     "Build digital experiences that earn trust, drive conversion, and connect directly to your operational systems, with AI-enhanced personalization and performance.",
+  path: "/digital-experience",
+});
+
+export const metadata: Metadata = {
+  ...pageSEO,
   openGraph: {
+    ...pageSEO.openGraph,
+    type: "website",
     title: "Digital Experience | Adroit Consulting",
     description:
       "Professional web development, Salesforce-integrated digital experiences, and AI-enhanced UX for businesses that need more than a brochure site.",

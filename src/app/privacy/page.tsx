@@ -1,14 +1,16 @@
 import type { Metadata } from "next";
+import { buildMetadata } from "@/lib/seo";
 import HeroSection from "@/components/Marketing/sections/HeroSection";
 import SectionContainer from "@/components/Marketing/sections/SectionContainer";
 import { NAV } from "@/lib/nav";
 import MarketingPage from "@/components/Marketing/MarketingPage";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Privacy Policy",
   description:
     "How Adroit Consulting collects, uses, and protects your information.",
-};
+  path: "/privacy",
+});
 
 function Heading({ children }: { children: React.ReactNode }) {
   return (

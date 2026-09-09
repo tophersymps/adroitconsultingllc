@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buildMetadata } from "@/lib/seo";
 import HeroSection from "@/components/Marketing/sections/HeroSection";
 import SectionContainer from "@/components/Marketing/sections/SectionContainer";
 import ServiceModule from "@/components/Marketing/sections/ServiceModule";
@@ -7,11 +8,18 @@ import ScrollReveal from "@/components/Marketing/effects/ScrollReveal";
 import StaggerChildren from "@/components/Marketing/effects/StaggerChildren";
 import MarketingPage from "@/components/Marketing/MarketingPage";
 
-export const metadata: Metadata = {
+const pageSEO = buildMetadata({
   title: "Salesforce Platform Strategy",
   description:
     "Salesforce implementation, architecture, and optimization, from org design and integrations to AI readiness and Agentforce planning.",
+  path: "/platform-strategy",
+});
+
+export const metadata: Metadata = {
+  ...pageSEO,
   openGraph: {
+    ...pageSEO.openGraph,
+    type: "website",
     title: "Salesforce Platform Strategy | Adroit Consulting",
     description:
       "Salesforce architecture, integration, adoption, and AI-readiness consulting for growing businesses with real-world complexity.",

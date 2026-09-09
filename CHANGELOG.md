@@ -9,6 +9,23 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 
 ## [Unreleased]
 
+### SEO: per-route canonical + og metadata on the 6 marketing pages (`v2`, t_5ec87252)
+
+**What** - Standardized all six ported marketing pages (home `/`, `/platform-strategy`, `/operational-intelligence`, `/digital-experience`, `/contact`, `/privacy`) onto the existing `buildMetadata({ title, description, path })` helper from `src/lib/seo.ts`. Each page now renders its own absolute canonical URL, `og:url`, `og:image`, and `og:type="website"` instead of inheriting the homepage's canonical/og from the root layout. `/contact` is a client component and cannot export `metadata`, so it gained a co-located server `src/app/contact/layout.tsx` (mirrors the `/login` precedent) that provides a unique title ("Contact Adroit Consulting"), description, canonical, and og:url.
+
+**Why** - lara's fresh-context re-review (t_f31093d9) of merged v2 found all six marketing pages emitted the HOMEPAGE canonical (`https://adroit.io`) and homepage og:url in their rendered `<head>`, so search engines treated each subpage as a duplicate of home; `/contact` additionally inherited the generic homepage title/description with no own metadata. Home + 3 service pages also omitted `og:url`/`og:image` because their page-level `openGraph` replaced the root layout's openGraph (which carried them). Fix is a straightforward SEO/metadata standardization.
+
+**What changed**
++ `src/app/page.tsx` (home) - metadata built via `buildMetadata({ title: "Adroit Consulting", description, path: "/" })`, og:url/og:image/og:type restored on the page's own openGraph.
++ `src/app/platform-strategy/page.tsx`, `src/app/operational-intelligence/page.tsx`, `src/app/digital-experience/page.tsx` - metadata via `buildMetadata` with own `path` + og:url/og:image; rich og title/description preserved.
++ `src/app/privacy/page.tsx` - metadata via `buildMetadata({ title, description, path: "/privacy" })`.
++ `src/app/contact/layout.tsx` (new) - server layout exports `buildMetadata({ title: "Contact Adroit Consulting", description, path: "/contact" })` for the client-component page.
+
+**Verification** - `tsc --noEmit` exit 0; `eslint src/app/` 0 errors; full suite 658 tests pass; `npm run build` exit 0. Live-rendered `<head>` verified on all 6 routes: each emits canonical + og:url = its own `https://adroit.io/<route>` (home = `https://adroit.io`), og:image present on home + 3 service pages, `/contact` emits its unique title/description/canonical.
+
+**Known issues** - None. `/contact` and `/privacy` og:type render as `article` (the `buildMetadata` default, matching `/blog`/`/login` precedent) rather than `website`; this is pre-existing helper behavior and out of scope for the canonical/og finding. No indexation or robots changes.
+
+
 ### a11y hardening: header disclosure Escape-close + focus, contact submit live regions (`v2-dev`, t_befe5aac)
 
 **What** - Addressed the two non-blocking WCAG a11y findings from lara's audit (t_3778281e). Header disclosure menus (desktop "Services" dropdown + mobile hamburger drawer in `src/components/Header.tsx`) now close on Escape and return focus to their activating toggle button, from both the trigger and from a link inside the open panel. aria-expanded/aria-controls stay in sync. The `/contact` submit outcome is now announced to screen readers and landed on: the error message renders in a `role="alert"` container, and the success panel is a `role="status"` live region whose heading receives keyboard/programmatic focus on success.
