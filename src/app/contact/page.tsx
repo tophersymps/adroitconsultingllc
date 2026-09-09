@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import Script from "next/script";
 import HeroSection from "@/components/Marketing/sections/HeroSection";
 import SectionContainer from "@/components/Marketing/sections/SectionContainer";
@@ -59,6 +59,17 @@ type Status = "idle" | "submitting" | "success" | "error";
 export default function Contact() {
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState("");
+  const successHeadingRef = useRef<HTMLHeadingElement>(null);
+
+  // When a submit succeeds the form is swapped for the success panel. Move
+  // focus to the success heading so a screen-reader + keyboard user lands on
+  // (and hears via the panel's role="status") the outcome, not lost at the
+  // top of the document.
+  useEffect(() => {
+    if (status === "success") {
+      successHeadingRef.current?.focus();
+    }
+  }, [status]);
 
   function onRecaptchaLoad() {
     // reCAPTCHA script is ready (used implicitly at submit via grecaptcha).
@@ -159,13 +170,21 @@ export default function Contact() {
 
           {status === "success" ? (
             <ScrollReveal direction="none">
-              <div className="mt-12 rounded-2xl border border-[var(--border-default)] bg-[var(--surface-card-soft)] p-10 text-center">
+              <div
+                role="status"
+                tabIndex={-1}
+                className="mt-12 rounded-2xl border border-[var(--border-default)] bg-[var(--surface-card-soft)] p-10 text-center focus:outline-none"
+              >
                 <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[var(--accent-icon-chip)] text-[var(--ink-icon-chip)]">
                   <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                   </svg>
                 </div>
-                <h2 className="mt-5 text-xl font-semibold text-[var(--ink-heading)]">
+                <h2
+                  ref={successHeadingRef}
+                  tabIndex={-1}
+                  className="mt-5 text-xl font-semibold text-[var(--ink-heading)] focus:outline-none"
+                >
                   Thank you for your inquiry
                 </h2>
                 <p className="mt-3 text-base text-[var(--ink-muted)]">
@@ -269,7 +288,10 @@ export default function Contact() {
                 </div>
 
                 {status === "error" && (
-                  <div className="rounded-lg border border-[var(--accent-band)]/20 bg-[var(--accent-band)]/5 px-4 py-3 text-sm text-[var(--accent-band)]">
+                  <div
+                    role="alert"
+                    className="rounded-lg border border-[var(--accent-band)]/20 bg-[var(--accent-band)]/5 px-4 py-3 text-sm text-[var(--accent-band)]"
+                  >
                     {errorMsg}
                   </div>
                 )}

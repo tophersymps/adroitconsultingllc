@@ -9,6 +9,22 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 
 ## [Unreleased]
 
+### a11y hardening: header disclosure Escape-close + focus, contact submit live regions (`v2-dev`, t_befe5aac)
+
+**What** - Addressed the two non-blocking WCAG a11y findings from lara's audit (t_3778281e). Header disclosure menus (desktop "Services" dropdown + mobile hamburger drawer in `src/components/Header.tsx`) now close on Escape and return focus to their activating toggle button, from both the trigger and from a link inside the open panel. aria-expanded/aria-controls stay in sync. The `/contact` submit outcome is now announced to screen readers and landed on: the error message renders in a `role="alert"` container, and the success panel is a `role="status"` live region whose heading receives keyboard/programmatic focus on success.
+
+**Why** - Previously pressing Escape left an open disclosure stuck until the same control was clicked again (desktop) or the mouse left; after a keyboard open, focus never left the trigger. And a screen-reader user got no announcement when the contact form failed or succeeded (a plain error div, no live region, no focus move). Both are real keyboard/AT UX gaps per the disclosure/menu and form-status patterns even though the hard WCAG AA requirements were already passing.
+
+**What changed**
++ `src/components/Header.tsx` - `servicesBtnRef` + `mobileToggleRef`; Escape handlers on the desktop Services disclosure wrapper, the mobile drawer button, and the mobile nav panel close the panel and refocus the trigger. aria-expanded/aria-controls unchanged (already correct).
++ `src/app/contact/page.tsx` - error container gains `role="alert"`; success panel gains `role="status"` + `tabIndex={-1}` and its heading is focused on success via a `status === "success"` effect.
++ `src/components/Header.test.tsx` - 4 new tests: Escape closes the mobile drawer + returns focus (from the toggle and from inside the panel), Escape closes the desktop Services disclosure + returns focus, and service links stay Tab-reachable while open with aria-expanded in sync.
++ `src/app/contact/page.test.tsx` - 2 new tests: error announces via role="alert"; success announces via role="status" and moves focus to the success heading.
+
+**Verification** - `tsc --noEmit` exit 0; `eslint` 0 errors; full suite 658 tests pass (652 + 6 new); `npm run build` exit 0. Live browser check (:3211): desktop Services disclosure opens via keyboard, Escape closes it and returns focus to the trigger; mobile drawer at 390px closes on Escape from the toggle and from inside a link with focus restored; /contact error renders role="alert" with the message and success renders role="status" with focus on the "Thank you for your inquiry" heading.
+
+**Known issues** - None. Regression scope is keyboard focus/live-region hardening only; desktop/mobile nav and the contact form behave identically for mouse/touch users (menu still opens on click/hover as before).
+
 ### Security hardening: contact reCAPTCHA CSP + fail-closed, rate-limit IP, dependency bump (`v2-dev`, t_fd9f68c2)
 
 **What** - Fixed the four findings from val-el's security review of the merged Adroit site (t_953e04ab, v2 6702179). Added `https://www.google.com` and `https://www.gstatic.com` to the served CSP `script-src` (plus the same hosts to `connect-src`, `frame-src` for the reCAPTCHA iframe, and `gstatic` to `img-src`) so the contact form's reCAPTCHA v3 actually loads in production instead of being blocked. The `/api/contact` rate limit is now keyed on the trusted proxy-provided client IP via the shared `getClientIp()` helper (prefers `x-real-ip`, else the rightmost `x-forwarded-for` hop) instead of the attacker-spoofable leftmost hop. reCAPTCHA now fails CLOSED in production when `RECAPTCHA_SECRET_KEY` is unset (returns 503) rather than silently running with bot defense off. Bumped `next` 16.3.0 to 16.3.4, added `sharp` 0.35.4 (previously transitive <0.35.4, both in the Aug-2026 CVE range), and ran `npm audit fix` (now 0 vulnerabilities).

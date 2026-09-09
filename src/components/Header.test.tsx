@@ -104,3 +104,76 @@ describe("Header mobile nav toggle (t_c4c0a710)", () => {
     expect(screen.queryByRole("navigation", { name: "Mobile" })).toBeNull();
   });
 });
+
+describe("Header disclosure Escape-close + focus management (t_befe5aac F1)", () => {
+  it("closes the mobile drawer on Escape and returns focus to the hamburger", async () => {
+    const user = userEvent.setup();
+    renderHeader();
+    const hamburger = screen.getByRole("button", { name: "Toggle menu" });
+
+    await user.click(hamburger);
+    expect(hamburger).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("navigation", { name: "Mobile" })).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    expect(hamburger).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("navigation", { name: "Mobile" })).toBeNull();
+    expect(hamburger).toHaveFocus();
+  });
+
+  it("closes the mobile drawer on Escape fired from inside (a drawer link) and refocuses the toggle", async () => {
+    const user = userEvent.setup();
+    renderHeader();
+    const hamburger = screen.getByRole("button", { name: "Toggle menu" });
+
+    await user.click(hamburger);
+    const drawer = screen.getByRole("navigation", { name: "Mobile" });
+    // Focus lands on a drawer link (the Escape handler lives on the panel).
+    within(drawer).getByRole("link", { name: "Home" }).focus();
+    expect(within(drawer).getByRole("link", { name: "Home" })).toHaveFocus();
+
+    await user.keyboard("{Escape}");
+    expect(hamburger).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("navigation", { name: "Mobile" })).toBeNull();
+    expect(hamburger).toHaveFocus();
+  });
+
+  it("closes the desktop Services disclosure on Escape and returns focus to the Services trigger", async () => {
+    const user = userEvent.setup();
+    renderHeader();
+    const services = screen.getByRole("button", { name: /services/i });
+
+    // Keyboard activation: focus the trigger and press Enter (no mouseenter,
+    // which would hover-open and leave onClick to toggle it back closed).
+    services.focus();
+    await user.keyboard("{Enter}");
+    expect(services).toHaveAttribute("aria-expanded", "true");
+    // A service link is exposed (the disclosure panel is open).
+    expect(screen.getByRole("link", { name: "Salesforce Platform Strategy" })).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    expect(services).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("link", { name: "Salesforce Platform Strategy" })).toBeNull();
+    expect(services).toHaveFocus();
+  });
+
+  it("keeps service links reachable by Tab while the disclosure is open and aria-expanded stays in sync", async () => {
+    const user = userEvent.setup();
+    renderHeader();
+    const services = screen.getByRole("button", { name: /services/i });
+
+    services.focus();
+    await user.keyboard("{Enter}");
+    expect(services).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByRole("link", { name: "Salesforce Platform Strategy" }),
+    ).toBeInTheDocument();
+
+    // Tab from the open trigger moves focus forward onto the first disclosure link.
+    await user.tab();
+    expect(screen.getByRole("link", { name: "Salesforce Platform Strategy" })).toHaveFocus();
+    // Toggling the trigger again keeps aria-expanded accurate.
+    await user.click(services);
+    expect(services).toHaveAttribute("aria-expanded", "false");
+  });
+});

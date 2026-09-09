@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition, type KeyboardEvent } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth, notifyAuthChanged } from "@/lib/hooks/useAuth";
@@ -14,6 +14,8 @@ import type { SiteRoute } from "@/shared/contracts";
 export default function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [servicesOpen, setServicesOpen] = useState(false);
+  const servicesBtnRef = useRef<HTMLButtonElement>(null);
+  const mobileToggleRef = useRef<HTMLButtonElement>(null);
   const pathname = usePathname();
   const router = useRouter();
   const isLearnActive = pathname === "/learn" || pathname.startsWith("/learn/");
@@ -64,8 +66,20 @@ export default function Header() {
         <nav aria-label="Main" className="hidden md:flex items-center gap-7">
           {NAV.primary.map((link) =>
             link.label === "Services" ? (
-              <div key={link.href} className="relative" onMouseLeave={() => setServicesOpen(false)}>
+              <div
+                key={link.href}
+                className="relative"
+                onMouseLeave={() => setServicesOpen(false)}
+                onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
+                  if (e.key === "Escape" && servicesOpen) {
+                    e.preventDefault();
+                    setServicesOpen(false);
+                    servicesBtnRef.current?.focus();
+                  }
+                }}
+              >
                 <button
+                  ref={servicesBtnRef}
                   type="button"
                   onClick={() => setServicesOpen((o) => !o)}
                   onMouseEnter={() => setServicesOpen(true)}
@@ -129,8 +143,16 @@ export default function Header() {
         {/* Mobile Hamburger */}
         <div className="flex items-center gap-3 md:hidden">
           <button
+            ref={mobileToggleRef}
             className="bg-none border-none cursor-pointer inline-flex items-center justify-center min-w-[44px] h-11"
             onClick={() => setMobileOpen(!mobileOpen)}
+            onKeyDown={(e: KeyboardEvent<HTMLButtonElement>) => {
+              if (e.key === "Escape" && mobileOpen) {
+                e.preventDefault();
+                setMobileOpen(false);
+                mobileToggleRef.current?.focus();
+              }
+            }}
             aria-label="Toggle menu"
             aria-expanded={mobileOpen}
             aria-controls="mobile-nav"
@@ -148,6 +170,13 @@ export default function Header() {
           id="mobile-nav"
           aria-label="Mobile"
           className="md:hidden flex flex-col px-5 py-4 gap-4 border-t border-[var(--border-default)] bg-[var(--surface-card)]"
+          onKeyDown={(e: KeyboardEvent<HTMLElement>) => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              setMobileOpen(false);
+              mobileToggleRef.current?.focus();
+            }
+          }}
         >
           {NAV.primary.map((link) =>
             link.label === "Services" ? (
