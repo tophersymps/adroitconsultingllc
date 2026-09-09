@@ -256,7 +256,7 @@ describe("QuizWidget", () => {
         questions={QUESTIONS}
         passThreshold={80}
         retakeLabel="Retake check"
-        backHref="/learn/series"
+        backHref="/atlas/series"
         backLabel="Back to series"
       />,
     );
@@ -270,7 +270,7 @@ describe("QuizWidget", () => {
     expect(screen.getByRole("button", { name: "Retake check" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to series" })).toHaveAttribute(
       "href",
-      "/learn/series",
+      "/atlas/series",
     );
     const ring = document.querySelector("svg circle:nth-of-type(2)");
     expect(ring?.getAttribute("stroke")).toBe("var(--signal-done)");

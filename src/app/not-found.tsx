@@ -8,7 +8,7 @@ import Footer from "@/components/Footer";
  *
  * 404s are a frequent destination right now (6/7 series certificate pages and
  * deep Learn URLs currently 404), so this is a navy/red display moment with
- * three CTAs instead of a dead end. The Learn CTA goes to the hub (/learn).
+ * three CTAs instead of a dead end. The Learn CTA goes to the hub (/atlas).
  */
 export default function NotFound() {
   return (
@@ -39,7 +39,7 @@ export default function NotFound() {
               <span aria-hidden>&larr;</span> Back to home
             </Link>
             <Link
-              href="/blog"
+              href="/field-notes"
               className="inline-flex items-center gap-2 bg-[var(--accent)] text-white text-[13.5px] font-semibold px-6 h-12 rounded-sm hover:bg-[var(--accent-hover)] hover:-translate-y-px transition-all duration-150 no-underline"
             >
               Browse the blog <span aria-hidden>&rarr;</span>

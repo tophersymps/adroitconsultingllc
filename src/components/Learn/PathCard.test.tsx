@@ -35,7 +35,7 @@ describe("PathCard preview link (ADR-221)", () => {
     render(<PathCard series={card({ canAccess: false })} gate="signed-in" />);
     const preview = screen
       .getAllByRole("link")
-      .find((a) => a.getAttribute("href") === "/learn/agentic-ai/preview");
+      .find((a) => a.getAttribute("href") === "/atlas/agentic-ai/preview");
     expect(preview).toBeTruthy();
     expect(preview).toHaveTextContent("Preview first lesson");
   });

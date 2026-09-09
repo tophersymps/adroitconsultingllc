@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
       const { error } = await supabase.auth.signUp({
         email,
         password,
-        options: { emailRedirectTo: buildAuthRedirect("/blog") },
+        options: { emailRedirectTo: buildAuthRedirect("/field-notes") },
       });
       if (error) {
         // Log the real reason server-side; return a fixed generic message so an

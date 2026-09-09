@@ -1,5 +1,5 @@
 /**
- * SeriesStarChart — the on-course tracker at `/learn/[series]`.
+ * SeriesStarChart — the on-course tracker at `/atlas/[series]`.
  *
  * The course's own constellation, drawn once and centred, with its star lines
  * lit to match real progress. Replaced the unmounted `SeriesConstellation3D`

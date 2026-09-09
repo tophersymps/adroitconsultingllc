@@ -27,10 +27,10 @@ export type SiteRoute =
   | ServiceSlug
   | "/contact"
   | "/privacy"
-  | "/blog"
-  | "/blog/categories"
+  | "/field-notes"
+  | "/field-notes/categories"
   | "/tags"
-  | "/learn"
+  | "/atlas"
   | "/login"
   | "/forgot-password"
   | "/profile"

@@ -40,9 +40,9 @@ describe("sanitizeRedirectPath (CWE-601)", () => {
   });
 
   it("passes through legitimate internal relative paths", () => {
-    expect(sanitizeRedirectPath("/blog")).toBe("/blog");
-    expect(sanitizeRedirectPath("/learn/omni-studio-cert")).toBe(
-      "/learn/omni-studio-cert",
+    expect(sanitizeRedirectPath("/field-notes")).toBe("/field-notes");
+    expect(sanitizeRedirectPath("/atlas/omni-studio-cert")).toBe(
+      "/atlas/omni-studio-cert",
     );
     expect(sanitizeRedirectPath("/profile")).toBe("/profile");
   });

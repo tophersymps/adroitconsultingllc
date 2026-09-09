@@ -2,7 +2,7 @@
  * sky-server.loadProfileSky — deep-sky v1.2.0 AC-5 regression (sync bug).
  *
  * ROOT CAUSE the sync bug (reported against deep-sky): the on-course tracker
- * /learn/[series] lit lessons from lesson_completion (mutable current state),
+ * /atlas/[series] lit lessons from lesson_completion (mutable current state),
  * but loadProfileSky derived lit stars from completion_events (the append-only
  * historical log). Because an "unmark" DELETES the lesson_completion row but
  * deliberately KEEPS the immutable lesson event, an unmarked lesson stayed lit

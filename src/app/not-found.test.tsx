@@ -22,7 +22,7 @@ describe("app/not-found (B-03)", () => {
     expect(html).toContain("Back to home");
     expect(html).toContain('href="/"');
     expect(html).toContain("Browse the blog");
-    expect(html).toContain('href="/blog"');
+    expect(html).toContain('href="/field-notes"');
     expect(html).toContain("Contact us");
     expect(html).toContain('href="/contact"');
     // No external adroit.io self-links remain (merger DoD)

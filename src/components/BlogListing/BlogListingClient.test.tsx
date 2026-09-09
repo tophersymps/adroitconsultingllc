@@ -88,7 +88,7 @@ function cardLinks() {
   return screen
     .getAllByRole("link")
     .filter((l) =>
-      /^\/blog\/post-\d+$/.test((l as HTMLAnchorElement).getAttribute("href") || ""),
+      /^\/field-notes\/post-\d+$/.test((l as HTMLAnchorElement).getAttribute("href") || ""),
     );
 }
 
@@ -131,7 +131,7 @@ describe("BlogListingClient (t_f7e84aca)", () => {
     expect(links.length).toBeLessThan(8);
     // Every visible card belongs to the react category.
     for (const link of links) {
-      expect((link as HTMLAnchorElement).getAttribute("href")).toMatch(/^\/blog\/post-\d+$/);
+      expect((link as HTMLAnchorElement).getAttribute("href")).toMatch(/^\/field-notes\/post-\d+$/);
     }
   });
 

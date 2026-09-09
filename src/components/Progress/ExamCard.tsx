@@ -112,7 +112,7 @@ export default function ExamCard({ series, totalChecks }: ExamCardProps) {
 
         {unlocked ? (
           <Link
-            href={`/learn/${series}/exam`}
+            href={`/atlas/${series}/exam`}
             className="inline-flex items-center justify-center gap-2 w-full h-11 rounded-xl bg-navy text-white text-[13.5px] font-bold no-underline hover:bg-navy-light active:scale-[0.98] transition-all duration-150"
           >
             Take the exam

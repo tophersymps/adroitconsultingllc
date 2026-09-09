@@ -206,7 +206,7 @@ export default function AdminCoursesPage() {
                         </button>
                       )}
                       <Link
-                        href={`/learn/${course.series_slug}/preview`}
+                        href={`/atlas/${course.series_slug}/preview`}
                         className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-[11.5px] font-semibold no-underline text-[var(--ink-muted)] hover:text-[var(--ink-primary)] hover:bg-[var(--surface-sunken)] min-h-[44px] md:min-h-0"
                         style={{ borderColor: "var(--admin-table-border)" }}
                       >

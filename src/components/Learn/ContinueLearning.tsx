@@ -66,7 +66,7 @@ export default function ContinueLearning() {
             </div>
             {item.nextLessonSlug && (
               <Link
-                href={`/learn/${item.seriesSlug}/${item.nextLessonSlug}`}
+                href={`/atlas/${item.seriesSlug}/${item.nextLessonSlug}`}
                 className="inline-flex items-center gap-2 bg-[var(--accent)] text-white dark:text-[#0f172a] text-[13px] font-bold px-5 py-2.5 rounded-full no-underline hover:bg-[var(--accent-hover)] hover:translate-x-0.5 hover:shadow-lg transition-all duration-150"
               >
                 Resume lesson <span aria-hidden>&rarr;</span>

@@ -18,6 +18,7 @@ import { siteConfig } from "@/lib/seo";
  */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const blogUrl = `${siteConfig.url}${siteConfig.blogPath}`;
+  const learnUrl = `${siteConfig.url}${siteConfig.learnPath}`;
 
   // Live series slugs from the DB (source of truth for status).
   let liveSlugs: Set<string> | null = null;
@@ -86,12 +87,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.3,
     },
     {
-      url: `${siteConfig.url}/blog`,
+      url: `${blogUrl}`,
       changeFrequency: "weekly",
       priority: 0.9,
     },
     {
-      url: `${siteConfig.url}/blog/categories`,
+      url: `${blogUrl}/categories`,
       changeFrequency: "monthly",
       priority: 0.7,
     },
@@ -121,12 +122,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // lesson's date as the content-derived lastmod.
   const learnHubPages: MetadataRoute.Sitemap = [
     {
-      url: `${siteConfig.url}/learn`,
+      url: `${learnUrl}`,
       changeFrequency: "weekly",
       priority: 0.9,
     },
     ...visibleSeries.map((s) => ({
-      url: `${siteConfig.url}/learn/${s.slug}`,
+      url: `${learnUrl}/${s.slug}`,
       ...(s.lessons[0]?.date ? { lastModified: new Date(s.lessons[0].date) } : {}),
       changeFrequency: "weekly" as const,
       priority: 0.8,
@@ -137,7 +138,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const learnLessonPages: MetadataRoute.Sitemap = learnLessons
     .filter(visibleLesson)
     .map((lesson) => ({
-      url: `${siteConfig.url}/learn/${lesson.series}/${lesson.slug}`,
+      url: `${learnUrl}/${lesson.series}/${lesson.slug}`,
       ...(lesson.date ? { lastModified: new Date(lesson.date) } : {}),
       changeFrequency: "weekly" as const,
       priority: 0.7,
@@ -148,7 +149,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // No natural publish date → lastmod omitted (B-12).
   const checkPages: MetadataRoute.Sitemap = visibleSeries.flatMap((s) =>
     getKnowledgeChecks(s.slug).map((c) => ({
-      url: `${siteConfig.url}/learn/${s.slug}/check/${c.n}`,
+      url: `${learnUrl}/${s.slug}/check/${c.n}`,
       changeFrequency: "weekly" as const,
       priority: 0.6,
     })),
@@ -156,7 +157,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const examPages: MetadataRoute.Sitemap = visibleSeries
     .filter((s) => getCertExam(s.slug) !== null)
     .map((s) => ({
-      url: `${siteConfig.url}/learn/${s.slug}/exam`,
+      url: `${learnUrl}/${s.slug}/exam`,
       changeFrequency: "weekly" as const,
       priority: 0.6,
     }));

@@ -13,6 +13,9 @@
  *    Privacy are all local routes on the host.
  */
 import type { SiteNavModel } from "@/shared/contracts";
+import { siteConfig } from "@/lib/seo";
+
+const { blogPath, learnPath } = siteConfig;
 
 export const NAV: SiteNavModel = {
   brand: {
@@ -23,8 +26,8 @@ export const NAV: SiteNavModel = {
   primary: [
     { label: "Home", href: "/" },
     { label: "Services", href: "platform-strategy" },
-    { label: "Field Notes", href: "/blog" },
-    { label: "The Atlas", href: "/learn" },
+    { label: "Field Notes", href: blogPath },
+    { label: "The Atlas", href: learnPath },
     { label: "Contact", href: "/contact" },
   ],
   /** Dropdown group label + the three service links (bare ServiceSlug). */
@@ -38,10 +41,10 @@ export const NAV: SiteNavModel = {
   },
   footer: {
     blog: [
-      { label: "All Posts", href: "/blog" },
-      { label: "Categories", href: "/blog/categories" },
+      { label: "All Posts", href: `${blogPath}` },
+      { label: "Categories", href: `${blogPath}/categories` },
       { label: "Tags", href: "/tags" },
-      { label: "The Atlas", href: "/learn" },
+      { label: "The Atlas", href: learnPath },
     ],
     services: [
       { label: "Salesforce Platform Strategy", href: "platform-strategy" },

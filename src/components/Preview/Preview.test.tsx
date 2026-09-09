@@ -44,17 +44,17 @@ describe("DraftBadge", () => {
 
 describe("PreviewStrip", () => {
   it("renders a region labelled as the draft preview notice", () => {
-    render(<PreviewStrip title="My Draft" status="draft" backHref="/blog" />);
+    render(<PreviewStrip title="My Draft" status="draft" backHref="/field-notes" />);
     expect(
       screen.getByRole("region", { name: "Draft preview notice" }),
     ).toBeInTheDocument();
   });
 
-  it("shows the draft title and a back link to /blog", () => {
-    render(<PreviewStrip title="My Draft" status="draft" backHref="/blog" />);
+  it("shows the draft title and a back link to /field-notes", () => {
+    render(<PreviewStrip title="My Draft" status="draft" backHref="/field-notes" />);
     expect(screen.getByText("My Draft")).toBeInTheDocument();
     const back = screen.getByRole("link", { name: /Back to Field Notes/ });
-    expect(back).toHaveAttribute("href", "/blog");
+    expect(back).toHaveAttribute("href", "/field-notes");
   });
 
   it("labels the back link for a learn series", () => {
@@ -62,37 +62,37 @@ describe("PreviewStrip", () => {
       <PreviewStrip
         title="Lesson"
         status="draft"
-        backHref="/learn/salesforce-architect"
+        backHref="/atlas/salesforce-architect"
       />,
     );
     expect(screen.getByRole("link", { name: /Back to The Atlas/ })).toHaveAttribute(
       "href",
-      "/learn/salesforce-architect",
+      "/atlas/salesforce-architect",
     );
   });
 });
 
 describe("DraftLocked", () => {
   it("signed-out: shows the sign-in headline and a /login?next= CTA", () => {
-    render(<DraftLocked state="signed-out" nextPath="/preview/blog/draft-x" />);
+    render(<DraftLocked state="signed-out" nextPath="/preview/field-notes/draft-x" />);
     expect(screen.getByRole("heading", { name: "Sign in to preview drafts" })).toBeInTheDocument();
     const cta = screen.getByRole("link", { name: /Sign in/ });
     expect(cta).toHaveAttribute(
       "href",
-      "/login?next=%2Fpreview%2Fblog%2Fdraft-x",
+      "/login?next=%2Fpreview%2Ffield-notes%2Fdraft-x",
     );
     expect(screen.getByRole("region") || screen.getByText(/PREVIEW/i)).toBeTruthy();
   });
 
   it("signed-out: exposes section aria-label", () => {
-    render(<DraftLocked state="signed-out" nextPath="/preview/blog/draft-x" />);
+    render(<DraftLocked state="signed-out" nextPath="/preview/field-notes/draft-x" />);
     expect(
       screen.getByRole("region", { name: "Preview locked - sign in" }),
     ).toBeInTheDocument();
   });
 
   it("no-access: shows the BA copy and a mailto CTA (no fake button)", () => {
-    render(<DraftLocked state="no-access" nextPath="/preview/blog/draft-x" />);
+    render(<DraftLocked state="no-access" nextPath="/preview/field-notes/draft-x" />);
     expect(
       screen.getByRole("heading", { name: "This content is not yet available" }),
     ).toBeInTheDocument();
@@ -101,7 +101,7 @@ describe("DraftLocked", () => {
   });
 
   it("no-access: exposes section aria-label", () => {
-    render(<DraftLocked state="no-access" nextPath="/preview/blog/draft-x" />);
+    render(<DraftLocked state="no-access" nextPath="/preview/field-notes/draft-x" />);
     expect(
       screen.getByRole("region", { name: "Preview locked - no access" }),
     ).toBeInTheDocument();
@@ -110,7 +110,7 @@ describe("DraftLocked", () => {
   it("sanitizes a malicious nextPath (CWE-601)", () => {
     render(<DraftLocked state="signed-out" nextPath="https://evil.com" />);
     const cta = screen.getByRole("link", { name: /Sign in/ });
-    // sanitizeRedirectPath falls back to /blog for external values.
-    expect(cta).toHaveAttribute("href", "/login?next=%2Fblog");
+    // sanitizeRedirectPath falls back to /field-notes for external values.
+    expect(cta).toHaveAttribute("href", "/login?next=%2Ffield-notes");
   });
 });

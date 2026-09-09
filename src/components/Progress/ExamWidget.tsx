@@ -357,7 +357,7 @@ export default function ExamWidget({
               Retake exam
             </button>
             <Link
-              href={`/learn/${seriesSlug}`}
+              href={`/atlas/${seriesSlug}`}
               className="flex-1 h-11 rounded-xl bg-navy text-white text-[13.5px] font-bold no-underline flex items-center justify-center cursor-pointer hover:bg-navy-light active:scale-[0.98] transition-all duration-150"
             >
               Back to series

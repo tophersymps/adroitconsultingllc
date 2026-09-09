@@ -124,7 +124,7 @@ export function FullSkySection({ sky }: FullSkySectionProps) {
             figures={figures}
             focusSlug={focusSlug}
             onFocusChange={setFocusSlug}
-            onOpenCourse={(slug) => router.push(`/learn/${slug}`)}
+            onOpenCourse={(slug) => router.push(`/atlas/${slug}`)}
             isGuest={sky.isGuest}
           />
         </div>
@@ -208,7 +208,7 @@ export function FullSkySection({ sky }: FullSkySectionProps) {
                 <li key={c.seriesSlug} data-testid={`sky-constellation-${c.seriesSlug}`}>
                   <div className="mb-1.5 flex items-center justify-between gap-2">
                     <Link
-                      href={`/learn/${c.seriesSlug}`}
+                      href={`/atlas/${c.seriesSlug}`}
                       className="inline-flex min-h-[44px] items-center font-mono text-[12px] font-bold uppercase tracking-[0.06em] text-[var(--sky-ink)] no-underline hover:text-[var(--constellation-star)] transition-colors"
                     >
                       {c.name}

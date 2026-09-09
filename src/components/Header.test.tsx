@@ -16,7 +16,7 @@ import Header from "./Header";
 import { ThemeProvider } from "@/components/Theme/ThemeProvider";
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/blog",
+  usePathname: () => "/field-notes",
   useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }),
 }));
 

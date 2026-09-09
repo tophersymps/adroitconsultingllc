@@ -49,7 +49,7 @@ export function SeriesConstellation({
             </span>
             {!isGuest && (
               <Link
-                href={`/learn/${seriesSlug}/${star.lessonSlug}`}
+                href={`/atlas/${seriesSlug}/${star.lessonSlug}`}
                 className="min-w-0 truncate text-[13px] text-[var(--ink-muted)] hover:text-[var(--ink-primary)] transition-colors duration-150 no-underline"
               >
                 {star.label}

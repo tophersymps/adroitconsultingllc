@@ -1,6 +1,6 @@
 /**
  * PathConstellation — client adapter that assembles a course's constellation
- * for the /learn hub PathCard preview. Signed-in: lit stars from the merged
+ * for the /atlas hub PathCard preview. Signed-in: lit stars from the merged
  * progress summary (localStorage + Supabase) over the card's lesson slugs.
  * Guests: synthetic locked dots (no per-lesson data ships for guests — only
  * the total), so the preview stays a shape without leaking lesson metadata.

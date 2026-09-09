@@ -188,7 +188,7 @@ export async function getCatalogForUserV2(
 }
 
 /**
- * Slim CatalogCourse[] → LearnCardSeries[] for the /learn hub client (guest
+ * Slim CatalogCourse[] → LearnCardSeries[] for the /atlas hub client (guest
  * hardening t_3dbf4826). Per-lesson metadata never crosses into the client
  * bundle; only card-render fields + the DB-derived org projection ship.
  * `includeLessonSlugs` opts into the slug list for signed-in SeriesProgress.

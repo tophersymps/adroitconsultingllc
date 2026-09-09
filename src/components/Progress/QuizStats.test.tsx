@@ -68,6 +68,6 @@ describe("QuizStats", () => {
     render(<QuizStats seriesSlug="omni-studio-cert" />);
 
     const link = await screen.findByRole("link", { name: /Quiz avg 82% · 1 attempt/ });
-    expect(link).toHaveAttribute("href", "/learn/omni-studio-cert/quiz");
+    expect(link).toHaveAttribute("href", "/atlas/omni-studio-cert/quiz");
   });
 });

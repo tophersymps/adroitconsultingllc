@@ -69,7 +69,7 @@ export default function ResetPasswordForm() {
                 All set. Your password has been changed, and you&rsquo;re signed in on this device.
               </p>
               <Link
-                href="/blog"
+                href="/field-notes"
                 className="block h-11 rounded-xl bg-navy text-white text-sm font-bold text-center leading-[2.75rem] no-underline hover:bg-navy-light active:scale-[0.98] transition-all duration-150"
               >
                 Continue to blog &rarr;
@@ -77,7 +77,7 @@ export default function ResetPasswordForm() {
             </div>
             <p className="text-center mt-6">
               <Link
-                href="/blog"
+                href="/field-notes"
                 className="inline-flex items-center gap-1.5 text-gray-500 text-xs font-medium no-underline hover:text-navy transition-colors duration-150"
               >
                 &larr; Back to blog
@@ -207,7 +207,7 @@ export default function ResetPasswordForm() {
 
           <p className="text-center mt-6">
             <Link
-              href="/blog"
+              href="/field-notes"
               className="inline-flex items-center gap-1.5 text-gray-500 text-xs font-medium no-underline hover:text-navy transition-colors duration-150"
             >
               &larr; Back to blog

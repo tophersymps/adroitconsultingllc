@@ -65,14 +65,14 @@ describe("search — buildSearchIndex", () => {
   it("matches posts by title and groups them under posts", () => {
     const res = search("React 19");
     expect(res.posts).toHaveLength(1);
-    expect(res.posts[0]).toMatchObject({ type: "post", href: "/blog/react-19" });
+    expect(res.posts[0]).toMatchObject({ type: "post", href: "/field-notes/react-19" });
     expect(res.total).toBe(1);
   });
 
   it("matches series by name", () => {
     const res = search("Architect Primer");
     expect(res.series).toHaveLength(1);
-    expect(res.series[0]).toMatchObject({ type: "series", href: "/learn/salesforce-architect" });
+    expect(res.series[0]).toMatchObject({ type: "series", href: "/atlas/salesforce-architect" });
   });
 
   it("matches lessons and links to their series route", () => {
@@ -80,7 +80,7 @@ describe("search — buildSearchIndex", () => {
     expect(res.lessons).toHaveLength(1);
     expect(res.lessons[0]).toMatchObject({
       type: "lesson",
-      href: "/learn/salesforce-architect/flow-basics",
+      href: "/atlas/salesforce-architect/flow-basics",
     });
   });
 

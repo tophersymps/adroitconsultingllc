@@ -241,7 +241,7 @@ export async function loadProfileSky(
 
   // Constellation lighting source of truth (deep-sky v1.2.0): the CURRENT set
   // of completed lessons comes from lesson_completion (getCompletedLessonSlugs)
-  // — the SAME source the on-course tracker /learn/[series] reads. completion
+  // — the SAME source the on-course tracker /atlas/[series] reads. completion
   // events stay for rank/streak/chronicle below but are NOT used to light
   // constellations, so an unmark (which deletes the lesson_completion row but
   // keeps the immutable event) reflects on BOTH surfaces identically.

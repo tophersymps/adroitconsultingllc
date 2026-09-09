@@ -14,7 +14,7 @@
  * specified in the security audit (t_d8a9dae6) and guards the common
  * bypasses.
  */
-export const DEFAULT_REDIRECT = "/blog";
+export const DEFAULT_REDIRECT = "/field-notes";
 
 /**
  * Return `path` if it is a safe internal relative path, otherwise the

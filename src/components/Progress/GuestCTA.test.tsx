@@ -25,7 +25,7 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/learn/omni-studio-cert/exam",
+  usePathname: () => "/atlas/omni-studio-cert/exam",
 }));
 
 describe("GuestCTA a11y (t_5664453e)", () => {

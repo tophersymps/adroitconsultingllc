@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     const { error } = await supabase.auth.resend({
       type: "signup",
       email,
-      options: { emailRedirectTo: buildAuthRedirect("/blog") },
+      options: { emailRedirectTo: buildAuthRedirect("/field-notes") },
     });
     if (error) {
       console.error("[resend-confirmation] resend failed", error.message);

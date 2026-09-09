@@ -208,7 +208,7 @@ export async function appendCompletionEvent(input: {
  * current-state store `lesson_completion` (migration 001). This is the single
  * source of truth for "which lessons are done right now" — it is written on
  * mark-complete (POST /api/progress/lesson upsert) and cleared on unmark
- * (DELETE removes the row). Both the on-course tracker (/learn/[series]) and
+ * (DELETE removes the row). Both the on-course tracker (/atlas/[series]) and
  * the profile sky derive their constellation lighting from THIS set, so the
  * two surfaces always agree after a mark OR an unmark.
  *

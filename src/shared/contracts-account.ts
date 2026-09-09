@@ -43,7 +43,7 @@ export interface ProfilePatchResponse {
 /* ------------------------------------------------------------------ */
 
 export interface ContinueLearningItem {
-  /** Series slug (route /learn/<series>). */
+  /** Series slug (route /atlas/<series>). */
   seriesSlug: string;
   seriesName: string;
   gradient: string;

@@ -14,7 +14,7 @@
 import type { BlogPost, LearningSeries } from "@/data/types";
 
 export interface FunnelRecommendation {
-  /** Recommended Learn series slug (route /learn/<slug>). */
+  /** Recommended Learn series slug (route /atlas/<slug>). */
   seriesSlug: string;
   /** One-line "why this fits" for the reader. */
   reason: string;

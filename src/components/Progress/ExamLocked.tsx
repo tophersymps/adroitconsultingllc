@@ -62,7 +62,7 @@ export default function ExamLocked({ series, checks, seriesName }: ExamLockedPro
           {checks.map((check) => (
             <Link
               key={check.n}
-              href={`/learn/${series}/check/${check.n}`}
+              href={`/atlas/${series}/check/${check.n}`}
               className="group flex items-center gap-3 py-3.5 border-b border-gray-100 no-underline last:border-0 hover:bg-gray-50 transition-colors duration-150 rounded-lg px-1"
             >
               <span

@@ -31,7 +31,7 @@ export default function LessonNavigation({
     <div className="max-w-[720px] mx-auto px-6 py-8 grid grid-cols-2 gap-4">
       {prev ? (
         <Link
-          href={`/learn/${prev.series}/${prev.slug}`}
+          href={`/atlas/${prev.series}/${prev.slug}`}
           className="group p-5 border border-[var(--border-default)] rounded-xl hover:border-[var(--border-strong)] hover:bg-[var(--surface-card-soft)] hover:shadow-md hover:shadow-navy/5 hover:-translate-y-0.5 transition-all duration-200 no-underline"
         >
           <div className="flex items-center gap-1 font-mono text-[10.5px] text-[var(--ink-muted)] uppercase tracking-[0.06em] font-bold mb-2 transition-colors duration-150 group-hover:text-[var(--accent)]">
@@ -49,7 +49,7 @@ export default function LessonNavigation({
       )}
       {next ? (
         <Link
-          href={`/learn/${next.series}/${next.slug}`}
+          href={`/atlas/${next.series}/${next.slug}`}
           className="group p-5 border border-[var(--border-default)] rounded-xl hover:border-[var(--border-strong)] hover:bg-[var(--surface-card-soft)] hover:shadow-md hover:shadow-navy/5 hover:-translate-y-0.5 transition-all duration-200 no-underline text-right"
         >
           <div className="flex items-center justify-end gap-1 font-mono text-[10.5px] text-[var(--ink-muted)] uppercase tracking-[0.06em] font-bold mb-2 transition-colors duration-150 group-hover:text-[var(--accent)]">

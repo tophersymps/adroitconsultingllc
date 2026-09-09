@@ -24,7 +24,7 @@
  *   - course       entire course completed    (last lesson in a series)
  *   - quiz         a knowledge-check run      (POST /api/progress/quiz/run)
  *   - exam         a cert-prep EXAM passed >=72 (POST /api/progress/quiz/run)
- *   - certificate  user became certificate-eligible (/learn/[series]/certificate)
+ *   - certificate  user became certificate-eligible (/atlas/[series]/certificate)
  *   - article      a signed-in user read a blog post (G1 — profile galaxy
  *                  free-floating stars; additive migration widens the CHECK)
  */

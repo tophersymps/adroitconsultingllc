@@ -57,7 +57,7 @@ interface GuestCTAProps {
 export default function GuestCTA({ tier, ariaLabel }: GuestCTAProps) {
   const pathname = usePathname();
   const copy = COPY[tier];
-  const next = encodeURIComponent(pathname ?? "/learn");
+  const next = encodeURIComponent(pathname ?? "/atlas");
   const loginHref = `/login?next=${next}`;
 
   return (

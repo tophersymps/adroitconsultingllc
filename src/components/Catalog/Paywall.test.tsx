@@ -16,7 +16,7 @@ describe("Paywall preview link (ADR-221)", () => {
   it("links to the dedicated preview route with reworded text", () => {
     render(<Paywall view={view("lesson-1")} seriesSlug="test-series" />);
     const link = screen.getByRole("link", { name: /preview first lesson/i });
-    expect(link).toHaveAttribute("href", "/learn/test-series/preview");
+    expect(link).toHaveAttribute("href", "/atlas/test-series/preview");
     expect(link.textContent).not.toContain("Preview this course");
   });
 

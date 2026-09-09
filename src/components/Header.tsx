@@ -19,7 +19,7 @@ export default function Header() {
   const mobileToggleRef = useRef<HTMLButtonElement>(null);
   const pathname = usePathname();
   const router = useRouter();
-  const isLearnActive = pathname === "/learn" || pathname.startsWith("/learn/");
+  const isLearnActive = pathname === "/atlas" || pathname.startsWith("/atlas/");
   const isHome = pathname === "/";
   const { user, isLoading } = useAuth();
   const [isSigningOut, startTransition] = useTransition();
@@ -40,7 +40,7 @@ export default function Header() {
     pathname === href || (pathname === "/platform-strategy" && href === "/platform-strategy");
 
   const isActive = (href: SiteRoute) =>
-    href === "/" ? isHome : href === "/learn" ? isLearnActive : pathname === href;
+    href === "/" ? isHome : href === "/atlas" ? isLearnActive : pathname === href;
 
   const authControl = isLoading ? null : user ? (
     <AvatarMenu user={user} onSignOut={handleSignOut} isSigningOut={isSigningOut} />

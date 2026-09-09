@@ -1,7 +1,7 @@
 /**
  * completion-completed-slugs.test.ts — getCompletedLessonSlugs (deep-sky v1.2.0 AC-5).
  *
- * The on-course tracker /learn/[series] AND the profile sky must light a
+ * The on-course tracker /atlas/[series] AND the profile sky must light a
  * lesson's star from the SAME current-state source. Root cause of the sync
  * bug: the learn page read lesson_completion (the mutable current-state store)
  * while the profile derived completed lessons from completion_events (the

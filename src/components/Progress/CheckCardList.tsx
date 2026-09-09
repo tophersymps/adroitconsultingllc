@@ -72,7 +72,7 @@ export default function CheckCardList({ series, checksMeta }: CheckCardListProps
           return (
             <Link
               key={meta.n}
-              href={`/learn/${series}/check/${meta.n}`}
+              href={`/atlas/${series}/check/${meta.n}`}
               className={`group flex items-center gap-4 px-5 py-4 no-underline transition-colors duration-150 hover:bg-gray-50 dark:hover:bg-[var(--surface-card-soft)] ${
                 i > 0 ? "border-t border-gray-100 dark:border-[var(--border-subtle)]" : ""
               }`}

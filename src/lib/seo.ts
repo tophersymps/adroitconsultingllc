@@ -10,7 +10,8 @@ export const siteConfig = {
   description:
     "Salesforce platform strategy, operational intelligence, and AI-enhanced digital experiences for growing businesses.",
   url: "https://adroit.io",
-  blogPath: "/blog",
+  blogPath: "/field-notes",
+  learnPath: "/atlas",
   logo: "/adroit-logo-fullcolor-256.png",
   defaultOgImage: "/adroit-og-image-1200x630.png",
   social: {

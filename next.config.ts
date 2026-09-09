@@ -6,12 +6,36 @@ const nextConfig: NextConfig = {
   // these includes the preview functions deploy but return empty content —
   // the single most likely silent-failure point (draft-state t_e1c8239e).
   outputFileTracingIncludes: {
-    "/preview/blog/[slug]": ["./content/blog/**/*.mdx"],
-    "/preview/learn/[series]/[slug]": ["./content/learn/**/*.mdx"],
+    "/preview/field-notes/[slug]": ["./content/blog/**/*.mdx"],
+    "/preview/atlas/[series]/[slug]": ["./content/learn/**/*.mdx"],
   },
 
   async redirects() {
     return [
+      // /blog → /field-notes and /learn → /atlas (URL migration t_1ab5ef9f).
+      // 301 permanent so existing bookmarks/backlinks/crawlers pass equity to
+      // the new canonical paths. /blog/categories is covered by the
+      // /blog/:path* wildcard; /tags does NOT move and needs no redirect.
+      {
+        source: "/blog/:path*",
+        destination: "/field-notes/:path*",
+        permanent: true,
+      },
+      {
+        source: "/blog",
+        destination: "/field-notes",
+        permanent: true,
+      },
+      {
+        source: "/learn/:path*",
+        destination: "/atlas/:path*",
+        permanent: true,
+      },
+      {
+        source: "/learn",
+        destination: "/atlas",
+        permanent: true,
+      },
       // kelexconsulting.com → adroit.io (path-preserving 301)
       {
         source: "/:path*",

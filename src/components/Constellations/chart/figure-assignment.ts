@@ -27,7 +27,7 @@ export interface AssignableCourse {
  *
  * Pinning is the **single source of truth** for "which constellation a course
  * draws," and it is exclusive: a pinned figure is claimed and no other course
- * can take it. This is what makes the on-course tracker at `/learn/[series]`
+ * can take it. This is what makes the on-course tracker at `/atlas/[series]`
  * and the whole-sky profile always agree on a course's constellation — before
  * pins, the course page ran an *isolated* size-match (`buildChartFigure` on one
  * course) that ignored the rest of the sky, so a course could quietly draw a

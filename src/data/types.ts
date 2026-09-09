@@ -69,7 +69,7 @@ export interface LearningSeries {
 }
 
 /**
- * Slim series projection for the /learn hub card grid (guest hardening
+ * Slim series projection for the /atlas hub card grid (guest hardening
  * t_3dbf4826). Carries ONLY what the PathCard + filters render — the per-lesson
  * metadata (slug/title/excerpt/date/author/readTime/tags) is never shipped to
  * the client. `lessonSlugs` is populated for signed-in cards (SeriesProgress)

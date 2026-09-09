@@ -8,7 +8,7 @@ import type { SortOrder } from "@/lib/sort";
  * Controlled component: the parent owns the `?sort=` URL param and passes the
  * current `sort` value plus an `onChange` callback. This keeps the component
  * free of `useSearchParams()`, so it never triggers a client-side-rendering
- * bailout inside a statically rendered tree (the /blog SSR/CWV fix).
+ * bailout inside a statically rendered tree (the /field-notes SSR/CWV fix).
  */
 interface SortToggleProps {
   sort: SortOrder;

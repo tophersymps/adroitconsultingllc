@@ -124,10 +124,10 @@ export default function QuizStats({
     <Link
       href={
         scope === "exam"
-          ? `/learn/${seriesSlug}/exam`
+          ? `/atlas/${seriesSlug}/exam`
           : scope !== "all"
-            ? `/learn/${seriesSlug}/check/${scope}`
-            : `/learn/${seriesSlug}/quiz`
+            ? `/atlas/${seriesSlug}/check/${scope}`
+            : `/atlas/${seriesSlug}/quiz`
       }
       className={`inline-flex items-center gap-2 font-mono text-[10.5px] font-semibold no-underline transition-colors duration-150 active:scale-[0.98] ${tone} ${
         onGradient ? "hover:text-white" : "hover:text-navy"

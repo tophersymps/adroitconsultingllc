@@ -67,7 +67,7 @@ export function buildSearchIndex(
       .map((p) => ({
         type: "post" as const,
         title: p.title,
-        href: `/blog/${p.slug}`,
+        href: `/field-notes/${p.slug}`,
         group: "Posts",
         snippet: p.excerpt,
         meta: p.category,
@@ -79,7 +79,7 @@ export function buildSearchIndex(
       .map((s) => ({
         type: "series" as const,
         title: s.name,
-        href: `/learn/${s.slug}`,
+        href: `/atlas/${s.slug}`,
         group: "Series",
         snippet: s.description,
       }));
@@ -92,7 +92,7 @@ export function buildSearchIndex(
       .map((l) => ({
         type: "lesson" as const,
         title: l.title,
-        href: `/learn/${l.series}/${l.slug}`,
+        href: `/atlas/${l.series}/${l.slug}`,
         group: "Lessons",
         snippet: l.excerpt,
       }));

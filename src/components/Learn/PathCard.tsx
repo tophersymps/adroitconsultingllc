@@ -20,7 +20,7 @@ export default function PathCard({ series, gate, loginNext }: PathCardProps) {
   const empty = series.lessonCount === 0;
   const isGuest = gate === "guest-locked";
   const isSignedInLocked = !isGuest && !series.canAccess && !empty;
-  const loginHref = `/login?next=${encodeURIComponent(loginNext ?? `/learn/${series.slug}`)}`;
+  const loginHref = `/login?next=${encodeURIComponent(loginNext ?? `/atlas/${series.slug}`)}`;
 
   const band = (
     <>
@@ -126,7 +126,7 @@ export default function PathCard({ series, gate, loginNext }: PathCardProps) {
                 the link is never harmful. */}
             {isSignedInLocked && (
               <Link
-                href={`/learn/${series.slug}/preview`}
+                href={`/atlas/${series.slug}/preview`}
                 className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-semibold no-underline hover:underline min-h-[44px] px-3"
                 style={{ color: "var(--accent, #C8102E)" }}
               >
@@ -149,7 +149,7 @@ export default function PathCard({ series, gate, loginNext }: PathCardProps) {
 
   return (
     <Link
-      href={`/learn/${series.slug}`}
+      href={`/atlas/${series.slug}`}
       className="group block rounded-2xl overflow-hidden border border-[var(--border-default)] bg-[var(--surface-card)] hover:shadow-xl hover:border-[var(--border-strong)] hover:-translate-y-[3px] transition-all duration-300 no-underline"
     >
       {band}

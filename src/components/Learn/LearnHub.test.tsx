@@ -1,7 +1,7 @@
 /**
  * LearnHub — group-level ordering (G2, t_f94e01d5).
  *
- * The /learn hub buckets the Hermes Consultant Track into one group and orders
+ * The /atlas hub buckets the Hermes Consultant Track into one group and orders
  * it Level 1 → 2 → 3 (then sort_order). groupOrder is the pure comparator the
  * client uses; these tests pin the Level N ordering + null-level (standalone)
  * fallback so the provisioned track renders in the right order.

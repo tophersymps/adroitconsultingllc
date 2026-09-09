@@ -13,7 +13,7 @@ vi.mock("@/lib/search", () => ({
     const hit = {
       type: "post",
       title: "AI Strategy 2026",
-      href: "/blog/ai-strategy-2026",
+      href: "/field-notes/ai-strategy-2026",
       group: "Posts",
       snippet: "The 2026 AI strategy.",
       meta: "Strategy",
@@ -117,7 +117,7 @@ describe("SearchOverlay a11y (t_754b2240 / B-21)", () => {
     await openDialog();
     await user.type(screen.getByRole("textbox", { name: "Search query" }), "AI");
     await user.click(screen.getByRole("button", { name: /AI Strategy 2026/ }));
-    expect(push).toHaveBeenCalledWith("/blog/ai-strategy-2026");
+    expect(push).toHaveBeenCalledWith("/field-notes/ai-strategy-2026");
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 });

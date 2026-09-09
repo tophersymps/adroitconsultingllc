@@ -3,7 +3,7 @@
 /**
  * BlogListingClient — the interactive blog listing "island".
  *
- * B-08 (ride-along): the /blog route is a server component that resolves the
+ * B-08 (ride-along): the /field-notes route is a server component that resolves the
  * 48 KB `posts.ts` dataset server-side only, keeping it out of the client JS
  * bundle, and passes it here as a serialized RSC prop. The page also threads
  * the URL `searchParams` into this island as a plain prop, so the island does
@@ -135,7 +135,7 @@ function BlogListingContent({
       params.set("category", key);
     }
     const qs = params.toString();
-    router.replace(qs ? `/blog?${qs}` : "/blog", { scroll: false });
+    router.replace(qs ? `/field-notes?${qs}` : "/field-notes", { scroll: false });
   }
 
   function handleReadFilterChange(value: ReadFilterValue) {
@@ -148,7 +148,7 @@ function BlogListingContent({
       params.set("read", value);
     }
     const qs = params.toString();
-    router.replace(qs ? `/blog?${qs}` : "/blog", { scroll: false });
+    router.replace(qs ? `/field-notes?${qs}` : "/field-notes", { scroll: false });
   }
 
   function handleSortChange(order: SortOrder) {
@@ -160,7 +160,7 @@ function BlogListingContent({
       params.set("sort", order);
     }
     const qs = params.toString();
-    router.replace(qs ? `/blog?${qs}` : "/blog", { scroll: false });
+    router.replace(qs ? `/field-notes?${qs}` : "/field-notes", { scroll: false });
   }
 
   const { user, isLoading: authLoading } = useAuth();
@@ -274,7 +274,7 @@ function BlogListingContent({
               <span className="hidden sm:inline">Sign in to sync across devices.</span>
             </p>
             <Link
-              href="/login?next=/blog"
+              href="/login?next=/field-notes"
               className="flex-shrink-0 text-[12px] font-bold text-navy underline underline-offset-2 decoration-red/40 hover:decoration-red no-underline transition-colors duration-150"
             >
               Sign in

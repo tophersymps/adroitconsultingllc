@@ -17,7 +17,7 @@ import { sanitizeRedirectPath } from "@/lib/redirect";
 
 interface DraftLockedProps {
   state: "signed-out" | "no-access";
-  /** Full preview path (e.g. /preview/blog/<slug>) for the login echo-back. */
+  /** Full preview path (e.g. /preview/field-notes/<slug>) for the login echo-back. */
   nextPath?: string;
 }
 
@@ -43,7 +43,7 @@ const COPY = {
   },
 } as const;
 
-export default function DraftLocked({ state, nextPath = "/blog" }: DraftLockedProps) {
+export default function DraftLocked({ state, nextPath = "/field-notes" }: DraftLockedProps) {
   const copy = COPY[state];
   const href = copy.href(nextPath);
 

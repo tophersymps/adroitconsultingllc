@@ -9,6 +9,22 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 
 ## [Unreleased]
 
+### URL migration: /blog → /field-notes, /learn → /atlas (route rename + 301s + code refs; t_1ab5ef9f)
+
+**What** - Moved the Adroit content-hub URL paths to match the brand names (Field Notes + The Atlas). This is the code/route half (Parts A-D of the migration plan); content MDX rewrite + gate change land separately in Task 2.
+
+- `src/app/blog/*` → `src/app/field-notes/*` (git mv), `src/app/learn/*` → `src/app/atlas/*` (git mv), `src/app/preview/blog/*` → `src/app/preview/field-notes/*`, `src/app/preview/learn/*` → `src/app/preview/atlas/*`. Dynamic segments ([slug], [series]) unchanged — only the parent route dirs renamed, so the public URLs change while slugs keep identity.
+- `src/lib/seo.ts` - `siteConfig.blogPath` `"/blog"` → `"/field-notes"`; introduced `siteConfig.learnPath = "/atlas"` so `/learn` stops being hardcoded inline.
+- `next.config.ts` - added four `permanent: true` redirects (`/blog`→`/field-notes`, `/blog/:path*`→`/field-notes/:path*`, `/learn`→`/atlas`, `/learn/:path*`→`/atlas/:path*`) for SEO/backlink preservation; `/blog/categories` covered by the wildcard, `/tags` untouched. Renamed `outputFileTracingIncludes` keys to `/preview/field-notes/[slug]` and `/preview/atlas/[series]/[slug]` (glob targets still `content/blog|learn`, which do not move).
+- Code refs swept: `src/lib/nav.ts` hrefs (reads blogPath/learnPath for DRY), `Header.tsx` active-state, `PreviewStrip.tsx` back-label branch, `BackLink.tsx` (default + "Back to Field Notes" label), `src/lib/redirect.ts` DEFAULT_REDIRECT, login/forgot/reset `?next=` targets, sitemap.ts / feed.ts (inline literals → constants), and every component/page/test that built a `/blog/…` or `/learn/…` URL or label.
+- `src/shared/contracts-merger.ts` - `SiteRoute` union dropped `"/blog"`, `"/blog/categories"`, `"/learn"` entirely; added `"/field-notes"`, `"/field-notes/categories"`, `"/atlas"`. Redirects handle legacy hits (clean cutover).
+
+**Why** - Chris approved the clean path cutover to the new brand names with 301 permanent redirects so existing bookmarks, backlinks, and crawlers pass equity to the new canonical URLs and old URLs never 404.
+
+**Verification** - `npx tsc --noEmit` exit 0 (proves route unions + calls updated); `npx vitest run` 88 files / 672 tests pass; `npm run lint` exit 0; `npm run build` exit 0 (new route set: /atlas/*, /field-notes/*, /preview/atlas/*, /preview/field-notes/*; no /blog or /learn page routes remain). Runtime on dev server: `/field-notes`, `/field-notes/categories`, `/atlas`, `/tags`, `/field-notes/<slug>` all HTTP 200; `/blog` → 308 `/field-notes`, `/blog/<slug>` → 308 `/field-notes/<slug>`, `/learn` → 308 `/atlas`, `/learn/<series>/<slug>` → 308 `/atlas/...`. Confirmed SiteRoute union no longer contains "/blog" or "/learn" literals. Nav renders "The Atlas" → /atlas and footer Field Notes → /field-notes.
+
+**Known issues** - The Atlas hub card sections and some data-gated routes require Supabase creds absent in this workspace (render empty/500 in headless copy — pre-existing and unrelated). Old `/blog/feed.xml` subscribers are preserved via the 301. Content MDX internal links still point at `/blog/` and `/learn/` until Task 2 rewrites them; those route links will 404/redirect until Task 2 lands with the route change deployed together.
+
 ### Fix: /api/admin/access/effective 500 - 'Failed to load effective access' (t_73b751bd)
 
 **What** - Admin panel on live adroit.io was broken: the client hook threw "Failed to load effective access" because GET /api/admin/access/effective returned a bare 500. Root cause: the prod adroitconsultingllc Vercel env was missing `SUPABASE_SERVICE_ROLE_KEY`. The route's first line inside the try block, `getSupabaseServiceClient()` (src/lib/supabase/service.ts), fails closed and throws when that env var is absent, and `listAuthUsers()` (src/lib/supabase/auth-admin.ts) requires it too. The catch block swallowed the real error into a bare `{"ok":false,"error":"Server error"}` 500, so the client (and operators) could not tell a 403 gate from a downstream read failure.

@@ -239,7 +239,7 @@ function LoginForm() {
 
           <p className="text-center mt-6">
             <Link
-              href="/blog"
+              href="/field-notes"
               className="inline-flex items-center gap-1.5 text-gray-500 text-xs font-medium no-underline hover:text-navy transition-colors duration-150"
             >
               &larr; Back to blog

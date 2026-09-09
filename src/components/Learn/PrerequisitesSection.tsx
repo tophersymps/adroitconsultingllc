@@ -59,7 +59,7 @@ export default function PrerequisitesSection({
               {prerequisites.map((p) => (
                 <li key={p.series_slug}>
                   <Link
-                    href={`/learn/${p.series_slug}`}
+                    href={`/atlas/${p.series_slug}`}
                     className="inline-flex items-center gap-2 text-[13px] font-semibold text-[var(--accent)] no-underline hover:underline"
                   >
                     <span aria-hidden>→</span> {p.name}

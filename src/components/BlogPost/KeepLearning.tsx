@@ -24,7 +24,7 @@ interface KeepLearningProps {
  *  2. A lightweight related-posts row (same category, 3 cards).
  *
  * Server component: resolves the recommendation from the static learn dataset
- * and renders the same card component the /learn hub uses (no divergence).
+ * and renders the same card component the /atlas hub uses (no divergence).
  */
 export default function KeepLearning({ post, allPosts }: KeepLearningProps) {
   const rec = resolveRecommendedSeries(post, learnSeries);
@@ -47,10 +47,10 @@ export default function KeepLearning({ post, allPosts }: KeepLearningProps) {
           <PathCard
             series={toLearnCardSeries(rec.series)}
             gate="signed-in"
-            loginNext={`/learn/${rec.series.slug}`}
+            loginNext={`/atlas/${rec.series.slug}`}
           />
           <Link
-            href={`/learn/${rec.series.slug}`}
+            href={`/atlas/${rec.series.slug}`}
             className="inline-flex items-center gap-1.5 mt-3 text-[12.5px] font-semibold no-underline hover:underline"
             style={{ color: "var(--accent, #C8102E)" }}
           >
@@ -66,7 +66,7 @@ export default function KeepLearning({ post, allPosts }: KeepLearningProps) {
               More in {post.category}
             </h2>
             <Link
-              href="/blog"
+              href="/field-notes"
               className="text-[12px] font-semibold no-underline hover:underline"
               style={{ color: "var(--accent, #C8102E)" }}
             >

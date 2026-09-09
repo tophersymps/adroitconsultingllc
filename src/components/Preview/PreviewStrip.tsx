@@ -14,7 +14,7 @@ import Link from "next/link";
 interface PreviewStripProps {
   title: string;
   status: "draft" | "published";
-  /** Where the back link points (e.g. /blog, /learn/<series>). */
+  /** Where the back link points (e.g. /field-notes, /atlas/<series>). */
   backHref: string;
 }
 
@@ -49,7 +49,7 @@ export default function PreviewStrip({
           </div>
         </div>
         <Link href={backHref} className="preview-strip-back-link no-underline">
-          &larr; Back to {backHref.startsWith("/learn") ? "The Atlas" : "Field Notes"}
+          &larr; Back to {backHref.startsWith("/atlas") ? "The Atlas" : "Field Notes"}
         </Link>
       </div>
     </div>

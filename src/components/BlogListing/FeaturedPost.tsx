@@ -22,7 +22,7 @@ export default function FeaturedPost({ post }: FeaturedPostProps) {
   return (
     <div className="max-w-[1120px] mx-auto mb-8 px-6">
       <Link
-        href={`/blog/${post.slug}`}
+        href={`/field-notes/${post.slug}`}
         style={{ boxShadow: `var(--shadow-glow-${glow})` }}
         className="group block rounded-xl overflow-hidden bg-navy border border-gray-200 dark:border-[var(--border-default)] grid grid-cols-1 md:grid-cols-2 hover:-translate-y-1 transition-all duration-300 no-underline"
       >

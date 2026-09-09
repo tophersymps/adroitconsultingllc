@@ -6,7 +6,7 @@ import type { LearnLesson } from "@/data/types";
 
 /**
  * PreviewFirstLesson — the read-only preview variant of lesson 1 (ADR-221).
- * Rendered by /learn/[series]/preview for a `paywall`-decided user. Amber
+ * Rendered by /atlas/[series]/preview for a `paywall`-decided user. Amber
  * strip + lesson-1 hero + readable excerpt + locked seam + unlock CTA. Never
  * renders the Paywall panel itself — the CTA returns to the Paywall access
  * options (the real lesson route re-runs the seam → paywall). Read-only: no
@@ -28,7 +28,7 @@ export default function PreviewFirstLesson({
   // CTA target: the first lesson's real route. For a still-`paywall` user that
   // route re-runs decideCourseAccess → renders the Paywall with these exact
   // access options. This is the intended terminal — NOT a loop.
-  const ctaHref = `/learn/${seriesSlug}/${view.peekLessonSlug ?? lesson.slug}`;
+  const ctaHref = `/atlas/${seriesSlug}/${view.peekLessonSlug ?? lesson.slug}`;
   const unlockLabel = "Unlock full course →";
 
   return (
@@ -65,7 +65,7 @@ export default function PreviewFirstLesson({
 
         {/* Breadcrumb */}
         <Link
-          href={`/learn/${seriesSlug}`}
+          href={`/atlas/${seriesSlug}`}
           className="inline-flex items-center gap-1.5 text-[12px] text-gray-500 no-underline mb-5 hover:text-navy"
         >
           &larr; Back to {view.courseName}
@@ -76,7 +76,7 @@ export default function PreviewFirstLesson({
           <span className="bg-navy text-white px-2 py-0.5 rounded-[5px] font-bold">Lesson 1</span>
           <span>
             of {totalLessons} ·{" "}
-            <Link href={`/learn/${seriesSlug}`} className="text-gray-500 no-underline hover:text-navy">
+            <Link href={`/atlas/${seriesSlug}`} className="text-gray-500 no-underline hover:text-navy">
               {view.courseName}
             </Link>
           </span>

@@ -1,5 +1,5 @@
 /**
- * LearnFilters — client filter chips + search for the /learn hub (Learn v2).
+ * LearnFilters — client filter chips + search for the /atlas hub (Learn v2).
  *
  * Section chips come from catalog_sections rows (Certifications / Tracks /
  * Learning Paths); group chips (under the active section) from catalog_groups

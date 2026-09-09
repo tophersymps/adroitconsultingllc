@@ -1,5 +1,5 @@
 /**
- * LearnHub — client orchestrator for the /learn hub (Learn Platform v2).
+ * LearnHub — client orchestrator for the /atlas hub (Learn Platform v2).
  *
  * Buckets purely from DB org rows (catalog_sections / catalog_groups) — the
  * old bucketOf() regex + content group/subgroup are GONE (ADR-206/207). The
@@ -152,7 +152,7 @@ export default function LearnHub({
                         key={c.slug}
                         series={c}
                         gate={gate}
-                        loginNext={`/learn/${c.slug}`}
+                        loginNext={`/atlas/${c.slug}`}
                       />
                     ))}
                   </div>

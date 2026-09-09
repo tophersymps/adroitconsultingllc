@@ -19,7 +19,7 @@ interface EmptyStateProps {
 export default function EmptyState({
   title = "No lessons published yet",
   body = "This track is being written. New lessons publish daily once the series launches — check back soon.",
-  ctaHref = "/learn",
+  ctaHref = "/atlas",
   ctaLabel = "Browse other tracks",
 }: EmptyStateProps) {
   return (

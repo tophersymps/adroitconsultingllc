@@ -518,7 +518,7 @@ describe("assignFigures", () => {
 /*
  * The course→constellation contract (baked in from Phase 4): every real course
  * is defined by exactly one constellation, exclusive to that course, and the
- * on-course tracker `/learn/[series]` and the whole-sky profile must resolve to
+ * on-course tracker `/atlas/[series]` and the whole-sky profile must resolve to
  * the SAME figure. Before pins, the course page ran an isolated size-match that
  * ignored the rest of the sky and could hand a course a figure the profile had
  * already given to another course.
