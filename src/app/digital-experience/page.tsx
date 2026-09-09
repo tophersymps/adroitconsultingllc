@@ -73,7 +73,7 @@ const OUTCOMES = [
   "Stronger brand perception and credibility with your buyers",
   "Higher quality inbound leads through optimized conversion flows",
   "Lower content publishing friction for internal teams",
-  "Seamless handoff from marketing to sales operations via Salesforce integration",
+  "Clean handoff from marketing to sales operations via Salesforce integration",
   "Digital experiences that adapt, personalize, and perform",
 ];
 
@@ -82,7 +82,7 @@ export default function DigitalExperience() {
     <MarketingPage>
       <HeroSection
         title="Build Digital Experiences That Earn Trust and Drive Conversion"
-        subtitle="We create secure, performant digital experiences that communicate authority, generate qualified demand, and connect directly to your business systems."
+        subtitle="We build secure, performant digital experiences that communicate authority, generate qualified demand, and connect directly to your business systems."
         primaryCta={{
           label: "Discuss Your Digital Strategy",
           href: "/contact",
@@ -94,15 +94,15 @@ export default function DigitalExperience() {
         <ScrollReveal>
           <div className="mx-auto max-w-3xl">
             <h2 className="text-3xl font-bold tracking-tight text-[var(--ink-heading)] sm:text-4xl">
-              Your Digital Presence as a Strategic Business Asset
+              Your Digital Presence as a Business Asset
             </h2>
             <p className="mt-6 text-lg leading-relaxed text-[var(--ink-muted)]">
-              Your digital experience should function as both a strategic brand
-              asset and an operational system. Adroit designs and builds
-              experiences that are fast, maintainable, and aligned with security
-              and governance that fit your business. We build sites that do more
-              than inform: they adapt, personalize, and connect directly to your
-              operational systems.
+              Your digital experience should work as both a brand asset and an
+              operational system. Adroit designs and builds experiences that are
+              fast, maintainable, and aligned with security and governance that
+              fit your business. We build sites that do more than inform: they
+              adapt, personalize, and connect directly to your operational
+              systems.
             </p>
           </div>
         </ScrollReveal>

@@ -161,10 +161,9 @@ export default function Contact() {
         <div className="mx-auto max-w-2xl">
           <ScrollReveal>
             <p className="text-lg leading-relaxed text-[var(--ink-muted)]">
-              Whether you are planning a Salesforce project, automation program,
-              AI adoption, or digital experience work, Adroit can help you define
-              scope, priorities, and execution sequencing. Start the conversation
-              below.
+              Planning a Salesforce project, an automation program, AI adoption,
+              or digital experience work? Adroit helps you define scope,
+              priorities, and execution sequencing. Start the conversation below.
             </p>
           </ScrollReveal>
 

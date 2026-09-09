@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     type: "website",
     title: "Salesforce Platform Strategy | Adroit Consulting",
     description:
-      "Salesforce architecture, integration, adoption, and AI-readiness consulting for growing businesses with real-world complexity.",
+      "Salesforce architecture, integration, adoption, and AI-readiness consulting for growing businesses with complex, real-world environments.",
   },
 };
 
@@ -70,7 +70,7 @@ const MODULES = [
 ];
 
 const OUTCOMES = [
-  "A Salesforce org that evolves from system of record to system of action",
+  "A Salesforce org that moves from system of record to system of action",
   "Faster cycle times across sales and service motions",
   "Improved data quality, reporting confidence, and decision speed",
   "Higher user adoption through process-fit design",
@@ -82,7 +82,7 @@ export default function PlatformStrategy() {
     <MarketingPage>
       <HeroSection
         title="Architect the Salesforce Foundation Your Business Runs On"
-        subtitle="We design and implement Salesforce solutions that unify data, automate processes, and position your business for AI-driven growth."
+        subtitle="We design and implement Salesforce orgs that unify data, automate processes, and make AI adoption practical, not aspirational."
         primaryCta={{
           label: "Schedule a Salesforce Assessment",
           href: "/contact",
@@ -98,12 +98,12 @@ export default function PlatformStrategy() {
             </h2>
             <p className="mt-6 text-lg leading-relaxed text-[var(--ink-muted)]">
               Adroit delivers Salesforce engagements that connect platform
-              capabilities to real business processes, not just feature
-              deployments. We focus on clarity in data models, automation logic,
-              and user experience so teams work faster with confidence. And as
-              your org matures, we help you evaluate and adopt AI capabilities
-              like Agentforce so your Salesforce CRM evolves from a system of
-              record to a system of action.
+              capabilities to real business processes, not feature deployments.
+              We focus on clear data models, automation logic, and user
+              experience so teams work faster with confidence. As your org
+              matures, we help you evaluate and adopt AI capabilities like
+              Agentforce so your CRM moves from system of record to system of
+              action.
             </p>
           </div>
         </ScrollReveal>

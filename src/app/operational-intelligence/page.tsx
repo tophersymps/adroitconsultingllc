@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     type: "website",
     title: "Operational Intelligence | Adroit Consulting",
     description:
-      "Workflow automation, AI-augmented processes, and operational analytics for teams ready to operate smarter.",
+      "Workflow automation, AI-augmented processes, and operational analytics for teams running operations at scale.",
   },
 };
 
@@ -94,16 +94,16 @@ export default function OperationalIntelligence() {
         <ScrollReveal>
           <div className="mx-auto max-w-3xl">
             <h2 className="text-3xl font-bold tracking-tight text-[var(--ink-heading)] sm:text-4xl">
-              Automation That Improves Decisions, Not Just Tasks
+              Automation That Improves Decisions, Not Tasks
             </h2>
             <p className="mt-6 text-lg leading-relaxed text-[var(--ink-muted)]">
-              Automation is most valuable when it improves decision quality and
-              execution speed, not just task completion. Adroit maps processes
-              end-to-end, identifies high-friction bottlenecks, and builds
-              automation that is reliable, observable, and scalable. We embed
-              intelligence into your workflows so systems can handle the
-              routine, flag the exceptions, and surface the insights your teams
-              need to act.
+              Automation pays off when it improves decision quality and
+              execution speed, not task completion alone. Adroit maps processes
+              end to end, finds the high-friction bottlenecks, and builds
+              automation that runs reliably and observably. We embed
+              intelligence into your workflows so systems handle the routine,
+              flag the exceptions, and surface the insights your teams need to
+              act.
             </p>
           </div>
         </ScrollReveal>
@@ -146,7 +146,7 @@ export default function OperationalIntelligence() {
 
       <ScrollReveal direction="none">
         <CTABlock
-          headline="Stop managing complexity, start leveraging it."
+          headline="Complexity is the job. We'll help you run it."
           ctaLabel="Book an Operational Intelligence Workshop"
           ctaHref="/contact"
         />

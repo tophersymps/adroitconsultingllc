@@ -11,7 +11,7 @@ import MarketingPage from "@/components/Marketing/MarketingPage";
 const pageSEO = buildMetadata({
   title: "Adroit Consulting",
   description:
-    "Adroit Consulting helps businesses modernize operations through Salesforce strategy, intelligent automation, and AI-enhanced digital experiences.",
+    "Adroit Consulting modernizes operations through Salesforce strategy, intelligent automation, and AI-enhanced digital experiences built for growing businesses.",
   path: "/",
 });
 
@@ -20,9 +20,9 @@ export const metadata: Metadata = {
   openGraph: {
     ...pageSEO.openGraph,
     type: "website",
-    title: "Adroit Consulting: Smarter Operations for Growing Businesses",
+    title: "Adroit Consulting: Modern Operations for Growing Businesses",
     description:
-      "Salesforce platform strategy, operational intelligence, and digital experience consulting for organizations ready to modernize with AI, at a pace that fits your business.",
+      "Salesforce platform strategy, operational intelligence, and digital experience consulting for organizations modernizing with AI, at a pace that fits the business.",
   },
 };
 
@@ -88,7 +88,7 @@ const WHY_ITEMS = [
   {
     title: "AI-Ready Delivery",
     description:
-      "We build platforms and processes with AI readiness in mind, so you can adopt Agentforce, intelligent automation, and predictive capabilities on a timeline that fits your business.",
+      "We build platforms and processes for AI readiness, so you can adopt Agentforce, intelligent automation, and predictive capabilities on your timeline.",
     icon: (
       <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
@@ -112,7 +112,7 @@ export default function Home() {
     <MarketingPage>
       <HeroSection
         title="Precision Consulting for Growing Businesses"
-        subtitle="Adroit Consulting helps organizations modernize operations through Salesforce strategy, intelligent automation, and AI-enhanced digital experiences."
+        subtitle="Adroit Consulting modernizes operations through Salesforce strategy, intelligent automation, and AI-enhanced digital experiences that connect your systems to how your teams actually work."
         primaryCta={{
           label: "Schedule a Strategy Consultation",
           href: "/contact",
@@ -128,15 +128,14 @@ export default function Home() {
         <ScrollReveal>
           <div className="mx-auto max-w-3xl text-center">
             <h2 className="text-3xl font-bold tracking-tight text-[var(--ink-heading)] sm:text-4xl">
-              Strategic Guidance. Technical Architecture. Delivery Discipline.
+              Strategy, build, and delivery in one engagement.
             </h2>
             <p className="mt-6 text-lg leading-relaxed text-[var(--ink-muted)]">
-              We partner with leadership and operations teams at growing
-              companies to eliminate process friction, accelerate digital
-              initiatives, and build AI-ready systems that scale with you. Our
-              engagements combine strategic guidance, technical architecture, and
-              delivery discipline to move from roadmap to measurable outcomes at
-              your pace.
+              We work with leadership and operations teams at growing companies
+              to cut process friction, ship digital initiatives faster, and build
+              AI-ready systems that hold up as the business grows. Strategy,
+              build, and delivery happen in one engagement, so you move from
+              roadmap to measurable outcomes without juggling vendors.
             </p>
           </div>
         </ScrollReveal>
@@ -149,8 +148,9 @@ export default function Home() {
               How We Help
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-lg text-[var(--ink-muted)]">
-              Three integrated practice areas delivering measurable outcomes at
-              your scale, with AI woven into every engagement.
+              Three practice areas that work as one engagement: strategy,
+              automation, and digital experience, with AI built into the
+              delivery.
             </p>
           </div>
         </ScrollReveal>
@@ -190,16 +190,16 @@ export default function Home() {
         </StaggerChildren>
         <ScrollReveal delay={0.3}>
           <p className="mx-auto mt-16 max-w-3xl text-center text-lg leading-relaxed text-[var(--ink-muted)]">
-            We deliver platforms and processes that improve speed-to-execution,
-            increase user adoption, and reduce operational overhead, with AI
-            capabilities built in, not bolted on.
+            We deliver platforms and processes that cut execution time, raise
+            user adoption, and reduce operational overhead, with AI built in,
+            not bolted on.
           </p>
         </ScrollReveal>
       </SectionContainer>
 
       <ScrollReveal direction="none">
         <CTABlock
-          headline="Ready to move from fragmented systems to coordinated, intelligent execution?"
+          headline="Fragmented systems or coordinated execution. Which one are you running?"
           body="Book a 45-minute discovery session. We'll map your current-state constraints and outline a practical modernization path."
           ctaLabel="Book Discovery Session"
           ctaHref="/contact"

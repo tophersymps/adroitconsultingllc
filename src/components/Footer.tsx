@@ -35,8 +35,8 @@ export default function Footer() {
             </Link>
             <p className="text-sm leading-relaxed max-w-[280px] text-[var(--ink-band-muted)]">
               Salesforce platform strategy, operational intelligence, and
-              AI-enhanced digital experiences. Helping businesses modernize and
-              scale.
+              AI-enhanced digital experiences. We help growing businesses
+              modernize and scale.
             </p>
           </div>
 
