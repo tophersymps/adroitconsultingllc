@@ -4,6 +4,7 @@ import "./globals.css";
 import { siteConfig, buildMetadata } from "@/lib/seo";
 import { ThemeProvider } from "@/components/Theme/ThemeProvider";
 import AnalyticsInit from "@/components/Analytics/AnalyticsInit";
+import CookieConsent from "@/components/CookieConsent";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -18,12 +19,38 @@ const newsreader = Newsreader({
   weight: ["400", "500", "600"],
 });
 
-export const metadata: Metadata = buildMetadata({
-  title: siteConfig.title,
-  description: siteConfig.description,
-  path: "/",
-  ogImage: "/og-blog-card.png",
-});
+export const metadata: Metadata = {
+  ...buildMetadata({
+    title: siteConfig.title,
+    description: siteConfig.description,
+    path: "/",
+  }),
+  icons: {
+    icon: [
+      { url: "/adroit-favicon-16.png", sizes: "16x16", type: "image/png" },
+      { url: "/adroit-favicon-32.png", sizes: "32x32", type: "image/png" },
+    ],
+    shortcut: "/adroit-favicon.ico",
+    apple: "/adroit-apple-touch-icon-180.png",
+  },
+  manifest: "/site.webmanifest",
+  openGraph: {
+    ...(buildMetadata({
+      title: siteConfig.title,
+      description: siteConfig.description,
+      path: "/",
+    }).openGraph || {}),
+    type: "website",
+    images: [
+      {
+        url: "/adroit-og-image-1200x630.png",
+        width: 1200,
+        height: 630,
+        alt: "Adroit Consulting",
+      },
+    ],
+  },
+};
 
 /** FOUC guard — apply persisted/OS theme to <html> before hydration. */
 function themeFoucScript() {
@@ -46,6 +73,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <ThemeProvider>
           <AnalyticsInit />
+          <CookieConsent />
           <a href="#main" className="skip-link">
             Skip to content
           </a>

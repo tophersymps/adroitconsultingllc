@@ -33,19 +33,19 @@ export default function NotFound() {
           {/* 3 CTAs */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             <Link
-              href="/blog"
+              href="/"
               className="inline-flex items-center gap-2 bg-navy text-white text-[13.5px] font-semibold px-6 h-12 rounded-sm hover:bg-navy-light hover:-translate-y-px transition-all duration-150 no-underline"
             >
-              Back to blog <span aria-hidden>&larr;</span>
+              <span aria-hidden>&larr;</span> Back to home
             </Link>
             <Link
-              href="/learn"
+              href="/blog"
               className="inline-flex items-center gap-2 bg-[var(--accent)] text-white text-[13.5px] font-semibold px-6 h-12 rounded-sm hover:bg-[var(--accent-hover)] hover:-translate-y-px transition-all duration-150 no-underline"
             >
-              Browse Learn <span aria-hidden>&rarr;</span>
+              Browse the blog <span aria-hidden>&rarr;</span>
             </Link>
             <Link
-              href="https://adroit.io/contact"
+              href="/contact"
               className="inline-flex items-center gap-2 border border-[var(--border-strong)] text-[var(--ink-body)] text-[13.5px] font-semibold px-6 h-12 rounded-sm hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors duration-150 no-underline"
             >
               Contact us

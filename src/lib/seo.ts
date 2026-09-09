@@ -6,13 +6,13 @@
 
 export const siteConfig = {
   name: "Adroit Consulting",
-  title: "Adroit Consulting Blog",
+  title: "Adroit Consulting",
   description:
-    "Insights on Salesforce, React, AI, and digital transformation to help your business scale smarter.",
+    "Salesforce platform strategy, operational intelligence, and AI-enhanced digital experiences for growing businesses.",
   url: "https://adroit.io",
   blogPath: "/blog",
-  logo: "/logo.png",
-  defaultOgImage: "/og-blog-card.png",
+  logo: "/adroit-logo-fullcolor-256.png",
+  defaultOgImage: "/adroit-og-image-1200x630.png",
   social: {
     twitter: "@adroitconsult",
   },

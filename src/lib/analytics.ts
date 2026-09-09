@@ -30,8 +30,22 @@ export const analyticsEnabled = Boolean(GA_MEASUREMENT_ID);
 
 const SCRIPT_ID = "adroit-ga4-script";
 
+/** Consent-gating storage key (merger contract ConsentAnalyticsApi). */
+export const CONSENT_STORAGE_KEY = "adroit_cookie_consent";
+export type ConsentState = "granted" | "denied";
+
+/** Read the persisted consent state (defaults to denied / unset). */
+export function getConsentState(): ConsentState {
+  if (typeof window === "undefined") return "denied";
+  const raw = window.localStorage.getItem(CONSENT_STORAGE_KEY);
+  return raw === "granted" ? "granted" : "denied";
+}
+
 /**
- * Initialize GA4 — inject the gtag.js script and send the config pageview.
+ * Initialize GA4 — inject the gtag.js script and send the config pageview,
+ * gated on consent (merger B1: consent-gated GA4, kara CookieConsent contract).
+ * The site defaults to analytics_storage: denied; the script only loads after
+ * the user grants via the cookie banner (localStorage "adroit_cookie_consent").
  * Safe to call more than once (idempotent via an injected marker attribute).
  */
 export function initAnalytics(): void {
@@ -46,6 +60,12 @@ export function initAnalytics(): void {
   };
 
   window.gtag("js", new Date());
+  // Consent default is denied until the banner grants it. Persisted grant
+  // (e.g. returning visitor) is re-applied after gtag exists.
+  window.gtag("consent", "default", { analytics_storage: "denied" });
+  if (getConsentState() === "granted") {
+    window.gtag("consent", "update", { analytics_storage: "granted" });
+  }
   window.gtag("config", GA_MEASUREMENT_ID, {
     anonymize_ip: true,
   });
@@ -55,6 +75,24 @@ export function initAnalytics(): void {
   script.async = true;
   script.src = `https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`;
   document.head.appendChild(script);
+}
+
+/** Grant analytics consent (drives GA4 consent mode + persists the choice). */
+export function grantAnalyticsConsent(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(CONSENT_STORAGE_KEY, "granted");
+  if (typeof window.gtag === "function") {
+    window.gtag("consent", "update", { analytics_storage: "granted" });
+  }
+}
+
+/** Revoke analytics consent. */
+export function revokeAnalyticsConsent(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(CONSENT_STORAGE_KEY, "denied");
+  if (typeof window.gtag === "function") {
+    window.gtag("consent", "update", { analytics_storage: "denied" });
+  }
 }
 
 /**

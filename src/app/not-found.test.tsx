@@ -18,13 +18,15 @@ describe("app/not-found (B-03)", () => {
     // Display moment + brand tokens
     expect(html).toMatch(/4.*0.*4/);
     expect(html).toContain("Page not found");
-    // Three real CTAs
-    expect(html).toContain("Back to blog");
+    // Three real CTAs (merger: Home + blog + local contact, no external adroit.io)
+    expect(html).toContain("Back to home");
+    expect(html).toContain('href="/"');
+    expect(html).toContain("Browse the blog");
     expect(html).toContain('href="/blog"');
-    expect(html).toContain("Browse Learn");
-    expect(html).toContain('href="/learn"');
     expect(html).toContain("Contact us");
-    expect(html).toContain("adroit.io/contact");
+    expect(html).toContain('href="/contact"');
+    // No external adroit.io self-links remain (merger DoD)
+    expect(html).not.toContain("adroit.io/contact");
     // Header + Footer present (full bleed, not a bare error)
     expect(html).toContain("header");
     expect(html).toContain("footer");
