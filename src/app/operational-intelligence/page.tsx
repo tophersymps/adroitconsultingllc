@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buildMetadata } from "@/lib/seo";
 import HeroSection from "@/components/Marketing/sections/HeroSection";
 import SectionContainer from "@/components/Marketing/sections/SectionContainer";
 import ServiceModule from "@/components/Marketing/sections/ServiceModule";
@@ -7,11 +8,18 @@ import ScrollReveal from "@/components/Marketing/effects/ScrollReveal";
 import StaggerChildren from "@/components/Marketing/effects/StaggerChildren";
 import MarketingPage from "@/components/Marketing/MarketingPage";
 
-export const metadata: Metadata = {
+const pageSEO = buildMetadata({
   title: "Operational Intelligence",
   description:
     "Turn process complexity into operational advantage with intelligent automation, cross-system integration, AI-augmented workflows, and real-time operational analytics.",
+  path: "/operational-intelligence",
+});
+
+export const metadata: Metadata = {
+  ...pageSEO,
   openGraph: {
+    ...pageSEO.openGraph,
+    type: "website",
     title: "Operational Intelligence | Adroit Consulting",
     description:
       "Workflow automation, AI-augmented processes, and operational analytics for teams ready to operate smarter.",
