@@ -9,6 +9,25 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 
 ## [Unreleased]
 
+### Security hardening: login rate-limit + origin + no error echo; completion_events server-write-only (`v2`, t_bd7ac2a0)
+
+**What** - Closed the two remaining steel-scoped findings (H1 HIGH, M2 MEDIUM) from val-el's full merged-site security audit (t_0a1bd35a; report at deliverables/security-audit.html). The C1/H2/M1 findings from that audit were already resolved on the current v2 head by PR #6 (next 16.3.4, sharp 0.35.4, npm audit 0 vulns, contact rate-limit via getClientIp + reCAPTCHA fail-closed) and were re-verified here. H1: `src/app/api/auth/login/route.ts` - the highest-value brute-force / credential-stuffing target - was the only auth mutation with no rate limit, no origin (CSRF) check, and it echoed raw Supabase/GoTrue error.message on failure (account enumeration). It now applies `checkOrigin` (403) and `checkRateLimit(getClientIp(req))` (429) before parsing the body (mirroring reset-password/request) and returns fixed generic messages ("Invalid email or password." / "Unable to create account. Please try again later.") while logging the real detail server-side only. M2: completion_events could be self-forged by an authenticated client via the anon key + its own JWT (INSERT policy `with check (auth.uid() = user_id)`), letting a user mint certificate/course/exam completions without earning them. New migration `012_completion_events_server_write_only.sql` revokes the client INSERT (deny-guard `with check (false)`, mirroring migration 006 for quiz_run/quiz_attempt); all completion_events INSERTs now route through `getSupabaseServiceClient()` (BYPASSRLS), with reads staying on the RLS-bound client.
+
+**Why** - Login is the highest-value auth surface and its missing controls enabled credential stuffing and account enumeration. The completion_events forge path is the same integrity hole (CWE-807) migration 006 already closed for quiz tables: a user could light constellations, inflate streaks/ranks, and earn certificates without doing the work. Both had to land before the v2 to main cutover.
+
+**What changed**
++ `src/app/api/auth/login/route.ts` - adds `checkOrigin` (403) + `checkRateLimit(getClientIp(req))` (429) before parsing; signup/signin failures return fixed generic messages and log `error.message` server-side via `console.error` (never reflected to the caller).
++ `supabase/migrations/012_completion_events_server_write_only.sql` - drops `completion_events_insert_own`, adds `completion_events deny client insert` (INSERT TO authenticated WITH CHECK (false)); SELECT own unchanged, no update/delete anywhere.
++ `src/lib/completion.ts` - `appendCompletionEvent` idempotency SELECT stays on `getSupabaseServerClient()`; the INSERT now goes through `getSupabaseServiceClient()`.
++ `src/app/api/auth/login/route.test.ts` (new, 6 tests) - origin 403, rate-limit 429, generic signin/signup messages, no raw error.message echo, 500 fallback no leak.
++ `src/lib/completion-write.test.ts` (new, 3 tests) - INSERT routed via the service client, RLS-bound client never a writer, idempotency short-circuit.
++ `src/lib/progress-complete.test.ts`, `src/app/api/progress/lesson/route.test.ts` - added a `@/lib/supabase/service` mock so the completion-event append assertions still observe writes through the new service-client path.
+
+**Verification** - `tsc --noEmit` exit 0; changed files `eslint` 0 errors; full suite 667 tests pass (667 prior + 9 new, 0 regressions); `npm run build` exit 0; `npm audit` 0 vulnerabilities on the merged head.
+
+**Known issues** - Branch protection on the public repo main + v2 (C2) is alpha's fix card (t_9137726a); it is deploy/infra, not code, and stays outside this card's scope. The full-security re-audit (t_0a1bd35a) and QA (t_bfb87dbd) will re-review the v2 head.
+
+
 ### a11y hardening: header disclosure Escape-close + focus, contact submit live regions (`v2-dev`, t_befe5aac)
 
 **What** - Addressed the two non-blocking WCAG a11y findings from lara's audit (t_3778281e). Header disclosure menus (desktop "Services" dropdown + mobile hamburger drawer in `src/components/Header.tsx`) now close on Escape and return focus to their activating toggle button, from both the trigger and from a link inside the open panel. aria-expanded/aria-controls stay in sync. The `/contact` submit outcome is now announced to screen readers and landed on: the error message renders in a `role="alert"` container, and the success panel is a `role="status"` live region whose heading receives keyboard/programmatic focus on success.
