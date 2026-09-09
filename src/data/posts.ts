@@ -25,6 +25,30 @@ export const posts: BlogPost[] = [
     "status": "published"
   },
   {
+    "slug": "salesforce-failure-patterns-2026",
+    "title": "Salesforce Builds Fail in the Same Six Places",
+    "excerpt": "Each layer of a combined Salesforce stack hides a default that stops holding when another layer touches it. Audit the six before you ship.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "September 09, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "13 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "Flow",
+      "Apex",
+      "Agentforce",
+      "Data Cloud",
+      "Experience Cloud",
+      "Security"
+    ],
+    "bannerImage": "/banners/salesforce-failure-patterns-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "agent-autonomy-governance-2026",
     "title": "Autonomy Is a Ladder, Not a Switch: Govern by Blast Radius",
     "excerpt": "Treat agent autonomy as a ladder, not a switch: set each agent's rung by the blast radius of its worst action, then govern proportionally.",
