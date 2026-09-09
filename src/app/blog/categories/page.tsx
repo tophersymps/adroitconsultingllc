@@ -7,7 +7,7 @@ import { buildMetadata } from "@/lib/seo";
 import { posts } from "@/data/posts";
 
 export const metadata: Metadata = buildMetadata({
-  title: "Blog Categories | Adroit Consulting",
+  title: "Categories | Field Notes",
   description:
     "Browse our content by topic — Salesforce, React & Web Dev, AI & Consulting, and Marketing.",
   path: "/blog/categories",

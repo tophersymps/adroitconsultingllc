@@ -9,6 +9,16 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 
 ## [Unreleased]
 
+### Fix: /blog/categories SEO title no longer overrides the Field Notes layout (t_4eab5500)
+
+**What** - `src/app/blog/categories/page.tsx` exported its own `metadata` whose `title: "Blog Categories | Adroit Consulting"` overrode the correctly-renamed layout metadata (`"Categories | Field Notes"`), because Next.js page-level metadata takes precedence over the nested route layout's. Fixed `page.tsx` metadata title to `"Categories | Field Notes"` (description and `path` unchanged).
+
+**Why** - QA flagged that the /blog/categories SEO title still showed the old "Blog Categories" wording after the Field Notes rename, defeating the layout change.
+
+**Verification** - `npx eslint src/app/blog/categories/page.tsx` exit 0; `npx tsc --noEmit` exit 0; `npm run build` exit 0. Runtime: `/blog/categories` resolves HTTP 200 and renders `<title>Categories | Field Notes</title>`.
+
+**Known issues** - None. Visible page copy ("Blog Categories" H1) and the blog-post SEO title suffix are intentionally out of scope for this metadata-override fix.
+
 ### Branding: rename "Learn" label to "The Atlas" (nav/breadcrumb/SEO; routes unchanged, t_df849483)
 
 **What** - Renamed the user-facing label for the structured curriculum hub (sequenced Salesforce/Agentic AI/OmniStudio paths, daily lessons, cert exams) from "Learn" to "The Atlas" in the display surfaces that carry it, pairing with the blog now named "Field Notes". This is a label-text rename ONLY — the route/URL `/learn` (and `/learn/<series>`, exam, certificate, preview paths) is unchanged to avoid redirect/SEO/bookmark risk.
