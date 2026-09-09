@@ -1,0 +1,76 @@
+---
+title: "Who Is Your AI Agent? Giving Agents Real Identities in 2026"
+slug: ai-agent-identity-2026
+excerpt: "NIST, the IETF, and Microsoft all moved on agent identity in 2026, and MCP now mandates OAuth 2.1 for remote servers. Giving agents real credentials."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "August 06, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "7 min read"
+tags: [AI Agents, Security, MCP]
+bannerImage: "/banners/ai-agent-identity-2026.png"
+---
+
+Your agents are doing real work now: triaging tickets, drafting code, reconciling accounts, coordinating delivery pipelines. But ask a simple question and most organizations freeze: *which identity did that agent act under?* In a startling number of production systems, the answer is "the same service account as everyone else" or worse, "a human's personal credentials."
+
+That answer stopped being acceptable in 2026. The identity layer, the part of the stack that says who you are and what you may touch, is finally catching up to the agents themselves. NIST published a concept paper on agent identity. Microsoft shipped Entra Agent ID. The Model Context Protocol (MCP) made OAuth 2.1 mandatory for remote servers. And the IETF has active drafts on agent authentication. If you're deploying agents this year, this is the story that decides whether they're an asset or a liability.
+
+## The identity gap: agents are borrowing keys they don't own
+
+The problem isn't that agents lack credentials. It's that the credentials they have are almost always the wrong ones. The default pattern in 2024–2025 was to hand an agent a shared service account or a personal API key and let it run. That creates two failure modes we now see constantly in enterprise reviews:
+
+![Before and after the 2026 identity shift: an agent borrowing a shared service account or personal API key has no per-agent identity or audit trail, so key rotation is an emergency and least-privilege is impossible to enforce, while an agent issued its own client ID and scoped credentials acts as a first-class identity subject: scoped permissions, an own audit trail, and tokens revocable without touching anyone's account](</diagrams/ai-agent-identity-2026/1-identity-gap.png>)
+
+**The confused deputy.** An agent with broad credentials can be tricked into using them for something the original user never authorized. The WorkOS developer's guide on agent authentication calls this out with a vivid example: a variable rename that flips `STRIPE_SECRET_KEY` from a test key to a live one, and the agent, holding both, silently reaches for the production secret [^1]. OAuth vendors have known this trap for years; it's called the confused deputy problem, and agents are the most confused deputies we've ever built, because they act on instructions rather than intent.
+
+**The shared-credential audit black hole.** When ten agents and forty humans all authenticate as "svc-ai-bot", the audit log tells you *what* happened but never *who*. Post-incident forensics degrade into guesswork, and least-privilege becomes impossible to enforce because the shared identity carries everyone's permissions at once. Agent identity is the foundation, but it is only one layer of the broader surface we map in our [look at the agent tool attack surface](/blog/agent-tool-attack-surface-2026).
+
+The industry's response in 2026 is a genuine paradigm shift: treat agents as **first-class identity subjects**, principals with their own client IDs, their own scoped credentials, and their own audit trails, separate from users and separate from legacy service accounts [^1].
+
+## 2026: the standards stack arrived
+
+Three months of 2026 alone produced more agent-identity infrastructure than all of 2024 and 2025 combined.
+
+**NIST made it a formal program.** On February 5, 2026, the National Cybersecurity Center of Excellence (NCCoE) published the concept paper *Accelerating the Adoption of Software and AI Agent Identity and Authorization*, and the public comment period closed April 2 [^2]. The paper's headline recommendation is telling: don't invent a new protocol; reuse what we have. It proposes a demonstration project combining **OAuth 2.0, SPIFFE/SPIRE, and MCP** to give agents verifiable identities and authorization, explicitly identifying agent identity as a foundational gap in enterprise AI security [^3].
+
+**The IETF is standardizing it.** The draft *AI Agent Authentication and Authorization* frames an agent as an OAuth 2.0 client: the access token carries the agent identity in the `client_id` claim, the human (or system) it acts for in the `sub` claim, and resource servers validate via standard token introspection [^4]. Meanwhile the IETF is extending SCIM with an `/agents` resource so agents can be provisioned and deprovisioned through the same lifecycle as employees [^1].
+
+**Identity providers are shipping agent classes.** Microsoft introduced **Entra Agent ID** as a native identity class in its IAM stack. Agents get an identity inside the corporate directory, not a shadow account in a vault [^1].
+
+**MCP made it mandatory.** The November 2025 MCP specification formalized **OAuth 2.1 with PKCE** as the authentication standard for remote MCP servers, the protocol layer that lets agents talk to tools and services [^5]. The 2025-06-18 transport spec had already introduced the OAuth 2.1 flow, and server discovery happens via RFC 8414 metadata [^6]. The Cloud Security Alliance's Agent Identity Governance Framework goes further, requiring OAuth 2.1 as the baseline, maintaining delegation parentage records (who is the human at the top of this chain?), and aligning with OWASP's ASI03 guidance: *if an agent encounters a credential during a task, using it is a new authorization event, not a continuation of the old grant* [^7].
+
+## Adroit on the Ground: identity isolation in a 10-agent pipeline
+
+We didn't wait for the standards to finish. We've been running a 10-agent delivery pipeline (BA → architect → designer → developer → security → QA → deploy) daily inside the Fortress of Solitude, and identity is the discipline that keeps it safe. Three practices survived contact with production:
+
+![The Fortress of Solitude 10-agent delivery pipeline (BA → architect → designer → developer → security → QA → deploy) with identity isolation: the orchestrator routes tasks to kanban workers in isolated subprocesses that never inherit its credentials, and every agent holds its own client ID with credentials stored in Bitwarden Secrets Manager and injected at runtime](</diagrams/ai-agent-identity-2026/2-pipeline-identity-isolation.png>)
+
+**1. Workers don't inherit the orchestrator's credentials.** Our kanban workers execute in isolated subprocesses that deliberately do *not* inherit the orchestrator's environment or credentials. Each task runs with only the secrets that task needs. This is the practical version of ASI03: an agent can't leak a credential it never possessed, as our internal worker-credential-isolation runbook codifies.
+
+**2. Secrets live in a manager, not in config.** Agent credentials are stored in Bitwarden Secrets Manager and injected at runtime, never in code or plain-text environment files. This mirrors the WorkOS checklist: credentials in a secrets manager, not code or environment variables [^1]. It also makes rotation a scheduled operation instead of an emergency.
+
+**3. Real OAuth flows for real service identities.** One of our tools (the gog CLI for Google Workspace) authenticates through a genuine OAuth token-exchange flow (authorization code, refresh token, short-lived access token) rather than a long-lived API key, following the pattern from our internal gog-oauth-setup runbook. That's exactly the pattern the IETF draft describes: a machine identity with scoped, expiring tokens that can be revoked without touching anyone's account [^4].
+
+We also learned the hard way that identity discipline is a habit, not a setting: we maintain a systematic token-discovery methodology because credentials have a way of accumulating in scripts and CI files, and the only reliable fix is periodic, systematic sweeps, which our internal github-token-discovery methodology formalizes.
+
+## What to do today
+
+You don't need NIST's final publication to start. The working consensus across every source above reduces to a short checklist:
+
+- **Give each agent its own identity.** A client ID and credential per agent (or agent class), never shared with users or other agents [^1].
+- **Scope narrowly and expire fast.** Request the minimum scopes for the task; prefer short-lived tokens with automated rotation. WorkOS recommends rotation on a schedule of 90 days or less [^1].
+- **Use a secrets manager.** If a credential isn't in the manager, it doesn't exist. Enforce it in review.
+- **Keep the human in the chain.** Record the delegation parentage, which human or system the agent acted for, so every agent action can be walked back to a principal [^7].
+- **Watch the drafts.** The AAuth extension (an agent authorization grant) and the On-Behalf-Of draft are moving toward RFC status; adopting OAuth 2.1 today positions you to absorb them when they land [^7].
+
+The uncomfortable truth of 2026 is that the agent you deploy is only as trustworthy as the identity it holds. The standards are finally here; the question is whether your IAM team has started the conversation. The answer to "who is your AI agent?" should never be "everyone."
+
+[^1]: workos.com. [workos.com](https://workos.com/blog/developers-guide-to-ai-agent-authentication-and-authorization)
+[^2]: csrc.nist.gov. [csrc.nist.gov](https://csrc.nist.gov/pubs/other/2026/02/05/accelerating-the-adoption-of-software-and-ai-agent/ipd)
+[^3]: labs.cloudsecurityalliance.org. [labs.cloudsecurityalliance.org](https://labs.cloudsecurityalliance.org/research/csa-research-note-nist-ai-agent-red-teaming-standards-202603/)
+[^4]: ietf.org. [ietf.org](https://www.ietf.org/archive/id/draft-klrc-aiagent-auth-00.html)
+[^5]: labs.cloudsecurityalliance.org. [labs.cloudsecurityalliance.org](https://labs.cloudsecurityalliance.org/agentic/agentic-mcp-security-best-practices-v1/)
+[^6]: stackoverflow.blog. [stackoverflow.blog](https://stackoverflow.blog/2026/01/21/is-that-allowed-authentication-and-authorization-in-model-context-protocol/)
+[^7]: labs.cloudsecurityalliance.org. [labs.cloudsecurityalliance.org](https://labs.cloudsecurityalliance.org/agentic/agentic-identity-governance-framework-v1/)

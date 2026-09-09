@@ -1,0 +1,95 @@
+---
+title: "Kubernetes for LLM Inference in 2026: The Stack That Fits"
+slug: kubernetes-llm-serving-2026
+excerpt: "66% of organizations run GenAI on Kubernetes, but only 7% ship to production daily. In 2026 the pieces landed: inference-aware routing, DRA, and llm-d."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "August 13, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "10 min read"
+tags: [DevOps, Kubernetes, AI Infrastructure, Platform Engineering]
+bannerImage: /banners/kubernetes-llm-serving-2026.png
+---
+
+Kubernetes won the orchestration war. It runs web tiers, batch jobs, and databases for most of the industry, and generative AI is no exception: according to the Cloud Native Computing Foundation, 66% of organizations now host GenAI workloads on Kubernetes. The uncomfortable part of that number is the second one: only 7% deploy workloads to production daily [^1]. Kubernetes is where models live, not, for most teams, where models are served.
+
+The gap is not a skills problem. It is a model problem. Kubernetes was designed around three assumptions that inference violates: resources are fungible, pods are cheap to replace, and requests cost about the same to serve. None of those hold for LLMs, which is why the first wave of Kubernetes AI deployments stayed demos.
+
+2026 changed the picture. The Gateway API Inference Extension reached GA at v1.0.0 [^2], GPU scheduling matured around Dynamic Resource Allocation (DRA) and Kueue, and IBM, Red Hat, and Google donated llm-d to the CNCF [^3]. The serving stack has a shape now. This article walks through the three mismatches, the pieces that fix each one, and how to decide what your team needs.
+
+## The three mismatches
+
+**GPUs are not CPUs.** Kubernetes models resources as continuous and fungible. You request 500m CPU and 256Mi of memory, and any core will do. GPU memory is the binding constraint for inference, and it is discrete: a 70B model in fp16 needs roughly 140GB of VRAM for weights alone, and it either fits on a device or it does not [^4]. An A100-40GB, an A100-80GB, and an H100-80GB all look like `nvidia.com/gpu: 1` to the scheduler, but they are not interchangeable. There is no "give me 0.7 of a GPU" in the default model: MIG requires supported hardware and a quiet GPU to reconfigure, and time-slicing gives no memory isolation, so one pod's allocation spike can OOM-kill a neighbor [^4].
+
+**Models are expensive to move.** Kubernetes assumes pods are ephemeral and cheap to replace, so preemption, scale-down, and rescheduling are routine. For inference they are ruinous. Loading a 7B model takes 30 to 60 seconds; a 70B model takes 2 to 10 minutes, and during loading the replica serves nothing [^4]. HPA has no concept of loaded state, so it happily tears down a warm replica that will be needed again in five minutes, paying the full loading cost twice.
+
+**Requests are not equal.** A load balancer that round-robins web requests works because requests cost roughly the same. In inference, a 100-token completion and a 32K-token generation differ by orders of magnitude, and connection count is the wrong proxy: one long generation is more load than ten short completions [^4]. The metrics that matter, tokens per second, time to first token, KV-cache utilization, and queue depth, do not exist natively in Kubernetes, and GPU utilization, the metric everyone reaches for first, is misleading: 95% means the hardware is busy, not that it is making progress [^4].
+
+Each mismatch produces a diagnosable failure: pod-level OOMs, multi-minute cold starts on scale-down, and hot spots on one replica while its neighbor idles. The fix for each one shipped in 2025 and 2026.
+
+## Routing: the Gateway API Inference Extension is GA
+
+The fix for mismatched traffic is an official Kubernetes project. The Gateway API Inference Extension adds inference-aware routing with two custom resources: an InferencePool, which groups pods that share a compute configuration and model server, and an InferenceModel, which declares which model names a pool serves [^5][^2]. Between the gateway and the pods sits an Endpoint Picker, a component that watches live pod metrics: queue depth, KV-cache utilization, and loaded LoRA adapters [^4].
+
+When a request arrives, the gateway parses the OpenAI-format body to identify the requested model, then routes to the pod with the shortest queue and the most available cache instead of blindly round-robining [^1]. The project hit GA at v1.0.0, and implementations exist in Envoy Gateway, kgateway, Istio, and NGINX Gateway Fabric [^2][^4].
+
+![Request routing with the Gateway API Inference Extension: the gateway reads the model name from the OpenAI-format request, the endpoint picker checks queue depth and KV-cache utilization across the pool, and the request lands on the least-loaded vLLM replica](</diagrams/kubernetes-llm-serving-2026/1-routing-flow.png>)
+
+The benchmarks published with the extension's introduction show the payoff: throughput roughly on par with a standard Kubernetes Service, and meaningfully lower p90 latency as traffic climbs past 500 QPS, because model-aware routing avoids the GPU hotspots that round-robin creates [^5]. The extension also brings token-aware rate limiting and criticality classes, so interactive chat can be prioritized over batch jobs [^1].
+
+## Scheduling: Kueue and DRA fix the GPU problem
+
+The scheduling layer caught up with the resource mismatch. Kueue intercepts jobs before pods are created and admits them only when all required resources are available, fixing the partial-scheduling problem that plagues multi-GPU workloads [^4]. DRA replaces the binary `nvidia.com/gpu: 1` model with a claim-based model that matches device attributes, including GPU memory capacity and interconnect topology [^4].
+
+The fractional-GPU story got concrete in 2026 when NVIDIA donated its DRA driver to the CNCF. It enables fine-grained allocation, roughly 0.3 of a GPU for one workload and 0.7 for another, with hardware-level isolation rather than the leaky memory sharing of time-slicing [^1]. MIG remains the option for hard partitioning when you need guaranteed isolation, up to seven instances per GPU [^1].
+
+## Disaggregation: llm-d joins the CNCF
+
+The most structural change is prefill/decode disaggregation. LLM inference has two phases with opposite resource profiles: prefill is compute-heavy and parallel, decode is memory-bandwidth-bound and sequential. Served on the same GPU, one side starves the other. llm-d splits the phases onto separate pod pools so each scales independently [^3].
+
+At KubeCon Europe 2026 in Amsterdam, IBM Research, Red Hat, and Google Cloud donated llm-d to the CNCF as a sandbox project, and Google's early testing showed 2x improvements in time-to-first-token for code completion use cases [^3]. The 0.5 release has production-shaped numbers: on Qwen3-32B across 8 vLLM pods and 16 H100s with shared prefixes, llm-d's inference scheduling delivered 4.5k to 11k output tokens per second with a P50 time-to-first-token of 136 to 157ms, up to 109% higher throughput and 99% lower TTFT than a baseline Kubernetes Service [^6]. Its KV-cache offload tier, which extends cache capacity from GPU memory to CPU and disk, sustains roughly 185k tokens per second on Llama-3.1-70B at 250 concurrent users, a 13.9x improvement over a GPU-only deployment once HBM saturates [^6].
+
+For most teams the takeaway is simpler: disaggregation is what keeps time-to-first-token stable under load, and it now has a vendor-neutral, CNCF-hosted implementation to build on.
+
+## The engine layer: vLLM, SGLang, or TensorRT-LLM
+
+Routing and scheduling decide which pod gets a request. The engine decides how fast that pod serves it, and the 2026 engine landscape has clear decision rules [^7][^8]:
+
+**vLLM is the production default.** PagedAttention keeps KV-cache memory waste under 4%, continuous batching keeps the GPU busy, and it runs on the widest set of hardware: NVIDIA, AMD, Intel, TPUs, Trainium [^8]. It is the safest baseline, and the JarvisLabs benchmark across three Qwen models recommends starting with it for general production serving [^7].
+
+**SGLang wins when requests share prefixes.** RadixAttention caches shared computation in a radix tree, so multi-turn chats, RAG pipelines, and agentic workflows reuse the same system prompts instead of recomputing them. On H100s, SGLang delivered 29% higher throughput than vLLM on shared-context workloads, 16,200 versus 12,500 tokens per second, and cache reuse runs 85 to 95% for few-shot prompts and 75 to 95% for agentic workflows [^8]. Structured output is roughly 3x faster, with JSON compliance climbing from 90 to 94% up to 96 to 98.2% with no speed penalty [^8].
+
+**TensorRT-LLM is the NVIDIA specialist.** It delivers 15 to 30% higher throughput than vLLM on H100s and supports speculative decoding up to 3.6x faster generation, but the model must be compiled into an engine before serving, a build that takes over 28 minutes and must be redone on every model swap, and it is NVIDIA-only [^8]. It is the right call for a long-lived deployment on a stable model at high volume, and the wrong call for a team iterating weekly.
+
+![Serving engine decision tree: start with vLLM as the baseline; move to SGLang when requests share prefixes or need structured output; move to TensorRT-LLM only for stable long-lived models on NVIDIA hardware at high volume](</diagrams/kubernetes-llm-serving-2026/2-engine-decision.png>)
+
+One more data point for anyone holding on to an older choice: Hugging Face has put TGI, the category pioneer, into maintenance mode and recommends vLLM or SGLang going forward [^8]. If TGI is still in your stack, that is your migration signal.
+
+## How to adopt: three paths
+
+The practical question is where your team starts. The ecosystem offers three paths, and they are not mutually exclusive [^4].
+
+First, extend Kubernetes. Add the Inference Extension for routing, Kueue for admission, and DRA for device allocation, and keep your existing cluster investment. The cost is stack sprawl: a working inference stack now requires the GPU Operator, a scheduler, a model serving platform, a custom metrics adapter, and an inference gateway, each with its own CRDs and failure modes [^4]. This path fits when your platform team already lives in Kubernetes and the workloads are stable enough to justify the operator count.
+
+Or abstract above it. Ray Serve gives a model-level abstraction on top of Kubernetes, trading one orchestration system for a runtime designed around stateful AI workloads. Managed endpoints like Replicate, Baseten, or Fireworks take GPUs off your plate entirely [^4].
+
+Finally, be honest about scale. If you serve under 10 concurrent users on a model under 13B parameters, Ollama on a decent GPU is fine, and a managed endpoint costs less than the engineering time to run vLLM [^8]. Self-hosting pays off at latency-sensitive or data-sovereign workloads at real volume, which we covered when we looked at [when local inference earns its keep](/blog/local-llm-infrastructure-2026).
+
+Whichever path you take, the pitfalls are the same. Autoscale on token throughput and queue depth, not GPU utilization, or you will scale up, wait minutes for a cold model load, and watch the burst pass before a single request is served [^4]. Think hard before letting HPA scale down warm replicas, since the load cost is the hidden tax [^4]. And optimize the model before the engine: a poorly quantized model on the fastest engine is still slow [^8].
+
+## The shape of the stack
+
+Stepping back, the 2026 stack has four layers. Kubernetes is the substrate, handling nodes, networking, storage, and RBAC. GPU orchestration sits above it with Kueue, the NVIDIA GPU Operator, and DRA managing devices and scheduling. Model serving adds the Inference Extension, KServe, Ray Serve, and the vLLM and SGLang engines. At the top, agent orchestration, token budgets, state persistence, and multi-agent coordination, is where nobody has won yet [^4].
+
+Kubernetes does not get replaced by this. It drops a layer, the same way VMs became the substrate when containers arrived [^4]. The gap between what Kubernetes can do and what inference needs is closing, and the components are mature enough to adopt today. The 7% that ship to production daily will be the ones that stopped treating inference like a special case and started treating it like a workload.
+
+[^1]: Cloudification, "How to Run Scalable AI Inference on Kubernetes and OpenStack Using Gateway API Inference Extensions," April 29, 2026. [cloudification.io](https://cloudification.io/cloud-blog/how-to-run-scalable-ai-inference-on-kubernetes-and-openstack-using-gateway-api-inference-extensions/)
+[^2]: Gateway API Inference Extension, InferencePool API reference. [gateway-api-inference-extension.sigs.k8s.io](https://gateway-api-inference-extension.sigs.k8s.io/api-types/inferencepool/)
+[^3]: The New Stack, "IBM, Red Hat, and Google just donated a Kubernetes blueprint for LLM inference to the CNCF," March 24, 2026. [thenewstack.io](https://thenewstack.io/llm-d-cncf-kubernetes-inference/)
+[^4]: Shan Valleru, "Running AI on Kubernetes: What Breaks and What's Being Built." [svalle.ru](https://svalle.ru/posts/kubernetes/running-ai-on-kubernetes/)
+[^5]: Kubernetes Blog, "Introducing Gateway API Inference Extension," June 5, 2025. [kubernetes.io](https://kubernetes.io/blog/2025/06/05/introducing-gateway-api-inference-extension/)
+[^6]: llm-d, "llm-d 0.5: Sustaining Performance at Scale." [llm-d.ai](https://llm-d.ai/blog/llm-d-v0.5-sustaining-performance-at-scale)
+[^7]: JarvisLabs, "vLLM, SGLang, or TensorRT-LLM? Picking an LLM Serving Stack." [jarvislabs.ai](https://jarvislabs.ai/blog/vllm-sglang-trtllm-comparison)
+[^8]: The AI Engineer, "vLLM vs Ollama vs SGLang vs TensorRT-LLM," April 9, 2026. [theaiengineer.substack.com](https://theaiengineer.substack.com/p/vllm-vs-ollama-vs-sglang-vs-tensorrt)

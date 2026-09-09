@@ -1,23 +1,9 @@
-# AGENTS.md
+<!-- BEGIN:nextjs-agent-rules -->
 
-## Cursor Cloud specific instructions
+# This is NOT the Next.js you know
 
-This is a monorepo, but the only runnable app is the Next.js site in `apps/web`. Run all
-commands from `apps/web` (not the repo root). Node 22 is required.
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
 
-Standard commands (see `apps/web/package.json` / `apps/web/README.md`):
-- Dev server: `npm run dev` (serves on http://localhost:3000)
-- Lint: `npm run lint`
-- Build: `npm run build`
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
-Non-obvious notes:
-- `npm run lint` currently reports pre-existing `react-hooks` errors in app code
-  (`contact/page.tsx`, `GoogleAnalytics.tsx`, `CookieConsent.tsx`). These are not caused by
-  environment setup and do NOT block `next build` (the Next 16 / Turbopack build does not run
-  ESLint), so `build` and `dev` succeed despite them.
-- The contact form (`/api/contact`) is the site's main interactive flow. It degrades
-  gracefully without secrets: with no `SALESFORCE_OID` set it returns a "Contact form is not
-  configured yet" message; client-side validation still works. To exercise the full success
-  path locally, put `SALESFORCE_OID` (and optionally `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`,
-  `RECAPTCHA_SECRET_KEY`, `NEXT_PUBLIC_GA_MEASUREMENT_ID`, `NEXT_PUBLIC_SITE_URL`) in
-  `apps/web/.env.local` (gitignored). reCAPTCHA verification is skipped in development.
+<!-- END:nextjs-agent-rules -->

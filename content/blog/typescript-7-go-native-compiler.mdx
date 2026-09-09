@@ -1,0 +1,110 @@
+---
+title: "TypeScript 7.0: The 10x Faster Go-Native Compiler"
+slug: typescript-7-go-native-compiler
+excerpt: "TypeScript 7.0 is stable: a complete rewrite of the compiler in Go that cuts build times by 8-12x. Here's what changed, what breaks, and how to migrate."
+category: "React & Web Dev"
+categoryColor: react
+categoryGradient: "from-emerald to-emerald-dark"
+date: "August 3, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "6 min read"
+tags: [TypeScript, Web Development, Performance]
+bannerImage: /banners/category-react.png
+---
+
+## The biggest TypeScript release in a decade just went stable
+
+On July 8, 2026, Microsoft shipped **TypeScript 7.0**, a complete rewrite of the TypeScript compiler and language tooling in Go, originally announced as "Project Corsa" in March 2025. It's the first stable release of the native compiler, and the numbers are not marketing fluff: full builds are typically **8x to 12x faster** than TypeScript 6.0, with memory usage dropping 6% to 26%. [^1]
+
+This matters more than the usual "new version" story. TypeScript became GitHub's most-used language by contributor count in August 2025, with 2.6 million monthly contributors, up 66% year over year, a shift GitHub called "the most significant language change in more than a decade." [^2] Every one of those projects pays the compile-time tax on every edit, every CI run, and every agent loop. TypeScript 7 is the first serious attempt to collect that tax.
+
+## The numbers, straight from Microsoft
+
+Microsoft benchmarked TypeScript 6 vs 7 on five large open-source codebases. These are vendor-reported, but they're reproducible and consistent with what early adopters are seeing: [^1]
+
+| Codebase | TS 6 build | TS 7 build | Speedup |
+|----------|-----------|-----------|---------|
+| VS Code | 125.7s | 10.6s | 11.9x |
+| Sentry | 139.8s | 15.7s | 8.9x |
+| Bluesky | 24.3s | 2.8s | 8.7x |
+| Playwright | 12.8s | 1.47s | 8.7x |
+| tldraw | 11.2s | 1.46s | 7.7x |
+
+Memory is better too: VS Code's build dropped from 5.2GB to 4.2GB (-18%), Bluesky from 1.8GB to 1.3GB (-26%). [^1]
+
+The editor experience improves even more dramatically. Opening a file with an error in the VS Code codebase used to take ~17.5 seconds from editor start to first error; with TypeScript 7 it's under 1.3 seconds, over 13x faster. And the new language server (LSP) is measurably more reliable: Microsoft reports failing language server commands down over 80% and server crashes down over 60% compared to TypeScript 6.0. [^1] The toolchain is already absorbing the new core: Next.js 16.3 uses TypeScript 7 for type checking during `next build`, as we note in our [Next.js 16.3 walkthrough](/blog/nextjs-16-3-instant-navigations).
+
+## Why Go?
+
+Anders Hejlsberg, TypeScript's creator, framed the rewrite as getting "10x, half of it from being native code, and the other half from being able to take advantage of shared memory concurrency." [^3]
+
+The team picked Go over C# and Rust for practical reasons: Go's syntax is structurally similar to JavaScript's (making the line-by-line port and future maintenance tractable), it compiles to native code on all platforms, and it handles graph traversal, walking the syntax trees the compiler lives on, exceptionally well. Go's garbage collector can even be effectively disabled for most compilations. [^3] [^4]
+
+![TypeScript 7's Go-native compiler architecture: TypeScript source flows through a Go-native compiler whose frontend (parsing + type checking) and backend (codegen/emitting) are parallelized by default, producing JavaScript output, native code plus shared-memory concurrency making full builds 8x–12x faster than TypeScript 6.0, with memory down 6–26%.](</diagrams/typescript-7-go-native-compiler/1-go-native-architecture.png>)
+
+## What's actually new (beyond speed)
+
+- **Parallelism you can tune.** TypeScript 7 parallelizes parsing, type-checking, and emitting by default. The new experimental `--checkers` flag controls type-checker workers (default 4); bumping to `--checkers 8` pushed VS Code to a 16.7x speedup. `--builders` parallelizes project-reference builds in monorepos, and `--singleThreaded` disables parallelism entirely for debugging or constrained CI runners. [^1]
+- **A rebuilt `--watch` mode.** File watching is now powered by a port of the Parcel bundler's watcher to Go, replacing polling logic that was "computationally expensive, especially at larger-scale projects with many dependencies in node_modules." [^1]
+- **Nightly builds** resume under `typescript@next`; the preview package `@typescript/native-preview` had already reached over 8.5 million weekly downloads. [^1]
+
+## What breaks: read this before upgrading
+
+TypeScript 7.0 is deliberately compatible: code that compiles cleanly with TypeScript 6.0 (with `stableTypeOrdering` on and no `ignoreDeprecations` flag) should compile identically. 7.0 adopts 6.0's defaults and raises hard errors for flags and constructs deprecated in 6.0. [^1]
+
+![What breaks when upgrading to TypeScript 7.0: no stable programmatic API (typescript-eslint stays on 6.0 until 7.1), side-by-side installs via @typescript/native and the @typescript/typescript6 alias, types now defaulting to [] with no automatic @types loading, and hard errors for flags and constructs deprecated in 6.0, with what to do instead for each.](</diagrams/typescript-7-go-native-compiler/2-what-breaks-upgrade.png>)
+
+The real gotcha is **tooling, not your code**:
+
+1. **No stable programmatic API in 7.0.** Tools that import the compiler directly, most notably `typescript-eslint`, must stay on 6.0 for now. Microsoft expects a new, different API with TypeScript 7.1. [^1]
+2. **Side-by-side is the supported pattern.** Microsoft published `@typescript/typescript6`, which provides a `tsc6` executable and re-exports the 6.0 API. Install both via npm aliases:
+
+```json
+{
+  "devDependencies": {
+    "@typescript/native": "npm:typescript@^7.0.2",
+    "typescript": "npm:@typescript/typescript6@^6.0.2"
+  }
+}
+```
+
+`npx tsc` gets you 7.0; `tsc6` stays available for legacy tooling. [^1]
+
+3. **Behavioral defaults from 6.0 are now hard.** If you never ran TypeScript 6.x, go through the 6.0 release notes first. `types` now defaults to `[]` (no automatic `@types` loading) among other breaking changes. [^5]
+
+## Real-world results from early adopters
+
+![TypeScript 7.0 real-world speedups: Slack's CI type-checking dropped from about 7.5 minutes to 1.25 minutes (around 6x), Canva's time-to-first-error dropped from 58 seconds to 4.8 seconds (around 12x), Vanta saw up to 9x on its biggest project, Microsoft News Services saved 400 hours a month waiting on CI, and VS Code adopted the compiler incrementally over about six months. Vendor benchmarks on five large codebases show full builds 8x-12x faster.](</diagrams/typescript-7-go-native-compiler/3-real-world-speedups.png>)
+
+- **Slack:** CI type-checking dropped from ~7.5 minutes to 1.25 minutes, and 40% of their merge queue time disappeared. Their editor was previously "almost unusable" at that scale. [^6]
+- **Vanta:** up to 9x faster on one of their biggest projects. [^7]
+- **Microsoft News Services:** 400 hours a month saved waiting on CI builds. [^1]
+- **Canva:** time to first error in the editor went from ~58 seconds to ~4.8 seconds. [^1]
+- **VS Code itself** adopted TypeScript 7 incrementally over ~6 months, using each phase as a regression test for nightly releases, and documented the migration as an "easy win for many codebases." [^8]
+
+## What we'd do at Adroit
+
+The upgrade path we'd recommend to clients, in order:
+
+1. **Move to TypeScript 6.0 first** if you're on 5.x. 7.0's defaults and deprecations all land in 6.0, so it's the natural ramp.
+2. **Run `tsc --noEmit` under TypeScript 7 in CI as a canary** before committing your whole pipeline. You get the speed with a one-line rollback.
+3. **Keep `typescript-eslint` pinned to 6.0** via the `@typescript/typescript6` alias until 7.1 ships its API. Don't force it.
+4. **Tune `--checkers` on big monorepos** (and `--builders` for project references). That's where the 12-16x results live, and `--singleThreaded` is your escape hatch on small CI runners.
+
+A couple of practical notes that fall out of the numbers above. First, **measure your own baseline before you promise a speedup.** The 8x-12x figure is what Microsoft sees on five large codebases, and the early-adopter results (Slack at ~6x on a specific CI path, Vanta at 9x) show that real-world wins cluster in that range but are not identical across projects. [^6] [^7] The cheapest reliable measurement is the canary in step 2: run `tsc --noEmit` under 7.0 in CI, compare wall-clock time against your current 6.0 run, and you have a project-specific number in one pipeline pass instead of a guess. [^1]
+
+Second, **plan the tooling migration as its own workstream, separate from the compiler swap.** Because `typescript-eslint` must stay on 6.0 until 7.1, your editor linting will keep running the old checker even after your build moves to 7.0. That split is by design and it is fine, but it means you will briefly have two checkers in play, one for the build and one for editor diagnostics. Teams that flag this up front avoid a confusing week where the editor and CI disagree about a type error that only one checker flags. [^1]
+
+Note: This article is written four weeks after 7.0.2 shipped; the programmatic API situation (7.1) is the one thing to re-verify before you rely on it, since it's expected but not yet released as of this writing. [^1]
+
+TypeScript 7 is an infrastructure release, not a feature release. Your code won't suddenly get smarter, but each build, edit, and agent iteration gets an order of magnitude cheaper. For teams where compile time is the bottleneck between idea and shipped code, that kind of upgrade pays for itself in the first week.
+
+[^1]: devblogs.microsoft.com. [devblogs.microsoft.com](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/)
+[^2]: github.blog. [github.blog](https://github.blog/news-insights/octoverse/octoverse-a-new-developer-joins-github-every-second-as-ai-leads-typescript-to-1/)
+[^3]: theregister.com. [theregister.com](https://www.theregister.com/devops/2026/07/09/speedier-type-checks-in-typescript-70-as-first-stable-go-release-ships/5268828)
+[^4]: github.com. [github.com](https://github.com/microsoft/typescript-go/discussions/411)
+[^5]: typescriptlang.org. [typescriptlang.org](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-6-0.html)
+[^6]: bsky.app. [bsky.app](https://bsky.app/profile/slack.engineering/post/3lry3ml3qok2f)
+[^7]: bsky.app. [bsky.app](https://bsky.app/profile/chriskrycho.com/post/3melxwy2lkycq)
+[^8]: code.visualstudio.com. [code.visualstudio.com](https://code.visualstudio.com/blogs/2026/06/26/iterating-faster-with-ts-7)
