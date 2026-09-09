@@ -1,0 +1,98 @@
+---
+title: "OpenTofu vs Terraform in 2026: The Fork Is a Real Decision"
+slug: opentofu-vs-terraform-2026
+excerpt: "Three years after the BSL relicense, OpenTofu has shipped features Terraform still lacks. Here's the license, governance, and migration math."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "August 16, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "9 min read"
+tags: [DevOps, Platform Engineering]
+bannerImage: "/banners/opentofu-vs-terraform-2026.png"
+---
+
+The Terraform fork grew up. Three years after HashiCorp moved Terraform off the permissive Mozilla Public License, OpenTofu is no longer a protest project with a corner of the IaC market. It has shipped real features upstream Terraform still does not have, crossed ten million downloads, and forced the conversation past "should this exist" to "which one fits our org" [^3]. In 2026 the choice between them is a judgment call about license posture, governance, and which side has shipped the features you actually depend on [^1]. For a long time the answer was "stay on Terraform, the fork is a hedge." This article walks through what changed, where the two tools diverge, how to migrate if you move, and the decision rule that separates teams who should switch from teams who should not.
+
+## How we got here
+
+The origin story is short and it matters because it frames everything after it. In August 2023, HashiCorp changed Terraform's license from the Mozilla Public License (MPL) 2.0 to the Business Source License (BSL) 1.1. The new terms allow internal production use but restrict using Terraform in a way that competes with HashiCorp's own products, and BSL only converts back to MPL after four years per release [^1]. A coalition of vendors and community members, including Spacelift, env0, Gruntwork, Harness, Scalr, and Cloud Posse, forked the last MPL release, Terraform 1.5, and formed OpenTofu under the Linux Foundation [^1].
+
+Then, in February 2025, IBM completed its acquisition of HashiCorp for $6.4 billion [^8]. The acquisition did not change the BSL license, but it did raise the stewardship question the fork was built to hedge against: whether Terraform's roadmap would stay independent under a single large corporate owner [^1]. If you are evaluating IaC in 2026, that IBM relationship is the background condition. It is not automatically a reason to leave, but it is the reason the fork stopped being academic.
+
+Adoption reflects that it is not academic anymore. Independent tracking from April 2026 put OpenTofu at roughly 12% adoption among IaC practitioners, with 27% of teams planning to evaluate or expand its use [^8]. That is still a minority position, momentum rather than a landslide, but a far cry from "nobody uses it."
+
+![Three years of IaC history: the 2023 BSL relicense spawned the OpenTofu fork, IBM acquired HashiCorp in early 2025, and by 2026 OpenTofu reached roughly 12 percent adoption with 27 percent of teams evaluating it](</diagrams/opentofu-vs-terraform-2026/1-timeline.png>)
+
+## The core divide is license and governance
+
+Everything else in this debate is downstream of the license. OpenTofu is MPL 2.0, an OSI-approved open-source license with no restrictions beyond its copyleft terms. Terraform is BSL 1.1, which is source-available but not open-source by the OSI definition, and which restricts competitive use against HashiCorp [^7]. The difference barely touches an end-user team that just runs `terraform apply` against its own infrastructure. It matters enormously to anyone building products on top of the tool: managed CI/CD platforms, drift-detection tools, and policy-as-code systems, several of which switched their default to OpenTofu after the relicense [^1].
+
+Governance follows the same line. OpenTofu is run by a multi-vendor Technical Steering Committee under the Linux Foundation, so roadmap decisions are not driven by one company's product plans [^7]. Terraform's roadmap sits inside HashiCorp, now IBM. If you value neutral governance that no single vendor can redirect, that is OpenTofu's argument. If you value a single accountable vendor with an enterprise support contract, that is Terraform's.
+
+There is also a price signal worth noting. HashiCorp raised Terraform Cloud prices by an average of 18% year over year in 2025 and 2026, the kind of commercial behavior the permissive-license hedge exists to make bearable [^7]. Enterprises deep in HCP Terraform have few alternatives if those increases keep coming, because the proprietary features are not portable.
+
+## The feature gap opened up
+
+The technical comparison has stopped being theoretical. OpenTofu's community-driven cadence shipped features that had sat in the Terraform backlog for years, and a few of them are genuinely differentiating.
+
+State encryption is the headline. Terraform historically stored state files, which can contain sensitive data, in plain text. OpenTofu 1.7 added native state encryption that encrypts state at rest with methods like AES-GCM, using key providers such as AWS KMS or HashiCorp Vault, so even a compromised S3 bucket yields unreadable state without the key [^7]. Since then it has only deepened: 1.10 added external key providers that can chain to your own secret-management tool, so the key does not have to live inside OpenTofu at all [^4].
+
+Version 1.10 also shipped three things that matter at scale. Native S3 state locking uses S3's conditional writes so you can drop the DynamoDB table that the Terraform S3 backend has always required [^4]. OCI registry support lets you distribute providers and modules through the container registry you already run, the missing piece for air-gapped environments [^3][^4]. And OpenTelemetry tracing, local-only and off by default, turns a `tofu plan` that is mysteriously slow into something you can actually profile [^4].
+
+The 1.11 release in December 2025 added ephemeral values and write-only attributes, which keep short-lived secrets like temporary credentials out of the state file entirely [^5]. The same release introduced the `enabled` meta-argument for conditionally provisioning resources. Then 1.12, in May 2026, made `prevent_destroy` dynamic, so a shared module can allow a development database to be destroyed while still protecting the production one, and added a `destroy = false` lifecycle option that removes an object from state without destroying the remote object [^2].
+
+Terraform's direction is different and, in its own way, just as clear. It doubled down on the integrated platform. Terraform Stacks, which manages a set of related configurations across environments as one unit, is GA on HCP Terraform and Terraform Enterprise. The 2025 announcement that previewed Project infragraph also shipped HCP Terraform Stacks GA, HCP Terraform search in beta, HCP Terraform actions in beta, a bring-your-own-key option for encrypting sensitive data, and an HCP Terraform MCP server in beta that lets an AI client or IDE query the registry and trigger workspace runs in natural language [^6]. Sentinel remains the first-class policy-as-code integration, where OpenTofu teams typically pair with OPA or Conftest [^1].
+
+The registry numbers frame the provider question. The OpenTofu Registry hosts more than 4,200 providers and 23,600 modules under Linux Foundation governance, with mandatory provider package signing for supply-chain safety. The Terraform Registry remains the larger ecosystem at roughly 4,800 providers, including niche and legacy hardware integrations that have not all been mirrored [^7]. Most providers run unchanged on both, because both tools speak the same provider plugin protocol and one binary typically serves both [^1].
+
+![OpenTofu and Terraform diverge by design: OpenTofu ships state encryption, native S3 locking, OCI registries, ephemeral values, and Linux Foundation governance, while Terraform centers on Stacks, Sentinel, HCP Terraform, and an MCP server under IBM](</diagrams/opentofu-vs-terraform-2026/2-feature-divergence.png>)
+
+## Migration is the easy part
+
+Here is the counterintuitive reality of this decision: switching is straightforward for the overwhelming majority of setups, because the two tools share the state file format, the HCL configuration language, the resource graph, and the apply lifecycle [^1]. The migration path for a team moving from Terraform to OpenTofu is short:
+
+1. Confirm provider compatibility. Most providers work identically, so check the few you depend on most.
+2. Install OpenTofu alongside Terraform on developer machines and CI runners.
+3. Run `tofu init` against your existing state. No state migration is needed, because the file formats match.
+4. Run `tofu plan` and confirm the plan is clean, with no unexpected diffs.
+5. Replace `terraform` with `tofu` in CI/CD pipelines, runbooks, and documentation.
+6. Remove Terraform from CI runners once you have validated the switch [^1].
+
+The plan-clean check is the moment of truth. If `tofu plan` shows no diffs against your current state, the swap is essentially invisible to your team. If it surfaces diffs, those are the edge cases to resolve before you commit to the move.
+
+The migration is only complicated if you depend on HashiCorp-specific features. Teams using Terraform Stacks generally stay on Terraform, because Stacks has no OpenTofu equivalent. Teams using Sentinel typically swap it for OPA when they migrate [^1]. And if you run HCP Terraform as your state and run backend, OpenTofu has no first-party equivalent, so you would move to a third-party platform like Spacelift, env0, or Scalr that supports both tools [^1]. That is a real cost to count, because migrating a state backend and its locking, policy, and run history is a bigger project than swapping the binary.
+
+The reverse direction, OpenTofu to Terraform, is possible but less common, and it requires unwinding OpenTofu-specific features like state-encryption configuration and `removed` blocks before the switch [^1]. That asymmetry is a one-way door worth noticing: OpenTofu is a low-friction exit from Terraform, but Terraform is not a frictionless exit from OpenTofu.
+
+## The decision rule
+
+Given the parity, the decision collapses to a small set of questions.
+
+Pick OpenTofu if you want an OSI-approved permissive license, if your CI/CD or policy platform has already standardized on it, if state encryption or the faster release cadence matters to you, or if you are uncomfortable with a roadmap governed by a single corporate owner and prefer Linux Foundation stewardship [^1]. That last one is not a technical argument, but it is a legitimate one, and it is the reason most managed IaC vendors moved their default.
+
+Stay on Terraform if you depend on Stacks, Sentinel, or other HashiCorp-specific features, if your team is deeply integrated with HCP Terraform and the migration cost is high, or if you have vendor or compliance reasons to stay on the IBM-supported path [^1]. There are industries, especially regulated ones, where the enterprise support contract and certifications outweigh everything else.
+
+The one thing to avoid is defaulting. "We have always used Terraform" is how the 18%-average price increases and the single-vendor roadmap become someone else's problem. Even if you stay, running the migration checklist and confirming a clean plan tells you whether you are actually locked in or just comfortable. That knowledge is worth having either way.
+
+## The question the debate skips
+
+The OpenTofu-versus-Terraform argument is real, and for teams maintaining existing IaC it is the right question to ask. But for greenfield work in 2026 there is a bigger one underneath it: whether the IaC model itself is the right primitive [^1].
+
+Both tools share the same shape. Infrastructure is described in a separate language, in a separate codebase, against a separate state file, and applied by a separate tool. The application code has no awareness of the infrastructure it runs on, and the infrastructure has no awareness of how the application uses it [^1]. That split made sense when infrastructure meant networks and VMs configured by ops teams. It is increasingly awkward now that much of what we call infrastructure is application-level concerns, databases, queues, secrets, object storage, auth, that the application reaches for directly.
+
+The awkwardness gets worse under generative AI. Estimates put 71% of cloud teams seeing an increase in IaC volume because of GenAI, compounding infrastructure sprawl and configuration mistakes faster than teams can review them [^7]. Yet AI tooling generates application code easily and struggles to generate matching IaC, precisely because the two contexts are isolated from each other [^1].
+
+This is the direction our own [control-planes article](/blog/control-planes-infrastructure-delivery-2026) points at: the reconciliation model, where a controller continuously converges declared state against reality, is a better fit for agent-operated infrastructure than the finite plan-apply pipeline. For new backends, the question worth asking before you reach for either Terraform or OpenTofu is whether you need an IaC tool at all, or whether a model that derives provisioning from application code would deliver less sprawl and a better fit for AI-assisted workflows [^1].
+
+That is a harder conversation than picking a fork. But it is the one that matters more in 2026, and it is why the fork decision, while now genuinely real, is also only half of what a platform team should be deciding.
+
+[^1]: OpenTofu vs Terraform in 2026: License, Features, and Migration. [encore.dev](https://encore.dev/articles/opentofu-vs-terraform-2026)
+[^2]: OpenTofu v1.12.0 release notes. [opentofu.org](https://opentofu.org/blog/opentofu-1-12-0/)
+[^3]: OpenTofu 1.10.0: A Well-Seasoned Release. [opentofu.org](https://opentofu.org/blog/opentofu-1-10-0/)
+[^4]: What's new in OpenTofu 1.10. [opentofu.org](https://opentofu.org/docs/v1.10/intro/whats-new/)
+[^5]: OpenTofu v1.11.0 release notes. [opentofu.org](https://opentofu.org/blog/opentofu-1-11-0/)
+[^6]: HashiCorp Previews the Future of Agentic Infrastructure Automation with Project infragraph. [newsroom.ibm.com](https://newsroom.ibm.com/2025-09-25-hashicorp-previews-the-future-of-agentic-infrastructure-automation-with-project-infragraph)
+[^7]: OpenTofu vs Terraform in 2026: Is the Fork Finally Worth It?. [dev.to](https://dev.to/mechcloud_academy/opentofu-vs-terraform-in-2026-is-the-fork-finally-worth-it-3nd1)
+[^8]: Terraform vs OpenTofu in 2026: Should You Stay or Switch?. [medium.com](https://medium.com/@surbhi19/terraform-vs-opentofu-in-2026-should-you-stay-or-switch-6653dd4fa1c0)

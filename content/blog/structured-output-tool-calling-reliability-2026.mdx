@@ -1,0 +1,86 @@
+---
+title: "Valid JSON Isn't Correct Data: The Reliability Gap"
+slug: structured-output-tool-calling-reliability-2026
+excerpt: "Structured output solved the formatting problem. But a model can emit valid, well-typed JSON that says the wrong thing, and no schema can tell the difference."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "September 02, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: 10
+tags: [AI Agents, AI Infrastructure, Structured Outputs, Tool Calling, Reliability, LLM Engineering]
+bannerImage: "/banners/structured-output-tool-calling-reliability-2026.png"
+---
+
+An agent writes a record back to your database and returns an object. It is valid JSON. Every field matches the schema. The `customer_id` is a string, the `amount` is a number, the enum matches an allowed value. Your pipeline accepts it without a second look. Then the ledger lands and the account that got debited is the wrong one, because the value was the correct type but the wrong content. The JSON passed every check that ran, and the system still did the wrong thing.[^2]
+
+This is the failure that structured output was supposed to retire, and in one sense it did. We spent 2024 and 2025 teaching ourselves to stop parsing ragged prose out of a model's mouth. Prompt-only JSON extraction fails 5 to 20 percent of the time depending on schema complexity, in five predictable ways: preamble contamination, hallucinated keys, missing required fields, type drift, and silent truncation mid-object.[^1] Native structured output, now shipped by every major provider, killed that entire class of failure. The APIs mask non-compliant tokens during generation, so a schema-valid token stream is the only thing the model can emit.[^1]
+
+That win created the trap. Once the formatting problem looked solved, teams started treating the output as trustworthy. The formatting was never the whole problem. A model can produce a structurally perfect object that is semantically wrong, and no schema, no matter how strict, can tell the difference. This article is about that second layer: what you have to build once the JSON is guaranteed valid.
+
+## The syntax is solved. The semantics are not.
+
+The cleanest evidence comes from OrderBench, a May 2026 benchmark built by researchers at the University of Birmingham. They ran 2,400 calls across four open models in two modes, prompt-only and strict JSON-schema, using restaurant orders as a proxy for any transaction an agent compiles from natural language. Ordering has business rules: negated modifiers, allergen conflicts, dietary constraints, unavailable items. A model that turns "no onions, and make sure it is nut free" into an order that keeps the onions has produced valid, well-typed JSON that would poison the customer.[^2]
+
+The headline result is how far apart structure and correctness can sit. The strongest evaluated model reached 100 percent schema validity in both modes, yet its semantic success, defined as an object that could be executed as a drop-in transaction, landed at about 81 to 83 percent. Roughly one in six orders carried an exactness error, and the schema mode did not fix it.[^2]
+
+The smaller models are more alarming. A Qwen 3 30B model hit 100 percent schema validity in both modes while semantic success stayed near 31 percent, and unsafe acceptances, orders that should never have been executed, hovered around 15 percent. Gemma 2 2B was the most severe counterexample: strict JSON-schema mode produced 100 percent schema-valid objects, yet semantic success collapsed to 2 percent and unsafe acceptance spiked to nearly 42 percent.[^2]
+
+![OrderBench semantic gap: four models all reach near-perfect schema validity under strict JSON-schema mode, yet semantic success ranges from 83 percent for the strongest model down to 2 percent for Gemma 2 2B, with unsafe acceptance as high as 42 percent](</diagrams/structured-output-tool-calling-reliability-2026/1-semantic-gap.png>)
+
+The pattern holds across the board. For the smallest models, adding schema enforcement often raises schema validity dramatically, from about 69 percent to 100 percent, while doing little or nothing for whether the answer is right. This is the paper's core finding, and it generalizes: structured output is a necessary interface layer, not a substitute for domain verification and fail-closed execution.[^2]
+
+## The four generations, and what each one actually guarantees
+
+It helps to see how we got here, because each rung of the ladder solves a different layer and people routinely over-credit the top rung. The first generation was pure prompt engineering: tell the model to return JSON and hope. This treats schema compliance as a soft instruction, and it is the 5 to 20 percent failure regime.[^1]
+
+The second generation was function calling and tool use, which arrived in 2023. Providers fine-tuned models to emit function arguments that conform to a signature. Reliability jumped, but it was not a mathematical guarantee; the model follows schemas as instructions, and edge cases differ across providers.[^1]
+
+The third generation was native schema-enforced APIs, shipped by OpenAI and Google in mid-2024 and since adopted across the majors. These use constrained decoding under the hood, masking invalid tokens at every generation step so schema violations become impossible for the supported schema subset.[^1]
+
+The fourth generation is constrained decoding for self-hosted models, running at the inference engine level in vLLM, llama.cpp, and TGI. This is the one that matters for teams self-hosting local LLMs. Two algorithmic approaches dominate: a finite-state machine that compiles the schema into a grammar, pioneered by Outlines, and a pushdown automaton that handles context-free grammars with stack-based tracking, used by XGrammar, which became the default structured output backend in vLLM.[^1][^3]
+
+![Four generations of structured output: prompt engineering and JSON mode (5 to 20 percent failure, treats schema as soft instruction), function calling (reliability jump, still a fine-tuned instruction not a guarantee), native schema-enforced APIs (constrained decoding masks invalid tokens), and engine-level constrained decoding for self-hosted models](</diagrams/structured-output-tool-calling-reliability-2026/2-four-generations.png>)
+
+Every one of these rungs, including the top, has the same ceiling. Constrained decoding guarantees syntactic conformance and nothing else. A system with perfect schema enforcement can reliably produce an object with the correct enum value; whether that value is accurate for the input is a separate question the schema cannot express.[^1] The provider-level APIs also carry real constraints. OpenAI's strict mode supports only a subset of JSON Schema and requires `additionalProperties: false` on every object. Anthropic's Claude strict mode rejects recursive schemas, numeric bounds, and string length constraints, and caps a request at 20 strict tools, 24 optional parameters, and 16 union-type parameters. These limits push validation out of the schema and into your post-validation code, exactly where the semantic layer has to live anyway.[^3]
+
+## Adroit on the Ground: the empty braces that broke a pipeline
+
+We ran into this gap the expensive way in our own delivery pipeline. We self-host a local Qwen model for background subsystems, and at one point it began emitting empty `{}` objects for nested tool-call arguments. The output was valid JSON. It parsed cleanly. But it carried none of the data the completion gate needed, so tasks could never validate as complete. Free-text reasoning stayed correct the whole time; only the structured tool-call payloads were gutted. We moved every structured and tool-calling workload to cloud models and kept the local model for free-text subsystems, and the fix held. The same reliability boundary that OrderBench documents in a restaurant domain took down our kanban completion gate.[^4]
+
+The lesson transfers directly to any client running local models. If your workload depends on strict structured output, test it on your chosen local model before committing, and plan a validation layer on top. A local model can be schema-perfect and content-empty at the same time, and the only way to catch that is to check what the output contains, not just whether it parses.
+
+## Structured outputs or function calling: the mechanism decision
+
+Once you accept that neither mechanism guarantees correctness, the next question is which one to reach for, and the 2026 answer is a clear decision rule based on what the agent is doing, not on fashion.
+
+Use structured outputs when the goal is pure data transformation: extracting entities from text, converting a natural language query into a validated SQL or GraphQL payload, or forcing an agent's internal reasoning into a parsable shape. The model already holds the information in context and just has to reshape it. Because there is no mid-generation interaction with an external system, this path is single-turn, cheaper, lower latency, and close to zero schema-parsing errors.[^5]
+
+Use function calling when the agent must perceive or change the world: fetch information it does not currently hold, trigger an external API, or dynamically route to a specialized subagent. Function calling is inherently multi-turn and statistically unpredictable. The model can hallucinate an argument, pick the wrong tool, or get stuck in a diagnostic loop, so it requires retry logic, fallback mechanisms, and careful error handling.[^5]
+
+![Choosing the mechanism: use structured outputs for pure data transformation and extraction where the model already holds the information in context, use function calling when the agent must fetch hidden data, trigger an external API, or route to a subagent mid-thought, and default to a hybrid where a structured plan drives a minimal tool loop](</diagrams/structured-output-tool-calling-reliability-2026/3-mechanism-choice.png>)
+
+The two are not rivals. Modern function calling relies on structured outputs under the hood to keep generated arguments aligned with function signatures, and most strong 2026 systems are hybrids: a structured plan generated up front, a minimal tool loop to act, then structured verification of the result. That matches what we found in the field.[^5]
+
+## The validator-first runtime
+
+The practical takeaway is that structured output moved your work downstream, not away. Because syntax is guaranteed, the failure surface is now semantic, and semantic correctness is enforced in code, not in the model. The durable pattern is a validator-first runtime: define a schema, validate every output against it, and wire a repair loop for the failures that slip through.
+
+A good validation layer has three parts. First, a schema that is flat and purposeful. Deeply nested schemas confuse both prompt-guided models and constrained decoders, so keep it shallow, name keys intuitively, and use enums aggressively for any field that drives branching. Mark every field required explicitly, giving optional ones a nullable type with an explicit null option, and set `additionalProperties: false` everywhere, because without it models invent keys.[^1][^3]
+
+Second, a repair loop with bounded retries. Catch parse and validation failures and re-prompt with the error message and a compact inline schema example. Most models self-correct on a second attempt; three retries is usually the ceiling, past which the model is unlikely to recover on that input. A library like `json_repair` can patch common minor syntax errors without a full retry round trip, though you should not build the pipeline around that fallback. For constrained decoding engines, cache compiled grammars at startup, because compilation is expensive and generation is cheap.[^1][^3]
+
+Third, version your schemas like interfaces. Adding a required field is a breaking change; changing a field type is a breaking change. Treat schemas as versioned contracts with deliberate consumer migration, and monitor for semantic drift, not just parse failures. After you solve syntactic compliance, the remaining risk is structurally valid values that are semantically wrong, classifications that shift after a model update, extracted entities that do not exist in the source. Set up downstream consistency checks that catch those silently incorrect outputs before they propagate.[^1]
+
+![The validator-first runtime path: define a flat schema, validate the model output, and on failure re-prompt with the error and an inline schema example up to three retries, while a cached grammar and json_repair buffer handle common fixes, and versioned schemas plus semantic-drift monitoring catch silently wrong values](</diagrams/structured-output-tool-calling-reliability-2026/4-validator-first.png>)
+
+The cheap wins come first. Three schema decisions, flat schemas, explicit required fields, and `additionalProperties: false`, eliminate most production structured output failures before any library or API change. From there, engineering discipline is what separates a pipeline that accepts wrong data from one that fails loudly and routes the output through validation before it reaches anything that can do real damage.[^1]
+
+The bottom line is narrower than the marketing, and far more useful. Structured output gave us valid JSON, which is real progress, and then it let us forget that valid JSON is not correct data. The teams that ship reliable agents treat the model as a producer of drafts, not of truth, and put a validator between the draft and the action. The schema guarantees the shape. Your code has to guarantee the meaning.[^2][^5]
+
+[^1]: tianpan.co. [tianpan.co](https://tianpan.co/blog/2025-10-29-structured-outputs-llm-production)
+[^2]: arxiv.org. [arxiv.org](https://arxiv.org/abs/2607.18261)
+[^3]: collinwilkins.com. [collinwilkins.com](https://collinwilkins.com/articles/structured-output)
+[^4]: adroit-blog. [local-llm-infrastructure-2026](/blog/local-llm-infrastructure-2026)
+[^5]: machinelearningmastery.com. [machinelearningmastery.com](https://machinelearningmastery.com/structured-outputs-vs-function-calling-which-should-your-agent-use/)

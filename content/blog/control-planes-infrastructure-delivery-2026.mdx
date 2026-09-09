@@ -1,0 +1,87 @@
+---
+title: "Control Planes Are Taking Over Infrastructure Delivery"
+slug: control-planes-infrastructure-delivery-2026
+excerpt: "Pipelines execute changes; control planes reconcile state. Crossplane graduated CNCF in November 2025; its 2.x line manages apps and infrastructure alike."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "August 10, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "9 min read"
+tags: [DevOps, Platform Engineering, Kubernetes]
+bannerImage: /banners/control-planes-infrastructure-delivery-2026.png
+---
+
+For a decade, infrastructure delivery has meant pipelines: a CI job runs `terraform plan`, waits for approval, runs `terraform apply`, and the log is the record of what happened. The control-plane model inverts that relationship. Instead of executing a change, a controller continuously reconciles the state you declared against the state that actually exists, and the API object, not the pipeline run, becomes the source of truth.
+
+That model just went mainstream. Crossplane, the open-source framework for building cloud-native control planes, graduated from the CNCF on November 6, 2025, and its 2.0 release (August 14, 2025) extended the pattern from infrastructure to applications [^1]. The current stable line is 2.3, with a patch release on July 23, 2026 [^2]. Around it, kro covers lightweight composition and Kratix covers orchestration. If you run infrastructure for more than one team, this is the delivery model you will be evaluating in the next year.
+
+## The model shift: pipelines execute, control planes reconcile
+
+The two models answer different questions. A pipeline answers "what should I run, in what order, and did it finish?" A control plane answers "does reality match what I declared, and if not, what do I do about it?"
+
+Terraform's plan/apply cycle is the clearest example. It is explicit, gated, and it terminates: you see the diff, someone approves it, the apply runs, and the job is done. The weakness is what happens after the job ends. Drift returns silently, through console changes, hotfixes, or resource deletion, and nothing notices until the next planned run or incident. The control-plane model borrows the loop Kubernetes has run on workloads since 2014: a controller watches the desired state, compares it to observed state, and converges. Declarative desired state plus continuous reconciliation means drift is corrected as a background property, not as a scheduled chore.
+
+Crossplane brings that loop to cloud resources and, since 2.0, to the applications that sit on them. The CNCF's graduation announcement frames the payoff in exactly these terms: "Its declarative model allows intelligent agents to operate cloud environments by targeting outcomes instead of executing instructions" [^1]. That is worth sitting with, because it is the same reason the rest of the stack is being rebuilt for agents right now: a control plane is an API a machine can operate safely, while a pipeline is a procedure a machine can only imitate.
+
+The maturity evidence is not anecdotal. Crossplane counts more than 3,000 contributors from 450+ organizations, ranks in the top 10% of CNCF projects for contributor engagement, and has shipped over 100 releases; the maintainers list Nike, Autodesk, NASA Science Cloud, Elastic, SAP, IBM, Akamai, and VMware Tanzu among production adopters [^1]. The project started as an Upbound open-source effort in 2018, entered CNCF Sandbox in 2020, and moved to Incubating in 2021; graduation required third-party security audits and CNCF-operated release infrastructure [^1].
+
+![The pipeline model runs plan, approval, and apply as a finite job that ends, while the control-plane model declares desired state once and a controller continuously reconciles reality back to it](</diagrams/control-planes-infrastructure-delivery-2026/1-pipeline-vs-control-plane.png>)
+
+## What Crossplane 2.0 actually changed
+
+Crossplane v1 already let platform teams wrap cloud resources in custom APIs, but the architecture was opinionated in ways that created friction: cluster-scoped resources by default, a separate claims layer, compositions limited to Crossplane-managed resources, and providers that installed every resource type they supported. Version 2.0, released August 14, 2025, restructured all of it [^3]. Four changes matter most.
+
+Applications are first-class citizens. Compositions can now include any Kubernetes resource, not just Crossplane-managed infrastructure [^4]. A platform team can offer a single "Microservice" API that provisions the database, configures networking, deploys the application, and sets up monitoring in one abstraction. The announcement's example is a `platform.acme.io/v1` Microservice composite whose spec is just an image, a database engine and size, and an ingress subdomain; behind it, the composition creates an RDS instance, security groups, a Deployment, a Service, an Ingress, and monitoring dashboards [^5]. In v1 terms, that full-stack abstraction was impossible; applications and infrastructure were managed as disconnected pieces.
+
+Namespaced by default. Composite resources (XRs) and managed resources (MRs) are now namespaced, aligning with Kubernetes conventions and making multi-tenancy intuitive. The old claim/XR duality is gone: developers create the resource in the namespace where it belongs [^4]. Cluster-scoped resources still exist for shared infrastructure, but they are now an explicit choice, and the maintainers describe cluster-scoped MRs as a legacy feature headed for removal [^4].
+
+Day-two operations, declaratively. The new Operation type runs function pipelines to completion, like a Kubernetes Job, for tasks that do not fit the resource-creation pattern: backups, rolling upgrades, certificate monitoring, scheduled maintenance [^4]. A `CronOperation` on `ops.crossplane.io/v1alpha1` with a schedule of `"0 2 * * 0"` can trigger a weekly database upgrade with a declared maximum downtime, and a `WatchOperation` fires when resource conditions change [^5]. This used to require external cron jobs or custom controllers, and it is still alpha in v2, so treat it as promising rather than proven [^4].
+
+Install only what you need. ManagedResourceDefinitions and activation policies let you install a subset of a provider's resources. Installing the AWS provider used to mean hundreds of CRDs hitting the API server at once; an activation policy like `aws-essentials` activates only RDS, S3, and EC2 resource types [^5].
+
+### The upgrade path is real, and it is gated
+
+Crossplane 2.0 is backward compatible with the vast majority of v1 configurations, but it removed five things: native patch-and-transform composition, `ControllerConfig`, external secret stores, composite resource connection details, and the default package registry [^4]. The maintainers also require sequential minor upgrades, so a v1.18 control plane must go through v1.19 and v1.20 before v2.0 [^3]. The v1.20 line remains maintained (v1.20.11 is current alongside v2.3.4), and the June 2026 v1.20.9 release added `crossplane beta upgrade check`, which connects to a live v1 control plane, scans for usage of every removed feature, and exits non-zero when it finds blockers, so you can gate the upgrade on a clean report in CI [^2]. Migration commands exist for the removed features: `crossplane beta convert pipeline-composition` for patch-and-transform and `crossplane beta convert deployment-runtime` for ControllerConfig [^3].
+
+![The gated upgrade path requires sequential minor versions from v1.18 through v1.20, then a crossplane beta upgrade check that scans for the five removed features before you may move to v2.0](</diagrams/control-planes-infrastructure-delivery-2026/3-upgrade-path.png>)
+
+One provider note: namespaced AWS managed resources are fully available in v2, while maintainers are actively updating Azure, GCP, Terraform, Helm, and GitHub providers, so multi-cloud teams should check readiness per cloud before committing to the namespaced model everywhere [^4].
+
+## The stack around it: kro composes, Kratix orchestrates
+
+Crossplane is not the only composition game, and the December 2025 CNCF analysis of the ecosystem makes the division of labor clear: composition tools package resources behind one API, orchestration tools manage delivery across environments [^6].
+
+**kro (Kube Resource Orchestrator)** is the lightweight composition option. A SIG Cloud Provider-maintained, cross-cloud project, it abstracts many Kubernetes objects behind a single API via a ResourceGraphDefinition, which specifies what users may configure, what gets created per request, and how sub-resources depend on each other [^6]. Its inclusion in Amazon's EKS Capabilities package signals that major cloud providers now treat composition tooling as a platform staple [^6]. kro is deliberately single-cluster and does not handle approvals, multi-cluster delivery, or integrations with enterprise systems; the CNCF post is blunt that its scope is composition, and teams needing more should pair it with orchestration [^6].
+
+**Kratix** is the orchestration side. Its Promises deliver managed services that reflect organizational standards, with support for long-running workflows, enterprise system integration, and delivery to clusters, airgapped hardware, or mainframes [^6]. The CNCF framing is that Crossplane and kro provide the composition, Kratix provides the workflow and multi-environment delivery, and a platform needs both halves to hit three outcomes: time for a user to get a new service, time to patch all instances of an existing service, and time to introduce a new business-compliant capability [^6].
+
+The same post warns against over-reading any single tool: kro helps teams "sketch the ovals" but drawing the rest of the platform owl, in the meme's terms, is still the platform engineer's job [^6].
+
+![The 2026 platform stack separates composition, which packages resources behind one API, from orchestration, which delivers capabilities across environments, above a delivery layer of clouds, clusters, and legacy targets](</diagrams/control-planes-infrastructure-delivery-2026/2-platform-stack.png>)
+
+## Where the control plane earns its place
+
+The decision is not "control plane versus Terraform." It is "which jobs belong in a reconciler, and which stay in a pipeline or a workflow," the same [complicated-versus-complex diagnostic](/blog/complicated-vs-complex-delivery-diagnostic) we apply to delivery teams. The practical rules we use when advising clients:
+
+- Many teams consuming standardized abstractions with real drift pressure is the control-plane signal. If platform engineers keep re-provisioning databases someone deleted, a control plane earns its cost. If you provision a few environments a year, Terraform's explicit plan/apply cycle is simpler to reason about and gate.
+- You just need to bundle five resources behind one CR is the kro signal. If Crossplane's provider and Composition machinery feels heavy for that job, kro does it with less to operate.
+- Multi-environment delivery, approvals, and enterprise integrations are the Kratix signal, or a workflow layer on top of whatever you already run.
+- Keep the pipeline for what is genuinely procedural. [Our own content pipeline](/blog/ai-generated-code-cicd-guardrails) is a small example: every article draft runs through a mechanical verification script (`verify-article.py`) that gates word count, citations, and dead links before editorial review. That is a finite, gated job, and it belongs in a pipeline. Nothing about it wants to be a reconciled object.
+
+A useful seam test comes from a vendor analysis of Crossplane alternatives: if the sentence describing the need contains "keep," "always," or "match," it is declarative-layer work; if it contains "when," "then," or "approve," it is workflow work [^7]. Note that this source is a vendor for workflow tooling, so treat the framing as one side of the argument, but the test itself matches how the CNCF describes the ecosystem split.
+
+## The pitfalls that bite in production
+
+The failure modes are worth naming before you commit. First, **complexity cost**: Compositions, XRDs, providers, and reconciliation debugging are specialist work. The vendor analysis describes Composition YAML passing a thousand lines and a stuck reconciliation taking a day to debug, and it recommends right-sizing rather than forcing everything into a composition [^7]. Second, **the day-two gap**: reconcilers express desired state, but investigations, approvals, migrations, and scale events are imperative and event-driven; forcing workflow-shaped operations through a reconciler is a category error [^7]. Third, **CRD sprawl**: providers can add hundreds or even thousands of CRDs to a cluster, which is exactly why 2.0's activation policies matter, and teams should adopt them from day one rather than after the API server slows down [^6]. Fourth, **alpha features**: Operations are alpha in v2, and namespaced MR coverage is uneven across clouds, so production plans should not depend on either being fully stable everywhere yet [^4].
+
+The pipeline is not dying, but it is being demoted. For infrastructure that must stay converged, the control-plane model has won the argument, and the ecosystem around Crossplane 2.0 has a mature core, a lightweight composition option, and an orchestration layer. Teams that treat the seam between reconciliation and workflow as a design decision are the ones that get self-service without the chaos.
+
+[^1]: Crossplane's CNCF Graduation Announcement. [cncf.io](https://www.cncf.io/announcements/2025/11/06/cloud-native-computing-foundation-announces-graduation-of-crossplane/)
+[^2]: Crossplane Releases. [github.com](https://github.com/crossplane/crossplane/releases)
+[^3]: Crossplane v2.0.0 Release Notes. [github.com](https://github.com/crossplane/crossplane/releases/tag/v2.0.0)
+[^4]: What's New in Crossplane v2. [docs.crossplane.io](https://docs.crossplane.io/latest/whats-new/)
+[^5]: Announcing Crossplane 2.0. [blog.crossplane.io](https://blog.crossplane.io/announcing-crossplane-2-0/)
+[^6]: Building Platforms Using kro for Composition. [cncf.io](https://www.cncf.io/blog/2025/12/15/building-platforms-using-kro-for-composition/)
+[^7]: Top 6 Crossplane Alternatives in 2026 (vendor, secondary). [usekestrel.ai](https://usekestrel.ai/blog/crossplane-alternatives)

@@ -1,0 +1,86 @@
+---
+title: "Agentforce on Experience Cloud: The Portal Agent Reality"
+slug: agentforce-experience-cloud-portal-2026
+excerpt: "An Agentforce agent on Experience Cloud is a routing and security project first. Grounding and the guest-user model decide whether it ships."
+category: "Salesforce"
+categoryColor: sf
+categoryGradient: "from-sky to-sky-dark"
+date: "August 27, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "10 min read"
+tags: [Salesforce, AI Agents, Data Cloud]
+bannerImage: "/banners/agentforce-experience-cloud-portal-2026.png"
+---
+
+## The portal agent is a routing project dressed as an AI demo
+
+Every client with a customer portal wants the same thing: a chat window that answers questions at 2am, deflects the repetitive tickets, and hands the hard cases to a human with full context. Agentforce is the obvious vehicle, and Salesforce's sales motion sells it as a 60 to 90 minute deployment with no custom development.[^1] That framing is misleading in a way that costs real money, because the part that looks like the product, the chat window, is the last 10% of the work.
+
+I have been through enough of these to state the order plainly. Before the AI does anything, you need Omni-Channel enabled, a routing configuration, a fallback queue, an Omni-Channel routing flow, a messaging channel, an Embedded Service Deployment, a CORS entry, and an Experience Cloud site that is published and active.[^1] Every one of those is a moving part, and the failure modes are silent. A chat widget that appears on the page but does nothing is usually a CORS problem, not an AI problem.[^1]
+
+None of this is exotic. It is the same plumbing that has run web chat for a decade, just with an agent at the end of it instead of a scripted bot. Treat it as infrastructure with a checklist and an owner, because the agent inherits the quality of everything underneath it. That point deserves its own treatment: the agent does not create business logic, it runs inside the logic that already exists, so [layered, undocumented automation](/blog/flow-orchestrates-agentforce) surfaces as a mess the agent cannot explain.[^9]
+
+## The path from chat window to working agent
+
+The full deployment path looks like this: a site visitor opens the chat on your Experience Cloud page, the conversation is a work item in Omni-Channel, a routing flow decides it goes to the agent first with a queue as fallback, the agent reasons over topics and runs actions backed by Flow, Apex, or Prompt Templates, and grounds itself in knowledge through Data Cloud. When it cannot resolve, an escalation path hands the thread to a human queue with history intact.
+
+![A customer portal agent path: the visitor starts a chat, Omni-Channel routing sends it to the Agentforce Service Agent, which grounds itself in Data Cloud RAG and escalates to a human queue through an outbound flow when it cannot resolve](</diagrams/agentforce-experience-cloud-portal-2026/1-portal-agent-path.png>)
+
+The enablement steps are mechanical but easy to miss. Einstein must be turned on, then Agentforce itself, then the Experience Cloud site must exist and be published before the agent can be pointed at it.[^1] The messaging channel is the bridge: you pick Enhanced Chat as the native channel, name it, set its domain to your Experience site, and attach the Omni-Channel flow and fallback queue you built.[^1] The Embedded Service Deployment packages how the chat button and window look and behave. Salesforce now creates it automatically when you create the channel, which removes a step that used to trip people up.[^1]
+
+Then the configuration that looks trivial and is not: CORS. Skip adding your site URL as an allowed origin and the widget loads but the background API calls are blocked, so the chat fails with no obvious error. It is the single most common reason a widget is "on the page but broken."[^1]
+
+For teams that want a faster starting point, Salesforce shipped an official accelerator that packages an inline chat experience, the same pattern help.salesforce.com uses, for Experience Cloud or any website you control.[^2] It includes an LWC you drop into Experience Builder and a standalone script you can add to a third-party site, plus an optional pre-configured agent that searches Knowledge articles.[^2] It is not zero-config: it requires Enhanced Chat v2 with an Embedded Service Deployment, and the pre-configured agent needs Data Cloud, Knowledge, and Agentforce licensing billed on Flex Credits.[^2] What it buys you is a working scaffold and a reference implementation instead of a blank page. I would take it as a proof-of-concept starting point, then replace the canned topics and instructions with your own.
+
+## Grounding: where Data Cloud does the real work
+
+A chat window is worthless if the agent answers from vibes. Agentforce grounds answers in your data, and for unstructured content like Knowledge articles, PDFs, and crawled sites, that grounding runs through Data Cloud's vector database and search indexes.[^3] This is the layer that separates a useful portal agent from a confident wrong one.
+
+The grounding pattern is concrete. You ingest content into Data Cloud, build a search index, and create a retriever in Einstein Studio that returns the relevant chunks to the LLM.[^3] The piece people underestimate is the retriever's return fields: for a knowledge base you almost always want the actual chunk content, the field that holds the text the LLM reads, rather than a pile of metadata.[^3] And the default dynamic retriever that Agentforce ships with looks across web and internal sources whether you need that or not, which is exactly why experienced builders override the standard "Answer Questions with Knowledge" prompt template with one that points at their own retriever.[^3]
+
+The failure modes are specific and diagnosable. If the agent says it has no data, check that the Data Cloud search index job actually ran and processed records, and rebuild it if it processed zero. If it gives generic answers despite articles existing, check whether your articles are published and visible in the public knowledge base, and whether the agent's permission set grants access to the right data categories.[^2]
+
+## The security model most guides skip
+
+Here is the part that does not get enough attention in the marketing, and it is the one that should shape your whole build. An Agentforce agent runs as its own assigned user, and that user's permission set, not the permission set of the visitor who started the conversation, defines what data the agent can reach.[^7] The blast radius of an agent is the effective access of its running user.[^7]
+
+That cuts two ways on a customer portal. If your agent runs as a service user with broad read access to Opportunity or Case, every visitor who chats with it inherits that ceiling, whether logged in or an anonymous guest.[^7] Give the portal agent a [dedicated user with a permission set](/blog/apex-summer-26-security-v67-migration) scoped to exactly the objects and fields the portal needs, and make that scope part of the design review, not an afterthought.
+
+The guest-user dimension sharpens the risk. In a publicly accessible Experience site, anonymous visitors share a single guest user profile, and Salesforce has documented an active campaign where threat actors exploited overly permissive guest user configurations to pull more data than intended from public sites.[^5] Salesforce is clear this is customer misconfiguration, not a platform vulnerability, but that does not make it less of a live threat to a portal that also runs an agent with data access.[^5] Audit the guest profile and restrict it to the absolute minimum objects and fields the site requires, and treat the agent's running user with the same discipline.[^5]
+
+The portal context also forces a design decision the standard Agentforce guidance skips: authenticated users and guests behave completely differently. Authenticated portal users can get personalized answers from their own records, their orders, their cases. Guest users can only get generic information from Knowledge articles.[^6] Design topics around those two scenarios from the start, or the agent will try to answer a guest's "what is the status of my order" with data it either cannot reach or should not be showing.[^6] I would scope guest topics to public knowledge only, and put personalization behind authentication.
+
+There is a hard constraint to know before you promise anything to a regulated client. Data masking in the Einstein Trust Layer is currently disabled for Agentforce agents, which means the pattern-based and field-based masking that protects data in other Einstein features does not apply to agent conversations.[^4] For financial services, healthcare, or the public sector, that is a compliance design exercise that has to happen before go-live, not after.
+
+## Einstein Bots to Agentforce is a rebuild, not an upgrade
+
+Most portals that want an agent already run an Einstein Bot. The hardest conversation I have with clients is the one that starts with "can we upgrade it?" The honest answer is no, and the reason is structural. Einstein Bots run on dialog trees and NLU models, Agentforce runs on an LLM, a reasoning engine, Topics, and Actions, and the two systems share zero authoring objects.[^4] No dialog node becomes a Topic, no NLU model feeds the reasoning engine, no conversation variable carries over.[^4]
+
+Salesforce ships "Create AI Agents From Einstein Bots" to scaffold a new agent, but it does not port NLU training data, migrate conversation variables, configure escalation flows, or set up Omni-Channel routing.[^4] What you get is a scaffolded starting point, and the majority of the implementation effort remains yours.[^4]
+
+![The Einstein Bots to Agentforce migration split: business logic like Flows, Apex, case logic, and integrations carries over, while dialog nodes, NLU training, named variables, and the transfer step must be rebuilt as Topics, Actions, and an escalation flow](</diagrams/agentforce-experience-cloud-portal-2026/2-einstein-bots-rebuild.png>)
+
+The useful rule is that business logic survives and conversational logic does not. Flows used in bot actions, Apex classes, case creation logic, and external integrations all transfer, possibly with minor updates. Dialog nodes and branches, NLU intent training data, and the "transfer to agent" step have no equivalent and must be rebuilt.[^4] The escalation model is the most commonly misconfigured piece: in Einstein Bots, escalation is a dialog step pointing at a queue, while in Agentforce it is an autonomous decision that triggers an Escalation Topic and routes through a dedicated Outbound Omni-Channel Flow, authored separately from the Inbound Flow that handles initial routing.[^4] Teams that miss the two-flow architecture end up with an agent that cannot hand off.
+
+## Pricing and the ROI reality
+
+The economics change the decision. Einstein Bots came bundled per-user with Service Cloud editions. Agentforce is consumption-based or a per-user add-on: Flex Credits at about $0.10 per action, roughly $2 per conversation, or $125 per user per month.[^4] Salesforce Foundations, free for Enterprise and above, includes an initial Flex Credit allocation to get started.[^4] For a high-volume portal, the per-action model rewards agents that resolve issues in fewer steps, but it also demands a usage modeling exercise before procurement, because nobody wants to discover the credit burn after launch.[^4]
+
+I want to be straight about the wider picture, because it affects how clients size their expectations. A TD Cowen survey of Salesforce partners across the US, Europe, and Asia found that not a single respondent said Agentforce was a driver of recent bookings, and 56% expected interest only after the product matures further.[^8] Agentforce hit $1 billion in ARR in May 2026, so adoption is real, but the gap between license revenue and delivered ROI is exactly what a consulting team is paid to close.[^8] The portal agent is one of the few Agentforce use cases with a clean, measurable value story: it deflects tickets that were going to a human queue anyway. That makes it a good first bet, provided you build the plumbing, the grounding, and the security model before you point the camera at the chat window.
+
+## What I would tell a client on day one
+
+Start with the site and the security model, not the agent. Publish the Experience Cloud site, audit the guest user profile to the minimum, and design the agent's dedicated running user with a permission set scoped to exactly what the portal needs. Then build the messaging plumbing, routing, fallback queue, and CORS, and verify the widget actually talks before you add intelligence. Then ground it: build the retriever over your knowledge base, test it in a prompt template, and only then wire it into the agent with topics scoped separately for guests and authenticated users. If you are migrating an Einstein Bot, budget for a rebuild of the conversational layer and reuse the Flows, Apex, and integrations underneath.
+
+The chat window is the easy part. The routing, the grounding, and the blast radius are where a portal agent becomes a self-service asset or a very expensive way to annoy your customers.
+
+[^1]: JetBI, "Integrating Agentforce with Experience Cloud Portals" (Feb 2026). [jetbi.com](https://jetbi.com/blog/integrating-agentforce-experience-cloud-portals)
+[^2]: Salesforce, "help-agent-accelerator: Agentforce inline chat experience" (GitHub). [github.com](https://github.com/salesforce/help-agent-accelerator)
+[^3]: Salesforce Ben, "Connecting Agentforce to Data Cloud for Grounding With RAG" (Atlas Can). [salesforceben.com](https://www.salesforceben.com/connecting-agentforce-to-data-cloud-for-grounding-with-rag/)
+[^4]: Concret.io, "Migrating Einstein Bots to Agentforce: Why It Is a Rebuild, Not an Upgrade" (Apr 2026). [concret.io](https://www.concret.io/blog/migrate-einstein-bots-agentforce)
+[^5]: Salesforce, "Essential Actions to Secure Experience Cloud Guest User Access". [salesforce.com](https://www.salesforce.com/blog/protecting-your-data-essential-actions-to-secure-experience-cloud-guest-user-access/)
+[^6]: Minuscule Technologies, "How to Configure a Service Agentforce Agent in Experience Cloud" (Jun 2026). [minusculetechnologies.com](https://www.minusculetechnologies.com/blogs/configure-agentforce-agent-experience-cloud)
+[^7]: Obsidian Security, "Securing Salesforce Agentforce". [obsidiansecurity.com](https://www.obsidiansecurity.com/academy/securing-salesforce-agentforce)
+[^8]: Salesforce Ben, "Salesforce Partners Are Not Seeing Agentforce ROI" (Aug 2026). [salesforceben.com](https://www.salesforceben.com/salesforce-partners-are-not-seeing-agentforce-roi/)
+[^9]: JetBI, "Why Your Salesforce Flows Are Agentforce's Biggest Problem" (Jul 2026). [jetbi.com](https://jetbi.com/blog/why-your-salesforce-flows-are-agentforces-biggest-problem)

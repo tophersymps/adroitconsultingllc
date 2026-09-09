@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hubble Field — System Architecture</title>
+<style>
+  :root {
+    --primary: #1a1a2e;
+    --accent: #e94560;
+    --accent2: #0f3460;
+    --bg: #f8f9fa;
+    --card: #ffffff;
+    --text: #333333;
+    --muted: #6c757d;
+    --border: #dee2e6;
+    --success: #28a745;
+    --warning: #ffc107;
+    --danger: #dc3545;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 2rem; }
+
+  header { background: var(--primary); color: white; padding: 3rem 0 2rem; }
+  header h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.5rem; }
+  header .meta { color: rgba(255,255,255,0.7); font-size: 0.9rem; }
+  header .meta span { margin-right: 1.5rem; }
+  .badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .badge-adroit { background: var(--accent); color: white; }
+
+  section { background: var(--card); border-radius: 12px; padding: 2rem; margin: 1.5rem 0; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  section h2 { font-size: 1.25rem; font-weight: 600; color: var(--primary); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+  section h3 { font-size: 1.1rem; font-weight: 600; color: var(--accent2); margin: 1.25rem 0 0.5rem; }
+  section h4 { font-size: 1rem; font-weight: 600; margin: 1rem 0 0.25rem; }
+
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.25rem; }
+  .lead { font-size: 1.05rem; color: var(--muted); }
+  pre { background: var(--primary); color: #e8e8f0; padding: 1.25rem; border-radius: 8px; overflow-x: auto; font-size: 0.82rem; line-height: 1.5; margin: 1rem 0; }
+  code { font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 0.9em; }
+  p code, li code, td code { background: #eef0f4; padding: 0.1rem 0.35rem; border-radius: 4px; }
+  .adr { border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 1.25rem; background: var(--bg); margin: 1rem 0; }
+  .adr h3 { margin-top: 0; color: var(--primary); }
+
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; margin: 1rem 0; }
+  .card { border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; background: var(--bg); }
+  .card h4 { color: var(--primary); margin-bottom: 0.5rem; }
+
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+  th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--primary); color: white; font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; }
+  tr:nth-child(even) { background: var(--bg); }
+
+  .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 0.5rem; }
+  .status-pass { background: var(--success); }
+  .status-fail { background: var(--danger); }
+
+  footer { text-align: center; padding: 2rem; color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--border); margin-top: 2rem; }
+  @media print { header { background: var(--primary) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="container">
+    <div class="badge badge-adroit">Adroit Consulting</div>
+    <h1>Hubble Field — System Architecture</h1>
+    <div class="meta">
+      <span>📅 September 04, 2026</span>
+      <span>📋 adroit-blog</span>
+      <span>👤 brainiac</span>
+      <span>🌿 feat/hubble-field</span>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+
+<section>
+  <h2>Overview</h2>
+  <p class="lead">The 3D layer is shipped and working. It is also wrong, and the reasons are structural rather than cosmetic — no amount of bloom tuning reaches them.</p>
+  <p>This document says what broke, what survives, where the fix gets built (<code>/lab/hubble-field</code>), and how it ports back. <strong>Phase 1 is diagnosis + lab architecture only; no production rewrite.</strong></p>
+  <p><strong>Visual floor:</strong> <code>docs/hubble-field-north-star.md</code> · <strong>Requirements:</strong> <code>docs/requirements-hubble-field.md</code> · <strong>Supersedes:</strong> <code>docs/arch-deep-sky-galaxy.md</code>, <code>docs/arch-immersive-3d.md</code>, <code>docs/system-architecture.html</code></p>
+</section>
+
+<section>
+  <h2>1. Diagnosis of the shipped 3D layer</h2>
+
+  <h3><span class="status-dot status-fail"></span>1.1 It's a dashboard, not a sky</h3>
+  <p><code>FullSkySection</code> renders <code>SkyHeroChrome</code> — the rank <code>&lt;h1&gt;</code>, the rank description, and a four-card stat grid — and passes it as <code>children</code> into <code>ProfileGalaxy3D</code>, which drops it into <code>.cx3d-overlay</code> <strong>on top of the canvas</strong>. Add <code>SkyChart</code>, <code>JourneyRail</code>, <code>RankChip</code>, <code>Legend</code>, and the <code>Overview</code> button and the WebGL surface is a texture behind a control panel. The eye reads the cards; the sky is wallpaper.</p>
+
+  <h3><span class="status-dot status-fail"></span>1.2 Wrong star primitives</h3>
+  <p>Three separate primitives, three separate failures:</p>
+  <ul>
+    <li><code>IgnitedStar</code> draws soft radial gradient sprites. Radial gradient + <code>UnrealBloom</code> is the recipe for <strong>bokeh</strong> — out-of-focus lens balls, not stars.</li>
+    <li><code>ConstellationGlyph</code> draws mesh glyphs without a point texture, so at small scale they resolve as <strong>squares</strong>.</li>
+    <li>Figure lines use <code>LineBasicMaterial</code> — uniform-width, fully opaque, aliasing-free <strong>CAD strokes</strong>. Real asterism figures are faint additive hints.</li>
+  </ul>
+  <p>None of these can produce a magnitude distribution, because none of them are point shaders with per-star attributes.</p>
+
+  <h3><span class="status-dot status-fail"></span>1.3 Space is a wash</h3>
+  <p><code>nebula-gl</code> is a 2D noise shader on an inward-facing sphere: a flat blue-violet tint over the entire frame, identical from every angle, with no occlusion and no form. Behind it sit roughly 900 field stars — too few to read as depth, enough to read as scatter. And <code>CameraRig</code>'s <code>HOME</code> is <code>(0, 4.6, 9.5)</code>: elevated, tilted down, looking at the ring of course nodes from above. That is the camera position for a <strong>diagram</strong>, not an observation.</p>
+
+  <h3><span class="status-dot status-fail"></span>1.4 Not navigable</h3>
+  <p><code>ProfileGalaxy3D.handleSelectSector</code> calls <code>router.push('/learn/' + slug)</code> when no <code>onSelectSector</code> is supplied. The first click on the sky leaves the sky. The <code>Overview</code> button is inverted — it renders only when <code>focusSlug</code> is null, so it appears exactly when you are already in overview and disappears when you would need it. There is no orbit control at all: the camera is scripted, so the user cannot look around.</p>
+
+  <h3><span class="status-dot status-fail"></span>1.5 The data is thin</h3>
+  <p><code>asterism-data.ts</code> authors two asterisms — Orion (<code>salesforce-architect</code>) and Cassiopeia (<code>agentic-ai</code>). The other five courses fall back to generated geometry, so five of seven sectors are invented scatter wearing a course name. Rank illumination is computed (<code>rankIllumination</code>) and displayed in <code>RankChip</code> as a percentage — but it never modulates the actual field brightness. The headline mechanic is a number in a chip.</p>
+</section>
+
+<section>
+  <h2>2. What stays</h2>
+  <p>The bones are good. Keep them.</p>
+  <table>
+    <tr><th>Keep</th><th>Why</th></tr>
+    <tr><td><code>lesson_completion</code> lighting + <code>completion_events</code> for rank/streak/chronicle</td><td>Correct source of truth, RLS-scoped, already shipped. No schema change.</td></tr>
+    <tr><td><code>contracts-constellations.ts</code></td><td>The contract is fine. Do not touch it.</td></tr>
+    <tr><td><code>asterism-data.ts</code> (Orion, Cassiopeia)</td><td>Real coordinates, real spectral classes, real magnitudes. This is the seed of the whole visual language.</td></tr>
+    <tr><td>GPU starfield shader (<code>starfield-gl</code> + <code>star-material.glsl.ts</code>)</td><td>Already a single <code>Points</code> buffer with per-star attributes. This — not <code>IgnitedStar</code> — is the primitive the whole field should be built from.</td></tr>
+    <tr><td>Lazy dynamic canvas + WebGL gate</td><td><code>ConstellationCanvas</code> behind <code>next/dynamic({ ssr: false })</code>, <code>supportsWebGL()</code> gate, <code>LoadingSky</code>. Bundle discipline holds.</td></tr>
+    <tr><td><code>usePrefersReducedMotion</code></td><td>Bound and working. Extend it to cover warp.</td></tr>
+    <tr><td>2D fallback</td><td>Untouched, still the floor for no-WebGL.</td></tr>
+    <tr><td>LOD idea (one focused constellation)</td><td>The right compositional answer. It was implemented against the wrong primitives, not the wrong idea.</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>3. Lab architecture — <code>/lab/hubble-field</code></h2>
+  <p>The lab page <strong>is</strong> the mockup. It exists so the field can be tuned against a real GPU instead of reviewed as a static poster.</p>
+<pre>
+src/app/lab/hubble-field/
+└── page.tsx                Dev-facing route. No auth, no DB. noindex + excluded
+                            from sitemap. Renders &lt;HubbleFieldLab/&gt; only.
+
+src/components/Constellations/lab/
+├── HubbleFieldLab.tsx      Client shell. Owns FieldParams state + mode
+│                            ('framed' | 'observatory'), renders the control
+│                            panel beside (never over) the canvas.
+├── FieldControls.tsx       Live sliders: star count, magnitude falloff, spike
+│                            threshold + intensity, exposure, dust density,
+│                            rank illumination. Values readable and copyable.
+├── field-fixtures.ts       PURE. Synthetic ProfileSky + 7 courses at assorted
+│                            completion levels. No network, no auth.
+├── deep-field-gl.tsx       The candidate field: ONE Points buffer, per-star
+│                            magnitude / spectral temp / twinkle phase / spike
+│                            weight. Replaces sprite stars.
+├── spike-material.glsl.ts  Point fragment shader: hot sub-pixel core, steep
+│                            falloff, diffraction spikes gated on magnitude.
+├── dust-volume.tsx         Dust as structure — layered occluding billboards
+│                            with form, not a tinted sphere.
+└── WarpRig.tsx             Mode-driven camera: framed dolly ↔ observatory
+                            orbit, with the warp transition between them.
+</pre>
+  <p><strong>Rules the lab obeys:</strong> it imports from <code>asterism-data.ts</code> and the existing pure model layer, it renders no production component, and it ships no DOM chrome over the canvas — the controls sit next to the field so the frame under review is the frame that ships.</p>
+  <p><strong>Exit criterion:</strong> a screenshot from the lab passes the north-star one-question test. Until then, Phase 2 does not start.</p>
+</section>
+
+<section>
+  <h2>4. Intended production port (Phase 2, not this phase)</h2>
+  <p>Once the lab passes:</p>
+  <ol>
+    <li><strong>Promote the field.</strong> <code>deep-field-gl</code> + <code>spike-material.glsl.ts</code> + <code>dust-volume</code> move into <code>3d/</code> and become the star primitive for both <code>ProfileScene</code> and <code>SeriesScene</code>. <code>IgnitedStar</code> is retired to the interactive-hover case only, or deleted.</li>
+    <li><strong>Frame the section.</strong> <code>FullSkySection</code> stops passing <code>SkyHeroChrome</code> as <code>children</code>. Rank title, stat cards, and chronicle become page siblings above and below a bounded galaxy frame. <code>.cx3d-overlay</code> loses its content.</li>
+    <li><strong>Add the mode.</strong> A <code>GalaxyMode</code> state (<code>'framed' | 'observatory'</code>) lifts into <code>ProfileGalaxy3D</code>; <code>WarpRig</code> replaces <code>CameraRig</code>'s fixed <code>HOME</code>; <code>Esc</code> warps out.</li>
+    <li><strong>Break the eject.</strong> <code>handleSelectSector</code> sets focus and never routes. An inspect panel owns the only <code>router.push</code>. The <code>Overview</code> button's condition is inverted back to correct (<code>focusSlug !== null</code>).</li>
+    <li><strong>Orbit.</strong> <code>OrbitControls</code> (damped, polar-clamped, zoom-limited) mount in observatory mode only.</li>
+    <li><strong>Apply illumination.</strong> <code>rankIllumination(rank)</code> becomes a shader uniform on the field, not a chip label.</li>
+    <li><strong>Author the missing five.</strong> Real asterisms for the remaining courses, or an honest generated-field state that does not pretend to be a named constellation.</li>
+  </ol>
+  <p>Nothing in <code>discovery/</code>, <code>contracts-constellations.ts</code>, or the 2D layer is touched by any of the above.</p>
+</section>
+
+<section>
+  <h2>5. New ADRs</h2>
+
+  <div class="adr">
+    <h3>ADR-309 — Warp is a mode, not a route</h3>
+    <p>The galaxy has two states in one mounted canvas: <code>framed</code> (a bounded section of <code>/profile</code>) and <code>observatory</code> (fullscreen). The transition is a camera and layout animation, not a navigation and not a remount.</p>
+    <p><strong>Why:</strong> a full-viewport galaxy page forces stats and chronicle onto the stars, which is exactly failure 1.1. A separate route would tear down the WebGL context, losing the continuity that makes the warp feel like travel.</p>
+    <p><strong>Consequences:</strong> mode state lives in the public entry; camera targets and post-processing intensity are functions of mode; <code>Esc</code> and scroll restoration are the entry's responsibility; reduced motion collapses the transition to a cross-fade.</p>
+  </div>
+
+  <div class="adr">
+    <h3>ADR-310 — Stars are point shaders, never bokeh sprites</h3>
+    <p>Every star in the field is a vertex in a single <code>Points</code> buffer with per-star attributes (magnitude, spectral temperature, twinkle phase, spike weight), rendered by a custom fragment shader with a hot sub-pixel core, steep falloff, and diffraction spikes gated on magnitude.</p>
+    <p><strong>Why:</strong> soft radial sprites plus bloom produce out-of-focus lens balls (1.2). Only a point shader can express a steep magnitude distribution across thousands of stars in one draw call, and only per-star attributes prevent the clip-art uniformity that has been rejected twice.</p>
+    <p><strong>Consequences:</strong> <code>IgnitedStar</code>'s sprite stack is demoted or deleted; spike geometry is shader work, not sprite art; bloom is tuned <em>down</em>, because brightness now comes from the field rather than the post chain.</p>
+  </div>
+
+  <div class="adr">
+    <h3>ADR-311 — Orbit is available in fullscreen only</h3>
+    <p>Damped <code>OrbitControls</code> with clamped polar angle and zoom range mount in observatory mode. Framed mode stays on a scripted, non-interactive camera.</p>
+    <p><strong>Why:</strong> an interactive camera inside a scrolling page steals wheel events and traps the reader; an observatory with no camera control is a diagram you are forbidden to look around (1.4). Mode boundaries resolve the conflict cleanly.</p>
+    <p><strong>Consequences:</strong> framed mode never captures pointer or wheel gestures; observatory mode does; clamps prevent the user from finding the empty regions of the scene; reduced motion disables inertia and keeps orbit direct.</p>
+  </div>
+
+  <div class="adr">
+    <h3>ADR-312 — Rank illumination modulates the field, not a label</h3>
+    <p><code>rankIllumination(rank)</code> feeds a shader uniform that scales field-star brightness, dust luminance, and the count of stars above the visibility floor. The rank chip may still display the number, but the number is a readout of something visible.</p>
+    <p><strong>Why:</strong> the product promise is "your sky gets brighter as you learn." Shipping that as a percentage in a chip while the field stays constant is the promise unfulfilled (1.5).</p>
+    <p><strong>Consequences:</strong> illumination is a single uniform in the field material; the lab exposes it as a slider so all five rank bands are reviewable side by side; low ranks must still read as a legible sky, so the floor is a design decision, not zero.</p>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="container">Adroit Consulting · Hubble Field Phase 1 · markdown twin: <code>docs/arch-hubble-field.md</code></div>
+</footer>
+</body>
+</html>

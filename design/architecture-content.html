@@ -1,0 +1,62 @@
+<h2>System Architecture — Adroit Blog Design Pass</h2>
+<p><strong>Architect:</strong> brainiac · <strong>Task:</strong> t_71faff13 · <strong>Date:</strong> 2026-08-05</p>
+<p>Repo: <code>/Users/kelex/Documents/Fortress-of-Solitude/adroit-blog</code> — Next.js App Router + Tailwind MDX blog. This architecture documents the delta implementation plan that turns kara's approved design (design/ dir, wow 6/6) into production code. The working tree already carries ~85% of the design from an earlier run; this plan formalizes the remaining gaps and the design-token layer.</p>
+
+<h3>Component Architecture Overview</h3>
+<p><strong>Layout shell:</strong> <code>Header</code> (sticky + backdrop blur, active-link underline) → page → <code>Footer</code>. All pages are server components except the two client listing surfaces.</p>
+<table border="1" cellpadding="6" cellspacing="0">
+<tr><th>Surface</th><th>Component tree</th><th>Type</th><th>Design delta owner</th></tr>
+<tr><td>/blog listing</td><td>BlogListing → Hero, CategoryPills, SortToggle, FeaturedPost, PostCard grid, Pagination</td><td>client (useSearchParams + Suspense)</td><td>FeaturedPost glow/pill, PostCard tokens, hero gradient</td></tr>
+<tr><td>/blog/[slug]</td><td>BlogPostPage → ReadingProgress, ShareBar, BannerImage, ArticleBody (MDX), PostNavigation</td><td>server (SSG)</td><td>article typography, banner scrim + chip, avatar, tag pills</td></tr>
+<tr><td>/learn</td><td>LearnLanding → grouped sections, PathCard, LessonProgress</td><td>server</td><td>PathCard progress row border</td></tr>
+<tr><td>/learn/[series]</td><td>SeriesPage → LessonCard, LessonProgress</td><td>server</td><td>LessonCard sequence badge</td></tr>
+<tr><td>/blog/categories</td><td>CategoriesPage → CategoryCard grid, Subscribe CTA</td><td>server</td><td>photographic bands, tint, glow, mono count pill</td></tr>
+<tr><td>/tags + /tags/[tag]</td><td>TagsPage → TagCloud · TagListing → FeaturedPost + PostCard</td><td>server + client</td><td>weighted cloud, gradient hero</td></tr>
+</table>
+<p><strong>Shared primitives:</strong> <code>BannerImage</code> (untouched — render logic frozen), <code>Tag</code>, <code>LessonProgress</code>, <code>BackLink</code>, <code>sortPosts</code> (untouched).</p>
+
+<h3>Data Flow</h3>
+<pre>
+┌────────────┐   static imports    ┌──────────────────┐   MDX loader   ┌──────────────┐
+│  client    │ ──────────────────► │  src/data/posts  │ ─────────────► │ content/*.mdx│
+│  listing   │  src/data/*.ts     │  (typed BlogPost)│  getMDXContent │ (read-only)  │
+└────────────┘                    └────────┬─────────┘                └──────────────┘
+        ▲                                  │  sortPosts (frozen)
+        │  ?category=&sort= URL state      ▼
+        └────────────────────────  FeaturedPost / PostCard render  ──► static HTML (SSG)
+</pre>
+<p>No API routes, no database, no client fetch. Sort/category state lives in the URL (<code>?category=</code>, <code>?sort=</code>) so the listing is shareable; the design pass changes classNames only, never data flow.</p>
+
+<h3>Tech Decisions & ADRs</h3>
+<table border="1" cellpadding="6" cellspacing="0">
+<tr><th>ID</th><th>Title</th><th>Decision</th><th>Rationale</th><th>Consequences</th></tr>
+<tr><td>ADR-001</td><td>Keep Next.js App Router + Tailwind v4</td><td>No framework change</td><td>Existing repo; design is class-level</td><td>All changes are Tailwind utilities + globals.css tokens</td></tr>
+<tr><td>ADR-002</td><td>Add elevation/glow tokens to @theme</td><td>--shadow-card, --shadow-card-hover, --shadow-glow-{sf,react,ai,mkt}</td><td>Consistent elevation language; enables shadow-card utilities</td><td>Components switch from ad-hoc shadow-xl to token classes</td></tr>
+<tr><td>ADR-003</td><td>Category glow via inline boxShadow on server component</td><td>style with boxShadow: var(--shadow-glow-&lt;cat&gt;)</td><td>FeaturedPost is a server component; no CSS-in-JS needed</td><td>Map unknown categoryColor → sf fallback</td></tr>
+<tr><td>ADR-004</td><td>Photographic category bands</td><td>public/categories images + multiply tint + scrim</td><td>QA #7 requires photographic bands, not flat gradients</td><td>Copy design/assets/*.jpg to public/categories; no remote patterns</td></tr>
+<tr><td>ADR-005</td><td>Weighted tag cloud by count</td><td>lg/md/sm size buckets</td><td>QA #8; glanceable popularity signal</td><td>Pure function of getAllTags count; no client state</td></tr>
+<tr><td>ADR-006</td><td>Respect prefers-reduced-motion</td><td>Global reduce block</td><td>Motion discipline + a11y (WCAG 2.3.3)</td><td>Hover lifts disabled under reduced motion — intended</td></tr>
+<tr><td>ADR-007</td><td>Freeze sort & content layers</td><td>No changes to src/lib/sort.ts, BannerImage internals, content/</td><td>Task constraint; QA #9</td><td>Diff gate: git diff --stat on those paths must be empty</td></tr>
+</table>
+
+<h3>Schema Changes</h3>
+<p><strong>None.</strong> No database, no API schema, no new data types. All design deltas are presentation-layer (className / CSS token) changes. `src/data/*` and `content/` are read-only inputs.</p>
+
+<h3>Build Decomposition</h3>
+<table border="1" cellpadding="6" cellspacing="0">
+<tr><th>Task</th><th>Assignee</th><th>Produces</th><th>Depends on</th></tr>
+<tr><td>Architecture plan (this)</td><td>brainiac</td><td>design/implementation-plan.md + docs/system-architecture.html</td><td>kara design (done)</td></tr>
+<tr><td>Design tokens + article typography (§1, §2.1)</td><td>steel</td><td>globals.css token/type changes</td><td>plan</td></tr>
+<tr><td>Listing elevation: FeaturedPost + PostCard (§2.2–2.3)</td><td>steel</td><td>featured glow, token hover</td><td>plan</td></tr>
+<tr><td>Post detail + Learn polish (§2.4–2.7)</td><td>steel</td><td>banner scrim/chip, avatar, progress row, badge</td><td>plan</td></tr>
+<tr><td>Categories + Tags (§2.8–2.10)</td><td>steel</td><td>photo bands, weighted cloud, gradient heroes</td><td>plan</td></tr>
+<tr><td>Build + QA gate</td><td>steel → zod</td><td>npm run build pass; acceptance mapping</td><td>all implementation</td></tr>
+</table>
+
+<h3>Handoff Guide (Kara / Steel)</h3>
+<ul>
+<li><strong>Implementation spec:</strong> <code>design/implementation-plan.md</code> — the delta list is the contract. Do not re-implement the ~85% already present.</li>
+<li><strong>Design reference:</strong> <code>design/mockup-*.html</code> + <code>design/design-tokens.css</code> + <code>design/design-system.html</code> (screenshots under design/screenshots/).</li>
+<li><strong>Pipeline:</strong> brainiac (done) → steel implements → zod QA checks the 9 acceptance criteria in plan §6. Orchestrator commits/pushes after QA.</li>
+<li><strong>Risk radar:</strong> article typography is the most QA-gated delta; client components must keep their Suspense boundaries; BannerImage + sort.ts are frozen.</li>
+</ul>

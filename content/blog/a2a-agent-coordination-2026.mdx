@@ -1,0 +1,134 @@
+---
+title: "A2A v1.0: The Multi-Agent Coordination Layer"
+slug: a2a-agent-coordination-2026
+excerpt: "MCP wires an agent to its tools. A2A wires agents to each other. Here is how the v1.0 coordination layer works and when to adopt it."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "August 16, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: 9
+tags: [AI Agents, MCP, Orchestration, Integration]
+bannerImage: "/banners/a2a-agent-coordination-2026.png"
+---
+
+If you read the agent-protocol discourse long enough in 2026, you will hit a pile of contradictory takes. A2A replaces MCP. You need both. Neither is production-ready. The confusion is real, but it is also self-inflicted: the two protocols answer different questions, and a lot of teams have not stopped to separate them [^1].
+
+MCP (Model Context Protocol) is the layer between an agent and its tools. It is how a single agent reaches a database, a file system, an API. A2A (Agent2Agent) is the layer between an agent and another agent. It is how agents discover each other, delegate work, and hand results back. MCP gives an agent hands. A2A gives it colleagues [^1].
+
+A2A crossed a meaningful line this year. Version 1.0 shipped as a stable specification, more than 150 organizations now support it, and it is embedded in the cloud platforms your agents already run on: Azure AI Foundry, Copilot Studio, and Amazon Bedrock AgentCore [^2]. This article is the coordination-layer companion to our [MCP coverage](/blog/mcp-stateless-2026-07-28-production-agents). Here is what A2A actually does, what v1.0 changed, how it composes with MCP in production, and the decision rule for when to reach for it.
+
+## The two problems that MCP and A2A split
+
+Before these protocols existed, every integration was bespoke. Connecting Claude to a database was custom code. Connecting GPT to Slack was different custom code. Coordinating two agents was building an orchestration layer from scratch every time [^3].
+
+Those are two separate integration problems, and the industry split them along a clean line. The tool problem: every provider had its own function-calling format, its own JSON schemas, its own error handling, so a connector written for one would not port to another. MCP standardized that. The coordination problem: once teams built multi-agent systems, there was no standard way for agents to advertise what they could do, negotiate a task, or hand off a result. Swap one agent for another and you rewrote the orchestration layer [^3].
+
+A2A answers the coordination problem. Google launched it at Cloud Next 2025 with more than 50 partners including Salesforce, SAP, ServiceNow, and PayPal, then donated it to the Linux Foundation in June 2025, where it now shares governance with MCP under the same foundation [^1]. IBM folded its competing Agent Communication Protocol (ACP) into A2A in August 2025 [^3]. By the one-year mark, supporter count had tripled past 150, including AWS, Cisco, Google, IBM, Microsoft, and SAP, the repository passed 22,000 GitHub stars, and the SDK had grown from a single Python implementation to five production-ready languages [^2].
+
+None of that made the problem go away. It made the problem standardized, which is the entire point. Agents built on LangGraph or CrewAI can now delegate to each other and coordinate workflows without sharing internal memory [^2].
+
+## What A2A actually is: four primitives
+
+A2A is a JSON-over-HTTP protocol built around four primitives [^4].
+
+### Agent Card
+
+Every agent publishes a JSON manifest, served at a well-known URL, that advertises its identity, its endpoint, its authentication requirements, and a skills list. A client agent fetches that card, reads what the remote agent can do, and decides whether it is the right agent for the job, all before any conversation starts. This is the discovery mechanism [^5].
+
+### Task
+
+The unit of work between agents. A task moves through a defined lifecycle: submitted, working, input-required, completed, failed, canceled. Unlike a one-shot tool call, a task is a first-class long-running operation, which is exactly what agent work tends to be [^4].
+
+### Message
+
+The unit of exchange within a task. Each message carries parts: text, files, or structured data, with a role saying who sent it [^4].
+
+### Artifact
+
+The output of a completed task. A named, multi-part envelope carrying JSON, PDFs, images, or generated content back to the delegating agent [^4].
+
+The interaction flow is worth picturing because it explains the difference from MCP. A client agent discovers a remote agent through its card, sends a task, streams progress over Server-Sent Events, and collects artifacts when the task completes [^5].
+
+![How an A2A interaction runs: a client fetches the remote Agent Card at a well-known URL, sends a task, streams progress through the task lifecycle, and collects artifacts when it completes](</diagrams/a2a-agent-coordination-2026/2-a2a-interaction-flow.png>)
+
+## What v1.0 changed: the enterprise blockers
+
+A2A's first stable spec is the release that matters for production. The v1.0 announcement is explicit that it targets the requirements that kept early adopters stuck in pilots: trust, scale, and operational control [^1].
+
+### Signed Agent Cards
+
+Cards now carry cryptographic signatures that verify the issuer's identity, so a client can establish trust before interacting across organizational boundaries. This is the fix for a real attack: a forged agent card could impersonate a trusted peer [^1].
+
+### Multi-tenancy
+
+A single endpoint can securely host many agents, which matters when you run a fleet behind one gateway [^1].
+
+### Multi-protocol bindings and version negotiation
+
+A2A v1.0 supports JSON+HTTP, gRPC, and JSON-RPC, and agents can negotiate versions so older and newer implementations interoperate predictably. Enterprises are not locked to a single vendor or platform [^1].
+
+### Web-aligned architecture
+
+The spec leans on patterns the web already solved: stateless, layered, load balanced, observable. In its simplest form an interaction begins with a single HTTP request, and clients can consume task updates through polling, streaming, or webhooks [^1].
+
+Version 1.0 also reinforced the relationship that generated the most confusion: A2A is complementary to MCP, not a replacement. MCP handles tool and context integration at the individual agent level. A2A handles communication between agents. Most real systems will use both, MCP inside agents, A2A between them [^1].
+
+The migration path is deliberate. AgentCard evolved backward-compatibly, so an agent can advertise support for both the old v0.3 behavior and v1.0 simultaneously, letting teams migrate progressively instead of cutting over all at once [^1].
+
+## Cloud support turned adoption from theory into default
+
+The strongest signal that A2A is past the prototype stage is that it stopped being a bolt-on. Microsoft integrated A2A into Azure AI Foundry and Copilot Studio, and the pitch is concrete: customers can build multi-agent workflows that span internal copilots, partner tools, and production infrastructure while keeping Entra, mutual TLS, content safety, and full audit logs in the path [^6]. AWS added A2A server support to Amazon Bedrock AgentCore Runtime through Marketplace, so partners can offer A2A servers alongside MCP servers and agents on the same runtime [^7].
+
+That changes the procurement math. When your platform vendor ships the protocol natively, adopting it is no longer a net-new integration project; it is a checkbox next to a runtime you already pay for.
+
+## How A2A and MCP compose in production
+
+The production pattern that emerged through 2026 is a two-protocol agent, the same shape we described in our [framework decision piece](/blog/agent-framework-decision-2026): orchestration beats the model. Every specialist agent is an MCP client internally and an A2A peer externally. It reaches its own tools through MCP, then presents itself to other agents through A2A [^1].
+
+A repair agent makes a good concrete example. It delegates diagnosis to a diagnostic agent, estimation to an estimate agent, and parts procurement to a parts agent. Each specialist talks to its own systems through MCP: the diagnostic agent to a sensors database and error catalog, the estimate agent to pricing and labor rates, the parts agent to inventory and supplier APIs. The orchestrating repair agent coordinates them through A2A [^1].
+
+![One agent, two protocols: an orchestrator delegates to specialist agents through A2A, while each specialist reaches its own tools through MCP](</diagrams/a2a-agent-coordination-2026/1-two-protocol-agent.png>)
+
+One protocol is vertical, agent to its tools. The other is horizontal, agent to agent. They do not compete; they occupy different layers of the same stack [^2].
+
+## The decision rule: when does A2A earn its keep
+
+A2A is not free to adopt. Augment's field guide is blunt about the cost asymmetry: wiring MCP into a single coding assistant takes about thirty minutes, while adding A2A to a working setup is weeks of custom work covering agent card hosting, webhook auth, task lifecycle handling, and a discovery mechanism no major IDE ships for you [^8]. That asymmetry is why the practical guidance is a ladder, not a fork.
+
+- Single agent, multiple tools: MCP only.
+- Multi-agent system inside one framework: MCP plus the framework's own glue.
+- Multi-agent system across frameworks: MCP plus A2A.
+- Cross-organization agent collaboration: MCP plus A2A, effectively mandatory.
+- Agent-to-agent payments: MCP plus A2A plus AP2, the payments extension [^9].
+
+The most common production mistake in 2026 is reaching for one protocol for everything. Teams that choose MCP for coordination bend it into a job it was never designed for, and the result is roughly a 10x cost penalty with degraded output quality [^8]. Teams that choose A2A for plain tool access carry the overhead of agent cards, task lifecycles, and webhooks when a thirty-minute MCP server would have done the job.
+
+There is one honest exception to the MCP-first ladder. If your product is a multi-agent service exposed to other vendors, a code review API or a security scanning agent, start with A2A, because delegation is your public contract [^8].
+
+## The gaps v1.0 did not close
+
+A2A is production-ready, not finished. Two gaps will bite the moment you ship something real.
+
+There is no standard agent identity model. Agent cards advertise authentication requirements, but A2A defers the actual identity layer to OAuth, mTLS, or whatever the implementer picks. Two agents from different vendors will not interoperate until you separately negotiate trust between them [^8]. In practice, cross-vendor delegation bottlenecks on auth long before it bottlenecks on the protocol.
+
+There is no cost or rate-limit accounting across delegation. When agent A delegates to agent B, and B spends model tokens completing the task, A2A defines no way to attribute, cap, or refuse that spend. You will build cost telemetry on top of the protocol, because the protocol does not carry it [^8].
+
+The roadmap is explicit about what comes next: an interoperability specification, a consolidated registry, expanded testing and tooling, and security and deployment best practices [^2].
+
+## What we are watching
+
+At Adroit we run a fleet of specialized agents across different profiles and toolsets, and the coordination layer is where multi-agent systems actually earn or lose their keep. Our own experience tracks the production pattern above: specialists that own one job, scoped tightly to their own tools, coordinated by an orchestrator that routes work and checks the result. That is the shape A2A standardizes, and the reason the protocol's momentum matters to us is that it converts what used to be bespoke orchestration glue into a shared, auditable contract.
+
+If you are starting a multi-agent build in 2026, the order matters. Stand up MCP servers for every tool your agents touch first; that is cheap and it solves the tool-access problem immediately. Add A2A agent cards only when cross-agent coordination is the actual bottleneck, when custom glue between three or more agents starts costing more time than it saves [^8]. The two protocols have converged. The remaining work is deciding which layer each piece of your system belongs in.
+
+[^1]: A2A Protocol v1.0 announcement. [a2a-protocol.org](https://a2a-protocol.org/latest/announcing-1.0/)
+[^2]: Linux Foundation, "A2A Protocol Surpasses 150 Organizations, Lands in Major Cloud Platforms" (April 9, 2026). [linuxfoundation.org](https://www.linuxfoundation.org/press/a2a-protocol-surpasses-150-organizations-lands-in-major-cloud-platforms-and-sees-enterprise-production-use-in-first-year)
+[^3]: "MCP vs A2A: The Complete Guide to AI Agent Protocols in 2026." [dev.to](https://dev.to/pockit_tools/mcp-vs-a2a-the-complete-guide-to-ai-agent-protocols-in-2026-30li)
+[^4]: A2A Protocol specification, Agent Card and Task concepts. [github.com](https://github.com/a2aproject/A2A)
+[^5]: "Building with the 2026 Agent Protocol Stack: MCP, A2A, and the Production Architecture" (June 7, 2026). [niteagent.com](https://niteagent.com/blog/2026-06-07-agent-protocol-stack-mcp-a2a-production/)
+[^6]: Microsoft Cloud Blog, "Empowering multi-agent apps with the open Agent2Agent (A2A) protocol" (May 7, 2025). [microsoft.com](https://www.microsoft.com/en-us/microsoft-cloud/blog/2025/05/07/empowering-multi-agent-apps-with-the-open-agent2agent-a2a-protocol/)
+[^7]: AWS, "AWS Marketplace adds A2A server support for Amazon Bedrock AgentCore Runtime" (November 19, 2025). [aws.amazon.com](https://aws.amazon.com/about-aws/whats-new/2025/11/marketplace-a2a-server-bedrock-agentcore-runtime/)
+[^8]: Augment Code, "A2A vs MCP for AI Coding Tool Interop (2026)." [augmentcode.com](https://www.augmentcode.com/guides/a2a-vs-mcp)
+[^9]: "MCP vs A2A: Compare Single-Agent & Multi-Agent Protocols." [truefoundry.com](https://www.truefoundry.com/blog/mcp-vs-a2a)

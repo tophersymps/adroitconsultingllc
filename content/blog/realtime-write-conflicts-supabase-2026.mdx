@@ -1,0 +1,117 @@
+---
+title: "Real-Time Writes: Stopping the Last-Writer-Wins Overwrite"
+slug: realtime-write-conflicts-supabase-2026
+excerpt: "Real-time apps are easy to read and hard to write. When two people edit the same record, whoever saves last wins silently. One guarded UPDATE fixes it."
+category: "React & Web Dev"
+categoryColor: react
+categoryGradient: "from-emerald to-emerald-dark"
+date: "September 05, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: 11
+tags: [React, Supabase, TypeScript, Realtime, Web Development, Postgres]
+bannerImage: "/banners/realtime-write-conflicts-supabase-2026.png"
+---
+
+Most real-time app advice stops at the pipe. Pick Server-Sent Events when you only need server to client, reach for WebSockets when clients talk to each other, choose Supabase Realtime when you want Postgres to push the change for you. We have covered that transport layer in detail, both in [when SSE beats WebSockets](/blog/sse-vs-websockets-2026) and in [what changed when Supabase Realtime started shipping binary payloads](/blog/supabase-realtime-binary-payloads). The read side of a live app is genuinely solved: subscribe, get the event, update the screen.
+
+The write side is where live apps quietly break. The moment two people can edit the same record at the same time, you inherit a class of bug that no transport choice touches. User A opens a contract, user B opens the same contract. A changes the title and saves. B has been typing on a stale copy the whole time, and when B saves, the app happily writes B's version over A's. A's edit is gone. Nobody was told, nothing errored, and there is no undo. This is the silent last-writer-wins overwrite, and in a real-time app it is worse than in a traditional one, because the loser is still looking at the old data on screen with no idea the ground moved under them.[^1]
+
+This article is the layer under the transport: how to stop that silent overwrite in a Postgres-backed app. I use Supabase as the concrete system because it is where the sharp edges show up most clearly. The pattern applies to any Postgres-over-HTTP stack, and the reasoning transfers to any optimistic-concurrency setup.
+
+## The failure, spelled out
+
+Picture a small billing app with a `contracts` table and two support agents editing the same account at the same time. Both screens load the contract and both hold the same starting row. Agent A edits the terms and saves. The database commits A's row and, if the app subscribes, Realtime fans the new version out to every open client. Agent B's browser receives that event, but the form B is editing was rendered from the earlier snapshot and does not reconcile its draft against the incoming row. B finishes, hits save, and the client sends a plain update. Nothing checks whether the row changed since B loaded it, so the database accepts the write and B's stale version becomes the truth. Agent A's work is overwritten and, because both updates succeeded, neither side sees an error.[^1]
+
+![Two editors and a silent overwrite: both load contract version 5, Agent A saves first and the server commits version 6 and broadcasts it, Agent B keeps editing the stale version 5 copy and saves, and the server accepts B's write, so Agent A's change is lost without any error on either side.](</diagrams/realtime-write-conflicts-supabase-2026/1-lost-update.png>)
+
+The failure is not exotic. Fowler's Optimistic Offline Lock names it plainly: once two sessions work on the same records, lost updates are quite possible, and the way to prevent them is to detect the conflict and refuse to commit the loser.[^3] The bug is that the naive app never detects anything. It writes without checking, so the database has no way to know B's version is stale.
+
+## Why you cannot just lock the row from the browser
+
+The first instinct of anyone who has done server-side database work is to reach for a pessimistic lock: `SELECT ... FOR UPDATE`, hold the row while the user edits, release on save. Fowler's Pessimistic Offline Lock is the pattern that does this, and it is correct when conflicts are frequent and expensive to unwind.[^4] It also does not work in a browser app talking to Postgres over an HTTP client library.
+
+The reason is transaction scope. `SELECT FOR UPDATE` only holds its lock until the transaction ends. In a Supabase app, every request is its own auto-committed transaction, so the lock is acquired and released in the span of one HTTP round trip. By the time the user has typed anything, the row is unlocked again. You cannot hold a database lock open across a human edit that takes minutes, because the transaction would need to stay open the entire time and the lock would serialize every other writer on that record for the whole editing session.[^2] Pessimistic locking from a stateless browser client is structurally the wrong tool.
+
+So teams reach for optimistic concurrency instead: assume conflicts are rare, detect them at save time, and refuse the loser.[^3][^5] The trick is that a naive optimistic check has its own race. A common attempt reads the current version, compares it to the version the user started with, and only then issues a separate update if they match. Two separate round trips. Between the comparison and the update, another user can commit, and because the two calls are not one transaction, the second writer still overwrites the first. The check and the write have to be atomic, and a stateless client cannot make two HTTP calls atomic on its own.[^2]
+
+![Why locking fails and which optimistic write is safe: row-lock SELECT FOR UPDATE releases on auto-commit so it cannot cover a long human edit; a two-step optimistic check races because the version read and the separate update are two round trips; only a single conditional UPDATE that checks the version and writes in one statement is safe.](</diagrams/realtime-write-conflicts-supabase-2026/2-why-locks-fail.png>)
+
+## The one UPDATE that makes it atomic
+
+The answer is to fold the version check into the write itself, so there is no window between "is it still the same?" and "commit." Give the table a version column and, on every save, send the version you saw. The UPDATE's WHERE clause includes that expected version, and the SET clause bumps it in the same statement. Postgres applies the filter and the write as one atomic unit under its default Read Committed isolation, and if a concurrent writer already bumped the row, the WHERE re-evaluation finds no match and the statement touches zero rows.[^6]
+
+Start with the schema. A single version column is enough for whole-row editing:
+
+```sql
+alter table public.contracts
+  add column version bigint not null default 1;
+```
+
+The save becomes one guarded write. You carry the version the user loaded, and you use it both to filter and to advance:
+
+```ts
+const { data: current } = await supabase
+  .from('contracts')
+  .select('id, title, version')
+  .eq('id', contractId)
+  .single();
+
+// on submit, guard on the version the user actually saw
+const { data: saved, error } = await supabase
+  .from('contracts')
+  .update({ title: nextTitle, version: current.version + 1 })
+  .eq('id', contractId)
+  .eq('version', current.version)   // the guard: did anyone change it since?
+  .select();                        // return the matched row
+
+if (error) throw error;
+if (!saved || saved.length === 0) {
+  return handleConflict(contractId, current.version);
+}
+```
+
+Two details in that snippet matter. First, `.update()` does not return the changed row by default, so you chain `.select()` to get it back; if the guard filtered out every row, `saved` comes back empty and that emptiness is your conflict signal.[^7] Second, you must advance `version` in the same statement that checks it. A separate bump would reintroduce the two-step race you are trying to kill.
+
+This is exactly the shape Fowler prescribes for optimistic offline locking: a validation and the update that follow it must occur within a single transaction, otherwise the whole point is lost.[^3] The conditional UPDATE is that single transaction expressed over HTTP. Read the expected version, bump it in the same guarded write, and treat zero affected rows as the conflict.
+
+![The atomic guarded write: a client submits with the version it saw, Postgres updates the row only where the version still matches and bumps it to the next number, one matched row commits and Realtime broadcasts the new version, or zero rows means a concurrent write won and the client must reconcile.](</diagrams/realtime-write-conflicts-supabase-2026/3-atomic-update.png>)
+
+## Let Realtime tell the loser, live
+
+The guarded UPDATE stops the silent overwrite, but a good app does not wait until the loser hits save to tell them. This is where the real-time layer earns its place. Because the version lives on the row, every committed change is a row change, and row changes are exactly what Supabase Realtime delivers. A client subscribes to `postgres_changes` on the table, filters to the record it is editing, and receives an UPDATE event with the new version the moment someone else commits.[^8]
+
+With that subscription in place, the loser is warned before they ever press save. Agent B's client is subscribed to the contract it is editing. When Agent A commits version 6, B's client gets the UPDATE event and can show a banner: "This contract was changed by someone else. Review the latest version before saving." B can reload the fresh row, or choose to keep their draft and reconcile. The conflict becomes a visible, handled moment instead of a silent data loss.
+
+The trick is to reconcile the draft, not the whole screen. If you reload the record and throw away the form, the user loses their own unsaved work, which is its own kind of data loss. A better pattern keeps the draft in component state, subscribes to the record's changes, and when an incoming UPDATE carries a newer version, offers the user a choice instead of silently replacing either side. Realtime's job is to surface the divergence early and hand it to the reconciliation logic. The write guard is the backstop that makes sure a missed notification can never corrupt data silently.[^8]
+
+## Choosing how to reconcile
+
+When the guard fires, you need a reconciliation policy, and the right one depends on what the record is. There are three practical levels, and teams usually start at the wrong end.
+
+Whole-row last-write-wins is the simplest and is correct for records where the fields belong together and partial updates make no sense. A contract's terms are one logical unit; letting two people merge different term clauses by hand is more dangerous than rejecting one edit outright. Here the version guard alone is the whole solution: the loser reloads the winner's row, reviews, and re-edits if they still need to change something. Accepting the newest version wholesale is a legitimate policy when the record is atomic.
+
+Field-level three-way merge earns its place when different people are editing different columns of the same row, which is common for customer records with many fields. Two agents, one editing the phone number and one editing the email, should both be able to save. Whole-row versioning would wrongly reject the second. A field merge compares the baseline each user loaded, the two edits, and the current row, then applies only the columns that did not change under either user. This needs per-field change tracking and is more machinery, but it is the difference between a usable CRM and one where co-editing a record constantly trips conflict dialogs.
+
+For concurrent edits to the same free text, like two people writing one document or one ticket description, neither whole-row nor per-field merge is enough. That is the domain of conflict-free replicated data types, commonly delivered by a library like Yjs. CRDTs let two clients edit the same text concurrently and merge automatically with no lost characters, at the cost of adding a collaboration library and, usually, storing the text outside plain Postgres columns or wiring a sync layer. This is real engineering and is only worth it when concurrent editing of the same text is a core product feature.
+
+![Reconciliation decision tree: is the record atomic, edited by separate fields, or co-edited as free text? Atomic records accept the newest version wholesale with a reload; multi-field records merge only the columns that changed under one editor; free text edited together needs a CRDT library for automatic merging.](</diagrams/realtime-write-conflicts-supabase-2026/4-reconcile-tree.png>)
+
+The through-line is to pick the level of conflict you are willing to handle and make the write guard match it. Most line-of-business records are either atomic or multi-field, which means a version column plus, at most, a field merge. True CRDT territory is rarer than the hype suggests. If you are building a collaborative editor, reach for it. If you are building a form over a customer record, a guarded UPDATE and a clear conflict dialog will serve you better and cost far less.
+
+## When this pattern stops being enough
+
+The version-column guard assumes writes go through your guarded path. It protects you only if every writer bumps the version in the same statement. The moment a background job, a database trigger, or a one-off migration updates the row without advancing the version, the guard can be fooled, because it compares against a version nobody maintained. This is the same warning Fowler attaches to optimistic locking: if any code path modifies the data without honoring the version column, the whole scheme silently loses its protection.[^3] Keep a single write path, or make every path version-aware.
+
+There is also a scaling caveat worth naming. Optimistic concurrency assumes conflicts are rare, which is exactly why it is cheap in the common case and punishes the rare collision with a reload or a merge.[^5] It is the wrong tool when many concurrent writers hammer the same few records and collisions are the norm, not the exception. That situation points back toward a pessimistic or queue-based model, where the hot record is effectively owned by one writer at a time. For the ordinary collaborative app, where most records are edited by one person most of the time, optimistic concurrency with an atomic guard is the honest, low-cost answer.
+
+The fix for silent data loss in a real-time app is not a better pipe. It is a better write. Give the table a version, fold the check into a single UPDATE, and let Realtime make the collision visible before anyone loses work. The transport gets you the live experience; the guard keeps that experience from erasing people.
+
+[^1]: A support agent reports the silent overwrite and the fix in the application layer; the underlying failure is lost updates under concurrent editing. See the discussion opened against supabase-js, "Concurrent editing of the same data," supabase/supabase-js issue #1645. [github.com](https://github.com/supabase/supabase-js/issues/1645)
+[^2]: Why a browser client cannot hold a pessimistic lock, and why a two-step optimistic check races: both points come from the same issue thread, which explains that Supabase auto-commits every transaction (so `SELECT ... FOR UPDATE` releases immediately) and that a version check in one call followed by an update in another leaves a window. [github.com](https://github.com/supabase/supabase-js/issues/1645)
+[^3]: Martin Fowler, "Optimistic Offline Lock," Patterns of Enterprise Application Architecture. It states that lost updates become possible once two sessions work on the same records, and that the validation and the subsequent update must occur within a single system transaction. [martinfowler.com](https://martinfowler.com/eaaCatalog/optimisticOfflineLock.html)
+[^4]: Martin Fowler, "Pessimistic Offline Lock," Patterns of Enterprise Application Architecture. Pessimistic locking allows only one business transaction at a time to access data and is appropriate when session conflicts are frequent. [martinfowler.com](https://martinfowler.com/eaaCatalog/pessimisticOfflineLock.html)
+[^5]: "The Importance of Concurrency Control within the Database," Oracle Maximum Availability Architecture blog. Optimistic concurrency suits a low chance of conflict with cheap rollback; pessimistic suits many simultaneous writers to the same data. [blogs.oracle.com](https://blogs.oracle.com/maa/from-chaos-to-order-the-importance-of-concurrency-control-within-the-database-2-of-6)
+[^6]: PostgreSQL documentation, "Transaction Isolation," Chapter 13 Concurrency Control. Under the default Read Committed level, an UPDATE whose target row was concurrently updated re-evaluates its WHERE clause against the new version, so a guard comparing the old version matches zero rows. [postgresql.org](https://www.postgresql.org/docs/current/transaction-iso.html)
+[^7]: Supabase JavaScript client reference, "update." By default updated rows are not returned; chain `.select()` after the filters to return the modified row, which is how an empty result signals a filtered-out update. [supabase.com](https://supabase.com/docs/reference/javascript/update)
+[^8]: Supabase Realtime architecture documentation. Postgres Changes streams committed row changes to subscribed clients over a Write-Ahead Log replication slot, so a committed version bump reaches every open editor. [supabase.com](https://supabase.com/docs/guides/realtime/architecture)

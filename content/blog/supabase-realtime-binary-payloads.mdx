@@ -1,0 +1,114 @@
+---
+title: "Supabase Realtime Broadcasts Binary Payloads: What Changes"
+slug: supabase-realtime-binary-payloads
+excerpt: "Supabase Realtime Broadcast now sends binary payloads alongside JSON. When it saves bandwidth, the minimum SDK versions, and the silent-drop trap."
+category: "React & Web Dev"
+categoryColor: react
+categoryGradient: "from-emerald to-emerald-dark"
+date: "August 5, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "6 min read"
+tags: [Web Development, TypeScript]
+bannerImage: /banners/category-react.png
+---
+
+## Realtime Broadcast grew a second data type
+
+For years, Supabase Realtime Broadcast sent one kind of payload: JSON. That was fine for chat messages, cursor positions, and custom notifications, the low-frequency events that most real-time apps actually move. But for high-frequency, numeric, or densely packed data, JSON's textual encoding is pure overhead. A temperature reading that takes 20-30 characters as JSON text fits in a few bytes as fixed-width binary.
+
+![JSON broadcast vs binary broadcast: JSON sends serialized text, so a temperature reading takes 20-30 characters on the wire and suits low-frequency events like chat messages and cursor positions; binary broadcast sends a compact ArrayBuffer or Uint8Array payload (a few bytes as fixed-width binary) for high-frequency, numeric, or already-binary data like sensor/telemetry streams and screenshot streaming.](</diagrams/supabase-realtime-binary-payloads/1-json-vs-binary.png>)
+
+In June 2026, Supabase closed that gap: **Realtime Broadcast now sends and receives binary payloads in addition to JSON**, across every path a Broadcast message can travel: the client libraries over WebSocket, the REST API, and directly from your database. [^1]
+
+It's a small changelog entry with an outsized effect on what you can build with Supabase as your real-time layer. Here's what changed, when to use it, and the version check you need before you rely on it.
+
+## Where binary payloads actually win
+
+Supabase's own guidance names the two cases where binary shines: sensor/telemetry streams and screenshot/presentation streaming. [^1]
+
+**Sensor and telemetry streams.** Connected devices emit steady streams of numeric readings: temperature, accelerometer values, GPS coordinates, battery levels. Each reading is compact and fixed-width by nature. Across thousands of devices publishing continuously, the JSON overhead compounds fast. Binary lets you pack those readings into a few bytes per sample instead of a 20-30 character JSON object.
+
+To make the trade concrete, take a single reading. A JSON sample such as `{"sensor":42,"temp":21.4,"battery":87}` plus its message envelope runs around 45-55 bytes on the wire, while the same three values packed as two 16-bit integers and one 32-bit float fit in 12 bytes. Multiply by volume: a thousand devices publishing once a second works out to roughly 180 MB of JSON per hour against about 43 MB of binary, so over 135 MB of bandwidth disappears every hour, and that is before you count the JSON parse work every subscriber pays on each message. At this scale the framing schema you choose is worth the small amount of up-front design.
+
+**Screenshot and presentation streaming.** A presenter or support agent shares a live view by broadcasting periodic image frames (JPEG/PNG) to viewers. Each frame is inherently binary, so encoding it as base64 inside JSON wastes ~33% of your bytes for no benefit. With binary payloads you send the image bytes straight to everyone watching. There's no base64 tax, and you don't need durable storage because each frame is transient.
+
+The general rule: **if your data is numeric, high-frequency, or already binary, send it binary.** If it's a low-frequency event that a human will debug, JSON's readability is worth more than its overhead.
+
+## How it works
+
+Binary payloads work across all three ways you can send a Broadcast message. [^1]
+
+![How binary broadcast works: Client A subscribes to a channel and sends a binary ArrayBuffer payload over WebSocket, the Realtime server's broadcast channel delivers the bytes to subscribers, and Client B receives the same bytes with no JSON serialization; the same channel also accepts binary via HTTP and from Postgres.](</diagrams/supabase-realtime-binary-payloads/2-binary-broadcast-flow.png>)
+
+**Client libraries (WebSocket).** Pass an `ArrayBuffer` or `ArrayBufferView` (like `Uint8Array`) as the payload:
+
+```ts
+const channel = supabase.channel('telemetry')
+channel.subscribe(async (status) => {
+  if (status !== 'SUBSCRIBED') return
+  channel.send({
+    type: 'broadcast',
+    event: 'sensor-reading',
+    payload: new Uint8Array([1, 2, 3]).buffer,
+  })
+})
+```
+
+On the receiving end the delivered payload comes back as an `ArrayBuffer`. Subscribers read it with a `DataView` or a typed array, a `Float32Array` for numeric telemetry or a plain `Uint8Array` for image frames, and since you control the byte layout on both sides, agree on field order and width once and keep that schema shared. That single shared definition is what keeps a binary channel readable across every subscriber.
+
+[^2]
+
+**REST API.** The single-message endpoint selects the format via `Content-Type`: `application/json` vs `application/octet-stream`. From JavaScript, `channel.httpSend()` handles it: pass a binary payload and it's sent as `application/octet-stream`. This works without subscribing, so a serverless function or cron can push binary frames to a channel. [^2]
+
+**Database.** A new SQL function, `realtime.send_binary()`, broadcasts a `bytea` payload straight from Postgres, useful when a trigger or scheduled job needs to push binary data without a client in the middle:
+
+```sql
+select realtime.send_binary(
+  '\x012345'::bytea, -- bytea payload
+  'event',           -- Event name
+  'topic',           -- Topic
+  true               -- Private / Public flag
+);
+```
+
+[^2]
+
+## The version check (this is the trap)
+
+Binary payloads are **silently dropped** by clients on older SDK versions, or SDKs that don't support them at all. No error, no fallback, the message just doesn't arrive. Supabase's changelog is explicit: "Binary payloads sent to clients on older SDK versions (or SDKs that don't support binary payloads) are silently dropped." [^1]
+
+Minimum versions to support binary payloads: [^1]
+
+| Path | Minimum version |
+|------|-----------------|
+| WebSocket (supabase-js) | 2.91.0 |
+| WebSocket (supabase-swift) | 2.44.0 |
+| REST API via `httpSend` (supabase-js) | 2.107.0 |
+| Realtime server | 2.103.2 |
+
+Current supabase-js on npm is **2.112.0**, comfortably past both the WebSocket and REST thresholds (verified against the npm registry on publish day). [^3]
+
+The other gap: **Dart, Kotlin, and Python clients don't support binary payloads yet.** [^4] If any of your subscribers are mobile or server-side non-JS clients, keep the payload JSON for them, or gate binary broadcasts by client platform.
+
+## What this means for a real-time app
+
+From the Fortress, this pattern is exactly what our live agent-dashboard work hits (documented in the Fortress's `live-agent-dashboard-implementation` skill): when you're streaming agent status and telemetry into a Next.js dashboard, the event layer (status changes, agent-to-agent messages) belongs in JSON, since it's low-frequency and you want to inspect it in the network tab. The high-frequency numeric stream (metrics, ticks, frame data) is where binary pays for itself. That split, JSON for events and binary for streams, is the practical architecture this release enables.
+
+A few things we'd check before shipping binary broadcasts in production:
+
+1. **Pin and verify client versions everywhere.** The silent-drop behavior means a stale mobile client won't "fail"; it'll just miss data. Make the minimum version a contract, and log client SDK versions on connect if you can.
+2. **Keep a JSON fallback path for mixed fleets.** If you can't guarantee every subscriber is on a binary-capable SDK, broadcast a JSON envelope for legacy clients and binary for current ones (two channels, or a capability flag).
+3. **Test `httpSend` from serverless.** It's the cleanest way to push binary from a function, but confirm your runtime's fetch layer forwards `application/octet-stream` bodies untouched.
+4. **Measure the real win before you commit.** The bandwidth math only holds if your frame format is actually tight. Log the delivered message size for a JSON build and a binary build of the same event during load testing, and confirm the binary path is smaller on your real payloads, not just in a contrived example. A loose fixed-width format can quietly eat the savings you adopted binary to get.
+
+## The bigger picture: Realtime is becoming the sync layer
+
+Binary payloads landed inside a month that shows where Supabase is taking Realtime. The July 2026 developer update also shipped `@supabase-labs/tanstack-db`, which syncs TanStack DB collections to Supabase tables over PostgREST **and Realtime** (alpha), plus OpenCode integration for agentic development against your project. [^4] Realtime has moved past chat rooms to become the live-sync substrate underneath client-side databases and agent tooling, the same trend we traced in our [Supabase pipelines and CDC deep-dive](/blog/supabase-pipelines-cdc-bigquery). Binary payloads are part of making that substrate fast enough to carry telemetry, not just events.
+
+If you're building real-time features on Supabase today, the migration is small: upgrade supabase-js, and use binary where your data is numeric or already binary. Just make sure every subscriber upgrades too. Silently-dropped messages are the kind of bug that doesn't surface until production.
+
+[^1]: supabase.com. [supabase.com](https://supabase.com/changelog/46834-realtime-broadcast-now-supports-binary-payloads)
+[^2]: supabase.com. [supabase.com](https://supabase.com/docs/guides/realtime/broadcast)
+[^3]: registry.npmjs.org. [registry.npmjs.org](https://registry.npmjs.org/@supabase/supabase-js/latest)
+[^4]: supabase.com. [supabase.com](https://supabase.com/changelog/47796-developer-update-july-2026)

@@ -1,0 +1,80 @@
+---
+title: "Real-Time Web 2026: When SSE Beats WebSockets"
+slug: sse-vs-websockets-2026
+excerpt: "Most real-time features only need server-to-client updates. SSE delivers them with less complexity. Here's when WebSockets still earn their keep."
+category: "React & Web Dev"
+categoryColor: react
+categoryGradient: "from-emerald to-emerald-dark"
+date: "August 15, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "8 min read"
+tags: [Web Development, LLMs]
+bannerImage: "/banners/sse-vs-websockets-2026.png"
+---
+
+Every team building a "real-time" feature reaches for WebSockets first. It is the default answer to the default question, and it is usually the wrong one. The uncomfortable truth, repeated across a decade of production postmortems, is that most real-time applications only need the server to push updates to the client. Chat notifications, live dashboards, stock tickers, log streams, build progress, AI token streaming: they all flow one way, from server to client. The developer who first put the number on it claims 95 percent of real-time use cases are unidirectional [^1]. Whether the exact figure is 90 or 95, the point holds: bidirectional communication is the exception, not the rule, and WebSockets charge you for it in complexity whether you use it or not [^1].
+
+The AI streaming boom turned that observation into a settled architecture. OpenAI, Anthropic, Google Gemini, and the Vercel AI SDK all stream model responses over Server-Sent Events [^2]. They independently arrived at the same protocol for the same reason: LLM token streaming is a one-way operation, the prompt goes over a normal request, the tokens come back on a persistent stream [^2]. This article walks through what SSE actually is, where it wins, the few cases where WebSockets genuinely earn their keep, and the production traps that bite teams switching to it.
+
+## What SSE actually is
+
+Server-Sent Events is a one-way server-to-client streaming protocol that runs over plain HTTP. The client opens a normal request, the server responds with `Content-Type: text/event-stream`, and the connection stays open. The server writes events as `data:` lines followed by a blank line, and the browser's built-in `EventSource` interface hands each one to your code as it arrives [^1]. There is no protocol upgrade, no handshake dance, no new port. It is HTTP, which means it works through any proxy, load balancer, CDN, or corporate firewall that already understands HTTP [^1].
+
+The client side is genuinely small:
+
+```js
+const source = new EventSource("/api/stream");
+
+source.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  updateUI(data);
+};
+```
+
+That is the whole consumption API. Compare it to a raw WebSocket client, where you write your own reconnection with exponential backoff, jitter, and a max-attempt cap, or you pull in Socket.IO, which adds roughly 40 KB to your bundle to do it for you [^1].
+
+SSE gets three properties from being plain HTTP that WebSockets have to rebuild by hand. First, automatic reconnection: when the connection drops, the browser retries on its own, and it can send a `Last-Event-ID` header so the server resumes from where the stream left off instead of restarting the whole generation [^2]. Second, no firewall trouble: enterprise networks that inspect packets and block WebSocket `Upgrade` headers generally let a plain HTTP stream through [^1][^3]. Third, it debugs with `curl -N`, no special tooling required [^1].
+
+The cost is real but narrow. SSE is text-only, so it cannot carry binary payloads [^3]. It is unidirectional, so the client cannot send mid-stream over the same connection [^2]. And under HTTP/1.1, browsers cap you at six concurrent SSE connections per origin, which is a hard wall if you open several streams on one page [^3]. That last limit is the one most teams cite as the reason to avoid SSE, and in 2026 it is largely moot, because HTTP/2 multiplexes all those streams over a single TCP connection, and HTTP/2 is the default in every major browser and at NGINX, Caddy, and Cloudflare [^1][^3].
+
+## The AI streaming case settled it
+
+The strongest argument for SSE as the default is that the industry's most latency-sensitive streaming product, the LLM chat interface, standardized on it. OpenAI sets `stream: true` and returns a stream of SSE `data:` chunks, one per token delta, ending with `data: [DONE]` [^2]. Anthropic also uses SSE, but adds an `event:` type line before each payload and emits `message_start`, `content_block_delta`, and `message_stop` events, with `ping` events as keepalives for proxies that kill idle connections [^2]. Google Gemini streams over SSE too, using a `?alt=sse` URL parameter, and sends larger chunks that include safety ratings on every event [^2]. The Vercel AI SDK, the de facto standard React wrapper, uses SSE under the hood [^2].
+
+These are not casual choices. Token generation is the one case where the transport's latency genuinely shows, because the user watches each token appear. Yet every major provider picked SSE over WebSockets. The reason is the direction of data. Streaming an LLM response is server-to-client only: the prompt goes up as a regular request, the tokens come back over the stream [^2]. For that shape, WebSockets would buy you a bidirectional channel you do not need, plus the reconnection, heartbeats, and proxy configuration you would have to maintain yourself.
+
+There is a nuance worth naming. MCP, the protocol connecting AI agents to tools, explicitly moved away from persistent SSE. Its 2025 revision deprecated the old HTTP+SSE transport in favor of Streamable HTTP, which uses ordinary POST and GET and upgrades to SSE only when a server actually needs to stream something back [^4][^5]. This is the same protocol family we dug into when [MCP went stateless](/blog/mcp-stateless-2026-07-28-production-agents). The lesson is not that SSE is bad. It is that persistent, always-open connections are operationally expensive on modern serverless and edge infrastructure, so the modern pattern is to open the stream only when you need to push, and close it when you do not [^4]. For your own app, that points at SSE for the streaming leg and a separate REST endpoint for anything the client must send mid-stream, like a cancel signal [^2].
+
+## Where WebSockets still earn their keep
+
+The cases that justify WebSockets are the ones where data flows both ways, often at the same time, and where the extra connection cost is the point. Multiplayer games need continuous two-way traffic [^1]. Collaborative editors like Google Docs need client edits flowing up while server reconciliations stream down, simultaneously [^1][^2]. Voice and audio AI, think phone agents and voice assistants, sends audio chunks in both directions at once, which SSE cannot do because it is text-only [^2][^3]. Trading platforms need bidirectional message flow plus the lowest possible latency [^1]. These are the 5 percent, and for them WebSockets are not a luxury, they are the correct tool. This is also where Supabase's WebSocket-based [Realtime layer](/blog/supabase-realtime-binary-payloads) earns its place, which we covered when binary payloads landed in June.
+
+There is also a middle category where the decision is more subtle. Agent tool-approval flows need a client-to-server signal while the model is mid-generation: the agent wants to run a database query and the user must approve it. SSE cannot carry that approval over the same connection, so you open a separate REST endpoint and coordinate state between the two [^2]. That works, but it is two connections and two request cycles where one would do. Multi-user collaboration in a shared AI session, three people watching one response and sending follow-up prompts, likewise favors a WebSocket channel so prompts, shared state, and responses all travel together [^2].
+
+The decision rule, then, is about direction and concurrency, not about how "real-time" the feature feels. If the server just needs to push updates, use SSE. If the client must send data mid-stream, or both sides need to send at the same time, use WebSockets. If you are unsure, start with SSE, because the migration path out is a specific, bounded refactor: you know exactly which connection needs to become bidirectional [^3].
+
+## The production traps
+
+Switching to SSE moves you onto infrastructure that is nearly universal, but it has sharp edges, and they all look the same in production: your stream arrives in bursts instead of smoothly. The single most common cause is reverse-proxy buffering. NGINX buffers responses by default, collecting chunks from your backend and flushing them in batches, which for SSE means tokens pile up and dump at once after the model finishes [^2]. The fix is one config block on the stream route: `proxy_buffering off`, `proxy_set_header Connection ''`, `proxy_http_version 1.1`, and `chunked_transfer_encoding off`, plus the `X-Accel-Buffering: no` response header as the escape hatch that disables buffering for just that response [^2].
+
+Two more gotchas are worth knowing before they cost you a day. Cloudflare applies a 100-second timeout to streaming responses, and an LLM generation with a large context window can exceed that, killing the connection mid-stream unless you raise it on an Enterprise plan [^2]. And if you are streaming a chat response over `fetch`, you cannot use `EventSource`, because it only supports GET and chat needs POST with a message body. You read the stream manually with `response.body.getReader()`, decode the chunks, and parse SSE `data:` lines from the buffer yourself [^2][^6]. It is more code than the one-line `EventSource` version, but it is the only way to stream a POST response.
+
+Finally, match your proxy timeouts to your real generation time. Proxies and load balancers that kill idle connections after 30 to 60 seconds will drop a slow stream, which is exactly why Anthropic's SSE implementation sends `ping` keepalive events [^2]. Set your `proxy_read_timeout` and `proxy_send_timeout` in the hundreds of seconds for streaming routes, and keep the connection alive with periodic events so nothing in the middle decides it is dead.
+
+![Why SSE streams arrive in bursts: tokens stream from the backend to the client, but a reverse proxy with buffering enabled collects the chunks and flushes them in one batch, so the UI freezes for several seconds then the whole response appears at once; the fix is proxy_buffering off plus the X-Accel-Buffering no header on the stream route](</diagrams/sse-vs-websockets-2026/2-proxy-buffering.png>)
+
+## The decision rule
+
+The takeaway is a simple default. Reach for SSE first for any real-time feature, because most of them are server-to-client pushes and SSE delivers that with dramatically less complexity: no upgrade, no manual reconnection, no protocol-specific proxy config [^1][^3]. Reach for WebSockets only when the client must send data during the stream, or both sides transmit concurrently, the multiplayer, collaborative, voice, and live-trading cases [^1][^2]. And reach for HTTP/2 as your baseline transport, because it dissolves the old six-connection SSE limit and makes the decision about your data shape rather than your browser [^1][^3].
+
+![One question picks the real-time transport: if the client must send data mid-stream or both sides transmit at once, use WebSockets for multiplayer, collaborative editing, voice AI, trading, and agent approval flows; otherwise default to SSE for notifications, dashboards, tickers, log streaming, and LLM token streaming, which gives you plain HTTP, built-in reconnection, and Last-Event-ID resume](</diagrams/sse-vs-websockets-2026/1-decision-rule.png>)
+
+The AI streaming stack settled this for the industry. The same protocol that renders the ChatGPT typing effect, where latency is the entire product, is the sensible default for your dashboard, your notification feed, and your log viewer. You are not compromising on real-time. You are choosing the simpler tool that was designed for exactly this job.
+
+[^1]: Server-Sent Events Beat WebSockets for 95% of Real-Time Apps. [dev.to](https://dev.to/polliog/server-sent-events-beat-websockets-for-95-of-real-time-apps-heres-why-a4l)
+[^2]: SSE vs WebSockets for Streaming LLM Responses. [buildmvpfast.com](https://www.buildmvpfast.com/blog/streaming-llm-responses-sse-vs-websockets-2026)
+[^3]: WebSockets vs Server-Sent Events: Key Differences. [ably.com](https://ably.com/blog/websockets-vs-sse)
+[^4]: Why MCP's Move Away from Server-Sent Events Simplifies Security. [auth0.com](https://auth0.com/blog/mcp-streamable-http/)
+[^5]: Model Context Protocol Transports: Streamable HTTP. [modelcontextprotocol.io](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports)
+[^6]: Streaming AI Responses: SSE, WebSockets, and the Architecture Behind ChatGPT's Typing Effect. [channel.tel](https://www.channel.tel/blog/streaming-ai-responses-sse-websockets-real-time)

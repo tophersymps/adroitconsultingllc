@@ -1,0 +1,96 @@
+---
+title: "The Agent Regression Your Final-Output Eval Misses"
+slug: agent-trajectory-evals-2026
+excerpt: "Final-output evals miss agent regressions: a model update that corrupts step 3 breaks steps 4 through 8. Here is the eval loop that catches them."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "August 19, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: 9
+tags: [AI Agents, LLMs, Observability, Testing, Delivery]
+bannerImage: "/banners/agent-trajectory-evals-2026.png"
+---
+
+You ship a new model version on a Thursday. The demo passes Friday morning. Two weeks later there are 180 support tickets about wrong answers and no record of what the previous model was doing on the inputs now failing [^3]. The problem was never the deploy cadence. Nobody measured whether quality had moved before the new model saw traffic.
+
+Most teams that run agent evals are running the wrong kind. They score final output: did the agent produce a good answer? That single score hides the failures that actually break agent systems, because agents fail in the middle of a multi-step trajectory, not at the end. A model update that changes how the agent interprets a tool response at step 3 can corrupt the reasoning at steps 4 through 8, and nothing in the final-answer check sees it [^1]. This is the eval companion to our [framework selection guide](/blog/agent-framework-decision-2026).
+
+## Why the final answer is the wrong thing to grade
+
+Standard LLM evaluation measures a single prompt-response pair: provide an input, receive an output, score accuracy, relevance, or faithfulness [^1]. That fits a chat completion, not an agent, which reasons across multiple steps, calls tools, and pursues a goal. The agent's behavior lives in the trajectory: the sequence of decisions and tool calls that produced the answer [^2].
+
+This matters because agent regressions are interaction-level. They do not show up at the individual step. An update that changes how the model reads a tool result at step 3 changes what the agent decides at step 4, and by step 8 the whole trajectory has drifted [^1]. The gap is large: analyses put the difference between final-output and full trajectory evaluation at 20 to 40 percent of test cases [^1]. Those are the cases your current eval suite tells you are fine.
+
+The other failure the final answer hides is success by luck versus success by logic. An agent can produce a correct final output despite a bad internal decision, or fail an entire task despite correct individual steps [^5]. Grade only the end state and you reward the lucky path and punish the correct one. A task completion rate treats the whole flow as the unit: for a customer-service agent tracking an order, if any of the lookup, retrieval, or estimate steps fails, the task failed even when its words look fine [^5].
+
+![Final-output scoring sees only the final answer; trajectory evaluation scores the whole decision chain, so a failure that starts at step 3 and cascades through step 8 is caught at the interaction level rather than hidden behind a passing final result.](</diagrams/agent-trajectory-evals-2026/1-trajectory-vs-final.png>)
+
+## The five stages of evaluation
+
+Evaluation is five stages, each with its own method, dataset, and failure threshold, and treating them as one stage is the main mistake [^3]:
+
+- Development, every commit. Unit-test-style sanity checks that run in milliseconds: does the output contain a phone number when it should not, does the JSON parse. They exist so the expensive layers do not do work a 5ms check could filter out [^3].
+- Pre-release, before any new model or major prompt change. Run against a red-team dataset covering edge cases and the OWASP Top 10 for LLM applications: prompt injection, insecure output handling, excessive agency [^3]. Your golden dataset covers failures you have already seen; adversarial testing finds the ones you have not.
+- CI regression, every pull request. Every PR that touches a prompt, a model version, or a retrieval configuration triggers an eval run against the golden dataset, and a PR that regresses past the threshold does not merge [^3]. Starting here without the commit-level checks above means the CI run carries too much load.
+- Production monitoring, continuously. Sample 5 to 10 percent of real traffic and score it with an automated evaluator [^3]. This is the only layer that catches changes that happen to you: a provider updating model weights without bumping the version identifier, or input distributions shifting as new users arrive.
+- Runtime guardrails, synchronous. Not an evaluation system but a safety system that blocks a specific failure mode inline with millisecond latency [^3]. An async evaluator where you need an inline guardrail means harmful output reaches users; a synchronous guardrail where you need an async evaluator means unacceptable p99 latency. They are not interchangeable.
+
+## Build the golden dataset from failures, not documentation
+
+The dataset is usually the bottleneck, not the method [^3]. Fifty examples detects large regressions; two hundred gives confidence on a 3 to 5 percent quality change; more than five hundred is diminishing returns unless your application has varied sub-tasks [^3].
+
+Where the dataset comes from matters more than its size. Datasets built from documentation or synthetic generation are too clean; they miss the edge cases that surface once real users interact with the system. The most effective golden datasets combine human-crafted examples, real production samples with PII removed, and synthetic expansions [^3]. The direction matters too: bottom-up failure analysis, collecting real failures first and then designing the metric to catch them, predicts what actually breaks, where top-down design produces high scores and surprising failures [^3].
+
+## Calibrate the judge or the score means nothing
+
+Most eval setups break at the judge. A judge is the LLM or rubric that scores your agent's output, and if it is not calibrated, its scores are confidently wrong [^3]:
+
+One domain expert, the person who owns the product, grades 30 to 50 examples with binary pass/fail verdicts and a written critique for every failure. Not a committee: committees produce criteria drift, where the labels reflect who graded which example rather than whether the output was actually good [^3].
+
+Use binary pass/fail, not a 1-to-5 Likert scale. Likert scores cluster between 3.2 and 3.8, close to a coin flip, and convert poorly into actionable feedback [^3]. A judge that stamps everything pass achieves 90 percent agreement on a dataset where 10 percent of outputs should fail, so measure precision and recall per class, not overall agreement [^3]. Build the judge prompt against those labels, targeting a Pearson correlation above 0.7 with the expert [^3].
+
+Judge models carry documented biases: position bias (swapping two identical candidate responses shifted a judge's preference by more than 10 percent), verbosity bias (longer outputs score higher regardless of content), and self-preference (a judge advantages its own model family) [^3]. A jury of three independent judges with a majority verdict reduces all three, at three times the cost.
+
+## Turn production failures into regression coverage
+
+This is the practice that separates eval programs that work from those that stall: every production failure becomes a test case. A trace that exposes a problem becomes a dataset example with inputs and pass/fail criteria [^4].
+
+The loop is concrete. A production session fails. A domain expert annotates it with a label and expected behavior. The failure is grouped into a signal, and an eval case is generated from the real conversation flow that triggered it, then added to the pre-deployment regression suite [^1]. After a model update, you run the same suite, and the pass rate tells you whether the update introduced regressions on the failure patterns your agent has actually exhibited [^1].
+
+Naming the failure matters before you can score it. Ask two reviewers to score an answer for helpfulness and you get two different numbers; the metric never had a shared definition [^4]. Trace review should end with a named failure mode, labeled examples, and the evaluator that will catch it. The named modes are concrete: rescheduled a tour when no slot existed, cited a stale document, called the refund tool before verifying eligibility [^4].
+
+Match each failure mode to the evaluator that can observe it [^4]:
+
+- Code and functional evaluators catch deterministic failures: invalid JSON, missing fields, code that fails to compile, an exact classification mismatch. Cheap, fast, run on every example, but they cannot judge semantic quality.
+- LLM-as-a-judge catches semantic failures: whether the answer addressed the user's intent, followed policy, used the right tone. Scales to subjective quality, needs calibration against labeled traces.
+- Human review catches failures only an expert can see: clinical, legal, financial domains. Expensive, does not scale, and it is where you calibrate the judge and build the golden dataset.
+
+In our own editorial pipeline, we run exactly this split. A deterministic mechanical gate, our article verifier, catches the code-like failures: raw HTML, bare URLs, em-dashes, broken citation links. Then a human reviewer, the editorial layer, judges the semantic quality a script cannot. The gate runs on every draft for free; the human reviewer handles the failures only they can see.
+
+![The production-failure regression loop: a failing production trace is annotated by a domain expert, named as a failure mode, turned into an eval case added to the golden dataset, run in CI on every change, and monitored online so the next recurrence is caught before users hit it.](</diagrams/agent-trajectory-evals-2026/2-regression-loop.png>)
+
+## Offline and online are two halves of one loop
+
+Offline evaluation happens before deployment against a fixed dataset; online evaluation happens in production, sampling real requests and watching for drift [^3]. Both are necessary. Offline catches regressions you introduce; online catches changes that happen to you, like provider updates without a version increment [^3].
+
+An agent can pass every offline check with strong faithfulness scores and high completion rates, then fail in production because costs spiral, latency climbs, or an edge case destabilizes it [^5]. Production evaluation is where evaluation intensifies. Monitor token usage per request before you discover cost problems through surprise bills [^5].
+
+The same three pillars as DevOps observability apply, extended for AI: metrics track token usage and cost per interaction, logs capture reasoning traces, and traces follow reasoning through agent steps and tool calls [^5]. If you cannot answer "when did this start failing," you kept only the current score and no history, and you cannot fix the cause [^3].
+
+## The benchmark trap and the pipeline that actually runs
+
+MMLU, HumanEval, and the other standard benchmarks appear in every model release and predict almost nothing about whether a model will work in your specific application [^3]. They measure broad capabilities against a fixed test set, and your agent runs a specific task on your data wrapped in prompts, tools, and retrieval that never appear in the benchmark [^4]. Use benchmarks once, at model selection, to eliminate the bottom-half candidates, then build a custom eval set of a hundred examples from your use case [^3].
+
+The methods only become useful when they run automatically on every change; an eval pipeline that needs a manual trigger will not run when it matters [^3]. Version your evaluation dataset like code and treat edits to ground truth as production risk [^3]. Use acceptable fail rates per failure category rather than a single hard threshold: a 3 percent hallucination rate on general queries might be tolerable, 8 percent is not, and safety failures at any rate block the deploy [^3].
+
+One warning before you scale this up. Off-the-shelf judge libraries ship generic rubrics that produce confidently wrong scores on specialized applications; calibration is not optional [^3]. And a better base model is not always a better application: a model upgrade can improve average output quality while breaking a safety filter. Evaluate the system, not just the model [^3].
+
+The habit matters more than the platform. Every production regression that ships to users should become a test case [^1]. To begin, pick one trace with negative feedback, name the failure mode, add it to an offline dataset, and create one online evaluator that watches for it [^4].
+
+[^1]: Latitude, "Top LLM Evaluation Tools for AI Agents in 2026." [latitude.so](https://www.latitude.so/blog/top-llm-evaluation-tools-ai-agents-2026-devto)
+[^2]: Wang et al., "A Survey on Large Language Model based Autonomous Agents," arXiv:2308.11432. [arxiv.org](https://arxiv.org/abs/2308.11432)
+[^3]: Galtea, "The Complete Guide for LLM Evaluations in 2026." [galtea.ai](https://galtea.ai/blog/llm-evaluation-complete-guide)
+[^4]: LangChain, "LLM Evals: The Feedback Loop Behind Reliable AI Agents," March 10, 2026. [langchain.com](https://www.langchain.com/resources/llm-evals)
+[^5]: Naa Ashiorkor, "LLM Evaluation and AI Observability for Agent Monitoring," JetBrains PyCharm blog, May 19, 2026. [jetbrains.com](https://blog.jetbrains.com/pycharm/2026/05/llm-evaluation-and-ai-observability-for-agent-monitoring/)
