@@ -1,0 +1,130 @@
+---
+title: "Lesson 15: Data Architecture for AI: Databases, Vector DBs, Embeddings, and the Same Modeling Discipline"
+slug: data-architecture-for-ai-vector-databases-embeddings
+series: "salesforce-architect"
+lesson: 15
+excerpt: "The data side of AI systems. Embeddings, vector databases, chunking, and why the modeling discipline from a Salesforce data model (records, relationships, source of truth, scale) carries over unchanged when the storage engine becomes a vector store. Includes a worked example of a RAG knowledge base, a pgvector walkthrough, and the Data Cloud vector database connection."
+date: "August 18, 2026"
+author: "Adroit Consulting"
+readTime: "10 min read"
+tags: [Architecture, Data, LLMs, RAG]
+---
+
+# Lesson 15: Data Architecture for AI: Databases, Vector DBs, Embeddings, and the Same Modeling Discipline
+
+Lesson 14 gave you the Salesforce data model: objects, relationships, skew, and the discipline of deciding where records live. This lesson takes the same questions and asks them of an AI system. Because when a client says "we want an AI assistant that answers questions from our documents," the data architecture decisions you make are not new. The storage engine changes. The modeling discipline does not.
+
+Here is the thesis to hold onto: **vector search is a retrieval technique, not a different world.** Behind the embeddings and the approximate neighbor indexes is still the same job you did in lesson 14. What is a record. How do records relate. What is the source of truth. How does it scale. Where does it live. If you can model a Salesforce org, you can model a knowledge base. You just have to learn the vocabulary.
+
+## The vocabulary
+
+Start with the pieces.
+
+**Embedding.** A numerical representation of meaning. An embedding model takes text, an image, an audio clip, or a document and converts it into a list of numbers, a vector, that captures semantic meaning rather than the exact words. [^3] IBM describes embeddings as the mechanism that moves a system "from language into a space where meaning can be compared mathematically." [^3]
+
+**Embedding model.** The machine learning model that does that conversion. It determines how information is positioned in that semantic space, which shapes how queries and documents get compared at retrieval time. [^3] AWS notes that embedding models map high-dimensional, sparse data like text into dense vector representations that encode meaning. [^4]
+
+**Vector database.** A database built to store, index, and query those vectors, optimized for similarity search rather than exact matches. IBM defines it as a system that "stores, manages and indexes high-dimensional vector data." [^1]
+
+**Similarity.** How you find things. The query is converted to a vector with the same embedding model, then compared to the stored vectors using a metric such as cosine similarity, and the closest matches come back ranked. [^3]
+
+**Chunking.** Before embedding, a document is split into manageable pieces. AWS describes the preprocessing step: source data gets split into chunks, each chunk is embedded, and the embeddings are written to the index while maintaining a mapping back to the original document. [^4]
+
+## Why a separate database for meaning
+
+A relational database answers exact-match questions: "show me every account whose name equals Acme." A vector database answers meaning questions: "show me the policy passages related to 'what happens if a shipment is late?'" even when the documents never use the word "late."
+
+Coursera lays out the distinction cleanly. Relational databases store rows and columns with pre-defined schemas. NoSQL databases store documents, key-value pairs, and similar shapes with flexible schemas. Vector databases store high-dimensional vectors. [^2] The whole game changes from equality to proximity.
+
+The numbers explain the momentum. IBM reports that vector database adoption grew 377% year over year in 2025, the fastest growth of any LLM-related technology. [^1] That is a big number, and it should not surprise you. Every RAG application needs a place to keep its embeddings.
+
+But here is the architect's correction to the hype: a vector database is not a replacement for your existing data systems. Coursera is explicit that vector databases complement relational and NoSQL systems rather than replace them, and that a hybrid approach, semantic search from the vector store plus the strengths of the relational engine, is where real systems land. [^2]
+
+## The same modeling discipline
+
+This is the heart of the lesson. When you build a knowledge base, you are making the exact decisions you made in lesson 14, just with different names.
+
+**The chunk is your record.** In a Salesforce model, a record is a row with fields. In a vector store, a chunk is the unit that gets embedded and retrieved. Choosing chunk size is a data model decision. Chunks too large and retrieval returns passages that bury the answer. Chunks too small and the model loses the surrounding context. You are deciding granularity, the same call you made deciding whether "commission rate per account" is a field or an object.
+
+**Metadata is your schema.** A vector database holds more than the embedding vector. Each chunk carries metadata: which document it came from, which section, which department owns it, when it was last updated. Amazon Bedrock maintains a mapping from each embedding back to the original document. [^4] That mapping is your referential integrity. Without it you can retrieve a passage but cannot cite it, filter it, or trace it to its source, and an uncitable answer is not a trustworthy one.
+
+**The source of truth still rules.** In lesson 14 you decided where data physically lives and kept the authoritative version somewhere. Same here. The vector store is a derived artifact, an index over source documents. The source documents are the system of record. When a source document changes, the stale embedding must be re-embedded and replaced, or your AI answers yesterday's truth.
+
+**Scaling and skew still bite.** A vector index is not magic. Approximate nearest neighbor indexes such as HNSW and IVFFlat trade a little accuracy for speed. [^6] Retrieval quality degrades when the index is stale, when chunks are poorly modeled, or when one source document dominates the store the way a parking-lot account dominates a data model. Same failure shapes, different engine.
+
+## pgvector: proof that it is one discipline
+
+The clearest evidence that vector search belongs in the data architecture toolset, not a separate universe, is pgvector. It is an open-source extension for PostgreSQL that adds a vector data type, indexes, and similarity operators to the relational database. The project's own tagline is the thesis in six words: "store your vectors with the rest of your data." [^5]
+
+You add a column of type `vector(n)` to a table, where n is the dimension of your embeddings, for example 1536 for OpenAI's text embedding models. [^6] Then you query with distance operators. A concrete example from the pgvector project: [^5]
+
+```sql
+CREATE EXTENSION vector;
+
+ALTER TABLE items ADD COLUMN embedding vector(3);
+
+SELECT id, name, embedding
+FROM items
+ORDER BY embedding <-> '[0.32, 0.1, 0.95]';  -- L2 distance, nearest first
+```
+
+The `<->` operator returns nearest neighbors. The `<=>` operator computes cosine similarity. [^5]
+
+Because the vectors live in Postgres, you keep everything you rely on in a relational system: joins, transactions, and the rest of the SQL engine. [^6] You can join a vector similarity result back to your operational tables. Google Cloud makes the same point, describing pgvector as a way to add similarity search without moving data or changing the application architecture to connect a new vector data type. [^6]
+
+Nothing about this is exotic. It is a column, an index, and an operator, sitting next to the rows you already manage. That is what the same modeling discipline looks like in practice.
+
+## Worked example: a field-services knowledge base
+
+Bring lesson 14 back. That field-services company, technicians, services, sites, now wants a support agent that answers technician questions from its operations manuals and past service notes. Walk the data architecture.
+
+1. **Choose the source of truth.** The manuals and service notes already live in the CRM and a document store. Those stay put. The knowledge base is an index over them, never a second copy of record.
+
+2. **Define the chunk.** A technician asks "what do I do if a compressor lockout trip happens during a night call?" The manual sections on compressor faults need to be retrievable as a unit. Chunk per section, not per page, and not per whole manual. Section-level granularity gets the answer and its surrounding procedure together.
+
+3. **Model the metadata.** Every chunk carries document ID, section heading, product line, and last-updated timestamp. That metadata is the schema. It lets the agent filter to the right product line before it even searches, the way a WHERE clause narrows a query.
+
+4. **Map back to source.** Each chunk retains its source document and section pointer, the AWS-style mapping to the original. [^4] When the agent answers, it can cite the manual section. Referential integrity, exactly as in lesson 14.
+
+5. **Keep the index in sync.** The CRM's service notes change constantly. A re-embedding job watches for new and changed notes and refreshes the corresponding chunks. Without it, retrieval drifts from reality.
+
+6. **Where does it live.** If the team already runs Postgres, pgvector adds the vector column without a new system. If the store must scale to tens of millions of chunks with hot ingestion, a dedicated vector database earns its keep. Same decision as "where does this data physically live," from lesson 14.
+
+## The Salesforce connection
+
+You are studying for the Salesforce System Architect track, so tie this back to the platform. Salesforce Data Cloud ships a vector database. It unifies structured and unstructured data and transforms it into a vector embedding by calling an embedding model through the Einstein Trust Layer. [^8] Salesforce says this grounding of AI prompts against company data is what lets Einstein Copilot answer from your data rather than retraining the model, which it calls costly and complex. [^7]
+
+The stated purpose matters for your architecture thinking. You do not retrain the LLM on your data. You index your data, retrieve what is relevant at query time, and stuff it into the prompt. That is the RAG pattern, and the Data Cloud vector database is the retrieval layer for it. [^7]
+
+An architect who understands lesson 14 can read that and see the familiar shape: a source of truth (the CRM and data lake), a derived index (the vector store), and a discipline for keeping them consistent. Salesforce just gives the pieces productized names.
+
+## The pitfall to avoid
+
+**Treating the vector database as an excuse to stop modeling.** The most common failure I see in AI data architecture is the assumption that because embeddings "just work," you can throw documents at a vector store and skip the design pass. You cannot. Without metadata you cannot filter or cite. Without source mapping you cannot trust or refresh. Without chunk modeling you retrieve noise. AWS and IBM describe the metadata and source mapping as core parts of the workflow, not optional extras. [^4] [^3]
+
+A second, subtler pitfall: **forgetting the embedding model is a versioned dependency.** Change the embedding model and every stored vector becomes incomparable to new queries, because the semantic space moves. Re-embedding is a migration. Plan for it the way you plan for a schema change, with a backfill job and a cutover, not a hope.
+
+## Try it
+
+Take a document you know, one or two pages of a real manual, contract, or policy. Build the knowledge base on paper.
+
+1. What are your chunks? Where exactly do you split, and why there?
+2. What metadata does every chunk carry? Which fields would you filter on at query time?
+3. What is the mapping back to the source, and how do you prove a retrieved chunk is the current version?
+4. How does a change to the source document reach the index? Describe the refresh job.
+5. If this store grew to a million chunks with a handful of source documents dominating, what would you watch for?
+
+If you answered all five, you modeled an AI data architecture. The fact that you never wrote a line of embedding code is the point. The discipline is not the engine.
+
+## What's next
+
+You now have the data side of AI systems: what embeddings are, where vector databases fit, and how the modeling discipline from the previous lesson carries over. The next lesson swings back to the platform and to moving real data: data migration strategy. It covers ETL and ELT, the tools, validation, cutover planning, and the rollback path when a migration goes wrong.
+
+[^1]: ibm.com. [What is a vector database?](https://www.ibm.com/think/topics/vector-database)
+[^2]: coursera.org. [Vector Database Explained: How AI Systems Store and Search Embeddings](https://www.coursera.org/articles/vector-database)
+[^3]: ibm.com. [Vector Databases for RAG](https://www.ibm.com/think/topics/rag-vector-database)
+[^4]: aws.amazon.com. [Dive deep into vector data stores using Amazon Bedrock Knowledge Bases](https://aws.amazon.com/blogs/machine-learning/dive-deep-into-vector-data-stores-using-amazon-bedrock-knowledge-bases/)
+[^5]: github.com. [pgvector: Open-source vector similarity search for Postgres](https://github.com/pgvector/pgvector)
+[^6]: yugabyte.com. [Using PostgreSQL as a Vector Database](https://www.yugabyte.com/key-concepts/using-postgresql-as-a-vector-database/)
+[^7]: salesforce.com. [New Vector Database in Salesforce Data Cloud Will Power Generative AI](https://www.salesforce.com/news/press-releases/2023/12/14/unstructured-data-ai-search-einstein/)
+[^8]: salesforce.com. [How Einstein Copilot Search Uses Retrieval Augmented Generation](https://www.salesforce.com/news/stories/retrieval-augmented-generation-explained/)

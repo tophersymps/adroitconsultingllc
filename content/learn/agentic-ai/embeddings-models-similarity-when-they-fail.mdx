@@ -1,0 +1,114 @@
+---
+title: "Lesson 11: Embeddings: Models, Similarity, and When They Fail"
+slug: embeddings-models-similarity-when-they-fail
+series: "agentic-ai"
+lesson: 11
+excerpt: "What an embedding actually is, how the popular models differ, why cosine similarity works, and the failure modes that make pure vector search miss the answer: rare terms, domain jargon, short queries, and model mismatch."
+date: "August 14, 2026"
+author: "Adroit Consulting"
+readTime: "10 min read"
+tags: [LLMs, AI Agents, RAG]
+---
+
+# Lesson 11: Embeddings, Similarity, and When They Fail
+
+Lesson 10 gave you the RAG pattern end to end and ended by promising a deeper look at the retrieval stack: how embedding models differ and how to evaluate retrieval quality. This is that lesson, narrowed to the piece that determines retrieval quality most directly. The embedding model decides what "similar" means in your index, and if it maps meaning wrong, no vector database or reranker can fully fix the damage. So this lesson covers what an embedding is, how the mainstream models compare, the one similarity metric you will use most, and the specific situations where embeddings quietly fail.
+
+## What an embedding is
+
+An embedding is an array of numbers that represents a piece of text as a point in a high-dimensional space. Embedding models are trained so that text with similar meaning lands near each other in that space, and text with different meaning lands far apart. When you index a chunk, you embed it and store the vector. When a query arrives, you embed the query with the same model and find the stored vectors closest to it. The measure of "close" is usually cosine similarity. [^1]
+
+The key detail hides in the word "array." A vector is just a long list of floats. OpenAI's text-embedding-3-small produces 1,536 floats per input, and text-embedding-3-large produces up to 3,072. [^2] Nothing in those numbers is meaningful to read by hand. What matters is that two inputs that mean the same thing, even if they share no words at all, produce vectors that point in nearly the same direction.
+
+That is the whole point and the whole risk. Embeddings buy you semantic matching, matching on meaning instead of exact words, but they only work if the model's idea of meaning matches your domain's idea of meaning.
+
+## How the mainstream embedding models differ
+
+The field splits into hosted APIs and open-weight models you can run yourself. Both matter for the Fortress pattern of local model serving, so it is worth knowing the tradeoff before you pick.
+
+**OpenAI text-embedding-3.** This is the family most teams reach for first. It comes in small (1,536 dimensions, $0.02 per 1M tokens) and large (up to 3,072 dimensions, $0.13 per 1M tokens). OpenAI positions the large model as its most capable embedding model for both English and non-English tasks. [^3] The v3 generation is a real step up from the older text-embedding-ada-002: on MIRACL, a multilingual retrieval benchmark, ada-002 scored 31.4% average while text-embedding-3-large scored 54.9%, and on MTEB, the English embedding benchmark, ada-002 scored 61.0% against 64.6% for the large model. [^3]
+
+The v3 models also support native dimension reduction. You can ask for any output size from 256 up to the model maximum, and OpenAI truncates the vector using a training technique called Matryoshka representation learning. A text-embedding-3-large vector shortened to 256 dimensions still outperforms an unshortened ada-002 vector at 1,536 dimensions on MTEB. [^3] That matters for storage: smaller vectors mean smaller indexes and cheaper vector databases, and the accuracy cost is often smaller than you would expect.
+
+**Open-weight models.** The sentence-transformers ecosystem gives you the same capability on hardware you control. The small all-MiniLM-L6-v2 model, a common starting point, produces 384-dimension vectors and runs locally. [^2] Stepping up, BAAI's BGE family and the E5 models from Microsoft offer strong multilingual and retrieval performance as open weights, and the BGE-M3 model handles dense, sparse, and multi-vector retrieval in one model. [^4] The Qwen3 embedding family has pushed open models to scores on MTEB that once belonged only to the largest hosted models. [^5]
+
+The tradeoff is the pattern you saw in the choosing-models lesson. A hosted API is zero-ops and always current, but you send your data to a third party and pay per token forever. A local model keeps the data in the building and the cost fixed, but you own the GPU, the serving, and the upgrades. For sensitive enterprise text, local serving often wins on privacy even when the raw benchmark score is a little lower.
+
+## The metric: cosine similarity
+
+To compare two embeddings you need a similarity score. The standard choice is cosine similarity, the cosine of the angle between the two vectors, ranging from -1 to 1 where 1 means they point the same way. [^6] Cosine ignores the length of the vectors and compares only their direction, which is the right thing to compare for meaning.
+
+OpenAI's embeddings are normalized to length 1, and OpenAI explicitly recommends cosine similarity as the distance function. [^6] This is why the match-the-metric guidance from lesson 10 matters: different models are trained with different objectives, and the metric that ranks well for one model can rank poorly for another. If you change embedding models, re-embed the whole index with the new model. Mixing vectors from two models in one index is comparing unrelated spaces.
+
+## When embeddings fail
+
+This is the part most tutorials skip, and it is the part that bites in production. An embedding model is a general-purpose statistical model, trained on the broad internet, not on your contracts, product codes, or domain jargon. That mismatch produces predictable failure modes.
+
+**Rare and out-of-vocabulary terms.** A pure vector search system can fail to surface the most relevant, up-to-date documents containing new or rare terms until the embedding model is retrained or fine-tuned. A brand name, a product code, or a piece of industry slang that the model has never seen gets embedded as noise, so exact-term queries miss it. [^7]
+
+**Domain ambiguity and jargon.** A term can have a common meaning and a very specific meaning inside a domain. A general model defaults to the common meaning's embedding. Domain jargon is either treated as a rare term or mapped to a semantically related but wrong concept from the general domain. [^7] "Rendering" is a visual thing to a general model and a performance bottleneck to a web team, and the model does not know which one you mean unless the surrounding text makes it obvious.
+
+**Semantic similarity is not specificity.** A query that targets one aspect of a topic can pull back whole documents about the topic that never answer the specific question. A query about the impact of a regulation on consent forms can return documents about the regulation generally, because the general topic dominates the vector. [^7]
+
+**Short queries.** Short queries expand the search scope, because a three-word query has less signal for the model to lock onto. [^8] A user typing "refund policy" into a search box expects exact policy text, but the embedding sees a vague phrase and returns a spread of vaguely related chunks.
+
+The fix is rarely "get a better embedding model." It is usually hybrid search, which pairs vector similarity with keyword matching so exact terms still win, plus reranking, plus a retrieval evaluation loop. You saw all three in lesson 10. Embeddings give you semantic recall; keyword search and reranking give you precision and exact matches. Treat the embedding model as the semantic layer, not the whole retrieval system.
+
+## Worked example: two sentences that share no words
+
+The cleanest way to see what an embedding buys you is to compare a meaning-based score against a word-overlap score on a pair of sentences that say the same thing using different words.
+
+Consider these two sentences:
+
+- A: "The employee must approve the purchase before it is submitted."
+- B: "Staff need to sign off on expenses ahead of filing."
+
+Word overlap says these have almost nothing in common. A and B share no content words. Term-frequency cosine similarity, the approach from lesson 10's example, would rank this pair low, because it only counts shared terms. A real embedding model, trained on meaning, should place these sentences close together because they describe the same action.
+
+The code below runs both measures on this pair using the all-MiniLM-L6-v2 model from sentence-transformers. It needs no API key and no network beyond downloading the model once, which is the local-serving pattern.
+
+```python
+from sentence_transformers import SentenceTransformer, util
+
+model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+
+a = "The employee must approve the purchase before it is submitted."
+b = "Staff need to sign off on expenses ahead of filing."
+
+emb_a = model.encode(a, normalize_embeddings=True)
+emb_b = model.encode(b, normalize_embeddings=True)
+
+cosine = util.cos_sim(emb_a, emb_b).item()
+print(f"dimensions: {len(emb_a)}")
+print(f"embedding cosine similarity: {cosine:.3f}")
+
+# contrast: word-overlap baseline
+def words(s):
+    return set(w for w in s.lower().split() if len(w) > 3)
+
+overlap = len(words(a) & words(b)) / len(words(a) | words(b))
+print(f"word-overlap similarity: {overlap:.3f}")
+```
+
+Run this and you will see the two numbers diverge. In my run on the sentence-transformers all-MiniLM-L6-v2 model the word-overlap score came back as 0.0, because the sentences share no content words, while the embedding cosine score came back as 0.328. The 384-dimension vectors are what you get from that model. [^2]
+
+The gap between 0.0 and 0.328 is the semantic understanding you are paying for: the model recognizes that both sentences describe the same approval-and-submit workflow even though they use no shared vocabulary. The score is not near 1.0, and that is normal. Absolute similarity values are hard to interpret across models, and a 0.3-level score between genuinely related sentences is common with small local models. What matters is the ranking, not the raw number: this pair should score meaningfully above a pair that talks about unrelated topics, and in this run it does. If the embedding score for this pair were at or near the word-overlap score, you would know your setup or your model choice was wrong.
+
+## Try it
+
+1. **Reproduce the gap.** Run the worked example above. Confirm the embedding score is clearly higher than the word-overlap score, then swap in a pair that uses the same word in different senses, such as "server rendered the page" and "the chef served the table," and watch the embedding score drop. That drop is domain ambiguity in action.
+2. **Compare models on your own text.** Embed three sentences from your domain with two different models, one local and one hosted, and compute the cosine similarity between them for the same sentence. If the two models disagree about what is similar, that is evidence you should evaluate on your own retrieval set instead of trusting a leaderboard.
+3. **Test the failure modes.** Take five real queries against a RAG index you control. Pick ones that contain product codes or acronyms. Check whether the exact-term chunks surface, and note whether hybrid search would have caught them. This is the seed of the retrieval evaluation loop later lessons build on.
+
+## What's next
+
+You now know what embeddings are, how the models differ, and where they break. The next lesson moves up the stack to the vector database: how indexes are built, how approximate nearest neighbor search keeps queries fast at scale, and how to pick an index for your access patterns and your cost constraints.
+
+[^1]: weaviate.io. [weaviate.io](https://weaviate.io/blog/vector-search-explained)
+[^2]: oneuptime.com. [oneuptime.com](https://oneuptime.com/blog/post/2026-01-30-rag-embedding-models/view)
+[^3]: openai.com. [openai.com](https://openai.com/index/new-embedding-models-and-api-updates/)
+[^4]: futureagi.com. [futureagi.com](https://futureagi.com/blog/best-embedding-models-2025/)
+[^5]: codesota.com. [codesota.com](https://www.codesota.com/benchmarks/mteb)
+[^6]: developers.openai.com. [developers.openai.com](https://developers.openai.com/api/docs/guides/embeddings)
+[^7]: apxml.com. [apxml.com](https://apxml.com/courses/advanced-vector-search-llms/chapter-3-hybrid-search-approaches/limitations-pure-vector-search)
+[^8]: pmc.ncbi.nlm.nih.gov. [pmc.ncbi.nlm.nih.gov](https://pmc.ncbi.nlm.nih.gov/articles/PMC11935759/)

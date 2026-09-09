@@ -1,0 +1,122 @@
+---
+title: "Lesson 23: Agent Patterns: ReAct, Plan-and-Execute, Reflection, and Tool Loops"
+slug: agent-patterns-react-plan-execute-reflection-tool-loops
+series: "agentic-ai"
+lesson: 23
+excerpt: "Lesson 22 built the loop by hand. This lesson gives that loop its names. You learn the four patterns that dominate real agent work: ReAct (reason and act interleaved), plan-and-execute (plan first, then execute), reflection (evaluate and revise), and the tool loop they all run on, plus when each one earns its complexity."
+date: "August 26, 2026"
+author: "Adroit Consulting"
+readTime: "10 min read"
+tags: [LLMs, AI Agents, Architecture]
+---
+
+# Lesson 23: Agent Patterns: ReAct, Plan-and-Execute, Reflection, and Tool Loops
+
+Lesson 22 showed you the agent loop in a hundred lines of Python. You saw that the loop is the easy part; the hard part is making it reliable. This lesson gives that loop its names. Every framework and every paper you will read describes one of a handful of patterns, and once you can name them you can recognize them, compare them, and pick the right one for a job instead of reaching for whatever your framework defaults to. The four patterns in this lesson are ReAct, plan-and-execute, reflection, and the tool loop they all sit on top of.
+
+Anthropic's engineering team frames the whole space in one sentence: agents "are typically just LLMs using tools based on environmental feedback in a loop." [^2] That loop is the constant. What varies is how the LLM reasons inside it, and that is what each pattern controls.
+
+## The tool loop: what they all share
+
+Before the named patterns, the common skeleton. The tool loop is the tight propose, execute, observe cycle you built in Lesson 22. The model proposes an action, your code runs it, the result comes back as context, and the model decides whether to act again or stop. LangGraph's canonical agent is this loop expressed as a state machine: an `llm_call` node that returns the model output, a `tool_node` that executes any tool calls, and a `should_continue` conditional edge that routes back to the tool node while the last message contains tool calls, and to END once it does not. [^6]
+
+```python
+def should_continue(state) -> Literal["tool_node", END]:
+    if state["messages"][-1].tool_calls:
+        return "tool_node"
+    return END
+```
+
+That `should_continue` branch is the heart of every pattern in this lesson. ReAct, plan-and-execute, and reflection are three different answers to one question: how does the model decide what to do next, and how much does it get to think before it acts? [^6]
+
+## ReAct: reason and act, interleaved
+
+ReAct, from Shunyu Yao and colleagues at Princeton and Google Research, is the pattern that launched the modern agent era. The paper's core claim is that reasoning and acting have usually been studied separately, and that interleaving them creates a synergy: reasoning traces help the model induce, track, and update action plans and handle exceptions, while actions let it pull in external information to support the reasoning. [^1]
+
+The mechanism is a repeated thought, act, observation loop, which is why the paper calls it Reason + Act. A ReAct agent produces a trajectory that looks like this [^3]:
+
+```
+Thought: I should call Search() to see the current score of the game.
+Act: Search("What is the current score of game X?")
+Observation: The current score is 24-21.
+Thought: I now know the current score.
+... (repeat N times)
+```
+
+Each loop step interleaves a natural-language reasoning trace with one concrete action. That is what the paper's authors found to be measurably better than doing either one alone: on the ALFWorld and WebShop interactive decision-making benchmarks, ReAct outperformed imitation and reinforcement learning methods by an absolute success rate of 34% and 10% respectively, using only one or two in-context examples. [^1] The reasoning traces also made the behavior more interpretable and diagnosable than a model that just outputs actions, which matters when you have to explain what an agent did in production. [^1]
+
+ReAct is the right default for open-ended, tool-heavy tasks where you cannot predict the path in advance and you want the model to adapt on every observation. Its cost is that it calls the LLM once per tool invocation, and it plans one step at a time, never forced to reason about the whole task. [^3]
+
+## Plan-and-execute: plan first, then act
+
+Plan-and-execute attacks ReAct's two weaknesses. Instead of re-consulting the model after every action, it separates the thinking from the doing into two components: a planner that prompts an LLM to generate a multi-step plan for the whole task, and executors that take the user query plus one step of the plan and invoke tools to complete that step. [^3] When execution finishes, the agent calls a re-planning prompt, which decides whether to produce a final response or a follow-up plan if the first one did not work. [^3]
+
+The LangChain team, which implemented this pattern in LangGraph, lists three concrete advantages over ReAct-style agents [^3]:
+
+1. **Faster.** The large agent does not need to be consulted after every action, so each subtask can run without an additional LLM call, or with a call to a lighter-weight model.
+2. **Cheaper.** When subtasks do use LLM calls, they can use smaller, domain-specific models. The large model is called only for planning, re-planning, and the final response.
+3. **Better on hard tasks.** Forcing the planner to think through every step in advance is a proven prompting technique, and subdividing the problem lets each executor focus on one piece.
+
+The planner output for a real task makes the shape obvious. Asked who the quarterbacks are in the Super Bowl contenders, a ReWOO-style planner (a plan-and-execute variant) emits an interleaved list of reasoning lines and parameterized task calls, referencing earlier results by variable [^3]:
+
+```
+Plan: I need to know the teams playing in the Super Bowl this year.
+E1: Search[Who is competing in the Super Bowl?]
+Plan: I need to know the quarterbacks for each team.
+E2: LLM[Quarterback for the first team of #E1]
+E3: LLM[Quarterback for the second team of #E1]
+Plan: I need to look up stats for the first quarterback.
+E4: Search[Stats for #E2]
+```
+
+The `#E2` references are the whole trick. The worker node assigns each task's output to a variable and substitutes those values into later calls, which means the agent can run its task list without re-planning after every single step. [^3] A further variant, LLMCompiler, streams the plan as a DAG of tasks and schedules each one the moment its dependencies are satisfied, which the paper claims delivers a 3.6x speed boost over prior approaches. [^3]
+
+Plan-and-execute is the right choice when a task decomposes into a known sequence of steps and you want to cut token cost and latency. Its weakness is the flip side of its strength: because it reasons ahead of the observations, a step that returns something entirely unexpected can invalidate the plan, which is why the re-planning step has to be real and not a formality. [^3]
+
+## Reflection: evaluate, then try again
+
+Reflection, formalized as Reflexion by Shinn and colleagues, adds a feedback loop on top of the acting pattern. The Reflexion framework turns the environment's feedback into language, stores it, and feeds it back so the agent improves on the next attempt. [^4] It is built from three pieces [^5]:
+
+- **An Actor**, which generates text and actions based on state observations, typically using Chain-of-Thought or ReAct, plus a memory component for additional context.
+- **An Evaluator**, which scores the Actor's trajectory and produces a reward signal, using an LLM or rule-based heuristics depending on the task.
+- **A Self-Reflection model**, which takes the reward signal, the current trajectory, and persistent memory, and generates verbal feedback that is stored and used to guide the next trial. [^5]
+
+The loop is: define a task, generate a trajectory, evaluate it, reflect on the failure, generate the next trajectory. That discipline produced striking results. On the sequential decision-making ALFWorld benchmark, ReAct plus Reflexion completed 130 of 134 tasks, significantly outperforming plain ReAct. [^5] Reflexion also improved agents on HotPotQA reasoning and on Python and Rust code-writing benchmarks. [^5]
+
+Reflection earns its complexity when an agent needs to learn from trial and error, when traditional reinforcement learning is impractical (it needs no fine-tuning of the underlying model), when the feedback needs to be more nuanced than a scalar reward, and when interpretable, explicit memory matters. [^5] Its cost is that it depends on the model's ability to evaluate its own output honestly, which is exactly the bias your eval layer has to watch for, as Lesson 19 discussed. [^5]
+
+## Worked example: the same task, three patterns
+
+Take a task an enterprise agent might actually get: "Research the last four quarterly revenue figures for Acme Corp and write a one-paragraph trend summary."
+
+ReAct runs it as a single tight loop. The model reasons, searches, reads the observation, searches again, and only stops when it has enough. Simple, adaptive, but every search is a fresh LLM call, and the model is never forced to notice it still needs Q2 and Q3 after it finds Q1.
+
+Plan-and-execute runs it as two phases. The planner writes the whole plan first: find the four quarters, pull each figure, check the trend, write the summary. Four executors then run, possibly against a cheaper model, and only when they are done does the large model re-plan or write the final paragraph. Fewer large-model calls, less token spend, but if the first search returns data in an unexpected shape, the plan has to be revised mid-stream.
+
+Reflection runs it as ReAct plus a review pass. The agent does the research, writes the summary, then an evaluator checks it against the original ask (did you get all four quarters? is the trend claim supported?). If not, the reflection stores what went wrong and the agent tries again with that lesson in context. You trade tokens and latency for a much higher chance the deliverable is actually complete.
+
+None of these is universally right. ReAct adapts best to unpredictable terrain; plan-and-execute is cheapest and fastest when the steps are known; reflection is the insurance policy when correctness on the first shot matters more than speed. [^3] [^5]
+
+## The pitfall to avoid
+
+Using one pattern for every job because it is your framework's default. ReAct-style agents are the default in most SDKs because they are the most general, but that generality is expensive: one LLM call per tool call, no upfront planning, and no way to catch a subtle mistake except to stumble on it. [^3] The other side of the trap is reflexively adding reflection to everything and paying double the tokens for tasks that were already fine on the first pass. Match the pattern to the failure mode. If the steps are predictable, plan-and-execute. If the task is open-ended and adaptive, ReAct. If the cost of a wrong answer is high and you can afford a retry, reflect. [^3] [^5]
+
+Also keep the loop honest regardless of pattern. Every one of these patterns still needs hard stopping conditions, retry classification, and validation at the observe stage, the discipline from Lessons 8 and 22. A ReAct agent with no iteration cap is a token-billing incident waiting to happen, and a planner that replans forever is the same bug wearing a nicer hat.
+
+## Try it
+
+1. **Extend your Lesson 22 loop into ReAct.** If it is not already, format each step as Thought, then Action, then Observation, and confirm the model actually reasons before each tool call instead of firing tools blindly. Trace one task and count the LLM calls. [^3]
+2. **Split planner and executor.** Write a two-node version: a planner that emits a numbered plan, and an executor that runs one step at a time using a cheaper model. Measure the token and latency difference against your ReAct version on the same task. [^3]
+3. **Add a reflection pass.** After the agent produces a final answer, run a second LLM call that evaluates it against the original instructions. Log the number of tasks that failed the first pass and got fixed on the second. That ratio is how you decide whether reflection is worth its cost. [^5]
+4. **Trace a failure through each pattern.** Give all three the same task that will fail on the first attempt, and note where each one recovers (or does not): ReAct adapts inline, plan-and-execute needs a replan, reflection catches it in review. [^3]
+
+## What's next
+
+You now have the vocabulary to talk about single-agent patterns. Lesson 24 builds outward: multi-agent systems, where orchestrator-worker, supervisor, and debate patterns split work across several agents and coordinate them. One well-named loop gets you far; the next lesson is where you decide when one agent is not enough and how to keep several from stepping on each other. [^3]
+
+[^1]: arxiv.org. [ReAct: Synergizing Reasoning and Acting in Language Models (Yao et al., 2022)](https://arxiv.org/abs/2210.03629)
+[^2]: anthropic.com. [Building Effective Agents](https://www.anthropic.com/engineering/building-effective-agents)
+[^3]: langchain.com. [Plan-and-Execute Agents](https://www.langchain.com/blog/planning-agents)
+[^4]: arxiv.org. [Reflexion: Language Agents with Verbal Reinforcement Learning (Shinn et al., 2023)](https://arxiv.org/abs/2303.11366)
+[^5]: promptingguide.ai. [Reflexion](https://www.promptingguide.ai/techniques/reflexion)
+[^6]: docs.langchain.com. [Workflows and agents (LangGraph)](https://docs.langchain.com/oss/python/langgraph/workflows-agents)

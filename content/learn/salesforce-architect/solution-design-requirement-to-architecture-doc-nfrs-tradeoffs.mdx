@@ -1,0 +1,110 @@
+---
+title: "Lesson 21: Solution Design: Turning a Requirement Into an Architecture Document (NFRs and Tradeoffs)"
+slug: solution-design-requirement-to-architecture-doc-nfrs-tradeoffs
+series: "salesforce-architect"
+lesson: 21
+excerpt: "How a requirement becomes an architecture document: separating the business why from the what and the how, writing measurable non-functional requirements using the Salesforce Well-Architected framework (Trusted, Easy, Adaptable), resolving design tradeoffs explicitly, and recording each decision with its rationale so the delivery team can build without re-litigating every choice."
+date: "August 24, 2026"
+author: "Adroit Consulting"
+readTime: "10 min read"
+tags: [Salesforce, Architecture]
+---
+
+# Lesson 21: Solution Design: Turning a Requirement Into an Architecture Document (NFRs and Tradeoffs)
+
+The earlier lessons handed you the mechanisms: integration patterns, reliability, environments, data architecture. This lesson is the step where all of those get organized into a single deliverable, the architecture document. The architect's job is not to write code. It is to convert a messy requirement into a clear set of decisions, each with a rationale, and record them so a delivery team can build without re-litigating every choice.
+
+Here is the framing I keep coming back to. A requirement tells you what the business wants. An architecture document tells your team how you will deliver it and why you chose that way, including what you gave up. Every design accepts a tradeoff. The document's job is to make those tradeoffs visible and deliberate instead of accidental.
+
+## Define the terms
+
+- **Functional requirement**: what the system must do, a behavior, a capability, or a rule. [^1]
+- **Non-functional requirement (NFR)**: how well the system must do it. NFRs are quality attributes such as performance, availability, security, scalability, and maintainability, expressed with measurable targets. [^4]
+- **Architecture document / solution design doc**: the record of the components, relationships, and principles from lesson 5, plus the NFRs and the decisions made to meet them.
+- **Tradeoff**: the cost you accept when you pick one option over another.
+- **Decision record**: a structured note of the options considered, the tradeoffs, the final decision, and the reasoning. [^2]
+- **Technical debt**: the cost of a shortcut, repaid later through rework. [^2]
+
+## Start with the why, not the what
+
+The most common failure is to solution the literal wording. Salesforce's architecture blog makes the point that requirements arrive with the stakeholder's why tangled into the what, often with a lot of how mixed in, and that pulling them apart is the first job. [^1]
+
+- The **why** is the business need or problem the request exists to solve. Causal language ("because", "in order to", "so that") and consequences (an audit finding, a compliance exposure) are clues to it. [^1]
+- The **what** is the behavior or capability the system must deliver.
+- The **how** is a specific technical way to deliver it.
+
+The order matters because a stakeholder who writes "the solution shall include a new custom data object" has already picked a how. The requirement only needs to say what data must be stored and how it relates to the rest of the system. Whether that lives on a custom object, a standard object, or a related list of files is your decision once you know the shape of the data, not the business's to make for you. [^1]
+
+The architecture blog works through a vendor certification RFP to show how the why hides. The requirements section reads like clean specifications: store certification records, notify someone before a certification lapses, let staff check status. Buried a section away in the background is the reason the whole RFP exists: an internal audit flagged vendor engagements that continued under lapsed certifications, and nobody caught it before the audit did. That one sentence is the why. [^1]
+
+Also read for what is absent. If the requirement is specific about who gets notified before something lapses but silent on what happens after it lapses, that gap is your opening to propose something the stakeholder did not ask for and may not have considered. [^1]
+
+## NFRs: the quality targets that shape the design
+
+Functional requirements are rarely where architecture gets hard. The hard part is the set of quality constraints, the NFRs. On Salesforce the cleanest frame for them is the Well-Architected framework, which organizes platform health into three capabilities: Trusted, Easy, and Adaptable. [^3]
+
+- **Trusted** solutions protect stakeholders. Under that sit security, compliance, and reliability, and reliability itself decomposes into availability, performance, and scalability. [^3] [^4]
+- **Easy** solutions deliver value fast. Under that sit intentionality (strategy, maintainability, readability), automation, and engagement. [^3] [^5]
+- **Adaptable** solutions evolve with the business. Under that sit resilience and composability. [^3]
+
+An NFR is not a vague wish. It is a target you can test. Availability is "a measure of the percentage of time that your system is operational." [^4] Performance splits into throughput and latency. [^4] So you write an NFR with a number and a condition: the order-status page renders in under two seconds at the seasonal peak of 2,000 concurrent users, not "the page should be fast."
+
+The Well-Architected guidance is blunt that availability has to be thought about during design, before the solution is built, because deferring it raises the cost of fixing it later. [^4] The same logic applies to every NFR. A target discovered after delivery is a rework request, not a requirement.
+
+## Tradeoffs are the point of an architecture document
+
+An architecture is a sequence of tradeoffs, each resolved and recorded. The Well-Architected framework makes the default tradeoff explicit: standard before custom. Use the prebuilt platform services first, consider AppExchange apps before building a custom solution, and use low-code before writing code. [^5] But it also acknowledges that stakeholders sometimes push for a custom path anyway, and when they do, the architect must "explain to the stakeholders the trade-offs involved in choosing this path and then thoroughly document the decision, its rationale, and its implementation." [^5]
+
+That sentence is the whole discipline. Every design decision gets recorded with its tradeoffs, its final choice, and its reasoning. The Architecture Center's decision guides exist to help you evaluate those tradeoffs and select the right approach. [^6]
+
+Real tradeoffs trade one NFR for another. The Data 360 interoperability guide evaluates integration patterns across latency, cost, scalability, governance, and complexity, and notes that live federated queries maximize data freshness but can reduce pipeline efficiency as more data moves over the network, while ingestion costs more to maintain but gives centralized governance. [^7] There is no free option. There is only the option whose cost you are willing to pay for the requirement at hand.
+
+## Worked example: a self-service order-status portal
+
+Let me walk a requirement through to an architecture document. A manufacturer runs Salesforce with a Sales Cloud implementation. A stakeholder hands you this:
+
+> "We need a customer portal. Customers should be able to log in and see the status of their orders and submit a return request. We've been getting a lot of calls about order status and we want to cut that down."
+
+Here is the decomposition and the document that follows.
+
+1. **Extract the why.** The calls are the symptom. The business need is to reduce support call volume and improve customer satisfaction. If you solution only the words, you build a portal. If you solution the why, you also ask whether a lighter status notification could cut the calls without a full portal at all. [^1]
+2. **Separate the what from the how.** The what: customers see order status, and customers submit a return request. "We need a portal" is already a how. Whether the portal is an Experience Cloud site, whether order data lives in standard Order objects, and whether status syncs through platform events or a nightly batch are all decisions for you to make later. [^1]
+3. **Write the NFRs.** [^3] [^4]
+   - Availability: the portal is a business-hours service, so 99.5% availability during working hours is acceptable, and a maintenance window outside those hours is fine. [^4]
+   - Performance and latency: order status renders in under two seconds on a typical connection; return submission may take longer because it runs a flow. [^4]
+   - Scalability: the org sees a seasonal peak around the holidays, so the portal must hold 2,000 concurrent customers without degradation. [^4]
+   - Security and compliance: customers see only their own orders, authentication goes through the platform identity layer, and returns data is retained per the company's seven-year policy. [^3]
+   - Maintainability: prefer standard objects and flows so a junior admin can extend the solution. [^5]
+   - Cost: no new middleware, and everything stays inside the licensed platform.
+4. **Resolve the tradeoffs, each with a decision record.** [^2] [^5]
+   - Experience Cloud site versus a custom LWC app. Decision: Experience Cloud with standard pages, because the maintenance cost and developer burden are far lower and the requirement does not need custom rendering. Tradeoff accepted: less visual control. Record the decision and the reason.
+   - Standard Order objects versus custom objects. Decision: extend the standard Sales Cloud data model, per the guidance to use prebuilt data models, because it avoids duplicating order data and keeps reporting and AI services working out of the box. [^5]
+   - Order status sync: platform events for near-real-time updates versus a nightly batch versus polling. Decision: platform events for high-value status changes, accepting the integration cost from lesson 7, because the business benefit of current status outweighs the added moving parts. Tradeoff accepted: more integration surface, which needs replay-based recovery.
+   - Notification: rely on the portal plus automated email on status change. Decision: yes, because it attacks the why directly, fewer calls, and it is the kind of alternative the requirements blog says to propose once you understand the process. [^1]
+5. **Assemble the document.** The architecture document opens with the business why in one sentence, then the functional requirements, then the NFR table, then a component diagram (from lesson 5's components, relationships, and principles), then the decision records, then the implementation notes. [^5]
+6. **Pitch it, don't just hand it over.** Salesforce's guidance for the stakeholder conversation is four steps: show you understand their why, show you can meet their stated requirements, show an alternative that meets their why better, then give a recommendation. [^1] Note the mandatory final step: "providing options without recommendations is sloppy advisory." [^1]
+
+## The pitfall to avoid
+
+**Solving the words instead of the problem, and leaving the tradeoffs implicit.** The two failures compound. An architect who takes "we need a portal" literally builds the portal even when a status notification would cut the calls, and an architect who makes choices without recording them leaves the delivery team to rediscover, and sometimes reverse, each decision under pressure. The Well-Architected framework names the second failure directly: not documenting changes to the system is always an anti-pattern, and skipping documentation to save a little time up front costs more later in troubleshooting. [^5] The fix is the whole lesson. Decompose to the why, write measurable NFRs, resolve tradeoffs explicitly, and record each decision with its rationale.
+
+## Try it
+
+Answer before reading on. Your org receives this requirement: "When a field service appointment is cancelled, automatically notify the next customer on the waitlist and offer them the slot."
+
+1. What is the why hiding behind this request? *(Look for the business pain the request is trying to prevent, not the mechanics of notifying someone.)* [^1]
+2. Write two NFRs for this feature, each with a measurable target. *(Examples: the waitlist offer must be sent within five minutes of the cancellation, and the notification must reach at least 99% of eligible customers within that window. Any measurable quality target tied to availability, performance, security, or maintainability works.)* [^4]
+3. Name one tradeoff you would have to resolve and what you would weigh on each side. *(Example: push the offer instantly with a flow and platform event versus waiting for a nightly batch. Instant wins on latency and customer experience; nightly wins on integration simplicity and cost. Pick based on which NFR matters more.)* [^7]
+4. A stakeholder insists on building a custom object even though a standard object fits. What do you do, and what must you record? *(Explain the tradeoff of the custom path, then thoroughly document the decision, its rationale, and its implementation in a decision record.)* [^5]
+
+## What's next
+
+You can now turn a requirement into an architecture document with measurable NFRs and recorded tradeoffs. The next lesson is what happens to that document once it exists: architecture review. It covers design reviews, decision records, and the hardest skill, knowing how to say no with a reason a stakeholder can act on.
+
+[^1]: salesforce.com. [Read Requirements Like an Architect](https://www.salesforce.com/blog/read-requirements-like-an-architect/)
+[^2]: architect.salesforce.com. [Salesforce Well-Architected, Easy: Intentional (Decision Records and Documentation)](https://architect.salesforce.com/docs/architect/well-architected/guide/intentional)
+[^3]: architect.salesforce.com. [Salesforce Well-Architected Framework Overview](https://architect.salesforce.com/docs/architect/well-architected/guide/overview)
+[^4]: architect.salesforce.com. [Salesforce Well-Architected, Trusted: Reliable (Availability, Performance, Scalability)](https://architect.salesforce.com/docs/architect/well-architected/guide/reliable)
+[^5]: architect.salesforce.com. [Salesforce Well-Architected, Easy: Intentional (Standard vs Custom, Tradeoffs)](https://architect.salesforce.com/docs/architect/well-architected/guide/intentional)
+[^6]: architect.salesforce.com. [Architect Decision Guides](https://architect.salesforce.com/decision-guides)
+[^7]: architect.salesforce.com. [Data 360 Interoperability Decision Guide](https://architect.salesforce.com/docs/architect/decision-guides/guide/data-360-interoperability)

@@ -1,0 +1,186 @@
+---
+title: "Lesson 18: System Limits: Governor, API, and Storage Limits, and Planning Around Them"
+slug: system-limits-governor-api-storage-planning
+series: "salesforce-architect"
+lesson: 18
+excerpt: "Governors exist to keep a multitenant platform fair. Learn the limits, then bulkify, batch, and monitor so they never fire on your watch."
+date: "August 21, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Salesforce, Architecture]
+---
+
+# Lesson 18: System Limits: Governor, API, and Storage Limits, and Planning Around Them
+
+Every Salesforce org lives inside three sets of constraints: governor limits that cap what a single Apex transaction can do, API request allocations that cap how many external calls an org gets per day, and storage limits that cap how much data and how many files you can keep. An architect who ignores them ships code that fails in production on a Thursday, and a platform owner who ignores them gets woken up when an org locks itself out of its own API allocation. The system architect's job is to treat limits as part of the specification, not as an afterthought.
+
+This lesson defines the three families of limits, gives the concrete numbers that matter, and shows how to plan around them with bulkification, batching, and monitoring. There is a worked example that runs a real batch process up against the DML row limit and then restructures it.
+
+## Why limits exist
+
+Salesforce runs on a multitenant architecture. Thousands of customer orgs share the same application servers, the same database clusters, and the same CPU. If one org's code could run without any guardrails, a single runaway process could starve the tenants sharing its hardware. That is why the Apex runtime engine strictly enforces limits: "so that runaway Apex code or processes don't monopolize shared resources." [^1] When code exceeds a limit, the associated governor issues a runtime exception that cannot be handled. [^1] You cannot catch a `LimitException` and keep going. The transaction stops.
+
+The "wash the T-shirts" framing in Salesforce's own best-practices guide captures the spirit: you would not wash 100 shirts one per load, you would batch them into a few loads. [^2] Limits reward efficient code. A transaction that issues one `update` statement for 200 records survives, while a transaction that calls `update` 200 times, once per record, dies at the 151st statement.
+
+## Define the terms
+
+Before the numbers, the vocabulary:
+
+- **Governor limit**: a per-transaction or per-org cap on a resource (SOQL queries, DML rows, CPU time, heap, callouts) enforced by the Apex runtime. [^1]
+- **Transaction**: one unit of work in Salesforce, from entry into Apex to completion. Every Apex trigger, Visualforce request, queueable job, and batch-apex `execute` call is a transaction. [^1]
+- **Bulkification**: writing code that processes records in sets (lists of sObjects, single SOQL query for many parents) instead of one record at a time, so you stay under statement-count limits. [^2]
+- **Batch Apex**: the asynchronous framework (`Database.Batchable`) that lets you process large data volumes in chunks, each chunk running as its own transaction with its own limits. [^1]
+- **API request allocation**: the total number of inbound API calls an org is allowed in a 24-hour period, based on edition and licenses. [^3]
+- **Concurrent API request limit**: the cap on simultaneously running API requests that last 20 seconds or longer. [^3]
+- **Data storage**: space used by records (standard and custom objects), counted separately from files. [^5]
+- **File storage**: space used by attachments, Chatter files, CRM Content, Documents, and related file content. [^5]
+
+## Governor limits: the per-transaction budget
+
+Governor limits are the ones your code bumps into every day. They reset for each new transaction, and Batch Apex resets them for each execution of a batch in the `execute` method. [^1] The table below lists the numbers that architects most often trip over. [^1]
+
+| Resource | Synchronous limit | Asynchronous limit |
+| --- | --- | --- |
+| SOQL queries issued | 100 | 200 |
+| Records retrieved by SOQL queries | 50,000 | 50,000 |
+| SOSL queries issued | 20 | 20 |
+| DML statements issued | 150 | 150 |
+| Records processed by DML statements | 10,000 | 10,000 |
+| Callouts (HTTP requests / web service calls) | 100 | 100 |
+| Cumulative timeout for all callouts | 120 seconds | 120 seconds |
+| Heap size | 6 MB | 12 MB |
+| Maximum CPU time | 10,000 ms | 60,000 ms |
+| Maximum execution time per transaction | 10 minutes | 10 minutes |
+
+A few things worth reading carefully.
+
+**DML statements vs. DML rows are two different governors.** The statement limit (150) counts how many times you call `insert`, `update`, `delete`, `upsert`, `Database.setSavePoint`, `EventBus.publish` for after-commit events, and several others. [^1] The row limit (10,000) counts how many total records those statements process. Calling `update` once on a list of 9,000 records uses 1 statement and 9,000 rows. Calling `update` 9,000 times, one record per call, uses 9,000 statements and blows the 150 limit long before the row count matters. A single `update` on 15,000 records passes the statement limit but fails the 10,000-row limit.
+
+**SOQL has a query-count limit and a row-count limit.** You get 100 SOQL queries per synchronous transaction, and those queries can return up to 50,000 rows in total. A SOQL query inside a loop is the classic violation: with 101 records in `Trigger.new`, a query-per-record loop fires the 100-query governor. [^2]
+
+**CPU and heap are where inefficient logic surfaces.** Synchronous Apex gets 10,000 milliseconds of CPU on the application servers and 6 MB of heap; asynchronous gets 60,000 ms and 12 MB. [^1] Sorting huge collections, heavy string manipulation, and tight loops all eat CPU. Heap is the one that fails silently on big data: a `List<SObject>` holding thousands of populated records can cross 6 MB fast.
+
+**Callouts have both a count and a cumulative timeout.** You get 100 callouts per transaction, and all of them together must finish within 120 seconds. [^1] A loop that makes a REST call per record for 101 records fires the callout-count governor. An integration that makes 10 calls, each taking 15 seconds, hits the 120-second cumulative ceiling even though it is under the count.
+
+## API limits: the daily request budget
+
+API limits are different in character. Governor limits reset every transaction; API allocations reset every 24 hours and apply to the org as a whole. The daily total is the sum of a base amount, a per-license contribution, and any purchased add-ons. The REST API, SOAP API, Bulk API, Bulk API 2.0, and most Connect REST APIs all count toward it. [^3]
+
+The numbers that matter for planning: [^3]
+
+- **Developer Edition**: 15,000 API calls per 24 hours.
+- **Enterprise and Professional (with API access)**: a base of 100,000 calls, plus a per-license amount. A Salesforce license contributes 1,000 calls per day; a Lightning Platform license contributes 1,000; a Lightning Platform One App license contributes 200; an External Identity license contributes far more (70,000, 750,000, or 4,000,000 depending on the license tier).
+- **Unlimited and Performance**: a base of 100,000 calls, plus 5,000 per Salesforce or Platform license, plus add-ons.
+- **Full Sandbox**: 5,000,000 calls.
+
+So a Professional org with 25 Salesforce licenses and API access gets 100,000 + (25 x 1,000) = 125,000 API calls per 24 hours. Double the licenses and you get 150,000. This is arithmetic you should be able to do in your head at a design review, because it decides whether your integration architecture is viable.
+
+Beyond the daily total, two operational limits matter. Production orgs allow 25 concurrent API requests that last 20 seconds or longer; Developer and Trial orgs allow 5. [^3] And the timeout for a REST or SOAP API call is 10 minutes, except for query calls, which are bounded by SOQL limits. [^3] When you exceed a limit, the API returns an error such as `REQUEST_LIMIT_EXCEEDED`. [^3]
+
+The licensing insight for an architect: API capacity is bought per license type. If an org is heavy on API integrations but light on Salesforce user licenses, it may still be fine because Platform licenses and add-ons contribute. The trap is an org that relies on Customer Community or Experience Cloud users, which contribute zero or very little toward the daily allocation. [^3] You have to count the licenses you actually have, not the ones you wish you had.
+
+## Storage limits: the capacity budget
+
+Storage is the slow-burn constraint. It does not fail a transaction; it accumulates until one day an insert returns `STORAGE_LIMIT_EXCEEDED` or the org runs out of room. Storage splits into data and file, and they have separate allocations and separate consumption. [^5]
+
+Data storage is what your records consume. Since 2019, Contact Manager, Group, Essentials, Professional, Enterprise, Performance, and Unlimited editions start with 10 GB of data storage, plus incrementally added user storage. [^5] The per-user increment varies by edition: Professional and Enterprise add 20 MB per user license, while Performance and Unlimited add 120 MB. [^5] Developer Edition gets 5 MB of data storage, and Personal Edition gets 20 MB. [^5]
+
+File storage is separate. Professional, Enterprise, Performance, and Unlimited editions get 10 GB of file storage per org; Essentials and Starter get 1 GB; Developer gets 20 MB. [^5] Files include attachments, Chatter files, CRM Content, the Documents tab, and the custom File field on Knowledge articles. [^5]
+
+A concrete worked allocation: a Professional Edition org with 10 users gets 10 GB of data storage plus 10 x 20 MB = 200 MB, for 10.2 GB total. [^5] That same org gets 10 GB of file storage. A Performance org with 100 users gets 10 GB plus 100 x 120 MB = 12 GB of data storage, plus 10 GB of files.
+
+Two storage facts change how you plan. First, data and file storage are calculated asynchronously, so a large import or a big file upload is not reflected immediately. [^5] Second, they are enforced independently, and you must keep both under 100 percent; exceeding either triggers the storage-exceeded error. [^5]
+
+When do you buy more? You buy additional data or file storage when legitimate business volume exhausts the standard allocation, after you have done the free work first: archiving inactive records, moving old attachments out to an external store, and cleaning up CRM Content. The architect's answer to a storage request is never "yes, buy more." It is "let me see what is consuming it, let me fix the waste, and then we decide."
+
+## Planning around limits: bulkify, batch, monitor
+
+Planning around limits is three disciplines, applied in order.
+
+**Bulkify the code.** The first line of defense is writing set-based code. Put DML on lists, not in loops. Run one query for all parent records and use a relationship query or a single `WHERE IN` query for children instead of querying per record. [^2] This keeps you under the 150-statement and 100-query governors while also making the code faster. The governor exists precisely to force this habit, and it works.
+
+**Move large volumes to asynchronous, batched execution.** When you genuinely have tens of thousands of records to touch, synchronous code cannot do it. That is what Batch Apex is for: it processes a large data set in chunks, and each chunk runs as its own transaction with a fresh set of limits. [^1] The worked example below shows the restructure.
+
+**Monitor before you break.** Know your headroom ahead of the failure. In Apex you can read `Limits.getDMLStatements()`, `Limits.getLimitDMLStatements()`, and the rest of the `Limits` class to see where a transaction stands while it runs. [^1] At the org level, the System Overview page in Setup shows API usage, and you can configure email alerts when API requests cross a threshold you set. [^3] The REST API exposes current allocations through the `/limits` resource. [^3] On storage, the Storage Usage page in Setup shows your data and file consumption. [^5] Monitor all three as a routine part of release, not as a response to an outage.
+
+**Escalate when the requirement exceeds the allocation.** Limits are not all moveable, and knowing which ones are is part of the job. Governor limits are fixed per transaction; you do not buy more SOQL. You restructure. API and storage allocations are purchaseable: API call add-ons and additional storage are sold by Salesforce, and the daily API total is explicitly "100,000 + (number of licenses x calls per license type) + purchased API Call Add-Ons." [^3] When legitimate business volume repeatedly exceeds the standard allocation, the answer is to engage your Salesforce account team for add-ons or a contract review. But escalate only after the free engineering is done, because a per-record integration that burns 40,000 calls a night is a design problem, not a capacity problem.
+
+## Worked example: the batch that hit the DML row limit
+
+A retail org runs a scheduled job that updates the status field on 20,000 order records every night after the pricing batch closes. The first version was written as a single synchronous method.
+
+```apex
+public class OrderStatusUpdate {
+    public static void updateAll() {
+        List<Order__c> orders = [
+            SELECT Id, Status__c FROM Order__c
+            WHERE Status__c = 'Pending'
+        ];
+        // One update statement on all 20,000 rows at once.
+        update orders;
+    }
+}
+```
+
+Run this and it fails. The SOQL query returning 20,000 rows is fine, since the SOQL row limit is 50,000. [^1] The single `update` statement is one statement, so the 150-statement limit is not the problem. The failure is the row count: the DML row limit is 10,000 per transaction, and this transaction tries to process 20,000 rows in one statement. [^1] The runtime throws a `System.LimitException` with a "Too many DML rows" error, the transaction rolls back, and every order keeps its old status.
+
+An even worse version is the classic per-record loop:
+
+```apex
+for (Order__c o : orders) {
+    o.Status__c = 'Processed';
+    update o;   // one DML statement per record
+}
+```
+
+This fails earlier. The 151st `update` call is the 151st DML statement, which exceeds the 150-statement limit. [^1] [^2] Two different versions, two different governors, same outcome: nothing processed, and no status updated.
+
+The restructure moves the work into Batch Apex, so the volume is split into chunks that each run as their own transaction.
+
+```apex
+public class OrderStatusBatch implements Database.Batchable<SObject> {
+    public Database.QueryLocator start(Database.BatchableContext bc) {
+        return Database.getQueryLocator(
+            'SELECT Id, Status__c FROM Order__c WHERE Status__c = \'Pending\''
+        );
+    }
+
+    public void execute(Database.BatchableContext bc, List<SObject> scope) {
+        List<Order__c> orders = (List<Order__c>) scope;
+        for (Order__c o : orders) {
+            o.Status__c = 'Processed';
+        }
+        update orders;   // one bulk statement per chunk
+    }
+
+    public void finish(Database.BatchableContext bc) {
+        // Optionally enqueue the next job or send a notification.
+    }
+}
+```
+
+When this runs with the default batch size of 2000, the 20,000 records are split into 10 chunks. Each `execute` call receives a scope of 2000 records, updates them with a single DML statement, and commits. Crucially, governor limits reset for each execution of a batch in the `execute` method. [^1] So each chunk runs within its own transaction: 2000 DML rows against a 10,000-row limit, one DML statement against a 150-statement limit, one SOQL query issued by `start` against its own budget. [^1] The job that failed instantly now completes, and it processes 20,000 records without ever getting close to a limit.
+
+The lesson in the numbers: the constraint was not the total volume of the work. It was the shape of the work. A single transaction cannot process 20,000 rows, but twenty independent transactions of 2,000 rows each can. That is the entire art of limit-aware design, and it is why the architect reaches for batching when the volume outgrows the transaction.
+
+## The pitfall to avoid
+
+**Treating every limit as a fixed wall instead of reading which one you actually hit.** An architect who hears "our batch fails" and immediately blames Salesforce capacity is guessing. Read the error. `Too many DML rows` is a different problem from `Too many SOQL queries`, which is different from `LimitException: Apex heap size too large`, which is different from `REQUEST_LIMIT_EXCEEDED`. Each points at a specific fix: bulkify the DML, move the query out of the loop, shrink the collection, or move the volume async. [^1] [^2] Name the governor, then pick the fix.
+
+## Try it
+
+1. A trigger loops over 200 records and calls `update` on each record inside the loop. Which governor fires, and at which record does the transaction fail? *(Answer: the DML statement limit of 150. The 151st `update` call exceeds it, throwing a `System.LimitException` before any record past the 150th is saved.)* [^1]
+2. A synchronous Apex method must insert 12,000 records in a single transaction. Does it succeed, and why? *(Answer: No. The DML row limit is 10,000 per transaction, so a single transaction inserting 12,000 rows fails with a "Too many DML rows" error. Move the insert into Batch Apex so chunks of records each run in their own transaction.)* [^1]
+3. An Enterprise org has 30 Salesforce licenses and no API add-ons. What is its daily API request allocation? *(Answer: 100,000 base plus 30 x 1,000 per Salesforce license = 130,000 API calls per 24-hour period.)* [^3]
+4. An integration loops over 150 records and makes one REST callout per record inside a synchronous Apex transaction. Which limit fires? *(Answer: the callout count limit of 100. The 101st callout exceeds it, and even before that, the cumulative 120-second callout timeout is a separate risk if the calls are slow.)* [^1]
+5. Your org keeps hitting its daily API allocation with legitimate business traffic and you have already bulkified the code. What is the escalation path? *(Answer: This is a capacity problem, not a design problem. Purchase API call add-ons or engage your Salesforce account team, since the daily total explicitly includes purchased add-ons.)* [^3]
+
+## What's next
+
+You can now read a governor error, size an API allocation from the license count, and restructure a failing batch so it fits the transaction. The next lesson turns from the limits themselves to how you move work through environments without tripping them. It covers environment and release strategy: sandbox types, change sets versus DevOps with sf and sfdx, and how to get changes into production safely.
+
+[^1]: developer.salesforce.com. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_gov_limits.htm)
+[^2]: developer.salesforce.com. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_limits_tips.htm)
+[^3]: developer.salesforce.com. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.salesforce_app_limits_cheatsheet.meta/salesforce_app_limits_cheatsheet/salesforce_app_limits_platform_api.htm)
+[^4]: developer.salesforce.com. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.salesforce_app_limits_cheatsheet.meta/salesforce_app_limits_cheatsheet/salesforce_app_limits_platform_bulkapi.htm)
+[^5]: help.salesforce.com. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.admin_monitorresources.htm&type=5)

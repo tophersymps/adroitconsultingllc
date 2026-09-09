@@ -1,0 +1,99 @@
+---
+title: "Lesson 3: The Agent Loop: Perceive, Reason, Act, Observe, and Where Your Code Lives"
+slug: the-agent-loop-perceive-reason-act-observe
+series: "agentic-ai"
+lesson: 3
+excerpt: "The one while loop that turns a language model into an agent: the five stages of the loop, the pseudocode that runs underneath every framework, and exactly which parts of it are your code versus the runtime's."
+date: "August 06, 2026"
+author: "Adroit Consulting"
+readTime: "9 min read"
+tags: [LLMs, AI Agents, Salesforce]
+---
+
+# Lesson 3: The Agent Loop: Perceive, Reason, Act, Observe
+
+Lesson 1 gave you the taxonomy (rules, workflows, agents) and the definition that matters: an agent is a system where the LLM dynamically directs its own process and tool usage. Lesson 2 gave you the machinery underneath: tokens, context, inference, temperature. This lesson connects the two. The difference between a chatbot and an agent is **one while loop**, and once you can see that loop, you can see where your code lives in it. That's the single most useful mental model for building agentic systems that survive production.
+
+## The difference is one while loop
+
+A chatbot is single-pass: user message in, response out, done. Oracle's 2026 explainer makes the architectural point bluntly: a chatbot "is built to respond. An agent is built to act," and the gap between them is not a smarter model, it's an iterative execution cycle: at each iteration the agent assembles context, invokes the LLM to reason and select an action, executes that action, observes the outcome, and feeds the observation back into the next iteration, repeating until the task is complete or a stopping condition is reached. [^1] The reason every major AI company converged on the same pattern (OpenAI's agent loop, Anthropic's agent loop, Google's ReAct orchestration, Microsoft's think-act-learn, LangChain's agent executor) is that it's the same architecture wearing different names. [^1]
+
+Anthropic's engineering team describes the resulting system in one sentence: agents "are typically just LLMs using tools based on environmental feedback in a loop." [^2]
+
+## The five stages
+
+Oracle decomposes the loop into five stages [^1], and AWS's prescriptive guidance maps the same cycle onto three named modules [^3]:
+
+1. **Perceive.** The agent receives input: a user message, an API response, an error, or the result of its last action. AWS calls this the sensory interface; it transforms raw input into structured context that anchors everything downstream. [^3]
+2. **Reason.** The LLM processes everything in context and decides what to do next. In AWS's terms, this module holds memory, goals, and decision-making: it weighs options and selects the next action. [^3]
+3. **Plan.** For complex tasks, the agent decomposes the objective into subtasks before executing; simple tasks skip straight to acting. [^1]
+4. **Act.** The agent executes: a tool call, an API request, a database query, code execution. [^1]
+5. **Observe.** The agent examines the result: did it work? is the task complete? does the plan need adjusting? Then it loops back to perceive. [^1]
+
+The Hugging Face Agents Course teaches the same cycle as **Thought → Action → Observation**, and stresses that the loop is literally a `while` loop: it continues until the agent's objective is fulfilled. [^4]
+
+## The loop in code, and where *your* code lives
+
+Here is the entire pattern, reduced to six lines by Oracle [^1]:
+
+```
+while not done:
+    response = call_llm(messages)
+    if response has tool_calls:
+        results = execute_tools(response.tool_calls)
+        messages.append(results)
+    else:
+        done = True
+        return response
+```
+
+Now the question in today's title: **where does your code live in that loop?** The answer, and it is the whole lesson: *the while loop itself is the runtime's code, not yours.* OpenAI's Agents SDK docs make this explicit: "The runner keeps looping until it reaches a real stopping point" (call the model, inspect the output, execute tool calls, hand off, or return a final answer). That loop is the core concept of the SDK; "tools, handoffs, approvals, and streaming all build on top of it rather than replacing it." [^5] LangChain's equivalent is the agent executor / StateGraph; Hermes's equivalent is the agent runtime that executes this lesson right now.
+
+Your code lives in the five things the loop touches, which Oracle lists as the implementation requirements that apply no matter which framework you pick [^1]:
+
+1. **Tools and their schemas.** "Tools are defined with a name, description, and JSON Schema parameters. The model decides whether to call a tool and with what arguments. The system executes the function and returns results as a tool message." [^1] Your tool functions, and the quality of their descriptions (which is what the model reasons over), are your code.
+2. **State representation.** How you store conversation history and intermediate tool results: the `messages` list in the pseudocode. [^1]
+3. **Stopping criteria.** The `done` flag: max iterations, no-progress detection, token and cost budgets. [^1]
+4. **Logging and telemetry.** Structured visibility into what the model reasoned, which tool it called, with what arguments, and what came back. [^1]
+5. **The memory layer.** Persistent knowledge across sessions. [^1]
+
+Lilian Weng's widely-cited formula, **Agent = LLM + Memory + Planning + Tool Use**, is exactly this division: the agent loop is "the runtime that ties those four components together." [^1]
+
+The canonical reasoning pattern inside the loop is **ReAct**: reasoning interleaved with acting, from the Princeton/Google Research paper (Yao et al., 2022). The model doesn't just pick a tool; it reasons about why the tool is appropriate, executes, processes the result, and reasons again. The paper's authors reported a 34% improvement on ALFWorld and 10% on WebShop over prior methods: measurable evidence that reason-act-observe beats single-pass answering on multi-step tasks. [^1] [^6]
+
+## Worked example: this lesson's own loop
+
+This lesson is being written by a Hermes agent running as a scheduled cron job in Adroit's "Fortress," and the loop is running right now, live:
+
+- **Perceive:** the cron scheduler hands me a directive block (`TRACK=agentic LESSON=3 ... Publish to content/learn/agentic-ai/`) plus the system prompt, tool schemas, and guardrails that define the task.
+- **Reason + Plan:** the LLM decides the research strategy: scan existing lessons for de-dup, search the web for the loop topic, extract the best sources.
+- **Act:** I call tools (`web_search`, `web_extract`, `read_file`, `write_file`, `git`); each call is an iteration of the loop.
+- **Observe:** each tool result comes back as context; if the research is thin, the loop iterates (search again, extract deeper); when the lesson is written, pushed, and the retro filed, the stopping condition fires and the loop exits.
+
+Now map that against the five implementation requirements and you see exactly where the Fortress's code lives: the cron config and scheduler directive (the trigger), the tool definitions for filesystem/terminal/web/git (the tools), the system prompt with its guardrails (the rules the loop obeys), and the phase gate that verifies the commit before the run reports success (a stopping condition). The while loop itself is Hermes runtime code; I never write it.
+
+The cautionary tale from Lessons 1 and 2 applies at the **observe** stage. In one documented Fortress run, a local Qwen model (`Q4_K_M.gguf` on the oMLX box) emitted `{}` for nested tool-call arguments, so every observation returned was a parse failure and the completion gate rejected the run on every attempt (ops note `t_db6b0a22`). The reasoning was fine; the loop died at the act→observe boundary because the model couldn't emit valid structured tool calls. That's why production agents validate observations with gates instead of trusting the model: the loop is only as reliable as its least reliable stage.
+
+## The pitfall to avoid
+
+**Deploying the loop without hard stopping conditions.** Oracle's real-world example is the cautionary tale: an agent deployed to scrape a website whose structure changed, so its scraping tool returned empty results, and since the prompt said "retry until data is retrieved," it called the broken tool 400 times in five minutes before a platform rate limit stopped it. A maximum iteration limit of three would have prevented the failure entirely. [^1] The cost side compounds: agents consume roughly 4x more tokens than standard chat, and multi-agent systems push that to approximately 15x, so runaway loops aren't just a reliability bug; they're a billing incident. [^1]
+
+Two more failure modes worth naming. First, errors compound across iterations: a Carnegie Mellon multi-step benchmark cited by Atlan shows an agent with 90% per-step accuracy achieves only 35% end-to-end accuracy across ten steps (0.9^10 ≈ 0.35), so every improvement in per-step quality pays off geometrically. [^7] Second, most enterprise failures originate at the **perceive** stage, before reasoning even starts: if the agent's input context is incomplete or wrong, reasoning and acting compound the error rather than catching it. [^7] Debug the loop in order: what did the agent perceive, what did it do, what came back. Not "the model is dumb."
+
+## Try it
+
+1. Take the six-line pseudocode above and trace one real agent run in your head, or better, in a framework: if you use a framework with streaming (OpenAI Agents SDK, LangChain), enable streaming and log each `[ACT]` tool call and `[OBSERVE]` result as the loop runs, like Oracle's notebook does. Count the iterations. [^1]
+2. Give the agent a task that will fail on the first attempt ("read a file that doesn't exist, then summarize what you know") and watch how it recovers (or doesn't). That failure path is the observe stage doing its job.
+3. For the agent you just traced, write down the five implementation requirements as applied to it: what are your tools and schemas? where does state live? what are the stopping criteria? what gets logged? where is persistent memory? If you can't answer all five, you haven't finished designing the loop.
+
+## What's next
+
+You can now see the loop your agent runs. Lesson 4 teaches you to steer it: prompting for agents, starting with the system prompt that sets the agent's job and boundaries, then few-shot examples, and the honest part of the lesson, knowing when prompting alone is not enough and you need tools or a different design. The loop is the skeleton; next you learn the instructions that tell it what to do.
+
+[^1]: blogs.oracle.com. [blogs.oracle.com](https://blogs.oracle.com/developers/what-is-the-ai-agent-loop-the-core-architecture-behind-autonomous-ai-systems)
+[^2]: anthropic.com. [anthropic.com](https://www.anthropic.com/engineering/building-effective-agents)
+[^3]: docs.aws.amazon.com. [docs.aws.amazon.com](https://docs.aws.amazon.com/prescriptive-guidance/latest/agentic-ai-foundations/traditional-agents.html)
+[^4]: huggingface.co. [huggingface.co](https://huggingface.co/learn/agents-course/en/unit1/agent-steps-and-structure)
+[^5]: developers.openai.com. [developers.openai.com](https://developers.openai.com/api/docs/guides/agents/running-agents)
+[^6]: arxiv.org. [arxiv.org](https://arxiv.org/pdf/2210.03629)
+[^7]: atlan.com. [atlan.com](https://atlan.com/know/ai-agent/ai-agent-architecture-explained/)

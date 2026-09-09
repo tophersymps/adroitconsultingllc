@@ -1,0 +1,139 @@
+---
+title: "OmniStudio OS-6: OmniScript Best Practices"
+slug: day-21-os-6-omniscript-best-practices
+series: omni-studio-cert
+lesson: 21
+excerpt: "Build OmniScripts that survive contact with users and production. Compose from child scripts instead of one giant flow, name elements as if they were JSON keys (because they are), test every branch in debug mode before publish, and push heavy orchestration into Integration Procedures."
+date: "August 30, 2026"
+author: "Adroit Consulting"
+readTime: "9 min read"
+tags: [OmniStudio]
+---
+
+An OmniScript that works in the designer is easy. The hard part is an OmniScript that still works after a hundred users run it, after your data model changes, after a downstream system goes down at the worst possible moment. The exam asks you to describe best practices for OmniScripts, which is really the exam asking whether you understand what makes a script maintainable and reliable, not just buildable. This lesson walks through the practices that separate the two.
+
+## Deep Dive
+
+### Why best practices matter more here than in Flow
+
+OmniScript is declarative, like Flow, but it carries a heavier burden. It renders a guided, multi-step experience and talks to other systems in the middle of that experience. Every element you drop becomes part of a JSON data structure that travels through steps, actions, formulas, and eventually into your database or an external API. A one-off "just get it working" script leaks that JSON all over the place, and once it is in production, reworking it means untangling references in formulas and actions across steps. That is why the official guidance stresses naming, modularity, and testing from day one, not after the fact.[^1]
+
+The four pillars in the exam tip are modular, named, tested, and lean. Hold every design decision against those four words and most traps disappear.
+
+### Modularity: compose instead of duplicate
+
+The single most common OmniScript mistake is a monolithic script. The team needs a credit check flow, so they build one script with fifty elements and a dozen steps. Then they need the same credit check inside a loan origination flow, so they copy the elements. Now there are two scripts with the same logic that will drift apart the first time someone fixes a formula in one and forgets the other.
+
+The fix is to build reusable child OmniScripts. When a process is repeatable across multiple scripts, create a reusable OmniScript and embed it in the parent scripts that need it.[^1] An embedded child script behaves like any other element in the parent, so you get reuse without a custom integration between the two.[^2] Think of children as the building blocks. You assemble small, single-purpose scripts into the larger flows that your users actually see.
+
+The official guidance is blunt about the downside of going big: creating a large OmniScript with several steps can hinder performance and user experience, and breaking complex tasks into multiple OmniScripts (paired with FlexCards when useful) is the recommended path.[^1]
+
+A useful rule of thumb: outline the whole script before you build. The docs recommend identifying reusable elements by outlining the entire OmniScript up front.[^1] If you can name a chunk of the process that another flow will also need, that chunk is a child script candidate.
+
+**Worked example.** You build a mortgage application OmniScript. The bank also has a refinance flow and a pre-approval flow, and all three need the same identity check, the same property lookup, and the same document upload step. Build those three as child OmniScripts. Each parent script embeds them. When the identity check rule changes (say, a new field appears), you fix it once in the child and all three flows pick it up. The alternative, three copies of a fifty-element identity check, is three places to remember to fix.
+
+### Naming: element names are JSON keys
+
+Every element name you type becomes a key in the OmniScript's JSON data structure. That is not a side detail, it is the contract everything else reads against. Formulas reference element names, actions read them, Data Mapper and Integration Procedure responses land in nodes named after them, and anything you hand to an external system is shaped by them.
+
+The practical consequences:
+
+- **Be consistent.** Pick a convention (for example, camelCase, no spaces) and apply it everywhere. The docs explicitly recommend unique names for OmniScript elements and Data Mapper response nodes, and removing spaces from element names to improve load time.[^1]
+- **Be descriptive.** `AccountNameInput` tells you what it is. `input1` tells you nothing when you are debugging a formula three weeks later.
+- **Rename sparingly.** Element names get referenced across formulas, actions, and conditions. Renaming one means updating every reference. The official guidance is to avoid element name changes after deploying to production, and to apply changes everywhere they are referenced when a change is unavoidable.[^1]
+
+A poorly named element does not break at build time. It breaks at debug time, when you stare at a JSON node and cannot tell what it holds. Naming discipline is cheap to apply and expensive to skip.
+
+### Testing: debug mode before you publish
+
+OmniScripts are tested in the designer, not just in a browser after deployment. The OmniScript Designer has a preview mode where you run the script element by element and inspect the JSON data as it builds. This is the tool that catches the subtle bugs the exam wants you to know about: a formula returning the wrong type, a merge field pointing at a node that does not exist, an action dropping data you expected to flow through.
+
+The testing workflow the docs describe is explicit: run the OmniScript in preview, use the debug log to view the data JSON and action request and response data, and trace the flow element by element.[^3] You can also collect Apex debug logs during execution to monitor governor limit usage, which catches scripts that work in a clean sandbox but blow a limit on real data.[^1]
+
+What to test before you publish:
+
+- **Happy path.** The script completes from start to finish with valid data, and the JSON at the end contains everything downstream expects.
+- **Edge cases.** Empty inputs, a record with no related data, a user who skips a step, a field that arrives as a different type than you assumed.
+- **Error states.** What happens when the external call fails, when a required field is missing, when a child script throws. A script that only works when everything goes right is not finished.
+
+The consequence of skipping this is the exact exam trap listed in this requirement: subtle JSON and formula bugs reach real users. The designer preview is cheap to run. A production outage is not.
+
+### Actions: keep them lean
+
+Actions are where the script talks to the rest of the world, and this is where scripts quietly become slow and fragile. The trap is a chatty script: one OmniScript that fires a separate callout for each piece of data it needs, scattered across steps.
+
+The guidance is to push heavy orchestration out of the script and into an Integration Procedure. The docs recommend reducing server roundtrips by using Integration Procedures whenever there are multiple actions between steps, and running them asynchronously when appropriate.[^1] The Integration Procedure best practices page is even more direct: use Integration Procedures for all data calls to Salesforce, keep each IP to a small group of related functions for reuse and performance, and trim the response so you only return what is needed.[^4]
+
+In practice this means:
+
+- One IP that extracts the account, related contacts, and open cases in a single server call, instead of three separate extracts inside the OmniScript.
+- A Data Mapper for data transformations, not a pile of OmniScript formulas doing the same work.
+- A Response Action in the IP that trims the output to exactly the nodes the script needs, instead of shipping the whole JSON back.[^4]
+
+The exam framing is clean: heavy multi-system orchestration lives in an Integration Procedure called by the script, and the OmniScript stays lean. If you find yourself adding a fifth action to do data work, ask whether that work belongs in an IP or a Data Mapper instead.
+
+### Performance: minimize round trips and cache reference data
+
+Two performance patterns matter for the exam and for real systems. The first is round trips. Extract once, not once per step. If the script needs account data, get it in one call at the start and carry it in the JSON, rather than re-fetching in each step that touches it. The docs cover this as reducing server roundtrips and trimming both the request payload and the response JSON.[^1]
+
+The second is caching reference data. Reference data is the stuff that almost never changes: product catalogs, lookup tables, configuration values. Fetching it on every run is wasted work. The Integration Procedure guidance is explicit: use caching to store frequently accessed, infrequently updated data.[^4] Cache the catalog with a sensible TTL and reuse it across runs.
+
+A few other official performance notes worth knowing: keep a single OmniScript under roughly 750 elements, avoid oversized LWCs (4 MB is called out as a hard ceiling), and be careful with large PDFs since they generate slowly.[^1] These are the numbers the exam can lean on, and they are easy to mix up, so treat the 750-element and 4 MB figures as the ones to remember.
+
+### Error handling: fail gracefully, not raw
+
+External systems fail. The question is whether your script fails with them in a way users can recover from. The best practice is to anticipate external failures and design controlled responses rather than letting a raw error surface.
+
+The patterns to build in:
+
+- **Try/catch where the platform supports it.** Integration Procedures support exception handling, so a callout that fails can be caught and turned into a controlled error response instead of aborting the whole transaction.
+- **Friendly messages.** When a step fails, the user should see something actionable, not a stack trace. Design error states into the script so a failure takes the user to a clear message and a sensible recovery path.
+- **Consistent shapes.** Keep the success and error response shapes consistent, so the OmniScript can handle both reliably. A caller that has to guess the shape of a failure is a caller that will mishandle it.
+- **Validate at the current step.** The docs recommend enforcing required data and validations at the current step rather than the end of the form, so users correct input immediately instead of retracing their steps.[^1]
+
+The catch is not decorative. It is how a script goes from "fails loudly in production" to "fails quietly, tells the user what happened, and lets them retry."
+
+## Configuration Walkthrough
+
+A concrete path for building a new OmniScript the right way:
+
+1. **Outline before building.** Map the whole process. Identify which chunks another flow will reuse and mark them as child OmniScript candidates.
+2. **Name the elements.** Set a consistent, descriptive, space-free naming convention before you drop the first element. Every element name is a JSON key the rest of the script reads.
+3. **Build children first.** Create the reusable child scripts, test them in isolation, then embed them in the parent. Fix bugs in the child once, not in every copy.
+4. **Consolidate data calls.** Design one Integration Procedure to gather the data the script needs in a single server round trip. Add a Response Action to trim the output to what the script actually uses.
+5. **Cache reference data.** Set up caching for the values that rarely change so they are not re-fetched every run.
+6. **Add error handling.** Wrap external calls so failures produce a controlled, friendly error state instead of a raw error.
+7. **Test in debug mode.** Run the script in preview, step through every element, and inspect the JSON at each point. Cover happy path, edge cases, and error states before you publish.
+
+## Exam Traps
+
+- **One giant OmniScript instead of modular children.** This is the headline trap. Big scripts duplicate logic, hurt performance, and are harder to maintain. The recommended pattern is reusable child scripts.[^1]
+- **Skipping debug-mode testing.** Subtle JSON and formula bugs reach real users if you only test the happy path in a browser. Preview mode and the debug log are the tools that catch them.[^3]
+- **Calling external systems repeatedly instead of one IP call.** Chatty per-element callouts multiply round trips. Consolidate into an Integration Procedure and trim the response.[^1][^4]
+- **Bad element names.** Element names are JSON keys. Inconsistent or ambiguous names make formulas, actions, and debugging painful, and renaming after deployment is risky.[^1]
+
+## Exam Tip
+
+Modular, named, tested, lean. The four pillars of maintainable OmniScripts. Compose from children, name elements like the JSON keys they become, test every branch in debug mode, and push orchestration into Integration Procedures.
+
+## Try It
+
+Open the OmniScript Designer in a sandbox and take the script you built in an earlier lesson. Walk it through preview mode, step by step, and watch the data JSON grow. Find one element name you would rename and trace every formula and action that references it before deciding whether the rename is worth it. Then split one reusable chunk of the script into a child OmniScript and re-embed it. That exercise teaches more about why these practices exist than any list of rules.
+
+## What's Next
+
+This lesson described how to keep an OmniScript maintainable. The next one turns to the tool that carries the heavy orchestration you just pushed out of the script. Lesson 22 covers IP Design: server-side orchestration with the Integration Procedure, which is where multi-system logic actually runs. Understanding how an IP is designed is the other half of keeping OmniScripts lean.
+
+## Related Requirements
+
+- Day 16, OmniScript Elements and Dynamic Interactions
+- Day 17, Child OmniScripts and Custom LWCs
+- Day 20, Embedding OmniScripts Across Channels
+- Day 39, Resolving OmniScript Errors and Rendering
+
+## References
+
+[^1]: [OmniScript Best Practices, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_omniscript_best_practices_8368.htm&language=en&type=5)
+[^2]: [Embed an OmniScript in Another OmniScript, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_embed_an_omniscript_in_another_omniscript_20581.htm&language=en_US&type=5)
+[^3]: [View and Debug Action Requests and Response Data, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_view_and_debug_action_requests_and_response_data.htm&type=5)
+[^4]: [Integration Procedure Best Practices, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_integration_procedure_best_practices.htm&type=5)

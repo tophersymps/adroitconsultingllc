@@ -1,0 +1,111 @@
+---
+title: "Lesson 10: Sync vs Async, Queues, and Eventual Consistency: The Laws That Shape Agent Pipelines"
+slug: sync-async-queues-eventual-consistency-agent-pipelines
+series: "salesforce-architect"
+lesson: 10
+excerpt: "The three operating laws that govern any pipeline spanning more than one system: synchronous calls block, asynchronous calls decouple, and distributed systems settle into eventual consistency. Queues are the buffer that makes async safe. And the same laws that drive Salesforce governor limits now shape multi-agent AI pipelines."
+date: "August 13, 2026"
+author: "Adroit Consulting"
+readTime: "9 min read"
+tags: [Architecture, Integration, Reliability, LLMs]
+---
+
+# Lesson 10: Sync vs Async, Queues, and Eventual Consistency: The Laws That Shape Agent Pipelines
+
+Lesson 5 introduced the general-systems frame: architecture is components, relationships, and principles, and AI agent patterns are remixes of patterns engineers have used for decades. This lesson stays in that mode and takes the next step. It covers three operating laws that govern every pipeline that spans more than one system: synchronous calls block, asynchronous calls decouple, and distributed systems converge only eventually. Once you internalize those three, you can read any integration, and any agent pipeline, and see why it is shaped the way it is.
+
+Here is the thesis, stated plainly. **There is no such thing as a free asynchronous system.** Every time you replace a synchronous call with a queue, you trade a simple, predictable blocking exchange for a faster, more decoupled one that can silently reorder, delay, or even drop work. And every time you accept eventual consistency, you accept a window in which the data you show is not the latest data. Salesforce enforces these laws with governor limits. LLM agent pipelines inherit them from the model APIs and message queues underneath. The architect who ignores them builds systems that fail at the worst moment.
+
+## Define the terms
+
+- **Synchronous call**: a blocking request/response operation. The caller sends a request and waits for the result before doing anything else. Salesforce's integration guide: synchronous timing is "blocking and real time," where "the result is returned to the caller immediately." [^1]
+- **Asynchronous call**: a nonblocking, queue-based, or message-based request. The same guide: "the caller makes the request and continues without waiting for a response," with results and faults delivered through other one-way operations. [^1]
+- **Message queue**: a buffer between a producer and a consumer. The consumer "retrieves messages from the queue and performs the work" when it is ready, so the two sides do not have to run at the same speed or even at the same time. [^2]
+- **Eventual consistency**: a specific weak consistency model. Vogels defines it as the guarantee that "if no new updates are made to the object, eventually all accesses will return the last updated value." [^3]
+- **Inconsistency window**: the period between an update and the moment every observer is guaranteed to see it. [^3]
+- **Backpressure**: the pressure a slow downstream consumer puts on a fast upstream producer when a queue fills up. The queue-based load leveling pattern exists precisely to absorb that pressure. [^4]
+
+One reminder from lesson 9, because it matters throughout: **idempotency** is the property that makes async safe. If an operation can be replayed without side effects, then a delayed, reordered, or duplicated message is harmless. Without it, async turns every retry into a data-integrity risk. [^1]
+
+## The first law: synchronous calls block, and blocking has a price
+
+A synchronous call is simple and strong. The caller submits a request, the remote system processes it, and the caller gets the answer back in the same transaction. This is Salesforce's request/reply pattern, the default for process and data integration. [^1]
+
+The price is that the caller is tied up for the full round trip. The longer the downstream work takes, the longer the caller waits. A synchronous callout is a synchronous transaction, and it burns the caller's CPU, heap, and transaction time while it waits. Salesforce sets a default callout timeout of 10 seconds and a maximum cumulative callout timeout of 120 seconds per transaction. [^5]
+
+So synchronous is right when the caller genuinely needs the result before it can proceed. You need the payment authorization before you confirm the order. You need the identity check before you grant access. Forcing async there would mean confirming an order before you know whether the payment cleared, which is worse than waiting.
+
+## The second law: asynchronous calls decouple, and decoupling needs a buffer
+
+The reason to go async is decoupling. The producer and consumer no longer have to be up at the same time, run at the same speed, or share a failure domain. Azure's messaging guidance describes the broker's role as decoupling: the producer sends into a queue, and "the consumer is ready, it can retrieve messages from the queue and perform the work." [^2]
+
+The queue is the load leveler. The queue-based load leveling pattern puts a queue between the producer and consumer "to handle failures and high-load situations gracefully," so bursts of demand accumulate in the queue and are drained at the consumer's own pace instead of overloading it. [^6] [^4]
+
+Salesforce runs on the same principle, enforced by the platform. Async Apex (Queueable, Batch, and future methods) runs in the background in its own thread, so your main logic is not delayed by a long operation. [^7] And the platform caps how much work can pile into that queue: at most 50 jobs can be enqueued with `System.enqueueJob` in one synchronous transaction, and only one from an async transaction. [^8] The queue is real, and it has a capacity.
+
+The governor limits make the tradeoff explicit. Salesforce gives async transactions more headroom than sync ones precisely because decoupled work runs longer and heavier: 200 SOQL queries instead of 100, 12 MB of heap instead of 6 MB, and 60,000 ms of CPU instead of 10,000 ms. [^5] That is the platform saying, in effect: if you are willing to give up the immediate response, you may use more resources.
+
+## The third law: distributed systems settle into eventual consistency
+
+Once work leaves a single transactional store and flows through queues, buses, and replicas, you lose the guarantee that every observer sees the latest value immediately. That is the third law.
+
+Vogels frames it as a deliberate tradeoff rooted in the CAP theorem, which holds that of consistency, availability, and partition tolerance, a distributed system can achieve only two at a time. Because network partitions are a given at scale, "consistency and availability cannot be achieved at the same time." [^3] Relaxing consistency keeps the system available; the cost is an inconsistency window during which a read may not reflect a recent write.
+
+The classic definition of eventual consistency is the guarantee that "if no new updates are made to the data item, eventually all accesses will return the last updated value." [^3] Vogels names DNS as the most widely deployed example: updates to a name propagate through configured caches, and eventually every client resolves the new value.
+
+Salesforce's own platform events bus is a distributed system with exactly these properties, and the architects are explicit about it: "The event bus is a distributed system and doesn't have the same guarantees as a transactional database." [^1] Publish is queued and buffered, not synchronous, and "in rare cases, the event message might not be persisted in the distributed system," meaning an event can be lost and is then unrecoverable. [^1] That is why lesson 9's replay and idempotency machinery exists: it is the mitigation for a bus that does not promise strict ordering or guaranteed delivery.
+
+## Why these laws hit agent pipelines
+
+Now the payoff. A multi-agent pipeline is a distributed system, and it obeys the same three laws. The processing units are LLM calls and tool functions instead of shell commands, but the mechanics are identical.
+
+A synchronous tool call is a blocking request/reply. An agent that calls a payment API or a database and needs the result before reasoning further is doing a synchronous exchange, and it blocks the whole reasoning loop for the round trip. That is fine when the result is required. It is a tax when it is not.
+
+An asynchronous pipeline is a queue. When an agent enqueues a job, publishes an event, or hands work to a background worker, it has created a queue with all the same properties as an SQS queue or the async Apex job queue: decoupling, buffering, reordering, and the possibility of loss. The agent can keep reasoning while the worker runs, but it can no longer assume the work completed, or completed in order.
+
+Eventual consistency governs agent state. In a multi-agent system, shared memory, a vector store, or a context store is a replicated, distributed read model. Two agents reading the same store can briefly see different values, exactly like two processes reading a replicated key-value store. An agent that reads a job status immediately after another agent updated it may read the stale value. And platform events delivered out of order mean an agent pipeline must carry its own sequence fields and idempotency keys rather than trusting arrival order, which is the same rule a Salesforce integration follows.
+
+The design consequence is not "never go async." It is that every async and eventually-consistent choice must come with the mechanisms that make it safe: a queue with bounded capacity, idempotent consumers, sequence fields for ordering, replay for recovery, and reconciliation for convergence. [^1]
+
+## Worked example: order fulfillment across four systems
+
+A retailer takes orders in Salesforce, authorizes payment with a processor, dispatches from a warehouse system, and notifies the customer by email. The architect maps each leg to the right law.
+
+1. **Payment authorization, synchronous.** The customer's card must be authorized before the order is confirmed. Salesforce calls the processor with request/reply and waits for the result. The caller needs the answer, so blocking is correct. [^1]
+
+2. **Warehouse dispatch, asynchronous via queue.** The warehouse system must not be flooded at checkout peaks, so Salesforce publishes a dispatch event instead of calling it inline. The event bus buffers the burst; the warehouse drains at its own rate. This is queue-based load leveling in action. [^4] [^1]
+
+3. **Customer notification, asynchronous via queue.** Email is high-volume and low-priority, so it is a queued worker. If the email worker is slow or down, the messages wait in the queue instead of blocking the checkout transaction.
+
+4. **Order status, eventually consistent.** The customer-facing order status is a read model fed by these async updates. After checkout, the status may briefly lag behind the warehouse state. The design accepts a bounded inconsistency window, and a reconciliation job re-syncs anything that diverged. [^3]
+
+5. **Idempotency everywhere in the async legs.** Each dispatch event carries a unique message ID, and the warehouse dedupes before applying. If the bus redelivers a message, the warehouse does not double-dispatch. [^1]
+
+Now run the same scenario as an agent pipeline. A checkout assistant agent authorizes the card with a synchronous tool call, because it needs the authorization result to confirm. It enqueues warehouse dispatch and email notification as async worker tasks. A separate status agent reads the shared order store, and it occasionally sees a stale status for a few seconds, the inconsistency window. Nothing about the design changed. Only the processing units did. That is the entire point.
+
+## The pitfall to avoid
+
+**Treating the queue and the bus as a transactional database.** The single most damaging mistake is assuming that a queued or published message is durable, ordered, and immediately visible, the way a committed database row is. Salesforce's platform event bus "doesn't have the same guarantees as a transactional database." [^1] Build on that assumption and a message can be lost, delivered out of order, or read as stale, and the system shows it immediately. The alternative is the discipline of this lesson: idempotent consumers, sequence fields, replay, and reconciliation, so that the eventual system converges to the truth instead of compounding the errors. [^3]
+
+## Try it
+
+Work through this decision sequence for a pipeline you know, whether a Salesforce integration or an agent workflow.
+
+1. For each step, ask: does the caller need the result before it can proceed? If yes, the step is synchronous and blocks. If no, it is a candidate for async. [^1]
+2. For each async step, name the queue. Where does the message sit while it waits, and what is that queue's capacity? In Salesforce, which async mechanism (Queueable, Batch, future) and what daily execution budget applies? [^8]
+3. For each eventually-consistent read, estimate the inconsistency window and name the reconciler that closes it. If the status screen can show stale data, who re-syncs it, and how often?
+4. Prove the pipeline is safe under reordering. If two messages arrive in the wrong order, does the consumer still converge? Carry a sequence field and an idempotency key on every message. [^1]
+5. Pick one synchronous leg and one async leg, and write one line each describing the failure mode if that leg's law is ignored. The sync leg fails if the caller times out mid-round-trip. The async leg fails if a message is lost or applied twice.
+
+## What's next
+
+You now hold the three laws that shape every integration and every agent pipeline: sync versus async, queues, and eventual consistency. The next lesson leaves the general-systems thread and returns to the platform, where those laws govern a specific and foundational problem. It is the deep dive on sharing architecture, the OWD floor, the role hierarchy, sharing rules, and manual sharing, the model that decides who can see what.
+
+[^1]: architect.salesforce.com. [architect.salesforce.com](https://architect.salesforce.com/docs/architect/fundamentals/guide/integration-patterns.html)
+[^2]: learn.microsoft.com. [learn.microsoft.com](https://learn.microsoft.com/en-us/azure/architecture/guide/technology-choices/messaging)
+[^3]: allthingsdistributed.com. [allthingsdistributed.com](https://www.allthingsdistributed.com/2008/12/eventually_consistent.html)
+[^4]: learn.microsoft.com. [learn.microsoft.com](https://learn.microsoft.com/en-us/azure/architecture/patterns/queue-based-load-leveling)
+[^5]: developer.salesforce.com. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_gov_limits.htm)
+[^6]: aws.amazon.com. [aws.amazon.com](https://aws.amazon.com/blogs/database/building-resilient-applications-design-patterns-for-handling-database-outages/)
+[^7]: developer.salesforce.com. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_async_overview.htm)
+[^8]: developer.salesforce.com. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_queueing_jobs.htm)

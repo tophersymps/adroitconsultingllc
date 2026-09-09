@@ -1,0 +1,111 @@
+---
+title: "Lesson 17: Large Data Volumes: Archiving, Big Objects, Skinny Tables, and Indexing Strategy"
+slug: large-data-volumes-archiving-big-objects-skinny-tables-indexing
+series: "salesforce-architect"
+lesson: 17
+excerpt: "How an org stays fast and inside its storage as volume grows: selectivity and custom indexes, skinny tables for read-heavy hot data, big objects for bulk historical storage, and archiving as the tier that sheds cold data before it drags everything down."
+date: "August 20, 2026"
+author: "Adroit Consulting"
+readTime: "10 min read"
+tags: [Salesforce, Architecture, Data, RAG]
+---
+
+# Lesson 17: Large Data Volumes: Archiving, Big Objects, Skinny Tables, and Indexing Strategy
+
+Lesson 16 ended with data finally loaded into the org. Now the data starts growing, and volume becomes the next problem. A Salesforce org breaks under scale in two ways that look unrelated until you see the cause. Storage runs out because every record, field, and file is billed. Queries get slow because the database can no longer scan the whole table cheaply. This lesson is the architect's toolkit for both: archiving to shed cold data, big objects for bulk historical storage, skinny tables to cut the read cost on hot tables, and an indexing strategy that keeps the queries that remain running fast.
+
+The framing to hold onto is a tiering decision. Not all data is equal. A Case a customer just opened is hot; it must be fast, searchable, and reportable. A Case closed three years ago is cold; it needs to exist for compliance, but nobody queries it daily. Treating both the same way is how orgs hit a wall at a few million records. The architect's job is to put each kind of data where it belongs.
+
+## Define the terms first
+
+- **Large data volume (LDV)**: a deployment whose data volume is large enough that default query behavior and storage degrade without deliberate design. Salesforce maintains a whole best-practices guide for these systems, and the techniques in this lesson come from it. [^3] [^4]
+- **Index**: a database structure the query optimizer can use to find rows without scanning every row in the table. Salesforce maintains indexes automatically on common fields and lets you request custom indexes on others. [^4]
+- **Selectivity**: the fraction of records a filter matches. The smaller the fraction, the more selective the query, and the more likely the optimizer will use an index instead of a full scan. It is the single concept that decides whether any indexing work pays off. [^4]
+- **Skinny table**: a separate database table, invisible to you, that Salesforce maintains to hold frequently used fields together so read-only queries avoid a join. [^3]
+- **Big object**: a horizontally scalable, non-transactional store for very large data sets, built to give consistent performance whether it holds 1 million or 1 billion records. [^1]
+- **Archiving**: moving rarely used data out of the active tables into lower-cost or bulk storage while keeping it accessible. It is the alternative to deletion when you still need the records. [^5] [^6]
+
+## Indexing: make the queries that remain cheap
+
+Before you add any storage, fix the queries. An index lets the query optimizer find a small set of rows without scanning the whole table. Salesforce maintains indexes on standard fields for most objects: RecordTypeId, Division, CreatedDate, SystemModstamp (Last Modified Date), Name, Email for contacts and leads, foreign key relationships, and the record ID primary key. [^4] If your query filters on one of those, you already have an index to lean on.
+
+Beyond the standard set, you can get **custom indexes** on custom fields, with a few exclusions. Long text areas, rich text areas, non-deterministic formula fields, and encrypted text fields cannot be custom-indexed. [^4] The cheap way to get an index is to mark a field as an **External ID**, which causes Salesforce to create an index on it automatically. External IDs are limited to auto number, email, number, and text fields. [^4] For other field types, including standard fields, you request the index through Salesforce Customer Support or deploy it as metadata. [^4]
+
+The catch is selectivity. The optimizer does not use an index just because one exists. It consults its statistics and only uses the index when the filter is selective enough. The thresholds are precise and worth memorizing. A **standard** indexed field is used when the filter matches less than 30% of the first million records and less than 15% of the records after that. A **custom** indexed field is used when the filter matches less than 10% of the first million records and less than 5% of the additional records. [^4] A filter that matches 60% of a five million record table gets no index help, because an index lookup would be slower than a scan. That is not a bug in your indexing. That is a signal that your query itself is too broad.
+
+Compound logic follows the same idea. With AND, the optimizer uses indexes unless one of them returns more than 20% of the records. With OR, it uses them unless all of them return more than 10%. [^4] And for list views that select on one field and sort on another, a **two-column custom index** beats two single-column indexes, for example an Account list view that filters by State and sorts by City. [^4]
+
+So the indexing strategy is: identify the queries that matter, confirm the filter field can be indexed, check that the filter is selective against the thresholds, and only then invest in a custom index. Indexing a low-selectivity field is wasted effort, because the optimizer will ignore it.
+
+## Skinny tables: cut the read cost on hot tables
+
+Indexes make queries fast by narrowing what is read. Skinny tables make queries fast by shrinking how much work each read costs. Here is the mechanism. For each object table you can see, Salesforce keeps separate database tables for standard fields and custom fields, and that split ordinarily forces a join when a query touches both kinds of fields. A skinny table holds both kinds of fields together and omits soft-deleted records, so a read-only operation that references only fields in the skinny table avoids the extra join and runs faster. [^3]
+
+Skinny tables earn their keep on tables holding millions of records, where the join cost is real, and they help read-only work such as reports, list views, and SOQL. They can be created on Account, Contact, Opportunity, Lead, Case, and custom objects, and they can hold most scalar field types: checkbox, currency, date, date and time, email, number, percent, phone, multi-select picklist, text, text area, text area (long), and URL. [^3] A skinny table caps at 200 columns and cannot pull in fields from another object. [^3]
+
+Two operational facts matter for a working architect. First, you do not create these yourself. You contact Salesforce Customer Support, and once enabled the skinny tables are created and used automatically where appropriate; you cannot create, access, or modify them directly. If your report or list view changes, you go back to Support to update the definition. [^3] Second, they only carry into Full sandboxes by default; other sandbox types need Support to activate production's skinny tables. [^3]
+
+The canonical example from the docs is a year filter. Building an annual or year-to-date report by filtering a date range like 01/01/11 to 12/31/11 forces expensive repeated date computation. A skinny table that carries a Year field lets the report filter on `Year = '2011'` instead. [^3] Same report, far cheaper query.
+
+Salesforce's own warning is worth taking seriously: skinny tables are not a magic wand. They hold copies of live data, and maintaining those copies has overhead. Used in the wrong context, a skinny table makes performance worse, not better. [^3] Reserve them for genuinely read-heavy, high-volume tables, not as a blanket fix for every slow report.
+
+## Big objects: the bulk historical store
+
+Big objects are the storage tier built for massive data. A big object stores and manages very large data sets on the platform, and it is designed to give consistent performance at 1 million, 100 million, or even 1 billion records. [^1] That scale comes from a different architecture: big objects run on a horizontally scalable, distributed, non-transactional database, in contrast to the relational, transactional database that backs ordinary sObjects. [^1] You use a big object to archive data out of other objects, or to bring a massive external data set in for a complete customer view. [^1]
+
+There are two kinds. Standard big objects are defined by Salesforce, are always available, and cannot be customized; FieldHistoryArchive, which backs the field audit trail, is the example. Custom big objects are the ones you create for your org's specific data. [^1] They are available in Enterprise, Performance, Unlimited, and Developer editions, with Developer limited to one million records. [^1]
+
+The documented use cases line up with the tiering view: a 360 degree view of the customer, by pulling in loyalty, billing, and usage data; auditing and tracking over a long window; and historical archive, keeping data accessible for analysis or compliance while protecting the core CRM's performance. [^1]
+
+Big objects behave differently from sObjects, and those differences are requirements, not warnings. Big objects support object and field permissions but no sharing rules. Triggers, flows, processes, and the Salesforce mobile app are not supported on them. Writes are idempotent: inserting an identical record multiple times creates only one record, which is how you make repeated archive jobs safe. [^1] You can create up to 100 big objects per org, and custom big objects do not support encryption, so archived encrypted data is stored as clear text and Shield Platform Encryption is not supported for them. [^2] Integration goes through SOQL, Bulk, Chatter, and SOAP APIs; the REST API is not supported for big objects. [^1]
+
+The write path needs a design decision up front. Because the big object database is non-transactional and favors consistency over availability, a batch can partially fail, with some records written and others not. Salesforce's guidance is blunt: do not try to figure out which records succeeded. Retry the entire batch until it succeeds, and do the writing from asynchronous Apex (for example the Queueable interface) so you isolate DML and handle database lifecycle events cleanly. [^2]
+
+## Archiving: the storage and performance lever
+
+Archiving is the tier that keeps the hot tables small. Salesforce bills data storage tightly, and the limits are a hard architectural input. Enterprise allocates 10 GB of data storage plus 20 MB per user license; Performance and Unlimited start at 10 GB with larger per-user allocations. [^5] When an org approaches 100% of that, the guidance from Salesforce is to review outdated records and archived items and either archive or delete to free space. [^7]
+
+Archive and delete are different tools. Deletion frees storage but destroys the record. Archiving moves the record out of the active tables while keeping it accessible, which is why it suits compliance and retention: you keep required records without keeping them in the hot database. [^6] [^8] Salesforce's Archive app is a paid feature that automatically archives old or inactive data and includes a Storage Analyzer that shows which objects consume the most storage. [^5] [^6] For long-term storage of structured, read-only records, Salesforce positions big objects as the way to archive within the platform itself, which keeps the data queryable through SOQL instead of dumping it somewhere disconnected. [^8]
+
+So the archiving strategy is tiering with a retrieval plan. Hot data stays in sObjects, indexed and fast. Cold data moves to a big object or external archive. The decision every record makes is: is this still queried or reported on day to day, or does it only need to exist? If the answer is the latter, it is a candidate to leave the active tables.
+
+## Worked example: a 40 million record event history
+
+A telecom operator runs a custom object, `UsageEvent__c`, that ingests one record per device event and has grown to 40 million rows. Cases number 3 million, with 2.4 million closed. Reports over the event object time out, storage is at 90%, and the Cases list view is slow. The architect's plan:
+
+1. **Index the hot queries first.** The report that matters filters Cases by Status and Owner, and Owner is a foreign key that is already indexed. Status is low-cardinality, and a custom index on it would not meet the 10% selectivity threshold, so they skip it. Instead they add a custom index on a high-cardinality custom field, the service territory, which makes the territory filter selective. [^4]
+2. **Add a two-column index for the list view.** The team's main list view filters by territory and sorts by last activity date, so they request a two-column custom index on those fields rather than two single ones. [^4]
+3. **Put a skinny table on the hot object.** Cases is read-heavy, so they ask Salesforce Support for a skinny table covering the Case fields their dashboards reference. The dashboards stop doing the standard/custom join, and because the skinny table omits soft-deleted records, the scans get smaller too. [^3]
+4. **Archive the closed history to a big object.** They create a custom big object `CaseArchive__c` and a nightly async job that copies Cases closed more than 24 months ago into it, then deletes them from the active Case table. The historical records stay queryable through SOQL for audit and legal requests, and the hot Case table shrinks by over a million rows. [^1] [^2]
+5. **Tier the event data.** `UsageEvent__c` is append-only and huge, so the full 40 million rows have no reason to live in an sObject. The team redirects new events into a big object from the start, keeping only a rolling 90 days of active events in the transactional object for reporting. [^1]
+
+The result is a system where the hot objects stay small and selective, the bulk history is off the transactional database, and every remaining query has an index that the optimizer will actually use.
+
+## The pitfall to avoid
+
+**Reaching for storage features to mask a query that should be indexed, or indexing a field the optimizer will ignore.** Two failures hide behind the same symptom, a slow report. The first is skipping selectivity: adding a custom index on a low-cardinality field like a two-value status and declaring the indexing work done, when the optimizer will bypass it because it matches too much of the table. [^4] The second is throwing a skinny table or a big object at a query that is slow simply because it filters on a non-indexed field. A skinny table makes a correct read cheaper; it does not make an unscanned, non-selective query correct.
+
+The reverse failure is just as common: **archiving without a retrieval plan.** Moving 40 million records into a big object is only a win if someone can still find a record when a regulator asks for it. Design the query path, the async write path with its retry, and the access pattern before you move a single row. [^2] Archive the data because you decided where it lives, not because storage was full and the deadline was tomorrow.
+
+## Try it
+
+A logistics org has 20 million tracking events in a custom object, 2 million closed Shipments, and a dashboard of open Shipments that times out. Answer before reading on.
+
+1. A field on Shipment has three possible values and a custom index. Will the optimizer reliably use it for a filter on one value? *(Only if the filter is selective: a custom index is used when the filter matches less than 10% of the first million records and less than 5% of the additional records. A three-value field likely matches far more, so probably not.)* [^4]
+2. Where do the 20 million tracking events belong? *(A big object, if they are append-only and queried rarely. They do not need to live in a transactional sObject.)* [^1]
+3. The open-Shipment dashboard queries many fields and is slow despite good indexes. What lever fits? *(A skinny table on the Shipment object, if the dashboard references a stable field set, because it avoids the standard/custom join. Request it through Support.)* [^3]
+4. How do you write to a big object safely? *(From asynchronous Apex, retrying the entire batch on partial failure, since big objects are non-transactional.)* [^2]
+5. What do you do with Shipments closed more than two years ago? *(Archive them to a big object (or external archive) and remove them from the active table, with a defined retrieval path.)* [^1] [^6]
+
+## What's next
+
+You now have the volume toolkit: selectivity-aware indexing, skinny tables for hot read-heavy data, big objects for bulk history, and archiving to keep the active tables small. The next lesson is about the hard numbers that bound all of it: system limits. It covers governor limits, API limits, and storage limits, and how an architect plans around them instead of hitting them by accident.
+
+[^1]: developer.salesforce.com. [Big Objects | Big Objects Implementation Guide](https://developer.salesforce.com/docs/atlas.en-us.bigobjects.meta/bigobjects/big_object.htm)
+[^2]: developer.salesforce.com. [Big Objects Best Practices](https://developer.salesforce.com/docs/atlas.en-us.bigobjects.meta/bigobjects/big_object_considerations.htm)
+[^3]: developer.salesforce.com. [Skinny Tables | Best Practices for Deployments with Large Data Volumes](https://developer.salesforce.com/docs/atlas.en-us.salesforce_large_data_volumes_bp.meta/salesforce_large_data_volumes_bp/ldv_deployments_infrastructure_skinny_tables.htm)
+[^4]: developer.salesforce.com. [Indexes | Best Practices for Deployments with Large Data Volumes](https://developer.salesforce.com/docs/atlas.en-us.salesforce_large_data_volumes_bp.meta/salesforce_large_data_volumes_bp/ldv_deployments_infrastructure_indexes.htm)
+[^5]: help.salesforce.com. [Data and Storage Resources](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.admin_monitorresources.htm&type=5)
+[^6]: help.salesforce.com. [Archive](https://help.salesforce.com/s/articleView?id=xcloud.archive.htm&language=en_US&type=5)
+[^7]: help.salesforce.com. [Data storage amount limit exceeded](https://help.salesforce.com/s/articleView?id=000386657&language=en_US&type=1)
+[^8]: salesforce.com. [What Is Data Archiving?](https://www.salesforce.com/platform/data-archiving-solutions/guide/)

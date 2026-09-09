@@ -1,0 +1,107 @@
+---
+title: "Lesson 11: Security Architecture: The Sharing Model, OWD, Role Hierarchy, Sharing Rules, and Manual Sharing"
+slug: security-architecture-sharing-model-owd-role-hierarchy-sharing-rules
+series: "salesforce-architect"
+lesson: 11
+excerpt: "Who can see a given record? The four record-level controls that answer it: org-wide defaults, the role hierarchy, sharing rules, and manual sharing. How they layer, how they only ever open access, and why 'most permissive wins' is the whole game."
+date: "August 14, 2026"
+author: "Adroit Consulting"
+readTime: "10 min read"
+tags: [Salesforce, Architecture, Security]
+---
+
+# Lesson 11: Security Architecture: The Sharing Model, OWD, Role Hierarchy, Sharing Rules, and Manual Sharing
+
+Your integration can write a record to Salesforce, but that says nothing about who can see it. Object permissions say a user *may* touch Accounts; the sharing model says which Accounts. Get the sharing model wrong and the result is either a sales team that can't see its own territory or, worse, a field user who can see everyone's compensation. This lesson is the deep dive every architect needs on the four record-level controls: **org-wide defaults (OWD)**, the **role hierarchy**, **sharing rules**, and **manual sharing**. Learn how they stack, and learn the one rule that decides every access question: sharing only ever opens access, and the most permissive path wins. [^1]
+
+## The two layers you keep apart
+
+Before any record-level logic runs, a user must clear **object-level security**. If a profile or permission set grants Read on the Account object, the user can read Accounts that the sharing model exposes. OWD and its friends *modify* those object permissions for records a user doesn't own. [^2] So OWD can never hand a user more than their object permission already allows. It is a filter on top, not a grant on its own.
+
+Think of it as a funnel, widest at the top. Object permission says yes or no on the whole object. OWD sets the baseline for records you don't own. Then the role hierarchy, sharing rules, and manual sharing open up specific records to specific people. Each lower layer can only widen, never tighten, the funnel. [^1]
+
+## Org-wide defaults: the baseline you lock down
+
+OWD is "the default access that users have to records they don't own." It's the safety floor. For most objects you set one of these levels: [^1]
+
+- **Private**: only the owner, users above the owner in the role hierarchy, admins, and anyone explicitly shared can see the record.
+- **Public Read Only**: everyone can read, nobody edits a record they don't own.
+- **Public Read/Write**: everyone can read and edit records they don't own.
+- **Controlled by Parent**: access follows the parent record. Available for some standard objects (like Contact, controlled by its Account) and for master-detail custom objects. [^1]
+
+The rule Trailhead drills into you: "Use org-wide defaults to lock down your data, and then use the other record-level security and sharing tools (role hierarchies, sharing rules, and manual sharing) to open up the data to users who need it." The setting should represent what the *most restricted* user should see. [^2]
+
+Two practical details. First, OWD is set separately for internal and external users, so a partner can be locked to Private while your own team reads broadly. Second, when you change OWD, Salesforce automatically runs a sharing recalculation to apply the new access to existing records; you get a notification email when it finishes. A big OWD change on a large org can churn for a while, so it is a change you schedule, not one you fire off mid-afternoon. [^1] [^2]
+
+The other thing OWD unlocks: sharing rules and the role hierarchy can only operate on objects whose OWD is Private or Public Read Only. Set an object to Public Read/Write and there is no point configuring granular sharing for it, because everyone already has access. [^1]
+
+## The role hierarchy: managers inherit
+
+The role hierarchy makes sure a manager always has the same access as their reports, regardless of OWD. It works like an org chart for data access: users higher in the hierarchy inherit the record access of the people below them. If your report can read a record, you can read it too. [^3]
+
+The critical nuance is that a role is not a job title and the hierarchy is not your org chart. A role is "a level of data access that a user or group of users needs." You build branches to model who must see whose data, not to mirror the reporting structure exactly. [^3]
+
+Three behaviors to remember:
+
+- **Access flows up, never sideways.** Peers in the same role do not automatically see each other's records. That's a deliberate feature: two reps in the same role shouldn't see each other's deals. They need a sharing rule or team if collaboration is required. [^3]
+- **It respects access level.** If the subordinate has read-only access to a record, the manager above inherits read-only, not edit. The hierarchy passes along the existing access level; it doesn't upgrade it. [^3]
+- **"Grant Access Using Hierarchies" is on by default but can be turned off, for custom objects only.** For standard objects like Account, Opportunity, and Case the setting is always on. For a custom object you can deselect the checkbox, and then only the owner and anyone explicitly shared (via sharing rule or manual share) get access, with no automatic roll-up to managers. [^2] [^3]
+
+A common trap: people treat the role hierarchy as the place to solve every sharing problem, then cram business units into it until it stops making sense. Keep the hierarchy lean. Salesforce's own guidance suggests keeping it to no more than about ten levels of branches. When the hierarchy can't express the pattern you need, that's what sharing rules are for. [^3]
+
+## Sharing rules: automatic exceptions for groups
+
+Sharing rules are the workhorse for granting access that OWD and the hierarchy don't cover. They extend access to records a user "can't normally see" based on who owns the record or on criteria. There are two types: [^2]
+
+- **Owner-based**: share records owned by a group (say, the "US Enterprise" role) with another group (say, the "Service" role). This handles cross-branch or matrix scenarios, like a person in Service who needs to see some Sales data but sits in a different branch of the hierarchy. [^3]
+- **Criteria-based**: share records whose field values match a condition, for example "all Opportunities where Deal Size equals Enterprise," with a public group. Criteria-based rules can't use lookup fields, encrypted fields, or formula fields in the filter. [^4]
+
+The one-sentence contract, worth repeating: **sharing rules can never restrict access.** They only open it. And because of that, if multiple rules give a user different access levels to the same record, the user gets the most permissive one. [^1] [^4]
+
+A few operational facts. You can define up to 300 sharing rules per object, including up to 50 criteria-based rules. Once you create a rule you can't change who it shares with; you delete and recreate it. And beware the side effects: sharing an Opportunity can also open up its related Account, and sharing a Case or Contact can open the related Account, because those related records may become visible too. [^4]
+
+## Manual sharing: one record, on demand
+
+Manual sharing is the most granular control: a record owner, or a user with sufficient permission, shares a single record with another specific user or group. It's the Share button on a record. It exists for the cases no automatic rule can predict, the "hey, I need this one deal visible to finance" moments. [^2]
+
+The catch is durability. Manual shares are fragile by design. When a record's owner changes, the manual share is dropped, because the share record is tied to the old owner's context. So if you're relying on manual sharing to hold a client's compliance posture, you're building on sand; ownership churn quietly removes access and someone gets surprised later. [^3]
+
+## The two special bypasses
+
+Every architect also needs to know that **View All** and **Modify All** object permissions ignore sharing rules and settings entirely. A profile with View All on Account can see every Account in the org regardless of OWD, the hierarchy, or sharing rules. That's the documented, deliberate behavior: these are the "admin override" permissions. When you troubleshoot "why can this user see a record they shouldn't," check these permissions before you go hunting through sharing rules, because they short-circuit everything below them. [^3]
+
+## Putting it together: the access funnel
+
+For any user and any record, the platform resolves access by taking the most permissive value available across every mechanism that grants access, bounded by the user's object permissions. Object permission first. If the object is readable, the effective record access is the widest of: OWD, the role hierarchy roll-up, any matching sharing rule, any manual share, and the View All / Modify All bypass. Because every layer only opens access, the final answer is the loosest one that applies. That's why "most permissive wins" isn't a bug; it's the design, and it's why locking OWD down matters: it sets the ceiling that the openers can never exceed downward. [^1]
+
+## Worked example: a regional sales and service org
+
+A manufacturer runs Sales and Service out of Salesforce. The architect needs to let each team work without exposing everything. Here's the design:
+
+1. **OWD baseline.** Accounts, Opportunities, and Cases all set to **Private** internally. Leads Private. Custom `Compensation__c` object Private. External access Private across the board. This is the safety floor; nobody sees anything they aren't explicitly given. [^1]
+2. **Role hierarchy for management.** Roles branch by region: North America Sales Manager sits above the North American reps, EMEA Sales Manager above the EMEA reps, and a Global Sales Director above both. Managers inherit what their reps own, which is the whole point: a manager reviews the team's deals without any sharing rule. [^3]
+3. **Sharing rule for cross-branch matrix.** Service needs to see the Cases tied to a region's accounts, but Service reps live in a different branch and share no parent with Sales. The architect creates an owner-based rule: share Accounts owned by the "North America Sales Manager" role (and its subordinates) with the "North America Service" role. Horizontal access that the hierarchy can't express. [^3]
+4. **Criteria-based rule for the enterprise book.** A criteria-based rule shares all Opportunities where `Deal_Size__c` equals "Enterprise" with the "Enterprise Deal Desk" public group, so deal desk sees the strategic pipeline without blanket Sales visibility. [^4]
+5. **Manual sharing as the exception valve.** When a rep goes on leave, their manager uses the Share button to give a peer temporary edit access to one in-flight deal. Fine for one record, and it will vanish on transfer, which is exactly what the manager wants here. [^2]
+
+## The pitfall to avoid
+
+**Treating sharing as something you can tighten later.** Because sharing rules and manual sharing only open access, the moment someone sets an OWD to Public Read/Write "so everyone can just see the accounts," you have permanently removed your ability to restrict that object for anyone. You cannot layer a sharing rule on top to hide records. The fix is always forward-only: lock down first, open selectively, and never start from a wide-open OWD expecting to carve out exceptions. [^1]
+
+The second classic failure is the **hierarchy-as-org-chart** trap. Someone builds a role for every title, mirroring the company directory, and suddenly a regional manager sees records from an unrelated line of business because the roles happen to share a parent. Roles are access levels, not job boxes. Keep them semantic, and put anything that doesn't fit the hierarchy into a sharing rule or a public group.
+
+## Try it
+
+1. You need every user to read all Accounts but only edit the ones they own. What OWD do you set, and can you still use sharing rules? *(Answer: Public Read Only. Yes, sharing rules still work, because Public Read Only is one of the two settings that permit them.)*
+2. Two reps in the same role must see each other's open cases. Does the role hierarchy give them access? *(Answer: No. Access flows up, not sideways between peers. Use a sharing rule or a team.)*
+3. A user can see records you know they shouldn't. You check OWD, the hierarchy, and sharing rules and find no path. What's the likely culprit? *(Answer: An object-level View All or Modify All permission, which bypasses the entire sharing model.)*
+4. Your compliance team relies on a manual share to let an auditor see one sensitive record. The record's owner is transferred next week. What happens? *(Answer: The manual share is dropped on ownership change; the auditor loses access. Manual sharing is not a durable access mechanism.)*
+
+## What's next
+
+You can now reason about who sees a record and why, from the OWD floor up through the role hierarchy, sharing rules, and manual sharing. The next lesson stays in the security thread and turns from record visibility to who the users are. It covers profiles, permission sets, permission set groups, MFA, and session policies, the tools that say what a user can do and how they prove who they are.
+
+[^1]: help.salesforce.com. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.security_sharing_owd_about.htm&type=5)
+[^2]: trailhead.salesforce.com. [trailhead.salesforce.com](https://trailhead.salesforce.com/content/learn/modules/data_security/data_security_records)
+[^3]: architect.salesforce.com. [architect.salesforce.com](https://architect.salesforce.com/docs/architect/fundamentals/guide/platform-sharing-architecture)
+[^4]: salesforceben.com. [salesforceben.com](https://www.salesforceben.com/tips-for-planning-and-creating-salesforce-sharing-rules/)

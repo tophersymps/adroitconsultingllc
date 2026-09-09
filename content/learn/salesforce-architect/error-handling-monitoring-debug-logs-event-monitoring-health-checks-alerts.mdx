@@ -1,0 +1,114 @@
+---
+title: "Lesson 23: Error Handling and Monitoring: Debug Logs, Event Monitoring, Health Checks, and Alerts"
+slug: error-handling-monitoring-debug-logs-event-monitoring-health-checks-alerts
+series: "salesforce-architect"
+lesson: 23
+excerpt: "The observability layer of a Salesforce org: debug logs and trace flags when a transaction misbehaves, Event Monitoring when you need who, what, and when across the whole org, health checks for the security baseline and the platform status, and the alerting that turns all of it into action instead of archaeology."
+date: "August 26, 2026"
+author: "Adroit Consulting"
+readTime: "11 min read"
+tags: [Salesforce, Architecture, Observability, Reliability]
+---
+
+# Lesson 23: Error Handling and Monitoring: Debug Logs, Event Monitoring, Health Checks, and Alerts
+
+Lesson 9 taught you how to design errors so nothing is silently dropped in an integration: idempotency, bounded retries, dead letters. This lesson is the observability side of that same discipline. A system can have perfect error handling and still fail your users if nobody can see the failure, attribute it, and act before it becomes an incident. Error handling decides what happens when a transaction fails. Monitoring decides whether you ever learn that it did.
+
+Salesforce gives an architect four layers to build that visibility: debug logs for the single transaction, Event Monitoring for the whole org, health checks for the security baseline and the platform itself, and the notifications that close the loop. They answer different questions. A debug log tells you why one call fell over. Event Monitoring tells you who exported 20,000 records at 2 AM. Health Check tells you your password policy drifted below baseline. Alerts tell you about all of it before you think to look. An architect who only reaches for one of these is flying with one instrument.
+
+## Define the terms
+
+- **Debug log**: a record of database operations, system processes, and errors that occur while executing a transaction or running unit tests. [^1]
+- **Trace flag**: the filter that controls how much detail a debug log captures, set for a user, class, or trigger. [^1]
+- **Event Monitoring**: a Salesforce feature that exposes detailed performance, security, and usage data across all your apps. [^2]
+- **Event log**: a record of a single event type, surfaced as CSV files or as queryable Event Log Objects. [^2]
+- **Real-Time Event Monitoring**: a service that streams selected events as platform events or stores them in big objects so you can react in near real time. [^3]
+- **Transaction Security**: a framework that evaluates real-time events against conditions and applies actions such as Block, Multi-Factor Authentication, or Notifications. [^3]
+- **Security Health Check**: a single page that scores your org's security settings against the Salesforce Baseline Standard or a custom baseline. [^5]
+- **Governor limit warning**: an email Salesforce sends when Apex code exceeds a portion of its allocated governor limits. [^4]
+
+## Debug logs: the single transaction under the microscope
+
+When one record fails to update, or a batch job dies at row 4,000, the debug log is where you start. Salesforce's Apex developer guide describes it plainly: a debug log records database operations, system processes, and errors that occur when executing a transaction or running unit tests. [^1] It captures database changes, HTTP callouts, Apex errors, resources used by Apex, and automated processes like workflow, assignment, approval, and validation rules. [^1]
+
+Two things govern how useful a log is: the trace flag and the limits. A trace flag filters how much detail gets captured. You set flags for users, classes, or triggers, and class and trigger trace flags override the levels set by user flags. [^1] The important subtlety is that a class or trigger flag does not cause logging to happen on its own. Logging only occurs when the code actually runs while logging is enabled, and the flag simply sets the level. [^1] Set a flag, run the code, read the log. The order of precedence between competing flags is documented, and it matters when a managed package or a shared class is involved. [^1]
+
+The limits are the part every architect should internalize, because violating them is a self-inflicted monitoring outage:
+
+- Each debug log must be 20 MB or smaller. Larger logs are reduced in size by removing older lines, which can be removed from any location, not just the start. [^1]
+- System debug logs are retained for 24 hours. Monitoring debug logs are retained for seven days. [^1]
+- If you generate more than 1,000 MB of debug logs in a 15 minute window, your trace flags are disabled, and Salesforce emails the users who last modified them so they can re-enable after 15 minutes. [^1]
+- When the org accumulates more than 1,000 MB of debug logs, users can no longer add or edit trace flags until some logs are deleted. [^1]
+
+The warning that follows the limit list is the one that bites production: if a trace flag is enabled on a frequently accessed Apex class, or for a user executing requests often, the request can fail, regardless of window and log size. [^1] Heavy logging is not free. It can take a request down. That is why production debugging is surgical: a tight flag on the specific class, run the failing path once, capture the log, turn the flag off.
+
+There is a parallel, automated alert here. You can configure specific users to receive an email when they invoke Apex that surpasses 50% of allocated governor limits. [^4] Only users with Author Apex permission can receive these warnings, per-org limits like concurrent long-running requests are not checked, and the notifications do not count against the daily single email limit. [^4] That email is your first line of defense against a slow governor-limit death spiral, because it fires before the transaction fails, not after.
+
+## Event Monitoring: the whole org, who, what, and when
+
+Debug logs are one transaction at a time, and you have to know what to look for. Event Monitoring is the wide-angle lens. Salesforce describes it as detailed performance, security, and usage data on all your Salesforce apps, letting you see who is accessing critical data when and from where. [^2] It answers the questions no debug log can: who viewed what data and when, where it was accessed, who is logging in and from where, which admins logged in as another user and what they did, how long a Lightning page takes to load, and threats such as anomalies in how users view or export reports, session hijacking, or credential stuffing. [^2]
+
+It is a paid capability. Event Monitoring is available in Enterprise, Unlimited, and Developer editions and requires a Salesforce Shield or Event Monitoring add-on subscription, though Developer Edition orgs get access to all log types with one day of retention for learning. [^2] [^3]
+
+The data has a few shapes. Traditional Event Monitoring writes event log files you can download as CSV from the Event Log Browser and import into dashboards or tools like CRM Analytics, Splunk, or New Relic. [^2] Event Log Objects store the same kind of data in standard objects you can query directly with SOQL. [^2] Which you pick depends on where your analysis lives. If you run dashboards in CRM Analytics or an external SIEM, the CSV files and their tooling fit. If you want to query events inside the platform, the Event Log Objects win.
+
+The layer that turns monitoring into action is Real-Time Event Monitoring. It streams selected events as platform events and stores them in big objects, so you can react in near real time rather than after the fact. [^3] On top of that sits Transaction Security, a framework that intercepts real-time events, evaluates them against conditions you write, and applies actions. [^3] The actions are Block, Multi-Factor Authentication, and Notifications. [^3] A classic policy blocks a report export when a user tries to download more records than a threshold, or triggers MFA before a risky download proceeds. [^3] The events and their storage objects pair up, and most can drive a transaction security policy. ApiAnomalyEvent detects API anomalies, ReportAnomalyEvent flags unusual report behavior, and both can be used in a policy. [^3] The trailhead guidance adds a practical note: before building transaction security policies, query the events to determine appropriate thresholds for normal usage, so your alert is tuned to your org, not to a guess. [^2]
+
+Real-Time Event Monitoring is also where performance monitoring gets proactive. You can be notified in real time when the org exceeds the concurrent long-running Apex limit, track API calls counting toward the 24 hour limit, and watch how long bulk API jobs take in a sandbox so you have a sense of how they will behave in production. [^3] That turns "why is the queue backed up" into a question with an answer you can act on before users call.
+
+## Health checks: the security baseline and the platform
+
+Debug logs and Event Monitoring tell you what happened. Health checks tell you whether the org is in a safe state to begin with. Salesforce provides two distinct ones, and they are easy to conflate.
+
+The first is Security Health Check. It is a single page where you identify and fix potential vulnerabilities in your security settings, with a summary score measuring your org against a security baseline. [^5] The baseline is the Salesforce Baseline Standard by default, and you can upload up to five custom baselines to compare against your own standards, such as FINRA for financial services. [^5] Settings are grouped into high-risk, medium-risk, low-risk, and informational. [^6] The score is computed by a proprietary formula: settings that meet or exceed the baseline raise the score, settings at risk lower it. [^6] The page ranks risk severity, so a session locked to its domain or CSRF protection disabled lands in the high-risk bucket, while password minimum length or session timeout drift land lower. [^6]
+
+Two details keep Health Check honest. First, new signals are introduced over time and can shift your score even if you change nothing, so you must revisit the baseline configuration to pick up new signals and resolve non-compliant settings. [^5] Second, there is an alert for it. You can configure who receives weekly notifications if the Health Check score decreases, so a security regression surfaces on its own instead of waiting for an audit. [^5]
+
+The second health check is about the platform, not your config. The Salesforce Trust site, at status.salesforce.com, lets customers, administrators, and partners monitor the operational health of Salesforce services and plan around scheduled maintenance windows. [^8] It is where you find your instance's current status and upcoming maintenance before you start blaming your own code for an outage that Salesforce already posted. When a feature is slow and a debug log looks clean, the Trust status page is the cheapest diagnostic on the shelf. [^8]
+
+## Monitoring API usage: the shared responsibility that always gets tested
+
+The layer that ties observability to scale is API monitoring, because a busy integration org can exhaust its API entitlement faster than any other resource. The System Overview page in Setup shows your daily API usage over the preceding 24 hours as a percentage of the Daily API Request Limit. [^7] It is the quick health panel to check after a deployment, during a big data load, or on a Monday morning. [^9] The daily API request limit is a soft limit: your org is allowed to exceed it, and further calls keep processing if it is safe to do so. [^7] Push far enough and a system protection limit kicks in, blocking all further API calls with an HTTP 403 and the REQUEST_LIMIT_EXCEEDED error code, until usage over the preceding 24 hours falls back under the limit. [^7]
+
+There are three complementary ways to watch it. The Sforce-Limit-Info header on API responses reports your usage, formatted like api-usage=25/5000, which lets your own integrations surface the number before you hit the wall. [^7] API Usage notifications send an email when the org exceeds a threshold you specify, as a percentage of the daily limit within a time period. [^7] And the API Total Usage event logs report SOAP, REST, and Bulk API requests to your org, browseable and downloadable from the Event Log Browser. [^7]
+
+The event logs are the real source of truth. System Overview shows totals, the seven day report shows daily counts per user, and notifications fire when totals cross a threshold, but only event-level data tells you which integration, which user, and roughly when. [^9] That is why Salesforce recommends a dedicated user per integration: each application gets its own identity, so the user ID logged with each API call gives you a clean way to trace which application caused a spike. [^7] A monitoring strategy built on totals alone can tell you the org hit 85 percent. One built on event logs can tell you it was the nightly ERP sync, running as the integration user you set up for it, an hour earlier than usual.
+
+## Worked example: an architect's monitoring stack for a payments org
+
+A mid-size payments company runs its billing on Salesforce with a nightly bulk sync to an external ledger, a custom Apex REST service for inbound ledger confirmations, and a team of analysts who export large reports. The architect builds the observability layer so that a failure anywhere becomes a visible, attributable event with an owner.
+
+1. **Debug logs for the failing batch.** When the nightly sync dies at row 4,000, the architect enables a trace flag on the batch class, runs one failed batch, reads the log, and finds a validation rule rejecting a record with an empty tax ID. The log answered the why. The architect turns the flag off immediately, because a trace flag on a frequently accessed class can itself fail requests. [^1]
+2. **Governor limit warnings for the hot path.** The architect enables Send Apex Warning Emails for the two developers with Author Apex permission, so a class that drifts past 50% of its governor limits emails them before the request fails. [^4]
+3. **Event Monitoring for the org's activity.** The architect queries the EventLogFile objects to establish a baseline for report exports and logins, then uses those numbers as thresholds. This is the recommended first step before writing transaction security policies, so the policy is tuned to real usage, not a guess. [^2]
+4. **Transaction Security for the dangerous action.** The architect writes a policy on ReportEvent that blocks an export above the baseline threshold, and a second that triggers MFA when an analyst logs in from a new country. The actions available are Block, MFA, and Notifications. [^3]
+5. **API usage monitoring for the sync.** Each integration runs as its own user. The architect checks System Overview after deployments and during data loads, sets an API Usage notification at 80 percent, and watches the Sforce-Limit-Info header so the ERP can log its own consumption. [^7]
+6. **Health Check for the baseline.** The architect reviews the Security Health Check score quarterly, sets weekly notifications so a score decrease surfaces on its own, and checks status.salesforce.com before blaming the org for a platform slowdown. [^5] [^8]
+
+The design rule: each layer answers a different question, and the layers are ordered from the narrowest to the widest. Debug logs explain one transaction. Event Monitoring explains the whole org. Health checks confirm the org is in a safe state. Alerts make sure you hear about all three without staring at dashboards.
+
+## The pitfall to avoid
+
+**Monitoring that produces logs but no action, and action that has no owner.** The two failure modes mirror each other. On one side, an org generates debug logs and event data but never tunes thresholds or reads them, so the dashboards are green until the night they are not, and the archive is archaeology, not alerting. On the other side, an alert fires but no one is named to respond, so the email sits in a shared inbox until the business notices. The fix is the whole lesson: point each tool at the question it answers, turn the events that matter into real-time policies, and give every alert a human owner. [^2] [^3]
+
+## Try it
+
+1. A class trace flag is enabled on a frequently accessed Apex class, and requests start failing. What is happening, and what is the safe way to debug? *(Answer: heavy logging on a hot class can fail requests. Use a surgical, short-lived trace flag on the specific class, run the failing path once, capture the log, and disable the flag.)* [^1]
+2. Debug logs for a user keep disappearing after a day. Is that expected, and what are the retention rules? *(Answer: yes for system logs, retained 24 hours; monitoring debug logs are retained seven days. Also remember the 20 MB per-log and 1,000 MB per 15 minute generation limits.)* [^1]
+3. You want to block an analyst from exporting more records than your org normally sees. What is the first thing you should do before writing the policy? *(Answer: query the events to establish a baseline for normal export behavior, then set the transaction security policy threshold to that baseline.)* [^2]
+4. Your org's API calls get rejected with HTTP 403 and REQUEST_LIMIT_EXCEEDED, but you thought the daily limit was soft. What happened? *(Answer: the daily API request limit is soft and allows overage, but pushing further triggers a system protection limit that blocks calls until 24-hour usage falls back under the limit.)* [^7]
+5. Which single user permission is required before someone can receive Apex governor limit warning emails, and which limits are not checked? *(Answer: the user needs Author Apex permission; per-org limits like concurrent long-running requests are not checked by the warnings.)* [^4]
+
+## What's next
+
+You can now see a failing transaction, trace activity across the whole org, and alert the right person before a problem becomes an incident. The next lesson keeps that same observational lens but turns it on speed: performance. It covers query optimization, writing selective SOQL, using indexes well, and caching, the levers that decide whether a feature feels instant or crawls.
+
+[^1]: developer.salesforce.com. [Debug Log, Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_debugging_debug_log.htm)
+[^2]: help.salesforce.com. [Event Monitoring](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.real_time_event_monitoring_overview.htm&type=5)
+[^3]: trailhead.salesforce.com. [Guide to Real-Time Event and Transaction Security Monitoring](https://trailhead.salesforce.com/content/learn/modules/realtime-event-monitoring/get-to-know-realtime-events-and-transaction-security)
+[^4]: developer.salesforce.com. [Set Up Governor Limit Email Warnings](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_gov_limits_emails.htm)
+[^5]: help.salesforce.com. [Security Health Check](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.security_health_check.htm&type=5)
+[^6]: help.salesforce.com. [How Is the Health Check Score Calculated?](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.security_health_check_score.htm&type=5)
+[^7]: developer.salesforce.com. [API Limits and Monitoring Your API Usage](https://developer.salesforce.com/blogs/2024/11/api-limits-and-monitoring-your-api-usage)
+[^8]: help.salesforce.com. [Use the Salesforce Trust Site](https://help.salesforce.com/s/articleView?id=000387502&language=en_US&type=1)
+[^9]: salesforceben.com. [An Admin's Guide to Better Salesforce API Usage Monitoring](https://www.salesforceben.com/an-admins-guide-to-better-salesforce-api-usage-monitoring/)

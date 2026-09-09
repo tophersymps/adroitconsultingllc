@@ -1,0 +1,114 @@
+---
+title: "Lesson 10: MCP Servers and Integrations: Wiring the Agent Into the Client's Stack"
+slug: mcp-servers-and-integrations
+series: "hermes-consultant"
+lesson: 10
+excerpt: "The client's value does not live in a chat window, it lives in their ticketing system, their CRM, their internal APIs. This lesson teaches how to connect an agent to that stack through MCP servers, how to decide what the agent gets to touch, and how to wire it in without breaking the systems the client depends on."
+date: "September 4, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [AI Agents, Consulting, LLMs]
+---
+
+# Lesson 10: MCP Servers and Integrations: Wiring the Agent Into the Client's Stack
+
+Lesson 9 asked what an agent can do by itself. This lesson asks what it can do once it is plugged into the systems that already run the client's business. That is where the real consulting value lives. An agent that drafts a good reply is a demo. An agent that drafts a good reply, checks the customer's history in the CRM, files the result in the ticketing system, and flags anything it cannot verify is a deliverable, because it is touching the actual systems where the client's work happens. Getting from the first to the second is the craft of this lesson, and it is the craft of wiring an agent into a stack you did not build, with credentials you do not own, without breaking anything the client relies on.
+
+The skills here transfer to any agent platform, because they are not really about Hermes. They are about three disciplines that apply the moment an agent reaches outside itself. Naming what an integration actually is and why a standard matters. Deciding, deliberately and in writing, exactly which actions the agent gets to take on a system the client depends on. And proving the connection works in the running configuration before you ever claim it to the client. Hermes Agent is the concrete vehicle because it makes all three concrete, and because the way it treats integrations exposes the exact questions a consultant has to answer anyway.
+
+## Define the terms: what an integration is, and why a standard matters
+
+Before you promise a client that "the agent works with Salesforce," or "it talks to our ticket system," slow down and name what you are actually describing. An integration is a connection that lets the agent take actions inside a system it does not own. Without one, an agent can only act on what is inside its own head and its own filesystem. With one, it can read a customer record, create a ticket, post to an internal API, query a database, run something in a browser against a web app. Every one of those is an action the agent performs in a system that predates it and that the business depends on.
+
+The problem an integration solves is real and old. Every external system has its own way of being reached. Your client's ticketing tool has an API with its own shapes and rules. Their CRM has another. Their internal data service has a third. If an agent implementation had to write a bespoke connector for each one, every engagement would stall on plumbing, and every integration would break the moment a vendor changed their API. What you want instead is a single, agreed way for an agent to expose and reach the tools that live outside it, so that connecting to a new system is a configuration task rather than a software project.
+
+That is what the Model Context Protocol, MCP for short, provides. MCP is an open standard that lets an agent connect to external tool servers, so the agent can use tools that live outside itself: databases, file systems, ticketing platforms, internal APIs, browser stacks. Think of it as a standard socket. A system that speaks MCP exposes its capabilities through that socket, and an agent that speaks MCP can discover and use them without a bespoke bridge for each vendor. Hermes ships an MCP client built in, which connects to MCP servers at startup, discovers the tools each one offers, and registers them so the agent can call them exactly like its own built-in tools. There is no extra wiring step in between, no glue script to maintain. The server appears, its tools become reachable, and the agent can act on the system behind it.[^1]
+
+Why does the consultant care about the standard rather than about each vendor? Because it changes the shape of the work. When a client's systems speak MCP, or can be reached through an MCP server, wiring the agent into them stops being a series of one-off engineering efforts and becomes a configuration exercise you can repeat, audit, and hand over. The standard is what makes the integration manageable at the scale a consulting practice actually runs, across many clients with many different stacks. When you hear a vendor or a colleague say "there's an MCP server for that," what they mean is that reaching that system now rides on a protocol the agent already understands, not on bespoke code only one person can maintain.
+
+## Two kinds of servers, and what each one tells you about reach and risk
+
+MCP servers come in two transport forms, and the difference between them is not a technical curiosity. It maps directly onto how much the agent can touch and where the risk sits.
+
+A stdio server runs as a local subprocess and talks to the agent over standard input and output. In practice that means something like an npm package or a Python tool that Hermes launches and keeps running as a child process. Use a stdio server when the thing you want to reach is installed locally, when you want low latency to local resources, or when the MCP server's own documentation shows you a command to run.[^2] The reach here is to things on the machine the agent runs on, and the trust question is about that machine and that subprocess.
+
+An HTTP server is a remote endpoint the agent connects to directly over the network. Use one when the system is hosted elsewhere, when your organization exposes internal MCP endpoints, or when you do not want the agent spawning a local subprocess for the integration at all.[^2] This is the form that matters most for the client-stack work this lesson is about, because most of the systems where a client's work lives, their ticketing platform, their CRM, their internal data service, are not on your machine. They are remote, and the agent reaches them as a remote service, usually over an authenticated connection.
+
+The consultant reads the transport as a signal about where the blast radius sits. A local stdio server can reach files and local resources, which matters when the agent needs to work against a project on disk. A remote HTTP server reaches the client's live production systems, which is where an agent with a bad boundary can do real damage to a business that trusted you. So the transport is not the interesting decision. The interesting decision is what the agent gets to do once it is connected, and that is where least privilege enters the picture.
+
+## Least privilege: the discipline of deciding what the agent gets to touch
+
+Here is the consulting principle that separates a safe integration from a dangerous one, and it transfers to any platform and any system. Give the agent the narrowest set of actions that lets it do the job, and nothing more. You do not connect an agent to a client's ticketing platform and hand it every action that platform offers. You connect it and let it do the small set of things the scoped task requires, and you deliberately withhold the actions that could damage data or that the client never asked it to perform.
+
+The reason is blunt. An agent is a tool that acts on instructions, and the more it can do, the more it can do wrong. Every destructive or far-reaching action you leave enabled is a thing that could fire on a misunderstanding, on a bad instruction, or on a system the client depends on. The client's production ticketing system is not a playground. The whole engagement rests on you not being the consultant who connected an agent to it and left every action switched on. Least privilege is how you keep that promise, and it is a promise you make in the integration design, not a hope you carry into the demo.
+
+MCP gives you the lever to enforce this precisely. Hermes supports per-server filtering, so you can expose only the MCP tools you actually want the agent to see, and you can block the rest. In the server configuration you can specify an include list, the tools the agent is allowed to reach, and an exclude list, the tools that are present on the server but deliberately hidden from the agent.[^3] This is configuration-level exposure control. It is not the agent deciding what is safe to use in the moment. It is you, the consultant, deciding up front, in a file you can review and hand over, exactly which actions exist for the agent and which are locked away.
+
+The exclusion matters more than most people expect, because some real integrations expose actions that should never be available to an agent. A ticketing server may offer a delete action. A CRM may offer a bulk-write action. A payments platform may offer a refund action. Those are real capabilities that the server happens to expose, and none of them belong in an agent's hands unless the scoped task explicitly requires them. The consultant's move is not to trust that the agent will be careful. It is to remove the dangerous actions from the agent's reach entirely, so that care is never required. If the action is not there, the agent cannot take it, no matter what it is told.
+
+Hermes also runs a curated catalog of MCP servers that have been reviewed, and you can install an entry from the catalog rather than hand-writing its config. The catalog install flow goes further and, after credentials are set, probes the server for everything it exposes and walks you through a checklist of tools to enable, so the narrow set is chosen deliberately rather than assumed. That install-time checklist is the least-privilege conversation made concrete: you look at every action the system offers and you tick only the ones the job needs.[^4] The discipline of this lesson is to treat that checklist not as a formality to speed through but as the design decision it is.
+
+## Credentials and trust: how to handle the keys without leaking them
+
+Connecting an agent to a system the client owns almost always means handling credentials, and this is where an integration either earns trust or destroys it. The rules here are simple and non-negotiable, and the consultant who treats credentials carelessly will not survive contact with a client's security team.
+
+First, an agent connecting to external systems does not get your whole environment. Hermes does not pass a full shell environment to the MCP subprocesses it spawns. It passes only a safe baseline set of variables, PATH and HOME and a few others, and everything else, especially API keys and tokens and secrets, is excluded unless you explicitly add it. When an integration needs a credential, you add that one key through the server's own environment configuration, so the subprocess receives exactly the secret it needs and nothing it does not. This is how an integration avoids the failure mode where a process with access to everything quietly sends a client's secrets somewhere it should not.[^5]
+
+Second, errors are scrubbed. If an MCP tool call fails, credential-like patterns in the error message are redacted before the agent sees them. A failed call does not dump a token or a key back into the conversation where a log or a transcript could capture it.[^5] That matters more than it sounds, because a consultant debugging a failed integration will happily read a long error, and the last thing you want is that error carrying a credential into a session record that outlives the debugging.
+
+Third, and this is the trust discipline that has no equivalent in a config file, do not install an integration you have not vetted. Hermes' catalog entries are reviewed before they ship, but the documentation is blunt that you should still read the manifest before installing: the source repository, the bootstrap commands, the invocation. A "one-click install" is only safe if the thing it installs does what you expect. When you connect an agent to a client's stack, you are vouching for every piece of that connection. Reading what a server actually runs before you let it near the client's systems is not paranoia. It is the baseline of the job.[^4]
+
+The consulting lesson under all three is that an integration is a trust boundary, and you are the one who designs and defends it. You decide which credentials cross it, and you do it one key at a time. You make sure failures do not leak what crossed. And you do not let code you have not read cross it at all. A client will forgive an integration that took a little longer to set up. They will not forgive one that leaked a credential or reached a system it should not have.
+
+## The verification reflex, applied to a live connection
+
+Everything from lesson 8 and lesson 9 comes back here, because an integration is a claim you must verify in the running system before you believe it. Configuring a server is not the same as connecting to it, and connecting to it is not the same as the agent successfully using its tools on the client's real system.
+
+The two failure modes you will actually meet in the field are both configuration-shaped, and both are checkable. The first is that the server does not connect. The causes are usually mechanical: the command binary is not on the path, the server is unreachable over the network, an HTTP endpoint requires authentication that has not completed, the connection simply timed out. You diagnose it the way you diagnose any failing dependency, by checking the startup logs and confirming the prerequisite is actually present. The second is that the server connects but its tools do not appear. That one is almost always a naming or an enablement problem, the server is configured under the wrong key, or its tools were filtered out by the exposure control you set, or the toolset that carries MCP tools is not enabled on the platform the client uses. In both cases the answer comes from inspecting the live state, not from re-reading the brochure.[^6]
+
+Then there is the test that decides the handover, and it is the same test lesson 9 drilled into you. You do not trust that the connection works because you configured it. You give the agent a real task that requires the integration, and you watch it work end to end. You confirm the MCP tool actually fired, that the agent reached the client's real system and not a guess, that the action it took is exactly the action the scope allowed, and that nothing it was not supposed to touch was touched. The integration you present at handover is the one you watched succeed against the live system, not the one that connects on paper.
+
+## Worked example: wiring the intake agent into the client's stack
+
+Put it together on the engagement you have carried through this series. The claims-intake agent drafts responses to customer queries, checks account history, and flags anything it cannot verify. Up to now it reached a policy document and an account-history file that you gave it. That was the demo. The client now wants it to do the real thing: work against the actual systems their team uses every day, their ticketing platform and their internal customer-data service. This is the moment this lesson is about, and it is where the consultant earns the fee or loses the account.
+
+You start by deciding the boundary, on paper, before you configure anything. The scoped job is: read an incoming query, look up the customer's data in the internal service, and file a draft reply back into the ticketing platform for a human to review. Those are the only actions the agent needs. You write that list, and you are explicit about what is not on it. The agent does not delete tickets. It does not bulk-update customer records. It does not close anything without a person. The delete and bulk actions exist on the servers the client uses, but they are not part of this job, so they are not part of this agent's reach.
+
+Then you configure the integrations to match the boundary. The internal customer-data service is remote, so it connects as an HTTP server, and the agent reaches it as a remote endpoint. The ticketing platform connects the same way. For each server you set the exposure control to include only the tools the job needs and to exclude the rest, so the dangerous actions are gone rather than discouraged. You handle credentials the way the discipline demands, adding the specific keys each integration needs through the server's own environment configuration rather than handing the processes your whole environment, and you confirm that failures cannot echo those keys back.
+
+Then you prove it. You give the agent a real customer query and you watch it work against the live systems. You confirm it calls the customer-data tool before it says anything about the account, that it files the draft into the ticketing platform for review, and that it never reaches for an action you excluded. You check the trace the way lesson 9 taught you, because the integration is only real when you have watched it fire. When the client's team asks, at handover, whether the agent "works with their systems," you answer from the run you just watched: it reads a customer's data, it drafts a reply, it files it for review, and it cannot touch the actions you locked away. Every word of that answer is a thing you verified, and the boundary you drew is exactly why you can say it without crossing your fingers.
+
+## The pitfalls to avoid
+
+**Connecting before scoping the boundary.** The instinct is to wire the agent up and see what happens. The discipline is to write down, before you configure anything, the exact actions the job needs and the exact actions it does not. If you connect first and decide later, the dangerous actions are already in reach while you figure it out.
+
+**Giving the agent everything a server offers.** An integration server exposes many actions, and most of them should never be available to an agent. Least privilege means the delete and the bulk-write and the refund are excluded even though they exist. If an action is not needed for the task, it is not enabled.
+
+**Handing your whole environment to an integration.** An agent process does not need your shell environment, and giving it everything means giving it every secret you have. Pass each integration only the specific credentials it needs, through its own configuration, one key at a time.
+
+**Trusting a connection because you configured it.** Configuring is not connecting, and connecting is not succeeding against the real system. Check the logs, confirm the tools appear, and watch the agent do the real task end to end before you claim the integration to the client.
+
+**Installing integrations you have not read.** A catalog entry that installs in one click is still code, and code can do things you do not expect. Read what a server runs, its source, its bootstrap commands, before you let it near the client's systems.
+
+## Try it
+
+Take the engagement you have been carrying and plan its integrations on paper before you touch any configuration:
+
+1. Name the systems. What does the agent need to reach that it cannot reach today, and where does each one live, on the machine or remote?
+2. Name the actions. For each system, what is the minimal set of actions the scoped task requires?
+3. Name the exclusions. Which actions does each server expose that you will deliberately lock away, and why?
+4. Name the credentials. What is the exact secret each integration needs, and how will you give it that one secret without exposing the rest of your environment?
+5. Name the proof. What real task will you run against the live system to watch the integration succeed before you claim it to the client?
+
+If you can answer all five, you can wire an agent into a client's stack without breaking it. If your instinct is to find a server, install it, and try the flashiest action first, that is the builder reflex again. Stop, and write the boundary down first.
+
+## What's next
+
+You can now connect an agent to the systems where the client's work actually lives, decide exactly what it gets to touch, and prove the connection against the live stack before you claim it. But there is a limit to where this lesson has taken you. Everything you have done so far, the agent has done because someone was there to ask it. The next lesson removes that dependency. It covers automation and cron jobs, how to turn a one-off win, an integration that works when you run it, into reliable recurring value that fires on a schedule whether anyone is watching or not. Where this lesson made the agent able to reach the client's systems, the next one makes it able to act on them without waiting to be asked, and it teaches you the discipline of unattended work that does not quietly go wrong.
+
+[^1]: Hermes Agent Docs, MCP (Model Context Protocol), the built-in MCP client, how it connects to external tool servers and auto-discovers and registers their tools at startup so they are usable like any built-in tool. [hermes-agent.nousresearch.com/docs/user-guide/features/mcp](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp)
+[^2]: Hermes Agent Docs, MCP (Model Context Protocol), the two kinds of MCP servers, stdio servers that run as local subprocesses and HTTP servers that are remote endpoints, and when to use each. [hermes-agent.nousresearch.com/docs/user-guide/features/mcp](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp)
+[^3]: Hermes Agent Docs, MCP Config Reference, per-server tool filtering with `tools.include` and `tools.exclude` and config-level exposure control. [hermes-agent.nousresearch.com/docs/reference/mcp-config-reference](https://hermes-agent.nousresearch.com/docs/reference/mcp-config-reference)
+[^4]: Hermes Agent Docs, MCP (Model Context Protocol), the curated catalog, the install-time tool selection checklist, and the trust model that says to read the manifest before installing. [hermes-agent.nousresearch.com/docs/user-guide/features/mcp](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp)
+[^5]: Hermes Agent Docs, MCP (Model Context Protocol), Security Model, stdio environment filtering that excludes secrets unless explicitly added, and credential stripping in error messages. [hermes-agent.nousresearch.com/docs/user-guide/features/mcp](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp)
+[^6]: Hermes Agent Docs, MCP (Model Context Protocol), Troubleshooting, common causes when a server does not connect or its tools do not appear, and how to diagnose them. [hermes-agent.nousresearch.com/docs/user-guide/features/mcp](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp)

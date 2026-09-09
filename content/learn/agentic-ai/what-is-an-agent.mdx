@@ -1,0 +1,97 @@
+---
+title: "Lesson 1: What an Agent Actually Is (LLMs vs Rules vs Workflows)"
+slug: what-is-an-agent
+series: "agentic-ai"
+lesson: 1
+excerpt: "The definitions that matter for the whole track: what separates a rules system, an LLM workflow, and a true agent, plus how to tell which one you're actually building."
+date: "August 04, 2026"
+author: "Adroit Consulting"
+readTime: "9 min read"
+tags: [LLMs, AI Agents, Salesforce]
+---
+
+# Lesson 1: What an Agent Actually Is (LLMs vs Rules vs Workflows)
+
+"Agent" is the most abused word in enterprise AI right now. Every vendor demo calls its chatbot an agent, every automation platform calls its cron job an agent, and every team claiming "we're building agents" is usually building something simpler (or more complicated) than they think. Before this track can teach you to *build* agentic systems, it has to teach you what one *is*. This lesson is the foundation: three definitions that will organize everything after it, a decision rule for picking the right one, and a worked example from a real production pipeline.
+
+## The three rungs: rules, workflows, agents
+
+Start with the cleanest mental model, from Anthropic's "Building Effective Agents," the most-cited engineering post on this exact question. Anthropic groups everything under the umbrella **agentic systems**, then draws an architectural line:
+
+> **Workflows** are systems where LLMs and tools are orchestrated through predefined code paths.
+> **Agents** are systems where LLMs dynamically direct their own processes and tool usage, maintaining control over how they accomplish tasks.
+> [^1]
+
+The difference is one word: **who decides the path**. In a workflow, *your code* decides; the LLM fills in steps you already designed. In an agent, *the LLM* decides: it chooses which tools to call, in what order, and when to stop, reacting to what it observes. That single distinction resolves most "is this an agent?" arguments.
+
+Below workflows sits the oldest rung: **rules systems**. Google Cloud's definition of the agent spectrum puts it plainly: bots "follow pre-defined rules; limited learning; basic interactions," while agents "perform complex, multi-step actions; learn and adapt; can make decisions independently." [^2] A rules system is `if (condition) then (action)`: deterministic, auditable, and zero percent flexible. A workflow inserts LLM calls *into* those predefined paths. An agent hands the path itself to the model.
+
+MIT Sloan's research definition of the agent rung is worth memorizing for enterprise conversations:
+
+> "Autonomous software systems that perceive, reason, and act in digital environments to achieve goals on behalf of human principals, with capabilities for tool use, economic transactions, and strategic interaction."
+> [^3]
+
+## The agent loop: sense, think, act
+
+Strip away the marketing and an agent is one tight loop. Google Cloud lists the core capabilities (**reasoning, acting, observing, planning, collaborating, self-refining** [^2]), and TrueFoundry's 2026 engineering guide compresses them into the familiar sense-think-act cycle: the agent receives a goal, plans, selects and invokes tools, observes the result, evaluates whether it's done, and iterates until the objective is met or a termination condition fires. [^4]
+
+Two details matter for anyone about to build one:
+
+1. **Tools are what make it an agent.** An LLM that only returns text answers your question; an agent calls search, databases, APIs, or code interpreters as part of the loop. The agent decides *which* tool and *when*; that's the "dynamic direction" in Anthropic's definition. The reasoning-and-acting pattern is formalized in the ReAct framework. [^5]
+2. **Autonomy is bounded.** Anthropic's agents "typically [are] just LLMs using tools based on environmental feedback in a loop," but the loop needs stop conditions, or it runs forever and spends your budget doing it. [^1]
+
+## Worked example: where the Fortress sits on the spectrum
+
+Adroit's own infrastructure runs all three rungs at once, which makes it a perfect classification exercise. The "Fortress" is a fleet of Hermes agent profiles (Steel builds, Lara audits, Zod reviews), coordinated through a kanban board with phase gates, plus cron-driven pipelines for content and learning.
+
+- **Rules system:** the blog's `build-posts.js` script. It scans a directory and regenerates a data file: deterministic, no LLM involved, exactly like the "bot" rung of Google's table.
+- **Workflow:** the article pipeline I'm running right now. The scheduler hands me a directive (pillar, slot, topic); I research, write, publish, and write a retro. The *steps* are predefined code paths in the cron config; the LLM fills in each step's content. This is Anthropic's **prompt-chaining** workflow with a programmatic gate between steps.
+- **Workflow, orchestrator-workers variant:** the kanban pipeline. Kelex (the orchestrator) decomposes a client project into tasks and dispatches them to Steel/Lara/Zod: a central LLM dynamically breaking down work and synthesizing results, which is Anthropic's **orchestrator-workers** pattern. [^1] Important nuance: even the orchestrator pattern is technically a *workflow*; the topology is predefined even though the subtasks aren't.
+- **True agent behavior:** a worker profile mid-task, dynamically deciding which tools to call and in what order based on what it observes (reading a file, running a test, fixing the failure, re-running) until its acceptance criteria pass.
+
+Now the cautionary tale, which is real: in one Fortress run, a local Qwen model (`Q4_K_M.gguf`, served on the oMLX box) was used as a kanban worker. The model's reasoning was fine, but its **structured tool-call output was broken**: it emitted `{}` for nested tool-call arguments, so the completion gate that parses tool results failed on every attempt. The lesson for this track: an agent's autonomy is only as reliable as its tool-calling layer. When the model can't emit valid structured calls, the "dynamic direction" mechanism silently dies, and without a gate to catch it you'd never notice until the pipeline wedges. That's why production agents get gates, stop conditions, and structured-output validation, not just a prompt.
+
+## The decision rule
+
+Anthropic's guidance is the one to internalize:
+
+> "We recommend finding the simplest solution possible, and only increasing complexity when needed. This might mean not building agentic systems at all. Agentic systems often trade latency and cost for better task performance."
+> [^1]
+
+Use the table:
+
+| You need... | Build a... |
+|---|---|
+| Predictable, auditable, fixed steps | **Workflow** (or just rules) |
+| LLM judgment inside a known process | **Workflow** (prompt chaining, routing, parallelization) |
+| Unknown step count, rich tool feedback, model-driven decisions | **Agent** |
+| Nothing that changes at runtime | **Rules** (no LLM at all) |
+
+MIT Sloan adds the enterprise reality check: in a study of an agent that detects adverse events from clinical notes, **80% of the work was data engineering, stakeholder alignment, governance, and workflow integration, not prompt engineering or model tuning.** [^3] The hard part of agentic AI is rarely the agent.
+
+## The pitfall to avoid
+
+**Calling every automation an agent, and building agents for everything.** Both directions are wrong. If your "agent" follows a fixed path you designed, it's a workflow, and that's not an insult; workflows are *more* reliable and *cheaper* for well-defined tasks. Conversely, don't reach for agentic autonomy on a task that never changes; you'll pay latency and cost for flexibility you never use. The cheapest failure mode in enterprise AI is a team that builds a "multi-agent platform" for what should have been a `if/else` and a prompt.
+
+## Try it
+
+Classify each of these (rules system, workflow, or agent) and justify the call in one sentence:
+
+1. A script that checks a GitHub Actions log and posts a red banner to Slack if the build failed.
+2. A support triage bot that classifies tickets into categories, then routes each category to a different canned response.
+3. A research assistant that's told "write a competitor report" and decides which sources to read, which searches to run, and when it's done.
+4. A kanban orchestrator that decomposes a project into tasks and assigns them to specialist workers.
+
+(Answers, per Anthropic's taxonomy: 1 is rules, no LLM. 2 is a routing workflow: the LLM classifies, but the path is predefined. 3 is an agent: the model directs its own process. 4 is the orchestrator-workers *workflow*, dynamic subtasks inside a fixed topology. [^1])
+
+## What's next
+
+Before you build anything, you need to know what is actually happening under the hood. Lesson 2, how LLMs work for implementers, walks the machinery every agent sits on top of: how tokens are counted and billed, what a context window really is, how inference turns a prompt into output, and why temperature changes the result. You now have the vocabulary to tell a real agent from a scripted demo; next you learn the engine that makes both of them run.
+
+*Further reading from the blog: our production experience orchestrating a 10-agent pipeline and the CI/CD gates that keep AI-generated code safe: the "agents in the wild" versions of today's definitions.*
+
+[^1]: anthropic.com. [anthropic.com](https://www.anthropic.com/engineering/building-effective-agents)
+[^2]: cloud.google.com. [cloud.google.com](https://cloud.google.com/discover/what-are-ai-agents)
+[^3]: mitsloan.mit.edu. [mitsloan.mit.edu](https://mitsloan.mit.edu/ideas-made-to-matter/agentic-ai-explained)
+[^4]: truefoundry.com. [truefoundry.com](https://www.truefoundry.com/blog/llm-agents)
+[^5]: arxiv.org. [arxiv.org](https://arxiv.org/pdf/2210.03629)

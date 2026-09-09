@@ -1,0 +1,118 @@
+---
+title: "Lesson 9: Integration Reliability: Idempotency, Retries, Error Handling, and Dead-Letter Design"
+slug: integration-reliability-idempotency-retries-error-handling-dead-letter-design
+series: "salesforce-architect"
+lesson: 9
+excerpt: "The reliability toolkit every integration needs: idempotency keys and message IDs so retries are safe, the transient vs. poisoned error taxonomy, bounded retry policies with backoff, per-pattern error handling, and dead-letter design with error tables so nothing is silently lost."
+date: "August 12, 2026"
+author: "Adroit Consulting"
+readTime: "9 min read"
+tags: [Salesforce, Architecture, Integration, Reliability]
+---
+
+# Lesson 9: Integration Reliability: Idempotency, Retries, Error Handling, and Dead-Letter Design
+
+Lessons 4 through 8 gave you the mechanisms (REST, SOAP, Bulk), the patterns (request-reply, fire-and-forget, batch), the event bus, and the middleware decision. This lesson is about what happens when those parts fail, because in a distributed integration, failure is not exceptional. It is the default. Salesforce's own consulting architects treat error handling and recovery as a mandatory part of the solution: "It's important to include an error handling and recovery strategy as part of the overall solution." [^1] The question is never *whether* a call will fail. It is whether the system survives the failure with correct data.
+
+## Define the terms
+
+- **Idempotency**: an operation produces the same result whether it executes once or many times. [^2] A retried create must not create a duplicate.
+- **Transient error**: a failure that is likely to resolve on retry, like a network timeout or a brief service outage. [^3]
+- **Poisoned message**: a message that will never process successfully no matter how many times you retry it, because the problem is in the message itself (bad auth, missing resource, invalid payload). [^3]
+- **Retry queue**: a queue that holds messages for automatic re-processing. [^3]
+- **Dead-letter queue (DLQ)**: a channel that holds messages the messaging system determines it cannot or should not deliver, awaiting manual intervention. [^4]
+- **Control/error tables**: supporting database structures an ETL process uses to track last run time, log errors, and restart after failure. [^1]
+
+## The failure taxonomy: transient vs. poisoned
+
+Classify every error before you decide how to react. MuleSoft's error-handling reference splits integration errors into two buckets: [^3]
+
+- **Transient errors** are sporadic and typically resolve by retrying: a networking error, a request timeout, a momentary 503.
+- **Poisoned messages** never resolve by retrying: an authentication error, a resource-not-found error, a malformed payload. Retrying them just burns cycles.
+
+The trap is that transient errors only stay transient for so long. "Transient errors are only transient errors for so long, and can become poisoned messages that need manual intervention." [^3] A service that is unavailable for an hour looks identical to a service that is permanently misconfigured after your first four retries. That is why every retry policy needs a bounded retry budget, and why everything past the budget lands in a dead-letter channel with an owner.
+
+## Idempotency: the foundation of safe retries
+
+An idempotent operation can be replayed without side effects. In Salesforce's words: "Idempotent capabilities guarantee that repeated invocations are safe. If idempotency isn't implemented, repeated invocations of the same message can have different results, potentially resulting in data integrity issues. Potential issues include the creation of duplicate records or duplicate processing of transactions." [^1]
+
+The classic failure is a flaky network on a REST create. The remote system sends a create request, the response is lost, the remote system retries, and Salesforce now has two identical records. Steve Bobrowski's Salesforce engineering post walks through exactly this scenario and the two ways to fix it: [^2]
+
+1. **Unique field on the target object.** Make a custom field (like `OrderNumber__c`) unique and required. The second create fails with `DUPLICATE_VALUE` and the caller traps that error as "already done." Bobrowski calls this the simpler, centralized, maintainable option: one unique-field configuration replaces query-then-insert logic duplicated across every client. [^2]
+2. **Upsert by external ID.** Salesforce's integration guide: "operations that create records in the remote system must check for duplicates before inserting. Check by passing a unique record ID from Salesforce. If the record exists in the remote system, update the record. In most systems, this operation is termed as an upsert operation." [^1] REST API upsert sends a PATCH to `/sobjects/Account/customExtIdField__c/11999` and Salesforce inserts or updates based on the external ID value. [^5]
+3. **Message ID tracking in a custom receiver.** "The most typical method of building an idempotent receiver is for it to track duplicates based on unique message identifiers sent by the consumer." [^1] The consumer generates a UUID per logical message, sends it in the payload, and the receiver stores it in a custom object with a unique constraint; a repeat of the same ID is a duplicate by definition.
+
+For the UI API, Salesforce ships native support: include an `Idempotency-Key` header value (UUID v4 format) and the server caches the response of the first mutation, returning the cached response instead of mutating again on an identical retry. It applies to the `/ui-api/records/{recordId}` resource for POST, PATCH, and DELETE, keys auto-expire after 30 days, and the cached response has a 9 MB ceiling beyond which idempotency is not honored. [^6]
+
+## Retry policy: bounded, backed off, and pattern-aware
+
+Once the operation is idempotent, retries become safe. Then you decide how many, how fast, and who owns them. The integration patterns guide gives per-pattern answers: [^1]
+
+- **Flow**: on failure, a detailed email is sent to the admin who last modified the flow; the guide says to enhance this with fault paths on every fallible element, writing errors to a custom object or creating a Case so failures are monitored and tracked. Recovery needs a custom retry mechanism if quality-of-service demands it.
+- **Apex callout**: the callout only handles exceptions in the initial invocation (for example, a timeout when no positive acknowledgment arrives); "the remote system must handle subsequent errors when the initial invocation is handed off for asynchronous processing." Salesforce does not natively support reliable messaging protocols like WS-ReliableMessaging, so guaranteed delivery is a customization: positive acknowledgments plus custom retry logic.
+- **Platform events / CDC**: error handling is the remote subscriber's job, because "platform events aren't processed within database transactions" and published events can't be rolled back. Recovery is replay: the replay ID is atomic and increases with every event, so the subscriber replays from the last successfully captured event, and high-volume messages are stored for 72 hours.
+- **ETL batch**: implement retry for errors that aren't infrastructure-related; on repeated failure, use control/error tables to log the error, retry the read, terminate if unsuccessful, and send a notification. If the operation succeeds but individual records fail, "a delayed restart might be a better solution because it allows time to triage and correct data that might be causing the errors." [^1]
+
+Three rules shape every retry policy:
+
+1. **Only retry transient failures.** 5xx, timeouts, and connection resets are retry candidates. A 400 with a validation message is a poisoned message; retrying it guarantees another failure. [^3]
+2. **Honor backoff signals.** When a rate-limited response includes a `Retry-After` header, wait that long, and use exponential backoff rather than hammering the endpoint. [^7]
+3. **Set a budget and escalate.** After N attempts, the transient error becomes a poisoned message: stop retrying, log it, and route it to the dead-letter channel. [^3]
+
+Know the status codes you are reacting to. The REST API error reference: 401 means the session ID or OAuth token expired or is invalid; 403 with error code `REQUEST_LIMIT_EXCEEDED` means you've exceeded org API request limits; 404 is a missing resource; 500 is a Lightning Platform error; 502 is Salesforce Edge failing to reach the instance; 503 means the server is down for maintenance or overloaded. [^8] That mapping tells you which codes belong in the retry loop (502, 503, 500 with care) and which belong in the DLQ (400, 404, 401 after one re-auth attempt).
+
+One more error-handling trap, this one inside the response body: the Composite API returns HTTP 200 even when a subrequest failed and the transaction rolled back. "Proper error handling should examine the response body, not just HTTP status codes." [^1] If you only check the status, a fully rolled-back composite call looks successful.
+
+## Dead-letter design: where failures go to be seen
+
+The Dead Letter Channel is one of the original Enterprise Integration Patterns: "When a messaging system determines that it cannot or should not deliver a message, it may elect to move the message to a Dead Letter Channel." [^4] The channel may be called a dead message queue or dead letter queue (DLQ). [^4]
+
+The DLQ exists because silent failure is the worst failure mode. A message that vanishes into a retry loop or a discarded batch leaves no trace, no owner, and no path to correction. A message in a DLQ has a record: what it was, why it failed, when it failed, and who can inspect it. The EIP catalog frames the rule: a messaging system should move undeliverable messages to a dead letter channel instead of discarding them. [^4]
+
+On the Salesforce side, the DLQ is usually a custom object. The integration patterns guide prescribes the pattern for flows: "put in custom behavior such as creating a case or writing errors to a custom object that can be monitored and tracked." [^1] A minimal `Integration_Error__c` design: [^9]
+
+- `Message_Payload__c` (long text): the full request or event body.
+- `Error_Message__c`, `Error_Type__c`, `Error_Code__c`: the failure details.
+- `Retry_Count__c` and `Status__c`: how many attempts happened and whether the message is `New`, `Retrying`, `Resolved`, or `Escalated`.
+- `Subscriber__c` or `Integration__c`: which consumer failed.
+
+For ETL integrations the parallel structure is the control/error table: the job reads the control table to find the last run time, processes, then updates the control values on success or writes restart values on failure, so a rerun continues where the previous run stopped instead of redoing or skipping work. Salesforce's guide recommends creating those tables in an environment the ETL tool can reach even when Salesforce is unavailable, because "Salesforce should be treated as a spoke in this process and the ETL infrastructure is the hub." [^1]
+
+## Worked example: order sync with three failure modes
+
+A manufacturer syncs orders from Salesforce to an external ERP. The integration is a request-reply callout (create the order in the ERP), an event stream (ERP confirms shipment via platform events), and a nightly batch (invoice reconciliation). The architect designs reliability into each leg.
+
+1. **Idempotent outbound create.** Salesforce sends `Order_Number__c` as the ERP's external key. The Apex callout uses the ERP's upsert-by-external-ID endpoint, so a retry after a lost response updates the existing order instead of creating a second one. [^1]
+2. **Bounded retry with backoff.** The callout wrapper catches `CalloutException` and HTTP 502/503, waits 5 seconds, then 25 seconds, then 125 seconds, then stops: three retries, exponential backoff, no infinite loop. HTTP 400 with a validation error skips the retry loop entirely and writes the payload to the error object. [^3] [^8]
+3. **Idempotent inbound receiver.** The ERP posts shipment updates to a custom Apex REST service. The service checks a `Message_ID__c` unique field before applying the update; a duplicate message ID returns "already processed" instead of double-applying a status change. [^2]
+4. **Replay-based event recovery.** The platform-event subscriber in the ERP persists the last `ReplayId`. When the subscriber restarts, it resubscribes from that replay ID and catches up on anything published during the outage, within the 72-hour retention window. [^1]
+5. **Dead letter on escalation.** After the retry budget is exhausted, the flow's fault path writes the record to `Integration_Error__c` with `Status__c = 'Escalated'` and creates a Case for the integration support queue. A scheduled job re-processes records marked `Retrying` after an operator corrects the root cause. [^1]
+6. **Batch checkpointing.** The nightly reconciliation reads a control table for the last successful run timestamp, loads only records changed since, and on failure writes restart values so the next run resumes cleanly; failed rows land in an error table and trigger a notification. [^1]
+
+The design rule that ties it together: every message is either processed exactly once, or parked somewhere visible with enough context to be fixed. Nothing is dropped on the floor.
+
+## The pitfall to avoid
+
+**Retrying without classifying, then failing without recording.** The two classic failures compound: an integration retries a poisoned 400 validation error nine times before giving up, and when it gives up it just logs a debug line, so the bad payload sits invisible in the logs while the business wonders why orders stopped flowing. The fix is the whole lesson: idempotency so retries are safe, a taxonomy so only transient errors are retried, a budget so retries terminate, and a dead-letter record so the failure has an owner. [^3]
+
+## Try it
+
+1. A REST create call times out, the client retries, and Salesforce ends up with two identical orders. Which reliability mechanism prevents this, and where does it live? *(Answer: idempotency, enforced on the receiving side: a unique field on the object, an upsert by external ID, or a message-ID dedupe store.)* [^2]
+2. You get HTTP 503 from a downstream service at 3 PM and again at 3:05 PM. Retryable or poisoned, and how do you know? *(Answer: transient: 503 means the server is down for maintenance or overloaded; retry with backoff, and escalate to the DLQ only after the budget is spent.)* [^8]
+3. A composite API call returns HTTP 200, but the order was never created. Where did the failure information go? *(Answer: into the response body: composite endpoints return 200 even when subrequests fail and the transaction rolls back. Check the body, not just the status.)* [^1]
+4. Your platform-event subscriber was down for two hours and missed a burst of events. How does it recover without losing anything? *(Answer: replay from the last successfully captured replay ID; high-volume event messages are retained for 72 hours.)* [^1]
+5. A nightly batch import succeeds overall but 40 of 10,000 records fail validation. Immediate restart or delayed restart, and why? *(Answer: delayed restart: it gives you time to triage and correct the data causing the errors, per the integration patterns guide.)* [^1]
+
+## What's next
+
+You can now build integrations that survive timeouts, duplicates, and poisoned payloads with idempotency, retries, error handling, and dead-letter design. The next lesson is a General Systems Architecture for AI slot, and it shows why the reliability rules you just learned are really the laws of distributed systems. You will see sync versus async, queues, and eventual consistency, and how the same constraints hit agent pipelines.
+
+[^1]: architect.salesforce.com. [architect.salesforce.com](https://architect.salesforce.com/docs/architect/fundamentals/guide/integration-patterns.html)
+[^2]: developer.salesforce.com. [developer.salesforce.com](https://developer.salesforce.com/blogs/engineering/2013/01/implementing-idempotent-operations-with-salesforce)
+[^3]: blogs.mulesoft.com. [blogs.mulesoft.com](https://blogs.mulesoft.com/dev-guides/how-to-tutorials/error-handling-integration-patterns/)
+[^4]: enterpriseintegrationpatterns.com. [enterpriseintegrationpatterns.com](https://www.enterpriseintegrationpatterns.com/patterns/messaging/DeadLetterChannel.html)
+[^5]: developer.salesforce.com. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/dome_upsert.htm)
+[^6]: developer.salesforce.com. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.uiapi.meta/uiapi/ui_api_features_records_idempotent.htm)
+[^7]: developer.salesforce.com. [developer.salesforce.com](https://developer.salesforce.com/docs/marketing/marketing-cloud/guide/rate-limiting-best-practices.html)
+[^8]: developer.salesforce.com. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/errorcodes.htm)
+[^9]: hellosnl.blogspot.com. [hellosnl.blogspot.com](https://hellosnl.blogspot.com/2025/04/implementing-dead-letter-queue-for-salesforce-platform-events.html)

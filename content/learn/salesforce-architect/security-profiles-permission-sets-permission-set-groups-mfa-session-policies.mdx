@@ -1,0 +1,124 @@
+---
+title: "Lesson 12: Security, Part 2: Profiles, Permission Sets, Permission Set Groups, MFA, and Session Policies"
+slug: security-profiles-permission-sets-permission-set-groups-mfa-session-policies
+series: "salesforce-architect"
+lesson: 12
+excerpt: "Who can do what in an org. The move from profile-led to permission-set-led access, what a permission set group bundles together, the 2026 MFA enforcement that now touches every login, and the session policies that decide how long a session lives."
+date: "August 15, 2026"
+author: "Adroit Consulting"
+readTime: "10 min read"
+tags: [Salesforce, Architecture, Security]
+---
+
+# Lesson 12: Security, Part 2: Profiles, Permission Sets, Permission Set Groups, MFA, and Session Policies
+
+Lesson 11 covered the sharing model: who can see which *records*. This lesson covers the other half of security: who can do which *things*, and how they get in. Profiles and permission sets decide what a user is allowed to touch. MFA and session policies decide whether the person typing the password is who they say they are, and how long that proof stays valid. An architect who designs for permissions but ignores authentication has built a door with a weak lock.
+
+## Profiles: the one-per-user baseline
+
+Every user has exactly one profile, and it is the baseline for what they can see and do. Salesforce describes a profile as the feature that "determines what users can see and do," and the important part for an architect is what profiles are *for* versus what they are *not* for. [^1]
+
+Profiles should hold the **default settings** a user needs: assigned apps, default record types and page layouts, login hours, login IP ranges, password policies, and session settings. [^1]
+
+You can also configure user, object, and field permissions in a profile. Salesforce is explicit that you should not lean on that: it "strongly recommends" using permission sets and permission set groups instead, because reusable permission set building blocks stop you from creating "dozens or even hundreds of profiles for each user and job function." [^1]
+
+The one-profile-per-user rule is the reason permission sets exist. If a finance analyst and a sales ops analyst both need to edit opportunities, you either clone a profile for each combination (profile explosion) or you give everyone a shared baseline profile and bolt on the specific permissions they need.
+
+## Permission sets: the reusable grant
+
+A permission set is "a collection of settings and permissions that give users access to various tools and functions." It extends access "without changing their profiles," and it is "the recommended way to manage your users' permissions." [^2]
+
+The design rule that matters: **create permission sets for a job or task, not for a title.** A user can hold multiple permission sets, and the same set can be assigned to different users regardless of profile. [^2]
+
+Permissions stack. If a permission is disabled in the profile but enabled in a permission set, the user has it. The example in the docs: if Manage Password Policies is off in the profile but on in one permission set, the user can manage password policies. [^2]
+
+Permission sets can carry a wide range of grants, including: Apex classes, connected app access, custom permissions, field permissions, object permissions, user permissions (app and system), tab settings, and Visualforce pages. [^3]
+
+## Permission set groups: the persona bundle
+
+A permission set group bundles several permission sets into one assignable package that maps to a user persona. You bundle permission sets that correspond to "your user personas," and if different personas share tasks, you reuse the same permission sets inside different groups. A user who has more than one persona gets more than one group. [^3]
+
+Two behaviors make groups powerful for an architect:
+
+- **Muting permission sets.** You can remove a permission from a group *without* editing the underlying permission sets. You create a muting permission set inside the group and remove the access there. This matters when one persona needs a permission that another persona sharing the same underlying set should not have. You avoid duplicating nearly identical permission sets just to strip one field. [^3]
+- **Assignment expiration dates.** When you enable "Permission Set & Permission Set Group Assignments with Expiration Dates," you can cap an assignment. For short-term work with a fixed end date, the user is automatically unassigned after that date. The docs use surge staffing as the example: extra help desk users get the group with an expiration date, then lose access automatically. [^3]
+
+One constraint to remember: a user must hold a user license or permission set license that supports a permission before a permission set or group can grant it. [^3]
+
+## The migration direction: permission-set-led access
+
+Salesforce's guidance is unambiguous: use permission sets and permission set groups to manage access "rather than profiles," to "simplify user management and encourage the principle of least privilege." [^4]
+
+The recommended target state:
+
+1. Assign users the **Minimum Access - Salesforce** profile, or a clone of it if you need different default settings. [^3]
+2. Create permission sets for tasks and jobs.
+3. Bundle them into permission set groups for personas.
+4. Keep profiles for default settings only: assigned apps, record types, page layouts, login hours, IP ranges, password policies.
+
+The migration article walks through a concrete plan: identify user personas, list the tasks each persona performs, document required permissions, then plan the permission sets and groups that deliver them. Before migrating, test everything in a freshly refreshed sandbox and verify both that users can do their jobs and that nobody was over-granted by accident. [^4]
+
+## MFA: now a hard platform enforcement, not a setting
+
+Multi-factor authentication is where "who can do things" meets "who is actually logged in." Salesforce has been pushing MFA for years, but in 2026 it moved from recommended to technically enforced. As of this lesson, there are **two** enforcement tracks running on the same schedule.
+
+**Standard MFA for all employee users.** Salesforce is "enforcing Multi-Factor Authentication (MFA) for all employee logins, including direct UI and Single Sign-On (SSO), across both production and sandbox orgs." This covers anyone who logs into an Employee Community or Experience Cloud site as an internal user. [^5]
+
+**Phishing-resistant MFA for privileged users.** Users with the **System Administrator profile**, or any of **Modify All Data**, **View All Data**, **Customize Application**, or **Author Apex**, must use phishing-resistant MFA (WebAuthn security keys or built-in authenticators, collectively called passkeys). [^6]
+
+The enforcement rolls out by release group. As of the Summer '26 documentation: sandboxes start July 10, 2026, production starts July 20, 2026, and the schedule runs through early September 2026 for later instances. Verify your own org's dates against the release-group schedule rather than assuming a single global date. [^5]
+
+Two practical details an architect should care about:
+
+- The org-wide setting "Require multi-factor authentication (MFA) for all direct UI logins to your Salesforce org" becomes active and admins can no longer disable it. [^5]
+- The "Waive Multi-Factor Authentication for Exempt Users" permission no longer auto-exempts users. To restore an exemption for a valid case (for example automated testing), you must get Salesforce Support approval. The underlying API field (`PermissionsBypassMFAForUiLogins`) is being removed from the PermissionSet and Profile schema, so code that references it will fail to compile once removed. Audit your metadata for it. [^6]
+
+For integrations, the guidance is worth knowing: OAuth web server and hybrid token flows require the user to log in to the Salesforce UI to complete authorization, so those logins are subject to MFA enforcement. JWT Bearer and Client Credentials flows are unaffected because no UI login happens. [^6]
+
+## Session policies: how long a session lives, and how strong it is
+
+Once a user is authenticated, they hold a session. Session security limits exposure when a machine is left unattended and limits the risk of one employee using another's session. [^7]
+
+The default timeout is **two hours of inactivity**. When the timeout hits, the user gets a dialog to log out or continue; if they do not respond, they are logged out. Two behaviors worth flagging: closing the browser tab does not log a user out, and the last-active time refreshes on an interval (roughly every five minutes), so a 30-minute timeout with activity at minute three can let a session run to about 35 minutes. [^7] [^8]
+
+Session settings you can configure on the Session Settings page include: the timeout value, locking sessions to the originating IP, terminating all of a user's sessions when an admin resets their password, forcing logout on timeout, and requiring the HttpOnly attribute on the session ID cookie. [^8]
+
+Salesforce also introduces the notion of **session security levels**. Each login method maps to one of two levels by default: **Standard** or **High Assurance**. You can require High Assurance for sensitive operations (accessing reports, managing IP addresses) or block those setup areas entirely without it. [^7]
+
+Admins monitor active sessions on the **Session Management** page, where they can review session details and end suspicious sessions. Non-admins see only their own. [^7]
+
+## Worked example: standing up an IT Help Desk team
+
+You need access for a support team that views and edits Accounts and Contacts, works Cases, and creates and manages reports. Here is the permission-set-led design from the Salesforce guidance.
+
+1. Assign every member the **Minimum Access - Salesforce** profile. No one on the team needs a custom profile; the baseline gives them the shell, and nothing more. [^3]
+2. Create four task-scoped permission sets: **View and Edit Accounts** (read/edit on Accounts, plus field permissions for the fields they work with), **View and Edit Contacts**, **Create, View, and Edit Cases**, and **Create and Manage Reports** (Create and Customize Reports, Report Builder, Run Reports). [^3]
+3. Bundle all four into a permission set group named **IT Help Desk Team Member**, and assign the group to the team. Reuse any of the four sets inside other groups for personas that share tasks. [^3]
+4. The team should not see the **Account Revenue** field, but other personas using the same Accounts set still need it. Rather than forking the permission set, create a **muting permission set** inside the group and remove read access on Account Revenue there. [^3]
+5. Case volume spikes for a few weeks, so you assign temporary helpers the same group with an **expiration date**. After the date, they are unassigned automatically. [^3]
+
+On the authentication side, anyone on the team who holds a privileged permission (for example View All Data granted via a set) lands in the phishing-resistant MFA population and must register a passkey. Everyone else gets standard MFA. The org-wide MFA setting is now enforced, so plan enrollment for the whole user base before the release-group date lands on your instance.
+
+## Try it
+
+Design the access for a field sales org. You have three personas: **Sales Reps** (edit Opportunities they own, read Accounts and Contacts, log Activities), **Sales Managers** (everything a rep does plus run reports and dashboards and view their team's pipeline), and **Contract Admins** (edit Contracts, no Opportunities).
+
+1. Decide how many profiles you need, and what those profiles should contain.
+2. List the task-scoped permission sets you would create, and which personas share them.
+3. Sketch the permission set groups, and where you would use a muting permission set.
+4. Say which of these personas likely falls under phishing-resistant MFA, and why.
+
+A reasonable answer: one shared Minimum Access profile (or a clone), with all differences carried by permission sets. Sales Managers share the rep-level sets (they do the same tasks) and add reporting sets. Contract Admins get a Contracts set and do not get the Opportunity sets. If a manager should see reports but not edit them, a muting set inside the manager group handles it. The Sales Managers and Contract Admins who are granted privileged permissions like View All Data fall under phishing-resistant MFA; a rep without those permissions does not.
+
+## What's next
+
+You now know who can do what, and how users prove who they are, through profiles, permission sets, permission set groups, MFA, and session policies. The next lesson takes that same security lens and points it outward. It covers external access, how OAuth, SAML single sign-on, connected apps, and communities let machines and outside people into the org without weakening what you locked down.
+
+[^1]: help.salesforce.com. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.users_profiles_using_enhanced_ui.htm&language=en_US&type=5)
+[^2]: help.salesforce.com. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.perm_sets_overview.htm&language=en_US&type=5)
+[^3]: help.salesforce.com. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.perm_sets_best_practices.htm&language=en_US&type=5)
+[^4]: help.salesforce.com. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.migrate_profiles.htm&language=en_US&type=5)
+[^5]: help.salesforce.com. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005321561&language=en_US&type=1)
+[^6]: help.salesforce.com. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005321563&language=en_US&type=1)
+[^7]: help.salesforce.com. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=xcloud.security_overview_sessions.htm&language=en_US&type=5)
+[^8]: help.salesforce.com. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.admin_sessions.htm&language=en_US&type=5)

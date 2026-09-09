@@ -1,0 +1,201 @@
+---
+title: "Lesson 13: RAG Quality: Reranking, Hybrid Search, Metadata Filtering, and Freshness"
+slug: rag-quality-reranking-hybrid-search-metadata-filtering-freshness
+series: "agentic-ai"
+lesson: 13
+excerpt: "The four levers that turn a RAG demo into a system you can trust: reranking to fix top-k precision, hybrid search so exact terms still win, metadata filtering so access control and scope survive retrieval, and freshness so the answers do not go stale."
+date: "August 16, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [LLMs, AI Agents, RAG]
+---
+
+# Lesson 13: RAG Quality: Reranking, Hybrid Search, Metadata Filtering, and Freshness
+
+Lesson 12 promised the next two steps that fix what pure vector search misses: hybrid search, which pairs vector similarity with keyword matching, and reranking, which scores the retrieved chunks a second time before the model sees them. This lesson delivers both, plus the two things that keep an enterprise RAG system honest at scale. The four levers here are reranking, hybrid search, metadata filtering, and freshness. Together they are the difference between a RAG pipeline that returns plausible text and one that returns the right chunk, from the right source, at the right time, for the right person.
+
+Here is the framing that ties all four together. Retrieval quality is not one number. It is four separate risks. Your retriever can return the right answer buried at rank 40, which reranking fixes. It can miss exact terms entirely, which hybrid search fixes. It can surface content the user is not allowed to see, which metadata filtering fixes. And it can surface content that used to be true, which freshness fixes. Each lever closes one gap, and a production system usually needs all four.
+
+## Why the first pass is not enough
+
+A bi-encoder, the kind behind dense vector search, embeds each document into a single fixed-size vector before the query ever arrives. The information is compressed, and that compression loses nuance. [^1] The result is a retriever built for recall: it is designed to get the right answer somewhere in the top 50 to 200, not to put it at rank 1. [^2]
+
+That tradeoff is fine when a human scrolls a results page. It is brutal when an LLM reads only the top 3 to 5 chunks. Pinecone makes the point directly: because of the information loss in a single vector, the top three vector-search documents often miss relevant information, and the relevant one sits below your top_k cutoff. [^1] The Big Data Boutique analysis names the specific failure modes. Chunk boundary artifacts: the sentence that answers the query lands in chunk A and its supporting context in chunk B, so neither scores high alone. Embedding collisions: negations and near-paraphrases collapse into nearby points in vector space, so "refunds are issued within 14 days" and "refunds are not issued after 14 days" sit close enough to confuse a top-k cut. Lexical gaps: rare entity names, IDs, error codes, and product SKUs are exactly the tokens dense embeddings struggle with, and those are the tokens users care about most. [^2]
+
+The naive fix is to raise top_k and stuff everything into the context window. That backfires. LLM recall degrades as the context window fills, and the "lost in the middle" research shows a model's ability to recall information placed mid-context is worse than if it had never been provided at all. [^1] So you cannot pass 100 chunks to the model. The answer is to retrieve many and keep few: maximize retrieval recall on the first pass, then minimize what reaches the LLM on the second. That second pass is reranking. [^1]
+
+## Reranking: the second pass that buys precision
+
+A reranker, also called a cross-encoder, takes a query and a document pair and runs them through a transformer with full attention across both, returning a single relevance score. [^2] Where a bi-encoder must compare two compressed vectors, a cross-encoder lets every token of the query attend to every token of the document, so it captures negations, conditionals, and fine-grained semantic match that single-vector similarity flattens away. [^2] Pinecone's summary: a reranker is more accurate than an embedding model because it receives the raw text instead of a compressed vector, and it runs at query time, so it can judge meaning specific to the query rather than a generic averaged meaning. [^1]
+
+The cost is time. Rerankers are slow, and retrievers are fast. A cross-encoder forward pass is roughly 10x to 100x more expensive per query-document pair than a bi-encoder similarity computation. Scoring a million documents with a small cross-encoder takes on the order of 83 minutes; Pinecone's example is that a small BERT-class reranker over 40 million records would take more than 50 hours on a V100. [^1] [^2] That is why rerankers can never be the first stage. They operate on a shortlist.
+
+The standard pattern is a two-stage cascade:
+
+1. **Stage one, recall.** A fast first-stage retriever, bi-encoder plus BM25 hybrid with ANN over the full corpus, pulls the top 50 to 100 candidates.
+2. **Stage two, precision.** A cross-encoder reranks that shortlist and keeps the top 3 to 5.
+3. **LLM.** Only the reranked top few reach the context window. [^2]
+
+This is the architecture lesson 10 sketched and lesson 12 deferred. Total latency stays well under the first stage alone would suggest, because reranking runs on dozens of candidates, not millions. And the quality gain is not marginal. The reference puts a typical production RAG NDCG@10 lift from adding a reranker at 5 to 15 points, and 20 or more on lexically hard datasets, for under 200 ms of added latency on a small model. [^2]
+
+## Hybrid search: exact terms need a lexical path
+
+Reranking fixes ordering among what you already found. Hybrid search fixes what you never found at all. Dense embeddings capture meaning but not exact matches. A product code, a part number, a legal citation, an acronym: these are exactly the terms that a general embedding model treats as noise or maps to a wrong general meaning, as lesson 11 covered. Keyword search captures them perfectly.
+
+Hybrid search combines the two. It runs BM25, the classic lexical ranking algorithm, alongside vector similarity, and merges the results. [^3] BM25 scores documents by how often query terms appear, weighted for term rarity and document length. It has no semantic understanding, but it is exact and it is fast. [^4] Weaviate's framing, echoed across the retrieval stack, is that hybrid search gives you semantic context and exact-term precision at once. [^5]
+
+The merge step is the part most people get wrong. You cannot just add a cosine score to a BM25 score, because the two live on incompatible scales. BM25 returns unbounded positive scores driven by term frequency and document length; cosine similarity over normalized embeddings sits in a bounded range. Adding them weights one path by accident, not by design. [^6]
+
+The fix is Reciprocal Rank Fusion, RRF. It ignores raw scores entirely and works on rank positions. For each document, sum the reciprocal of its rank across all the result lists, dampened by a constant k:
+
+```
+score(d) = sum over each retriever of 1 / (k + rank(retriever, d))
+```
+
+RRF comes from Cormack, Clarke, and Buettcher's 2009 SIGIR paper, "Reciprocal Rank Fusion outperforms Condorcet and individual Rank Learning Methods," which showed the simple parameter-free formula beating dedicated learning-to-rank algorithms. [^6] The default rank constant k is 60, and Elasticsearch's documentation notes RRF requires no tuning and the different relevance indicators do not have to be related to each other to achieve high-quality results. [^7] A document that ranks first in one list scores 1/61, about 0.0164; one that ranks 100th scores about 1/160. A document ranked in both lists accumulates evidence, which is exactly what you want: hybrid search rewards consistency across the two retrieval views. [^6] [^7]
+
+RRF has become the default hybrid fusion method in OpenSearch, Elasticsearch, Azure AI Search, MongoDB Atlas, and Weaviate. [^8] That is why the phrase "hybrid search is a setting" is wrong. It is an architecture decision: two independent first-stage retrievers, fused on ranks, then reranked for precision. [^7]
+
+## Metadata filtering: scope and access control before ranking
+
+Reranking and hybrid search decide which chunks are relevant. Metadata filtering decides which chunks are eligible. Every vector database worth using lets you attach structured metadata to a vector and filter on it during the query. The fields are usually things like tenant, document type, department, status, access level, version, and created date. [^9]
+
+Filtering matters for three reasons that stack.
+
+**Scope.** When a user asks about the refund policy, you want the legal department's published policy, not a vendor contract that happens to mention refunds. Filtering on department and document type narrows the candidate set before ranking, so the reranker spends its precision budget on plausible candidates instead of irrelevant ones.
+
+**Access control.** Enterprise RAG must not surface content the user is not authorized to see. The reference design for secure RAG treats the source system as the decision maker: if the source system makes the current access decision, copying a stale permission list into the vector store can weaken the boundary. [^10] But where you do store access metadata, filtering on it at query time is the enforcement mechanism. A flat vector store with no access filters is a security hole, a point lesson 10's pitfalls already flagged. Zero-trust retrieval enforces access control at both the data source layer and the vector database query layer. [^11]
+
+**Freshness.** Metadata carries version and status, so you can filter out superseded drafts and surface only current published versions. That is how metadata filtering and freshness, the next section, connect.
+
+The practical shape in code, using the convention from the metadata-filtering reference: every chunk you upsert carries a metadata map, and every query narrows on it before computing similarity. [^9]
+
+```python
+vector_db.upsert(
+    id="chunk_001",
+    vector=[0.12, -0.34, ...],
+    metadata={
+        "tenant_id": "acme-corp",
+        "doc_type": "policy",
+        "department": "legal",
+        "status": "published",
+        "version": "3.2",
+        "access_level": "all-employees",
+        "source_url": "https://docs.acme.com/refund-policy",
+    },
+)
+
+results = vector_db.query(
+    vector=query_embedding,
+    filter={
+        "status": "published",
+        "tenant_id": current_tenant,
+        "access_level": {"$in": user_access_levels},
+    },
+    top_k=100,
+)
+```
+
+The filter runs before the reranker, so the LLM never sees a chunk the user cannot see, and the reranker never wastes a pass on a chunk outside scope.
+
+## Freshness: the answer can be confidently wrong
+
+The quiet failure in RAG is not hallucination. It is staleness. A system can retrieve a perfect chunk, cite it accurately, and still be wrong, because the chunk describes policy that changed last quarter and the index was never updated.
+
+The failure is structural. Basic RAG relies on static, batch-uploaded documents, and that leads to stale embeddings and AI hallucinations when the source changes. [^12] When a policy updates, the source system changes, but the vector index still holds the old embedding, and the retriever happily serves it as if nothing happened. The model has no way to know the chunk is out of date, because the chunk has no timestamp in its meaning.
+
+The fixes fall into two buckets, and you usually need both.
+
+**Re-ingestion on change, not on a schedule.** The reliable pattern is event-driven: when a source document changes, re-chunk and re-embed just that document, and update or replace its vectors. A design guide for enterprise RAG storage puts it as the storage substrate absorbing continuous change, with concurrent ingest and query handled without lock contention, and the metadata layer able to filter "only the current version, only this jurisdiction" as the corpus grows. [^12] Scheduled full re-indexes are a fallback, not a strategy. The system should be able to ingest continuously while queries keep running.
+
+**Metadata as the freshness lever.** This is where filtering and freshness meet. Store version, status, and a source timestamp on every chunk. When a document is superseded, you can mark the old chunks as status "superseded" instead of deleting them, and filter them out at query time. That gives you an audit trail of what was in effect when, without ever serving it as current. Versioned metadata is what makes "surface only current published versions" a filter you can express in one line.
+
+The hard part is knowing when a source changed. That is an integration problem, not a model problem. Your pipeline needs a hook into the source systems, whether a webhook, a file watcher, a change-data-capture feed, or a poller. Enterprise RAG deployed on private data with permission inheritance, evaluation, governance, and observability treats the freshness pipeline as part of the system, not an afterthought. [^13]
+
+## Worked example: hybrid fusion and reranking from scratch
+
+To see the mechanics without a paid API, you can build a two-stage retrieval pipeline in pure Python: a lexical retriever (a naive term-frequency stand-in for BM25), a semantic retriever (simulated scores), RRF fusion on the ranks, then a simulated reranker that reorders the fused shortlist. This is the same shape as lesson 10's miniature RAG: crude parts, real architecture.
+
+```python
+# Two retrievers return (doc_id, score) lists. RRF fuses on rank only.
+
+def bm25_style(docs, query_terms):
+    # naive lexical: score by shared term count (stand-in for BM25)
+    return sorted(
+        ((d, sum(q in doc for q in query_terms)) for d, doc in docs.items()),
+        key=lambda x: x[1], reverse=True,
+    )
+
+def vector_style(docs, query_terms):
+    # naive semantic: arbitrary per-doc relevance (stand-in for embeddings)
+    fake = {"A": 0.9, "B": 0.1, "C": 0.6, "D": 0.3, "E": 0.7}
+    return sorted(((d, fake[d]) for d in docs), key=lambda x: x[1], reverse=True)
+
+def rrf(lists, k=60):
+    scores = {}
+    for results in lists:
+        for rank, (doc, _score) in enumerate(results, start=1):
+            scores[doc] = scores.get(doc, 0.0) + 1.0 / (k + rank)
+    return sorted(scores.items(), key=lambda x: x[1], reverse=True)
+
+docs = {
+    "A": "refund policy within 30 days for purchases",
+    "B": "vendor contract terms mention refunds",
+    "C": "returns and reimbursements process",
+    "D": "security access control policy",
+    "E": "refund not issued after 14 days",
+}
+query_terms = ["refund", "policy"]
+
+lex = bm25_style(docs, query_terms)
+vec = vector_style(docs, query_terms)
+fused = rrf([lex, vec])
+print("lexical :", [d for d, _ in lex])
+print("vector  :", [d for d, _ in vec])
+print("fused   :", [d for d, _ in fused])
+
+# Rerank the fused shortlist with a naive relevance reorder (stand-in for a
+# cross-encoder that sees query + doc jointly and catches negation).
+def rerank(shortlist, query_terms):
+    def relevance(doc):
+        # crude cross-encoder stand-in: penalize "not issued" for a query
+        # that asks about the policy.
+        return -1 if "not" in docs[doc] else sum(q in docs[doc] for q in query_terms)
+    return sorted(shortlist, key=lambda x: relevance(x[0]), reverse=True)
+
+print("reranked:", [d for d, _ in rerank(fused, query_terms)])
+```
+
+Run it and watch what happens. The lexical path surfaces A, the exact match on "refund" and "policy." The vector path, simulated, ranks E high because it is semantically about refunds. RRF fuses the ranks so A stays near the top by consistency across both lists, not by a single inflated score. Then the reranker step demotes E, because the cross-encoder catches the negation: E says refunds are *not* issued, which is not what the query asks. The final order is A first, and E drops. That is the whole production pattern in miniature: retrieve by two complementary paths, fuse on ranks so no single scale dominates, then apply a relevance model that reads the query and document together.
+
+The stand-ins are crude. Real BM25 uses term-frequency saturation and length normalization, real embeddings capture meaning, and a real cross-encoder runs a full transformer over the pair. But the architecture is identical, and the lesson is in the shape: two independent retrievers, rank-only fusion, a precision pass on a shortlist.
+
+## The pitfall to avoid
+
+Do not reach for these levers in the wrong order, and do not add them blindly. The sequence that works is: confirm your first-stage recall is healthy before you spend on a reranker. A reranker can only reorder what the retriever found. If the right chunk is never in the top 100, no reranker helps, and the answer is hybrid search or better chunking, not a more expensive second pass. [^2] Conversely, if the right chunk is in the top 50 but never at rank 1, the retriever is fine and the reranker is the fix. Measure first: build a labeled set of real queries with judged documents, and measure NDCG@10, Recall@k, and MRR, before and after each change. [^7] The reference advice is blunt: if you cannot move the needle with a fast open-weight reranker on a small labeled set, your eval is broken, or the failure is upstream in chunking or query understanding. [^2]
+
+The other trap is treating freshness as optional. Stale content is the failure users cannot see until it bites, and it produces the most damaging kind of wrong answer: one that is fluent, cited, and confidently outdated. Schedule the freshness pipeline as seriously as you schedule the retriever.
+
+## Try it
+
+1. **Build the fusion script.** Run the worked example above. Change the query terms and the fake vector scores, and watch how RRF moves documents that appear in both lists ahead of documents that rank first in only one. Confirm E drops after the reranking step when the query asks for policy rather than exclusions.
+2. **Add a metadata filter to a real index.** Take a vector store you control. Attach tenant, status, and version metadata to a set of chunks, then run the same query with and without a filter that restricts to published, current versions. Count how the candidate set and the top answers change.
+3. **Evaluate, then add a reranker.** Assemble 30 to 50 real queries with a known-good answer chunk. Measure NDCG@10 without reranking, then with a cross-encoder such as the MS MARCO MiniLM baseline from sentence-transformers. Record whether the lift appears, and if it does not, check whether the right chunks were in the top 50 at all. That diagnosis tells you whether the fix is reranking or hybrid search.
+
+## What's next
+
+You now have a retrieval stack you can tune. Lesson 14 steps back from documents to the agent itself: agent memory, the difference between short-term and long-term, and between episodic and semantic. A RAG system answers questions about your data; agent memory is what lets the agent carry its own history and learning across a task and across sessions.
+
+[^1]: pinecone.io. [pinecone.io](https://www.pinecone.io/learn/series/rag/rerankers/)
+[^2]: bigdataboutique.com. [bigdataboutique.com](https://bigdataboutique.com/blog/rag-reranking-improving-retrieval-quality-with-cross-encoders)
+[^3]: weaviate.io. [weaviate.io](https://weaviate.io/blog/vector-search-explained)
+[^4]: medium.com. [medium.com](https://medium.com/@vasanthancomrads/hybrid-search-architecture-for-rag-systems-8d5fdad4ba22)
+[^5]: weaviate.io. [weaviate.io](https://weaviate.io/developers/weaviate/search/hybrid)
+[^6]: bigdataboutique.com. [bigdataboutique.com](https://bigdataboutique.com/blog/reciprocal-rank-fusion-how-it-works-and-when-to-use-it)
+[^7]: digitalapplied.com. [digitalapplied.com](https://www.digitalapplied.com/blog/hybrid-search-bm25-vector-reranking-reference-2026)
+[^8]: serghei.pl. [serghei.pl](https://blog.serghei.pl/posts/reciprocal-rank-fusion-explained/)
+[^9]: dataaihub.co. [dataaihub.co](https://www.dataaihub.co/learn/metadata-filtering)
+[^10]: gsconsultingllc.com. [gsconsultingllc.com](https://gsconsultingllc.com/insights/secure-rag-design-patterns-enterprise-data)
+[^11]: confluent.io. [confluent.io](https://www.confluent.io/blog/enterprise-knowledge-management-with-rag-for-digital-native-companies/)
+[^12]: scality.com. [scality.com](https://www.solved.scality.com/rag-data-storage-for-enterprise-ai/)
+[^13]: atlan.com. [atlan.com](https://atlan.com/know/what-is-rag/)

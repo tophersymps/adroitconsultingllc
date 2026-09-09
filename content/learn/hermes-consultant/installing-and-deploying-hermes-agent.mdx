@@ -1,0 +1,107 @@
+---
+title: "Lesson 7: Installing and Deploying Hermes Agent: Local Setup, Profiles, Gateway, First Run"
+slug: installing-and-deploying-hermes-agent
+series: "hermes-consultant"
+lesson: 7
+excerpt: "The consultant's deployment discipline: how to stand up an agent correctly once you have the go-ahead. Isolation per engagement, a verified first run before you layer on features, and a gateway that turns a laptop experiment into an always-on tool your client actually uses."
+date: "September 1, 2026"
+author: "Adroit Consulting"
+readTime: "11 min read"
+tags: [AI Agents, Consulting, LLMs]
+---
+
+# Lesson 7: Installing and Deploying Hermes Agent: Local Setup, Profiles, Gateway, First Run
+
+Lesson 6 taught you when an agent is the right tool and when to say no. This lesson assumes you said yes, the client signed off, and the work is yours to deliver. It is where the consulting stops being advice and starts being a running system. This lesson teaches you the deployment discipline that separates a consultant who stands an agent up correctly from one who creates a mess the client has to live with. The skills are platform-agnostic: isolate each engagement from every other, verify the base works before you add anything to it, and put the agent on a surface the client actually uses rather than a chat window on your own laptop. Hermes Agent is the working example, but the discipline transfers to any agent you deploy for a client.
+
+## Deployment is consulting work, not install work
+
+There are two ways to get this phase wrong, and they are opposites. The first is to treat deployment as trivial, a matter of running an installer and declaring victory. That consultant shows up with an agent that works on their machine and calls the job done, then leaves the client with something they cannot run or trust. The second is to treat deployment as pure IT plumbing, as if the technical steps were the whole of it. That consultant gets the software running and misses the decisions that make the deployment safe, isolated, and honest for this particular client.
+
+The truth sits between them. Deployment is where the scoping decisions you made in lesson 3 and the boundary decisions you drew in lesson 6 become concrete. The isolation you build, the verification you run, and the way the agent reaches the client's people are consulting judgments, not install steps. Get them right and every later phase is easier. Get them wrong and you hand the client a liability wearing the shape of a deliverable.
+
+## Isolation first: one agent per engagement
+
+The first deployment decision is where the agent lives, and the answer is never the same place as everything else you run. A consultant who runs every client's agent out of one shared configuration, one shared memory, one shared set of credentials, is setting up a failure that may not surface until it is expensive. Client A's data, prompts, and state bleed into Client B's agent. A prompt meant for one engagement starts showing up in another. Nobody does this on purpose, and it almost always comes out of convenience, which is exactly why it is dangerous.
+
+Hermes Agent gives you a clean way to prevent it, and it is the pattern you want to copy. A profile is a separate Hermes home directory with its own `config.yaml`, its own `.env`, its own `SOUL.md`, its own memories, sessions, skills, cron jobs, and state database. [^1] Create a profile for one purpose and you get a separate agent that does not share state with anything else. The documentation is blunt about why this matters: never point two agent processes at the same home, because both write memory automatically and each loads the other's writes into its own system prompt at session start, so two writers on one home compound each other's state until it stops being anything you configured. [^1]
+
+That is the consulting translation of a technical warning. You deploy one profile per engagement, per client, per environment. Create it with a name that means something: `hermes profile create <client>`, and pass a description when you want the orchestrator to know what that agent is good at. [^1] You now have an agent whose state is walled off from every other engagement you carry. When Client A's project ends, you can back it up and archive it without touching Client B. When Client A changes a prompt, it stays in Client A's agent.
+
+The rule transfers directly to any agent platform you use for a client. Ask the same question of whatever you deploy: does this engagement have its own config, its own memory, its own credentials, and its own state, or is it sharing a home with other work? If it is sharing, fix the isolation before you build anything else, because every hour you invest in a shared setup is an hour you will eventually have to claw back to separate it.
+
+## The install: what actually happens
+
+Once you have decided where the agent will live, the installation itself is the part that feels like plumbing, and mostly it is. On Linux, macOS, WSL2, or Android, the install is a single line: `curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash`. On native Windows it is the PowerShell equivalent. [^2] You can also install the Hermes Desktop app on macOS or Windows, which bundles the command line and the desktop interface. [^2]
+
+The part worth understanding is what the installer does, because it explains why the install is usually not where deployments fail. It handles the dependencies, Python and Node.js and ripgrep and ffmpeg, the repository clone, the virtual environment, the global `hermes` command, and the provider configuration. [^2] You do not need to install most of that yourself. The only prerequisite that matters on most platforms is git. [^2] After it finishes you reload your shell and run `hermes`. [^2] On a per-user install the code lives under `~/.hermes/hermes-agent/`, the `hermes` command is a symlink in `~/.local/bin/`, and the data directory is `~/.hermes/`. [^2]
+
+Understand the boundary between code and data, because it is the same boundary you will explain to a client. The code is the program. The data directory is where the agent's config, memory, and state live, and it is exactly the thing a profile isolates. If a deployment goes wrong, you can reinstall the code without losing the data, or you can preserve the code while replacing the data, and knowing which one you are doing is half of troubleshooting.
+
+## The first run: one clean conversation before anything else
+
+Here is the discipline that separates a clean deployment from a haunted one. Before you add any feature, before the gateway, before cron, before skills, get one clean conversation working. The Hermes quickstart makes this the rule of thumb: if the agent cannot complete a normal chat, do not add more features yet; get one clean conversation working first, then layer on gateway, cron, skills, voice, or routing. [^3]
+
+This is not a suggestion about order. It is a debugging strategy and a scoping strategy at once. Every feature you add is a variable, and when you add several at once you can no longer tell which one broke the thing. A clean first run pins the baseline: the model works, the provider is configured, the agent responds. Everything after that is a delta you can test on its own. The same reasoning you applied to the client's work in lesson 6, bounded and reviewable and verified against a clear success criterion, applies to your own deployment. The first clean conversation is your acceptance case for the base install.
+
+The setup wizard gives you a fast path. `hermes setup --portal` logs you in with one OAuth flow, sets your provider, and turns on the tool gateway that covers web search, image generation, TTS, and browser access, all in one command. [^3] If you prefer to choose your own provider, `hermes model` walks you through the choice interactively. [^3] Either way, the test is the same and it is the only one that counts at this stage: you send a message, the agent answers, and the answer is what you expected. Not what you hoped, what you expected. That is the baseline.
+
+## Verify before you layer
+
+The clean conversation is the floor, but it is not the whole verification. A consultant verifies the deployment the way they verify the agent they built, which means confirming the actual state and not assuming it. A couple of checks are worth running before you trust the base.
+
+Know which agent you are actually talking to. Hermes surfaces the active profile in the prompt and the startup banner, so you can tell at a glance whether you are in the client's profile or your default. [^1] If you find yourself configuring the wrong home, that is a fast, cheap failure caught early, and it is exactly why the banner exists. Run `hermes doctor` to check the health of the install; it tells you what is missing and how to fix it, which is a faster diagnostic path than guessing. [^2] Verify sessions actually persist, because a client whose agent forgets the conversation every turn is not a working deployment. [^3] And confirm that the provider and model you configured are the ones the running agent uses, because a deployment that responds with the wrong model is a deployment that will not behave the way you priced it.
+
+None of these are heroic. They are the same verification discipline you used in discovery, applied to your own work. You looked at the numbers instead of trusting memory then. Do the same here. Confirm the state instead of assuming it, and you catch the failures that are cheap now and expensive later.
+
+## The gateway: turning a laptop experiment into a deployment
+
+The last deployment decision is the one consultants most often get wrong, and it is the surface. If you stand up an agent and it only lives in a terminal on your laptop, you have not deployed it for the client. You have prototyped it. A client's agent has to be reachable where the client's people already work, and it has to keep running when you are not watching.
+
+That is what the gateway is. In Hermes Agent the gateway is a single background process that connects to all your configured platforms, Telegram, Discord, Slack, WhatsApp, Teams, and more, and it also runs the cron scheduler and handles sessions. [^4] It is the always-on connection between the agent and the people who use it. A client whose team lives in Slack gets an agent they can message in Slack. A client whose team lives in Teams gets one in Teams. The deliverable is not a chat window on your machine. It is a presence on the client's own channel.
+
+The gateway is also where the always-on piece comes from. You start it, you can install it as a service so it runs in the background and comes back after a reboot, and each profile runs its own gateway as a separate process. [^4][^1] That last point matters for the isolation you set up in the first step. Each client's gateway is its own process with its own bot token, so the always-on surfaces do not collide. [^1] If two profiles accidentally share a bot token, the second gateway is blocked with a clear error, which is a guardrail that protects you from your own mistake. [^1]
+
+Keep the discipline you started with. The gateway is a layer, and you add it only after the base conversation is clean. Configure the platform, connect the client's channel, and verify that a message sent from the client's own tool reaches the agent and gets an answer. That is the real acceptance test of the deployment: not that it works in your terminal, but that it works where the client will actually use it.
+
+## Worked example: standing up the engagement
+
+Put the whole discipline together on a concrete case, and use the engagement you have been carrying through this series. You scoped it, agreed the problem, set the boundary that the agent never sends anything customer-facing without a human review, and named the acceptance cases. The client said yes. Now you deploy.
+
+First, isolation. You create a dedicated profile for this client so their agent does not share state with anything else you run. You name it after the engagement, and you verify, from the prompt or the banner, that you are now talking to that agent and not your default.
+
+Second, the base. You run the setup and get one clean conversation working in the new profile. You send a real message and confirm the agent answers with what you expect. You run the health check, and you confirm the model and provider are the ones you priced. You do not touch the gateway yet, because the base is not yet proven.
+
+Third, the layer. Only now do you connect the gateway to the client's channel and bring the agent to the client's team. You configure the platform, confirm each profile has its own token, and you run the acceptance test from the client's own tool. A message from the client's Slack reaches the agent, and the agent answers. The base holds under the new layer, which tells you the deployment is sound.
+
+Fourth, the honest close. You hand the client a deployment that is isolated, verified, and reachable where they work, with the human review points from lesson 6 still in place. You did not invent features to impress them, and you did not leave them with an untested prototype. You stood up exactly the system you scoped, and you proved it works where they will use it. That is deployment done like a consultant.
+
+## The pitfalls to avoid
+
+**Skipping isolation.** Running every client out of one shared home is the fastest way to turn a small engagement into a cross-client incident. One profile per engagement, before anything else. This is the deployment rule you defend first, because it is the one that protects the client's data.
+
+**Adding features to a broken base.** The instinct is to install everything at once and hope. Resist it. If the agent cannot hold a clean conversation, nothing layered on top of it is trustworthy. Get the base verified, then add, then verify the layer. The order is the strategy.
+
+**Treating install as one-and-done.** Running the installer is not verification. Confirm the agent responds, confirm which profile is active, confirm the model is the one you priced, confirm sessions persist. A deployment you did not verify is a deployment you have not finished.
+
+**Deploying to your laptop and calling it done.** An agent that only lives in your terminal is a prototype, not a delivery. The client's people work in their own tools, and the agent has to be reachable there, always on, and running its own isolated gateway. Deliver the surface the client will actually use.
+
+## Try it
+
+Take the engagement you have carried through this series and run the deployment discipline end to end, in writing:
+
+1. Name the isolation. What profile or isolated home will this client's agent live in, and how is it kept separate from every other engagement you run?
+2. Name the base test. What is the one clean conversation that proves the install works, before you add any feature?
+3. Name the verification. Which checks confirm the agent is healthy, is the right profile, and uses the model you priced?
+4. Name the surface. What platform does the client's team actually work in, and what is the gateway test that proves the agent reaches them there?
+
+If you can write all four before you run a single install command, you are deploying like a consultant. If the first thing you want to do is run the installer and start experimenting, that is the builder reflex again, and the discipline this lesson teaches exists to catch it.
+
+## What's next
+
+You can now stand an agent up correctly: isolated per engagement, verified at the base before you layer anything on, and reachable through a gateway on the channel your client actually uses. The next lesson moves from standing it up to making it behave correctly in the field. It covers configuration, models, providers, and fallback, and it is the lesson that takes on the claim that "it works on my machine" is not enough, which is the exact gap between a deployment that runs in your test environment and one that runs reliably for your client. Where this lesson taught you to get the agent installed and reachable, the next one teaches you to configure it so it stays dependable when the client depends on it.
+
+[^1]: Hermes Agent Docs, Profiles, isolated per-domain homes that keep one engagement's config, memory, and state from bleeding into another. [hermes-agent.nousresearch.com/docs/user-guide/profiles](https://hermes-agent.nousresearch.com/docs/user-guide/profiles)
+[^2]: Hermes Agent Docs, Installation, what the installer does, the per-user layout, prerequisites, and the health check. [hermes-agent.nousresearch.com/docs/getting-started/installation](https://hermes-agent.nousresearch.com/docs/getting-started/installation)
+[^3]: Hermes Agent Docs, Quickstart, get one clean conversation working before layering on gateway, cron, skills, or routing. [hermes-agent.nousresearch.com/docs/getting-started/quickstart](https://hermes-agent.nousresearch.com/docs/getting-started/quickstart)
+[^4]: Hermes Agent Docs, Messaging Gateway, the single background process that connects to your platforms, runs cron, and handles sessions. [hermes-agent.nousresearch.com/docs/user-guide/messaging](https://hermes-agent.nousresearch.com/docs/user-guide/messaging)

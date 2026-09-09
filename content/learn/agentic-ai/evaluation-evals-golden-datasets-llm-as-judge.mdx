@@ -1,0 +1,178 @@
+---
+title: "Lesson 19: Evaluation: Evals, Golden Datasets, LLM-as-Judge, and When It Lies"
+slug: evaluation-evals-golden-datasets-llm-as-judge
+series: "agentic-ai"
+lesson: 19
+excerpt: "An agent you cannot measure is an agent you cannot trust, and the moment a model changes you have no way to know what you traded away. This lesson walks the evaluation stack from the bottom up: the golden dataset that anchors everything, the classic metrics that break on open-ended output, the LLM-as-judge technique that replaces them, and the biases that make a judge lie, from position and verbosity preference to rating its own output too high and being misled by a confident wrong answer."
+date: "August 22, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [LLMs, AI Agents]
+---
+
+# Lesson 19: Evaluation: Evals, Golden Datasets, LLM-as-Judge, and When It Lies
+
+The last two lessons were about making an agent safe to run: Lesson 17 gated what it could reach, and Lesson 18 gated what it could emit. Both assumed you know whether the agent is working. This lesson is about how you know that. If you cannot measure an agent, you cannot say whether a prompt tweak helped, whether a model swap helped, or whether it got worse last week and nobody noticed. Evaluation is the layer that turns "it feels better" into a number you can argue about.
+
+The one idea to carry out of this lesson: **every eval in the stack rests on a golden dataset, and every number that matters has to be checked against human judgment at some point, because the automated judge you lean on can lie.** Start with a small trusted set of inputs with reviewed answers. Everything downstream, the regression gate, the LLM judge, the before-and-after comparison, hangs off that set. [^3]
+
+## What an eval actually is
+
+An eval is a measurement: you run your agent on a fixed set of inputs and score the outputs against a definition of good. For a normal program you would call this a test suite. For an LLM it is harder, because the output is not deterministic and "good" is often a matter of judgment rather than a single correct string.
+
+Three questions an eval stack has to answer, and they are different jobs:
+
+1. **Does it do the task?** Does the agent return a correct, useful answer to a real request?
+2. **Did it regress?** A change to a prompt, a model, or a retrieval config improved or broke something that used to work.
+3. **Is it still honest?** Did it start lying more, or start calling tools it should not call?
+
+A single test cannot answer all three. That is why the stack has layers: a golden dataset for regression, a judge for open-ended quality, and continuous monitoring for drift after release. [^4] Teams that skip straight to the LLM judge without the golden dataset underneath usually end up with a score that moves around but nobody can say whether it means anything.
+
+## The golden dataset: the anchor everything else hangs on
+
+A golden dataset is a fixed, curated set of test cases. Each item records an input your application should handle and, usually, a reviewed definition of what a correct response looks like. The word "golden" means the items are trusted: a person with domain knowledge confirmed the expected output, or deliberately decided the item needs none because a format or safety check is the pass criterion. [^3]
+
+That trust is the whole value. When a run against the set shows a score drop, you want the conclusion to be "this change regressed quality," not "item 23 has a wrong label." An unreviewed pile of examples produces scores nobody acts on. A golden dataset produces scores that block or approve a release. [^3]
+
+You need one because informal spot-checking does not survive iteration. The first prompt tweak you can eyeball. By the tenth you cannot remember which earlier behavior you traded away. A fixed, trusted test set turns "does the new prompt feel better" into a measured comparison, and it is the prerequisite for everything downstream: regression testing in CI, model migration decisions, and honest numbers for stakeholders. [^3]
+
+### What makes one good
+
+Three properties matter most, and all three are decisions, not accidents.
+
+**Scope: one dataset per component or behavior.** You will end up with several datasets, each answering one question. A dataset can target the end-to-end flow or a single step like retrieval, routing, or summarization, but it should not mix them. When a run fails, you want the failure to point at a cause, and a dataset that bundles every behavior cannot do that. [^3]
+
+**Size: matched to the job, not maximized.** More items means more coverage but slower, costlier runs. The working sizes that matter: around ten items when you are exploring a single issue, tens to a low hundred for a gate that runs on every pull request so it stays fast, and one hundred to a thousand for a full regression set that mirrors the production distribution. [^3] A separate guide puts the statistical floor in plainer terms: about 50 examples detects large regressions, and roughly 200 gives you confidence on smaller differences, on the order of a 3 to 5 percent quality change. [^4]
+
+**Coverage of failure modes, not just happy paths.** A dataset of easy cases scores 95 percent forever and tells you nothing. Every failure mode you have observed in production deserves at least a few items: the ambiguous question, the multi-part request, the input in the wrong language, the prompt-injection attempt. A useful heuristic from the field: if a class of input has ever caused an incident or a support ticket, it belongs in the dataset. [^3]
+
+The source of the data matters more than its size. Datasets built purely from documentation or synthetic generation come out too clean; they miss the edge cases and adversarial inputs that surface once real users interact with the system. The most effective sets combine human-crafted examples for known edge cases, real production samples with personal data removed, and synthetic expansions for underrepresented scenarios. [^4] Start from production traces first, and treat synthetic items as extensions of a production-grounded core, never the replacement for it. [^3]
+
+A golden dataset also has to be maintained, and this is where most teams slip. It decays. A set assembled in January describes January's traffic; by July your users ask different questions and your product has new features. The discipline is the same as maintaining any test suite: every escaped bug becomes a test, duplicates get merged, obsolete cases get retired deliberately, and you version the set so every experiment runs against a pinned version. [^3]
+
+## Why classic metrics break on open-ended output
+
+Traditional NLP metrics fall into two buckets. Reference-based metrics like BLEU and ROUGE compare the model's output to a ground-truth reference string by measuring n-gram or token overlap. They work on narrower tasks like machine translation and summarization, where there is a known reference. They fall apart on modern open-ended tasks, because a correct answer rarely matches a reference string and there is no single "right" output at all. [^2]
+
+The alternative is human evaluation, which is the gold standard for measuring what people actually prefer. It is also slow, noisy, and expensive, and it does not scale. The bottleneck is real: you cannot route every prompt change, every model candidate, and every retrieval tweak through a panel of human raters and still ship on a reasonable cadence. [^2] [^1] You need a measurement that is fast and cheap enough to run continuously but still tracks what a human would say.
+
+## LLM-as-judge: the fast approximation of a human
+
+LLM-as-a-judge is exactly that compromise. Instead of a human rating an output, you prompt a strong LLM to evaluate another model's output against a rubric. It is a reference-free metric: it reads the question, the answer, and the criteria, and returns a score or a comparison. It scales to any volume, costs near nothing per call, and it consistently agrees with human preferences well enough to be useful. [^2] [^1]
+
+The technique was introduced with the paper "Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena," which used GPT-4 as the judge. The central finding holds up across the field: GPT-4 agreed with human preferences over 80 percent of the time, roughly the same level of agreement that human evaluators reach with each other. That comparison is the honest framing. An LLM judge is not better than a human rater; it is about as consistent as one, and it is infinitely more scalable. [^1] [^5]
+
+There are three common prompt structures, and you should know which you are using:
+
+- **Pairwise comparison.** The judge sees a question and two model responses and says which is better. This is the setup behind the Chatbot Arena leaderboard.
+- **Pointwise scoring.** The judge sees one response and assigns a score, often a 1 to 5 scale.
+- **Reference-guided scoring.** The judge gets a reference solution along with the question and the response, which helps on tasks where a known-good answer exists. [^2]
+
+You can improve any of them by asking the judge to write out its reasoning before it gives the score. The evidence says the rationale should come first: the paper found that conclusions produced after a post-hoc explanation are not supported by it, so you want the judge to reason, then score, not the other way around. [^2]
+
+## When the judge lies
+
+This is the part that gets systems in trouble. An LLM judge is a model, and it carries the same biases and failures as any model, plus a few specific to the judging job. Treat it as a probabilistic instrument, not a ground truth, and know its failure modes.
+
+**Position bias.** The judge tends to favor whichever response appears first in a pairwise prompt, and the effect is measurable across most evaluators. [^2] The mitigation is mechanical: randomize the order of the two responses, or run both permutations, so the position advantage averages out. [^2] [^10]
+
+**Verbosity bias.** The judge tends to give higher scores to longer outputs, mistaking length for quality. [^2] This is the classic way a wrong answer beats a right one. A concise correct answer loses to a padded wrong one, and you would never catch it from the score alone. Mitigations include penalizing redundancy and rewarding conciseness in the rubric itself. [^10]
+
+**Self-enhancement bias.** A model tends to rate its own output higher than another model's. [^2] This is a serious risk in an automated loop, because it silently corrupts any preference data you collect. The standard mitigation is strict separation: if your pipeline is built on GPT, judge it with Claude or an open model, and never let a model evaluate its own production output. [^5] [^10]
+
+**Misled by confident wrong content.** Judges are easily misled by incorrect information sitting in their context. If one of the responses being graded is wrong but plausible, the judge can be pulled toward it and assign an inaccurate score. [^2] In other words, the judge can be fooled by the exact thing you are trying to detect.
+
+**Failure on hard questions.** LLM judges struggle to grade responses to questions they cannot answer themselves, which is precisely the complex-reasoning and math territory where you most need an accurate grade. [^2] A judge that cannot do the arithmetic cannot reliably tell you whether the model did the arithmetic right.
+
+**The domain gap.** The agreement between an LLM judge and a human expert falls as the task gets more specialized. One study tested LLM judges against subject-matter experts in two professional domains: the experts agreed with the LLM judge only 68 percent of the time in dietetics and 64 percent in mental health. [^7] In fields where getting the answer right matters and requires real expertise, a generic judge is not a substitute for a human reviewer.
+
+None of these biases is a reason to throw out LLM-as-judge. They are reasons to use it as a signal rather than a verdict, to design around the known ones, and to calibrate the judge before you trust any score it produces.
+
+## Build the judge like a model, not like a script
+
+The single most important practice, and the one that ties back to the golden dataset, is this: **before you trust an LLM judge, validate the judge itself against human labels.** You already have a small set of items with reviewed answers. Run the judge over that set and measure its agreement with the human rating. The field convention is to aim for roughly 75 to 90 percent agreement before you let the judge gate anything. [^6] [^10] If the judge lands below that, it is not a reliable measurement instrument, and every score it produces is noise wearing a number's clothes.
+
+That step also catches the quiet failures. A judge that hands out the same score for everything collapses into a meaningless distribution, and that only shows up when you compare its output to what a human actually said. [^10] Calibrate against a golden set once, and re-check periodically, because the judge model updates and its behavior drifts.
+
+## A worked example: a tiny eval stack with a judge you can see lie
+
+To make the bias concrete, here is a miniature eval stack in pure Python. It holds a two-item golden dataset, runs a candidate answer through two different judges, and shows the second one getting fooled by verbosity.
+
+```python
+# A miniature eval stack: a golden dataset, a rubric judge, and a naive judge.
+
+GOLDEN = [
+    {
+        "input": "What is the refund window?",
+        "expected": "30 days",
+    },
+    {
+        "input": "How is a refund issued?",
+        "expected": "Returned to the original payment method",
+    },
+]
+
+def candidate(input_text):
+    # Two canned answers: one right and concise, one wrong and padded.
+    if input_text.startswith("What is the refund window"):
+        return ("Customers may request a refund. We understand that returns can be "
+                "frustrating, and we want every customer to feel completely "
+                "satisfied with their purchase experience with us, which is why we "
+                "offer a generous policy that we believe reflects our commitment "
+                "to service excellence.")
+    return "Refunds are processed and returned to the original payment method within a few business days."
+
+def naive_judge(answer):
+    # A stand-in for a verbosity-biased LLM judge: longer means better.
+    return min(5, 1 + len(answer) // 40)
+
+def rubric_judge(answer, expected):
+    # A stand-in for a rubric LLM judge: it checks the substance it was told to.
+    return 5 if expected.lower() in answer.lower() else 1
+
+for item in GOLDEN:
+    out = candidate(item["input"])
+    print(item["input"])
+    print("  expected :", item["expected"])
+    print("  naive    :", naive_judge(out), "/ 5")
+    print("  rubric   :", rubric_judge(out, item["expected"]), "/ 5")
+```
+
+Run it. The first item gets a wrong, padded answer. The naive judge, which only cares about length, scores it a 5. The rubric judge, which was told to check whether the answer contains the substance, scores it a 1. Same answer, two completely different verdicts. That is the difference between a judge tuned on length and a judge with a real rubric, and it is why you validate the judge against a golden set before you trust a single number from it. [^6] [^10]
+
+The stand-ins are crude. A real judge is a frontier model reading a detailed rubric with chain-of-thought, not a length counter. But the architecture is the same: a fixed set of trusted items, a scoring function, and a rule that a score only means something once you have confirmed the scorer agrees with a human.
+
+## The Fortress angle: evaluation is a pipeline, not a report
+
+The lesson is not abstract at Adroit. The Fortress already runs the shape of this stack in miniature. Publishing this very lesson runs through a mechanical gate, `verify-lessons.py`, that hard-fails on em-dashes and known AI-slop phrases before anything is committed, a regression check with the same logic as a golden dataset gate. It is not an LLM judge; it is a deterministic rule, and that is exactly the point. Deterministic checks and LLM checks are complementary layers, and you want both. [^3]
+
+The evaluation lesson also shows up in an earlier run in this series. A local Qwen model began emitting empty `{}` objects for nested tool-call arguments, silently breaking the kanban completion gate because tasks could never validate as complete. [^9] The failure was caught by a validation layer, a deterministic check on the tool-call output, not by any model judging itself. [^9] That is the durable pattern: put deterministic checks where they can run, use an LLM judge for the open-ended judgment a rule cannot express, and anchor both on a small set of trusted cases.
+
+## The pitfall to avoid
+
+The most common mistake is trusting the judge without calibrating it. A team wires an LLM judge into the pipeline, watches a score tick up, and ships, never having checked whether the judge agrees with a human on a single item. When a padded wrong answer scores a 5 because the judge likes length, the eval becomes theater. [^2] [^10]
+
+The mirror-image mistake is skipping the golden dataset and evaluating ad hoc. Without a fixed, reviewed set, you cannot tell a real improvement from noise, and you have no record of which behaviors you have traded away across a series of prompt tweaks. [^3]
+
+And a third failure, from the domain research: using a generic judge on specialized work without a human in the loop. When the task needs real expertise, the judge's agreement with an expert drops, and you should not pretend a generic score carries expert weight. [^7]
+
+## Try it
+
+1. **Build a 20-item golden dataset.** Pick a behavior your own agent performs. Write 20 inputs with reviewed expected outputs, making sure a few of them are the failure modes you have actually seen, not just easy cases. This is the anchor everything else uses. [^3]
+2. **Calibrate an LLM judge.** Take an existing model as your judge. Run it over your golden set, compare its scores to your reviewed answers, and record the agreement percentage. Aim for the 75 to 90 percent range before you trust it. If it is lower, rewrite the rubric and retry. [^6] [^10]
+3. **Prove the verbosity bias to yourself.** Write a deliberately wrong but padded answer to one of your golden items, and a correct but terse one. Run your judge on both. Record which scores higher, then add a rubric line that rewards conciseness and see whether the order flips. [^2] [^10]
+
+## What's next
+
+You now know how to measure an agent: a golden dataset for regression, an LLM judge for open-ended quality, and human calibration to keep the judge honest. The next lesson turns to the production side of the same problem, monitoring an agent once it is live, tracking its behavior over time, and catching the quality drift that no pre-release eval can predict.
+
+[^1]: arxiv.org. [Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena (Zheng et al.)](https://arxiv.org/abs/2306.05685)
+[^2]: cameronrwolfe.substack.com. [Using LLMs for Evaluation (Cameron R. Wolfe)](https://cameronrwolfe.substack.com/p/llm-as-a-judge)
+[^3]: langfuse.com. [Golden dataset evaluation: build and maintain LLM test sets](https://langfuse.com/resources/engineering/golden-dataset-evaluation)
+[^4]: galtea.ai. [The complete guide for LLM evaluations in 2026](https://galtea.ai/blog/llm-evaluation-complete-guide)
+[^5]: comet.com. [LLM-as-a-Judge: The Ultimate Guide for AI Developers](https://www.comet.com/site/blog/llm-as-a-judge/)
+[^6]: arize.com. [LLM as a Judge: Primer and Pre-Built Evaluators](https://arize.com/guides/llm-as-a-judge/)
+[^7]: dl.acm.org. [Limitations of the LLM-as-a-Judge Approach for Evaluating LLM Outputs in Expert Knowledge Tasks](https://dl.acm.org/doi/10.1145/3708359.3712091)
+[^8]: deepeval.com. [LLM-as-a-Judge in 2026: Top evaluation techniques and best practices](https://deepeval.com/blog/llm-as-a-judge)
+[^9]: github.com. [Local LLM infrastructure 2026, Adroit blog](https://github.com/kelex1812/adroit-blog/blob/main/content/blog/local-llm-infrastructure-2026.mdx)
+[^10]: wandb.ai. [Exploring LLM-as-a-Judge](https://wandb.ai/site/articles/exploring-llm-as-a-judge/)

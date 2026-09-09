@@ -1,0 +1,131 @@
+---
+title: "Lesson 31: MCP Deep Dive: Tools, Resources, Prompts, and Auth"
+slug: mcp-deep-dive-tools-resources-prompts-sampling-auth
+series: "agentic-ai"
+lesson: 31
+excerpt: "Lesson 30 built a hello-world MCP server and left the deeper protocol features for later. This lesson is that later. It goes past the weather server into the four parts you will actually tune in production: how to design each of the three server primitives (tools, resources, prompts) so a model uses them well, and how OAuth 2.1 secures a remote server. It also covers sampling, the legacy feature that once let a server borrow the client's model instead of holding its own API keys, which is deprecated as of the 2026-07-28 spec revision and replaced by direct LLM provider API integration. Each section pairs the protocol method with the design decision behind it, and a single worked example ties them together: a project-intel server that exposes a tool, a resource, a prompt, and a sampling call, then gets locked down with real authorization."
+date: "September 3, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [LLMs, AI Agents, MCP, Tool Integration, OAuth]
+---
+
+# Lesson 31: MCP Deep Dive: Tools, Resources, Prompts, and Auth
+
+Lesson 30 got you a working server: two tools, a stdio transport, and the satisfaction of watching a model call a function you wrote. That is the hello-world. The parts you will actually tune in production are the ones this lesson covers. Tools, resources, and prompts are the three things a server can expose, and each one has a design discipline that separates a server a model uses well from a server a model fumbles with. Authorization is what decides who is allowed to call the server at all. Sampling, the feature that once let a server reason without holding its own model credentials, is deprecated as of the 2026-07-28 spec revision: SEP-2577 moved inference out of the protocol toward direct LLM provider API integration. You still need to know it, because servers built before that revision use it and you may take one over.
+
+This lesson walks the four production features, then traces the deprecated sampling path so you can maintain servers that still use it, and ties it all into one server you can build and secure end to end.
+
+## Tools: the model-controlled primitive
+
+A tool is a function the model decides to call. The server defines what tools exist, the model discovers them, decides when one fits, and invokes it. That is the whole contract, and it is worth stating plainly because it inverts the way you are used to wiring functions. In a normal application you call the function. In MCP the model calls it, and your job is to make the model call the right one at the right time. [^1]
+
+The model makes that decision from three things you control: the tool's name, its description, and its input schema. The name is how the model refers to the tool, so it should read like a command: `github_create_issue`, `database_query_users`, `slack_send_message`. A name that says the service and the action beats a vague one, because the model has to infer what `create_issue` touches and which service it belongs to. The description answers the question the model is actually asking, which is "why would I use this tool and what does it return?" A description like "Execute a read-only SQL query and return results as JSON" tells the model when the tool fits and what to expect back. A description like "does database stuff" tells it nothing. [^1]
+
+The input schema is where the model learns how to call the tool. MCP expresses it as JSON Schema, and the model reads the property names and descriptions to shape its arguments. The quality of that schema is the difference between a model that invokes the tool perfectly and one that guesses at the arguments. Write property descriptions the way you would write a hint for a colleague, and mark required fields explicitly so the model knows what it must supply. [^1]
+
+The wire flow is short. The client asks for the available tools with `tools/list`, and the server returns the set of tool definitions. When the model decides one fits, the client sends `tools/call` with the tool name and the arguments the model constructed, and the server executes and returns a result. [^1] Two details matter in production. First, the set of tools a server returns can change over time, and a server that supports the `listChanged` capability sends a notification when that set changes so the client re-lists. Second, the set can vary by the authorization presented on the request, which is how a server shows a caller only the tools their granted scopes permit. [^1]
+
+The security rule from lesson 30 still holds, and the spec makes it explicit: tools are arbitrary code execution, and there should always be a human in the loop with the ability to deny a tool invocation. The host should show which tools are exposed, show a clear indicator when one is invoked, and present a confirmation prompt for operations. [^1] A tool that can write to a production database is a button the model can press. Design the server so that button requires approval.
+
+## Resources: the application-controlled context
+
+Where a tool is an action the model takes, a resource is data the model reads. The two are controlled differently, and that difference is the whole point. The model decides to call a tool. The application decides which resources to put in front of the model. [^2]
+
+Each resource has a stable URI, and the URI is its identity. A resource for a project's main file might be `file:///project/src/main.rs`, and a resource for a database schema might be `config://app`. The scheme is yours to choose, and a custom scheme like `db://` or `log://` tells clients what kind of data the resource holds. [^2]
+
+Discovery and reading are two methods. The client lists available resources with `resources/list`, which supports pagination for large collections, and reads one with `resources/read`, passing the URI and getting back the contents with a MIME type. [^2] Beyond static resources, a server can define URI templates for dynamic resources. A template like `file:///logs/{date}` is a family of resources, and the client fills the `{date}` slot to read a specific member. This is how a server exposes a large or unbounded set of resources without enumerating them all. [^2]
+
+Resources also support change notifications, which is what makes them useful for live data. A client can subscribe to a specific resource with `resources/subscribe`, and the server pushes a `notifications/resources/updated` notification when that resource changes, so the client re-reads it instead of polling. A separate `listChanged` capability tells the client when the set of available resources itself changes. [^2]
+
+The design discipline for resources is restraint. A resource is context, and context has a cost: everything you attach to a model's context window competes for space. Returning an entire multi-megabyte log file as a resource is a way to blow up a context window. Return what the model actually needs, and for large data use a template with parameters so the model reads a slice, not the whole thing. [^2]
+
+## Prompts: the user-controlled template
+
+Prompts are the third server primitive and the one most people read wrong. A tool is invoked by the model. A resource is attached by the application. A prompt is selected by the user. It is a template the human picks from a menu, fills in, and drops into the conversation. [^3]
+
+The spec is explicit about who controls what. Prompts are designed to be user-controlled, meaning the user explicitly selects them for use. That refers to who decides when the prompt is used, not who authors its content. The server authors the content, and the user decides when to apply it. [^3] Think of the slash commands in a tool like Claude Code: `/summarize`, `/review`, `/test`. Those are prompts, pre-crafted instruction templates that encode expertise into a one-click workflow. [^3]
+
+A prompt definition has a name, an optional title and description, and a list of arguments. The arguments are the template's slots, and because a prompt is user-controlled, they are what the client's interface asks the user to fill before invoking it. The description on each argument is the label the user reads. [^3]
+
+The flow is two methods. The client lists available prompts with `prompts/list`, and the user picks one. The client then requests the rendered template with `prompts/get`, passing the prompt name and the filled arguments, and the server returns a set of messages the host inserts into the conversation. [^3] A prompt can return multiple messages, and those messages can even embed a resource, so a code-review prompt can pull in the file it is reviewing as part of the template. [^3]
+
+The common pitfall is confusing prompts with tools. A tool is invoked by the model as part of its reasoning. A prompt is selected by the user to start or guide an interaction. If you want the model to be able to trigger a workflow on its own, that is a tool. If you want a human to be able to kick off a well-tested workflow, that is a prompt. [^3]
+
+## Sampling: a deprecated way to borrow the client's model
+
+The first three primitives all flow from client to server. Sampling flips the direction. It lets a server ask the client to run an LLM completion on its behalf, and return the result. [^4]
+
+> **Deprecated as of the 2026-07-28 spec revision.** Sampling is deprecated under SEP-2577, which moved inference out of the protocol toward direct LLM provider API integration. The replacement for sampling is to call your LLM provider's API directly. New implementations SHOULD NOT adopt it; existing implementations SHOULD migrate to integrating directly with LLM provider APIs. The mechanics below are still accurate for servers that already use sampling, but do not build a new server around it. [^4]
+
+This matters more than it sounds. A server that can sample can reason, summarize, classify, and plan without holding its own API keys or model access. The client keeps control of model access, selection, and permissions, and the server gets the benefit of AI without the credentials. [^4] The canonical use case is a server that needs to think: it reads a document, then asks the client's model to summarize it, then returns the summary as a tool result. The server never touches an LLM API. [^4]
+
+The flow is a single method. The server sends a `sampling/createMessage` request, and the client, after human review, forwards it to whatever model it is connected to and returns the generation. The response reports the actual model the client used and a stop reason, so the server learns what answered it. [^4]
+
+Because the client owns model selection, the server cannot demand a specific model. Instead it expresses preferences. MCP defines a priority system with three normalized values from 0 to 1: `costPriority` (prefer cheaper models), `speedPriority` (prefer faster models), and `intelligencePriority` (prefer more capable models). A server can also send model hints, advisory substrings that suggest specific models or families, which the client may map to an equivalent model from another provider. [^4] The client is free to choose any model; the preferences are guidance, not a demand. That is what keeps servers model-agnostic.
+
+Sampling also supports tool use. A server can include a tools array in its sampling request, scoped to that request, so the client's model can call tools mid-sampling, return tool results, and continue the conversation in a multi-turn loop. [^4] This is how a server builds a nested agent loop entirely through the client's model.
+
+The security rule mirrors the others: there should always be a human in the loop with the ability to deny a sampling request. [^4] And the design rule, for servers that still route inference through sampling, is to never assume they can call models directly. The whole point is that the server routes inference through the client's model access, so a server that hard-codes its own model calls defeats the mechanism.
+
+## Authorization: who is allowed to call the server
+
+Everything so far assumes the server answers anyone who connects. Over stdio, that is fine, because the server runs locally and takes its credentials from the environment. Over HTTP, a remote server has to prove who is calling before it answers. MCP's answer is OAuth 2.1, with the server cast as a resource server. [^5]
+
+The role model has three parties. The MCP client is the OAuth client, requesting access on the user's behalf. The MCP server is the resource server, holding the protected tools and resources and validating tokens. A separate authorization server, which may be co-hosted or external, authenticates the user and mints the tokens. The server does not issue tokens; it validates them. [^5]
+
+The flow starts with a challenge. When a client first connects without a token, the server responds with a `401 Unauthorized` and a `WWW-Authenticate` header that points the client at a Protected Resource Metadata document, typically at `/.well-known/oauth-protected-resource`. That document names the authorization server, the supported scopes, and the resource. [^5]
+
+The client then discovers the authorization server's own metadata, registers itself (either pre-registered or through Dynamic Client Registration), and runs an authorization-code flow with PKCE. The user logs in and consents to specific scopes, and the client exchanges the code for an access token and a refresh token. From then on, the client sends the access token in the `Authorization` header on every request, and the server validates its signature, expiry, audience, and scopes. [^5]
+
+Two details separate a secure deployment from a broken one. First, the client sends a resource parameter, per RFC 8707, on both the authorization and token requests, set to the canonical URI of the MCP server. That binds the token to one server, so a token minted for one server cannot be replayed against another. [^5] Second, the server must not pass the token it receives on to downstream APIs. It acts as its own OAuth client there, with its own token. Otherwise you get the confused deputy problem, where a server uses someone else's privileges against a downstream system. [^5]
+
+The practical rules are the ones you would expect from any secure service: use short-lived access tokens, always validate tokens, enforce HTTPS in production, use least-privilege scopes rather than catch-all ones, never log credentials, and pin to a single issuer unless you are explicitly multi-tenant. [^5]
+
+## Worked example: a project-intel server
+
+All the pieces come together in one server. Build a `project-intel` server that gives a model everything it needs to work on a codebase, and secure it so only authorized callers can use it.
+
+Start with the tool. Expose `query_issues` with a description that says it runs a read-only query against the project's issue tracker and returns results as JSON, and an input schema with a `query` string property. The model now knows when to call it and what to pass. [^1]
+
+Add the resource. Expose the project's schema as a resource at `config://project/schema`, so the application can attach it as context when the model needs to understand the data model. Because it is a resource, the application decides when to include it, and the model does not have to guess that it exists. [^2]
+
+Add the prompt. Define a `code_review` prompt with a `file` argument, so a user can select it from a menu, fill in the file to review, and get a well-tested review workflow dropped into the conversation. The prompt can even embed the file as a resource, so the reviewer sees the code it is reviewing. [^3]
+
+Handle inherited sampling. If you take over a server that already uses sampling, this is how it works: inside `query_issues`, after fetching the raw issues, the server calls `sampling/createMessage` with a request to summarize the results in a few sentences, with `intelligencePriority` weighted high because the summary needs judgment. The server returns the summary as the tool result, and it never needed its own model key. [^4] Remember that sampling is deprecated as of the 2026-07-28 spec revision, so a new server should integrate directly with an LLM provider API instead.
+
+Then secure it. Deploy the server over HTTP, stand up an authorization server, and protect the server as a resource server. The client gets a `401` with a metadata pointer, discovers the authorization server, runs the PKCE flow, and sends a bearer token on every call. The server validates the token's audience and scopes before it lets `query_issues` run. [^5]
+
+That is the protocol in one server: a tool the model calls, a resource the application attaches, a prompt the user selects, a sampling call that borrows the client's model where you maintain an inherited server, and OAuth 2.1 deciding who gets in.
+
+## The pitfalls to avoid
+
+The first is writing tool descriptions and schemas as an afterthought. The model decides when to call a tool from the name, description, and schema you write. Treat those three as the product, because they are the entire interface between the model and your system. A vague description produces a model that calls the wrong tool or the right tool with the wrong arguments. [^1]
+
+The second is treating resources as free. Every resource you attach is context, and context has a cost. Expose what the model needs, use URI templates for large or unbounded data, and resist the urge to dump whole tables into a resource. [^2]
+
+The third is confusing prompts with tools. If you want the model to trigger a workflow autonomously, that is a tool. If you want a human to select a workflow, that is a prompt. Getting this wrong means either a workflow the model fires off without consent or a capability the user can never reach. [^3]
+
+The fourth is designing a server that assumes it can call models directly when sampling is available. Sampling exists so a server can reason without its own credentials. A server that hard-codes its own model calls defeats the mechanism and reintroduces the API-key management sampling was designed to remove. [^4]
+
+The fifth is shipping a remote server with no authorization, or with a broken one. A remote MCP server that can run tools is a genuinely dangerous thing to leave unauthenticated. Use OAuth 2.1, bind tokens to the server with the resource parameter, use least-privilege scopes, and never pass a client's token downstream. [^5]
+
+## Try it
+
+1. **Audit a tool you already built.** Take a tool from lesson 30 or earlier and rewrite its name, description, and input schema as if the model were a new teammate who has never seen it. Would that teammate call it at the right time with the right arguments? Fix what would trip them up. [^1]
+
+2. **Add a resource and a prompt to your server.** Expose one piece of context as a resource with a custom scheme, and one workflow as a prompt with an argument. Connect a host and confirm the resource shows up as attachable context and the prompt shows up as a selectable command. [^2] [^3]
+
+3. **Trace an inherited sampling call.** If you take over a server that already uses sampling, trace how it works: pick a tool that returns raw data and see how it summarizes that data through `sampling/createMessage` instead of returning it verbatim, with `intelligencePriority` set high. Confirm the server returns a summary without holding its own model key. [^4]
+
+4. **Protect the server.** Deploy it over HTTP and stand up an authorization server. Confirm an unauthenticated request gets a `401` with a metadata pointer, and that a valid token with the right scope reaches the tool while a token for the wrong audience is rejected. [^5]
+
+## What's next
+
+You now know how to design each MCP primitive well, how the now-deprecated sampling feature lets a legacy server reason without its own model credentials and why the protocol moved past it, and how OAuth 2.1 secures a remote server. The next lesson, **Building your first enterprise agent: project setup, end to end**, is where the pieces stop being individual techniques and become a product. It walks the full setup of a real agent project, from scaffolding the repository and wiring the model through to connecting the tools and shipping it, the way you would stand up a client engagement rather than a demo. The MCP server you built in these two lessons is the tool layer that enterprise agent will call, so keep it close.
+
+[^1]: modelcontextprotocol.io. [Tools (MCP specification)](https://modelcontextprotocol.io/specification/2026-07-28/server/tools)
+[^2]: modelcontextprotocol.io. [Resources (MCP specification)](https://modelcontextprotocol.io/specification/2026-07-28/server/resources)
+[^3]: modelcontextprotocol.io. [Prompts (MCP specification)](https://modelcontextprotocol.io/specification/2026-07-28/server/prompts)
+[^4]: modelcontextprotocol.io. [Sampling (MCP specification)](https://modelcontextprotocol.io/specification/2026-07-28/client/sampling)
+[^5]: modelcontextprotocol.io. [Understanding Authorization in MCP](https://modelcontextprotocol.io/docs/2026-07-28/tutorials/security/authorization)

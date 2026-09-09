@@ -1,0 +1,130 @@
+---
+title: "Lesson 18: Guardrails II, Output Validation, Allowlists, PII Redaction, and Refusal Paths"
+slug: guardrails-output-validation-allowlists-pii-redaction
+series: "agentic-ai"
+lesson: 18
+excerpt: "Input guardrails keep an attacker from pushing the agent past its boundary. Output guardrails keep the agent from pushing bad output out the other side: validation, allowlists, PII redaction, and refusal paths."
+date: "August 21, 2026"
+author: "Adroit Consulting"
+readTime: "13 min read"
+tags: [LLMs, AI Agents, Security]
+---
+
+# Lesson 18: Guardrails II: Output Validation, Allowlists, PII Redaction, and Refusal Paths
+
+Lesson 17 built the boundary that keeps hostile input from steering your agent: injection defense, containment, least privilege, and input validation. That is one half of the contract. The other half is what the model emits. Every prompt can be steered, but output is where a wrong answer actually becomes an action, a leak, or a bad decision handed to a human. OWASP calls this class of failure improper output handling, and it sits at number five on the 2025 Top 10 for LLM Applications. [^1]
+
+The lesson to carry out: **treat model output as untrusted data, exactly the way you treat user input, and validate, sanitize, redact, and gate it before it reaches a user or a downstream system.** An agent that never checked its own output would let a single hallucination mutate a database row, leak a phone number, or render a script in a browser.
+
+Here are the terms you will need, defined up front:
+
+- **Output validation** is the practice of checking what the model generated against a rule before releasing it. The rule can be structural (does this parse as valid JSON that matches a schema), syntactic (does this string match a pattern), or semantic (does this claim hold up).
+- **Allowlist** is a policy that denies by default and admits only the values you explicitly named. Its opposite is a **denylist**, which admits by default and blocks only the values you named.
+- **PII** (personally identifiable information) is data that can identify a person, alone or combined: names, phone numbers, email addresses, social security numbers, account IDs, physical addresses.
+- **Redaction** is masking or removing that PII from text before it leaves your system.
+- **Refusal path** is the designed behavior when the output cannot be validated: what the agent returns, how it escalates, and how it stays safe while failing.
+
+## Why the output side is a distinct problem
+
+Input validation and output validation look symmetrical, but they are not. On the input side you are defending against an adversary who is deliberately constructing hostile payloads. On the output side the model is not trying to attack you, yet it still fails, because it is a stochastic predictor, not a deterministic function. It can hallucinate a fact, fabricate a field, emit malformed JSON, or reproduce sensitive text it saw in context.
+
+The OWASP LLM05 definition captures the second distinction: the damage from bad output depends on what you do with it downstream. The failure is not that the model said something odd. The failure is that the application trusted the response and passed it to a shell, a database, a browser, or an email template without scrutiny. [^1] Their common examples make the blast radius concrete: model output entered into `exec` or `eval` becomes remote code execution; generated JavaScript returned to a browser becomes cross-site scripting; an unparameterized LLM-built query becomes SQL injection; output used to build a file path becomes path traversal. [^1]
+
+So the first design decision is contextual encoding. OWASP's mitigation list is explicit about this: encode model output for the context where it will be used, HTML-encode for web content, SQL-escape for queries, use parameterized statements everywhere the output touches a database, and apply a strict Content Security Policy where the output renders in a browser. [^1] Do not ship model output raw into a place where bytes mean something.
+
+## The three layers of output validation
+
+Validation is not one check. It is a stack, and you apply it from the cheapest structural check up to the most expensive semantic one.
+
+**Schema and JSON validation.** When an agent emits structured data, the first gate is whether it parses at all and whether it matches a declared shape. JSON mode and tool schemas already constrain generation at the model layer, so the model tends to produce well-formed JSON, but "tends to" is not "guarantees." [^6] You still parse the result and validate it against a schema with a library like Pydantic or JSON Schema. A field typed as an integer arriving as the string `"42"`, a missing required key, an extra key the schema does not know about, all of these are validation failures you catch before any downstream code reads them.
+
+**Regex and format checks.** For free text and individual fields, pattern matching catches the cases schemas cannot. A field that must be a currency amount in a specific format, a date in `YYYY-MM-DD`, a country code from a finite list, these are checks a regular expression or a small predicate handles in microseconds. The OWASP prompt injection cheat sheet models exactly this kind of output monitor: it scans responses for suspicious patterns, like system-prompt leakage or leaked credential syntax, and rejects anything that matches before returning it. [^2]
+
+**Semantic checks.** The expensive layer is checking whether the output means what it should, not just whether it is shaped right. For a summary, this can be a second model call that compares the summary against the source for groundedness, or a fact-check against a known-good database. For an agent that must only take actions in a fixed set, it can be a classifier that confirms the requested action is in scope. Semantic checks are probabilistic, so treat them as a strong filter, not a guarantee, and always pair them with the deterministic layers underneath. [^2]
+
+The order matters. Run the cheap checks first, because they reject most of the bad output for almost no cost, and save the expensive model-based check for what survives them.
+
+## Allowlists over denylists
+
+This is the single most important design choice in the output gate, and it is the same choice that governs permissions elsewhere in your system. An allowlist denies by default and admits only what you named. A denylist admits by default and blocks only what you named. The difference is what happens to the thing you did not think of. An allowlist fails that thing closed. A denylist lets it through.
+
+For output this shows up concretely in three places.
+
+**Action names.** If your agent can perform a fixed set of actions, validate the requested action against an allowlist of those names. Any action that is not on the list is refused. A denylist of "do not call delete" leaves every other action, including the ones you never imagined, open. [^7]
+
+**Enum values and accepted inputs.** A field that should hold one of a handful of values, a currency code, a status, a category, should be checked against the explicit set. Reject anything outside it rather than guessing.
+
+**Commands and tool targets.** If output is ever translated into a command or a file path, the set of allowed commands and allowed target prefixes is your allowlist. Lesson 17 argued this for tools at the boundary, and the same rule applies to the text the model emits: when the model writes a command string, only the commands you enumerated may run.
+
+The underlying principle is default deny, and it is the safer direction to fail in. [^7] A system that stops and asks because an action was not on the list is annoying in the best way. A system that runs because it was not on the block list is how records get deleted.
+
+## PII redaction before emission
+
+An agent often reads, composes, or summarizes text that contains personal data. When it does, you have a decision about what may leave the system, and you make that decision before the output reaches a user or a downstream service, not after. OWASP's LLM02, sensitive information disclosure, describes the risk: a model can reproduce PII or secrets it saw in context, and output-side filtering is one of the named mitigations. [^9]
+
+Redaction is the mechanical version of this: detect the sensitive spans and mask them. The approach breaks into detection and masking.
+
+**Detection.** You can detect PII with pattern-based recognizers, for things with reliable shape like email addresses, phone numbers, and credit card numbers, and with model-based recognizers, for things without fixed shape like names and addresses. Microsoft's Presidio is an open source library that ships both: an analyzer with a library of recognizers, and an anonymizer that replaces the detected spans. [^4] [^5] It reports each match with a confidence score, so you can choose a threshold and decide which spans to act on. Google's Sensitive Data Protection is the managed, cloud-hosted equivalent: you define an inspection config that detects sensitive elements and a de-identification config that decides how to transform each one. [^8]
+
+**Masking.** Once detected, decide what replaces the span. Full removal deletes it, which is safest but can break the sentence. Replacement with a category label, like `[EMAIL]` or `[PHONE]`, keeps the structure readable while stripping the identifying value. Faking, generating a plausible but non-real value, preserves format for downstream parsers but is riskier because a fake value can still look real to the next system. [^5] For an agent summary that a customer will read, the category label is usually the right call.
+
+**Where to redact.** Redact on both sides of the model. Mask PII in the input before it reaches the model where you can, so the model never sees the real value, and redact the output as a backstop for PII the model reconstructs or that leaked in from retrieved content. The output redaction is the part that protects the reader, and it belongs in the same gate as every other output check. [^9]
+
+## Refusal paths: failing on purpose
+
+Every validation layer will reject output. So the design is not complete until you answer one question: what does the agent return when the gate refuses? This is the refusal path, and it deserves the same care as the happy path, because it is what a user sees when the system decides not to answer.
+
+A safe refusal path has three properties.
+
+**It does not leak the failure's cause to the wrong audience.** If a summary was rejected because it contained a PII span, you do not echo that PII back at the user while explaining the rejection. The user gets a neutral message, and the detailed reason goes to a log or a monitoring channel where the team can see it. OWASP's own example of an output filter returns a fixed string, `"I cannot provide that information for security reasons."`, when a response fails validation or exceeds a length cap. [^2] The fixed string is the point: no echo of the bad content, no hint that aids an attacker.
+
+**It distinguishes retryable from non-retryable failure.** Sometimes validation fails because of a transient glitch, malformed JSON from a bad generation, and the safe move is to regenerate once or twice before giving up. Sometimes it fails because the request itself is out of scope, and retrying would just burn tokens and repeat the failure. Design the refusal path to know which case it is in. For the transient case, a bounded retry with a backoff is reasonable. For the out-of-scope case, the answer is a refusal, not another attempt.
+
+**It escalates the dangerous cases.** When output would have caused a high-impact action and was stopped, that event should not vanish into a silent block. It should surface to a human or a monitoring system. A blocked destructive command, a refused data mutation, a caught PII leak, each of these is a signal worth recording. [^1] The refusal path is also the last place to catch an attack that got through input filtering, so log the input and the refusal together for the review that follows.
+
+NIST's generative AI profile makes the same point about verification from the governance side: an organization should analyze generative AI output for harmful content and misinformation as part of its risk-management process, and a system that has a designed way to handle output it does not trust is one that can be monitored and improved. [^3]
+
+## Worked example: a customer-facing summary agent
+
+Let me put this together in one concrete system. You are building an agent that reads a customer's open support ticket and the account notes, then produces a short summary of the issue and the account status for the customer to read.
+
+**Step one, schema.** You decide the summary is structured data, not raw prose. The agent returns JSON with three fields: `issue_summary` (a string), `account_status` (one of `active`, `suspended`, `closed`), and `priority` (one of `low`, `medium`, `high`). [^6] You define this as a Pydantic model, so the first gate is the parser: parse the JSON, validate it against the model, and reject anything that does not match. A summary that comes back without a priority, or with `account_status` set to a value like `urgent` that is not in the enum, fails here before any of it is shown.
+
+**Step two, format checks.** You add lightweight checks on top. `issue_summary` must be between twenty and five hundred characters, and it must not contain raw HTML tags, because you will render it in the customer portal and you do not want a script slipping through. A regex strips or rejects tags. `priority` and `account_status` are already constrained by the schema's enums. [^2]
+
+**Step three, PII redaction.** The agent read the account notes to write the summary, and notes often contain phone numbers and email addresses. Before the summary goes to the customer, you run it through Presidio. The analyzer detects an email address and a phone number in the `issue_summary` text, and the anonymizer replaces them with `[EMAIL]` and `[PHONE]`. The customer sees "we emailed you at [EMAIL]" instead of their live address being echoed back into a portal where other people might see it. [^4] [^8]
+
+**Step four, semantic check.** Because accuracy matters when the summary will reach a customer, you run a light groundedness check: a second model call compares the summary against the ticket text and flags whether the summary asserts anything the ticket does not support. This is the expensive layer, so you run it only after the cheap layers passed. [^2]
+
+**Step five, the refusal path.** Suppose the account status was actually `closed` but the notes are contradictory, and the semantic check flags that the summary asserts `active`. The gate refuses. The agent returns the fixed neutral string, "I could not prepare a complete summary for this ticket. A member of our team will follow up." It does not retry five times, because the problem is a data conflict, not a transient glitch, and it does not leak which field failed. The refusal, the input that produced it, and the validation error go to the monitoring log, where a human sees that a closed account's summary was blocked and can resolve the underlying data conflict. [^2] [^3]
+
+That is the whole shape: structural validation, format checks, redaction, a semantic pass, and a designed way to refuse. Every layer is deterministic except the semantic one, and the refusal path makes the deterministic layers safe to fail.
+
+## The pitfall to avoid
+
+The most common mistake is treating output validation as a single model-based filter. A "please don't include personal data" instruction in the system prompt is a preference, not a control. The model may follow it and may not, and the whole point of the output gate is that you do not depend on the model's good behavior for safety. [^2] Pair every model-level constraint with a deterministic check in code, parse the output, validate the schema, redact the PII, and encode for the context. The deterministic layer is what actually protects the user.
+
+The second mistake is forgetting that the output gate protects downstream systems, not just people. A summary rendered to a browser needs HTML encoding. A value destined for a SQL query needs parameterization. An action name destined for a tool call needs an allowlist. Encode and gate for where the bytes go, not just for readability. [^1]
+
+## Try it
+
+1. **Build a schema gate.** Take an agent you have built that returns structured data. Define the output as a Pydantic model or JSON Schema, add an enum for any categorical field, and write the validation call that rejects output which does not parse or match. Feed it three examples: valid output, output with a wrong-typed field, and output with a value outside the enum. Confirm all three are classified correctly.
+
+2. **Redact a sample.** Run a short text containing an email address, a phone number, and a name through Presidio's analyzer and anonymizer, or through your cloud provider's equivalent. [^4] [^8] Inspect the detected spans and their confidence scores, then set a threshold and confirm the email and phone are masked while a common word is not flagged. Answer: why does a confidence threshold matter, and what happens to a real PII value whose confidence lands below it? The threshold keeps the gate from flooding the log with false positives, but a low-scoring real value slips through, which is why redaction is a backstop and never a guarantee. [^5]
+
+3. **Design a refusal path.** For the summary agent above, write the code path that fires when the schema gate rejects the output. Decide whether this failure is retryable or not, write the fixed neutral response, and write the log line that records the input, the validation error, and the timestamp. Confirm the response contains no part of the rejected output.
+
+## What's next
+
+You now have the full guardrail pair: input boundaries from Lesson 17 and output validation, allowlisting, redaction, and refusal paths from this one. Together they make an agent that is hard to push past its edge and hard to let bad output escape. The natural next subject is evaluation: how you measure whether an agent actually behaves, with golden datasets and an LLM-as-judge. That is where you learn to trust your guardrails instead of just hoping they work. [^10]
+
+[^1]: genai.owasp.org. [OWASP Gen AI Security Project, LLM05: 2025 Improper Output Handling](https://genai.owasp.org/llmrisk/llm052025-improper-output-handling/)
+[^2]: cheatsheetseries.owasp.org. [OWASP LLM Prompt Injection Prevention Cheat Sheet, Output Monitoring and Validation](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html)
+[^3]: nist.gov. [NIST AI 600-1, Generative AI Profile of the AI RMF](https://www.nist.gov/publications/artificial-intelligence-risk-management-framework-generative-artificial-intelligence)
+[^4]: microsoft.github.io. [Presidio, Data Protection and De-identification SDK](https://microsoft.github.io/presidio/)
+[^5]: github.com. [Microsoft Presidio repository](https://github.com/microsoft/presidio)
+[^6]: platform.openai.com. [OpenAI Structured Outputs guide](https://platform.openai.com/docs/guides/structured-outputs)
+[^7]: pushary.com. [Allowlist vs denylist for AI agent permissions](https://pushary.com/blog/allowlist-vs-denylist-ai-agent-permissions)
+[^8]: docs.cloud.google.com. [Sensitive Data Protection, redacting sensitive data from text](https://docs.cloud.google.com/sensitive-data-protection/docs/redacting-sensitive-data)
+[^9]: genai.owasp.org. [OWASP Gen AI Security Project, LLM02: 2025 Sensitive Information Disclosure](https://genai.owasp.org/llmrisk/llm022025-sensitive-information-disclosure/)
+[^10]: genai.owasp.org. [OWASP LLM Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/)

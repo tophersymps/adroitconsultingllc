@@ -1,0 +1,135 @@
+---
+title: "Lesson 34: Data Model Design: Inheritance, Polymorphic Relationships, and Denormalization Tradeoffs"
+slug: data-model-design-inheritance-polymorphic-denormalization
+series: "salesforce-architect"
+lesson: 34
+excerpt: "Three data modeling tools that people reach for when records stop being uniform: inheritance for records that are kinds of a common thing, polymorphic relationships for a single field that must point at several object types, and denormalization for precomputing data so reads get fast. Each solves a real problem, and each hides a cost. This lesson defines them precisely, shows how Salesforce represents each one, and walks a worked example that forces you to use all three at once."
+date: "September 7, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Salesforce, Architecture, Data]
+---
+
+# Lesson 34: Data Model Design: Inheritance, Polymorphic Relationships, and Denormalization Tradeoffs
+
+Lesson 14 shaped data around the common relationship patterns: one-to-many, many-to-many, and hierarchy, then protected it from data skew. This lesson assumes records are the hard part in a different way. Not too many of them, and not crammed onto one parent, but genuinely messy in their kind. Some records are versions of one concept that need different fields. Some records need to attach to several unrelated objects. Some objects need a number that only exists after you count thousands of children.
+
+Those three problems map to three tools: inheritance, polymorphic relationships, and denormalization. Architects reach for them constantly and mix them up constantly, because all three are responses to the same underlying pressure: the business sees uniform records, but the data wants to branch. This lesson gives each tool a clean definition, shows the representation Salesforce actually offers, and closes with a scenario that needs all three. If you can hold those three ideas apart and pick the right one for a given wrinkle, you can defend a data model in a design review instead of just drawing it.
+
+## Define the terms
+
+- **Inheritance (supertype / subtype)**: a modeling relationship where several subtypes share the common attributes and relationships of a supertype, and each subtype adds what is specific to it. Subtypes are mutually exclusive: any single record is exactly one subtype. The Salesforce data model notation defines a subtype as a subset of the occurrences of an entity, where the supertype entity shows the shared attributes and the subtypes show their own. [^1] In a database this is commonly called class-table or single-table inheritance. Salesforce has no object-to-object inheritance of fields or records, so you express it with record types or with separate objects tied to a shared parent, covered below.
+- **Record type**: the Salesforce feature for grouping records of one object into subtypes that can show different page layouts, required fields, and picklist values. Salesforce Ben's definition is the useful one: record types are for records that share the same concept but differ in execution. [^4]
+- **Polymorphic relationship**: a relationship field whose referenced object can be one of several types. The Salesforce SOQL reference states it plainly: in a polymorphic relationship, the referenced object can be one of several different object types. [^2]
+- **Polymorphic field**: a relationship field whose descriptor reports more than one referenced object type, such as `Who` (Contact or Lead) or `What` (Account, Opportunity, or several others) on activities. [^2]
+- **Denormalization**: storing on a record data that could be derived from other records, to save a read or a recompute. Salesforce's native forms are roll-up summary fields, which keep an aggregate of a child object's values on the master record, and cross-object formula fields, which pull a value from a related record onto the current one.
+- **Roll-up summary field**: a field on the master of a master-detail relationship that automatically shows a value computed from the detail records, such as a count or a sum, and keeps it current as those children change. [^6]
+
+## Inheritance: where the "kinds of a thing" live
+
+Start with the shape that trips people up because it borrows a word from object-oriented programming. In code, inheritance means a child class gets the parent's members. In a data model, nothing is inherited at runtime. Salesforce does not let one custom object extend another and inherit its fields and records. What "inheritance" means here is logical: you have identified a supertype and a set of subtypes, and you must pick a physical representation.
+
+The data model notation makes the logical idea precise before any representation is chosen. A supertype entity carries the common attributes and relationships; its subtypes carry the specifics, and the subtypes are mutually exclusive, meaning a record is always exactly one subtype. [^1] The notation also tells you how a subtype gets implemented, by the solidness of its border:
+
+- A **solid border** means the subtype has its own physical object. In the Salesforce notation, an actual object tracks the occurrences of that subtype.
+- A **dashed border** means the subtype is modeled as a record type on the supertype object.
+- A **dotted border** means the subtype is conceptual only: no object, no record type, just a logical grouping used to explain the model. [^1]
+
+That border choice is the whole inheritance decision. When subtypes differ mostly in which fields matter, which picklist values apply, and what must be filled in, record types are the tool. Salesforce Ben's rule is that record types fit records that are the same concept but differ in execution, giving each subtype its own page layout, required fields, and picklist values. [^4] The classic cases are Opportunities split by revenue type, Cases split by issue type, and Leads split by source. Every subtype shares the same physical table, which means you can report across all of them in one place and keep one security model. Salesforce's own communications data model does exactly this, showing Business Account, Billing Account, and Consumer Account as record-type subtypes of a single account entity. [^1]
+
+Record types carry a real constraint that people discover late: a record type cannot truly hide a field from the database, only from the user. The physical fields exist on the object for every subtype. You control visibility and requirements through the layout, and you keep picklist values separate through record type picklist assignment, but the object is one table. If your subtypes need genuinely different fields that are meaningless to the other subtypes, or different relationships, or different sharing, record types distort the model. Fields pile onto the object, every subtype shares one schema, and validation gets gnarly.
+
+That is when the supertype-object pattern earns its keep. If a "Vehicle" concept branches into cars, aircraft, and vessels that share almost nothing beyond being vehicles, forcing them into one object makes a bloated record. The alternative is separate subtype objects, each with its own fields and relationships, all pointing at a shared supertype object that holds the common identifiers and the type discriminator. This is not class inheritance and it is not free. You now have a join to read the common data, an extra object to secure, and more moving parts on insert. It buys clean separation when divergence is deep.
+
+The mutual-exclusivity rule is the guardrail for both designs. If you find a record that legitimately belongs to two subtypes, you have not modeled subtypes at all; you have modeled two independent aspects, and they should be separate fields or separate objects, not a forced either-or. Naming a type discriminator a subtype when records can carry both is how you end up with a "type" picklist that is really two booleans wearing a costume.
+
+## Polymorphic relationships: one field, many possible parents
+
+Inheritance handles records that are kinds of one thing. Polymorphism handles the opposite: a record whose relationship must point at several unrelated things. The platform's own vocabulary is the clearest definition. A polymorphic relationship is one where the referenced object can be one of several different object types. [^2]
+
+Salesforce exposes this natively on a small set of standard fields rather than as a general capability you bolt onto any custom object. The two you meet constantly are on activities: `Who`, the person associated with the record, usually a Contact or a Lead, and `What`, the related non-person object, which can be an Account, an Opportunity, or any of a number of other types. [^2] `Owner` is polymorphic too; on an Event it can resolve to a User or a Calendar, and on many records it can be a User or a Group. [^2][^3] When you create a Task against an Account today and an Opportunity tomorrow, that single activity history stays uniform because the `WhatId` field never cares which object it points at.
+
+Querying a polymorphic field requires handling the unknown type. SOQL gives you two mechanisms. The `Type` qualifier filters on the referenced object's type, so you can ask for tasks whose `What` is an Account. [^2] The `TYPEOF` clause goes further, letting a single query pull type-specific fields and branch in Apex with `instanceof`:
+
+```apex
+List<Merchandise__c> merchandise = [
+    SELECT TYPEOF Owner
+        WHEN User THEN LastName
+        WHEN Group THEN Email
+    END
+    FROM Merchandise__c
+];
+
+for (Merchandise__c merch : merchandise) {
+    if (merch.Owner instanceof User) {
+        User userOwner = merch.Owner;
+        // work with a User owner
+    } else if (merch.Owner instanceof Group) {
+        Group groupOwner = merch.Owner;
+        // work with a Group owner
+    }
+}
+```
+
+Apex requires you to cast the polymorphic reference to a concrete type before you can pass it to a method typed for that object, which is exactly the discipline the `instanceof` checks enforce. [^3]
+
+Now the honest part. When your own custom object needs a field that can reference several object types, the platform does not hand you a general custom polymorphic field the way it gives you `Who` and `What`. This is a place to check the current release rather than trust a version you read once, because platform capabilities drift. As a design principle, though, the question to ask first is whether you want a polymorphic field at all. A single field that points at many object types is convenient for the user who creates the record and painful for everyone downstream. Every report, every Apex consumer, and every validation must branch on the type. Reporting tools and list views struggle with a field that has no fixed reference object. And security becomes murkier, because the access rules differ by what the field happens to point at.
+
+So the architect's honest move is often to remove the polymorphism rather than build a workaround for it. If the candidate parents share a meaningful common ancestor, give them that ancestor and make the polymorphic child point at it, which turns a wild relationship into a normal lookup. If the children genuinely need to hang off disparate objects, model the attachment explicitly: a junction that records both the child and the specific parent it belongs to, or one lookup field per candidate object plus a type field, accepting the schema cost for clarity. Chasing a native-looking single field across many parents is usually importing a UI convenience into the data model and paying for it in every query and report.
+
+## Denormalization: paying write cost to make reads fast
+
+Where inheritance and polymorphism shape how records relate, denormalization shapes what data you store at all. A normalized model keeps every fact in one place and derives the rest on read. That is clean and consistent. It is also slow when "deriving on read" means aggregating thousands of child records every time someone opens a parent page. Denormalization copies derived data onto a record so a read does not have to compute it. Salesforce makes this cheap and automatic through roll-up summary fields, which live on the master of a master-detail relationship and display a value calculated from the detail records, maintained as those children change. [^6]
+
+The payoff is real. A roll-up summary gives you a count, sum, average, or latest value on a parent that updates itself, so your page, your list view, and your Apex never run the aggregation query. That is the same reason a record in an ERP carries a cached total instead of recomputing its lines each time it renders. The platform is doing the denormalization for you, transactionally, which removes most of the consistency risk that hand-written denormalized fields carry. A count of open Cases shown right on the Account page is a roll-up summary, and it is almost always better than a trigger that maintains a number field by hand.
+
+Denormalization is a trade, and the trade has a shape you should name before you accept it. Every roll-up summary adds work to the write path. When a detail record is inserted, updated, or deleted, the platform updates the affected master. On high-volume objects with many children per parent and several roll-ups, that write cost is exactly the account-style skew pressure Lesson 14 warned about: many children writing into one master contend for the same record. Roll-up summaries also require a master-detail relationship, so you cannot roll up across a lookup, and you inherit master-detail's ownership and cascade behavior whether you wanted it or not. And they are a finite resource, capped per object, so you budget them like any scarce platform asset.
+
+The same reasoning applies to cross-object formula fields, which denormalize by pulling a related value onto the current record. They keep data in sync without stored duplication, which is a genuine advantage, but they are computed at read time and cost CPU on every query that touches them, and you cannot index a formula field. A formula is denormalization with the consistency handled for you and the read cost still present, which makes it the right call when a value must never drift out of sync and the volume is modest.
+
+The pattern behind all of it is a decision you make consciously: move a read cost to a write cost when reads are frequent and writes are rare, and keep data derived when it is cheap to derive. The failure mode is denormalizing out of reflex. Every cached field is duplicated state, and duplicated state is a promise that some process keeps it correct. When the platform maintains the copy for you, that promise is safe. When you maintain it with a trigger, you are now on the hook for every edge case that updates one copy and not the other. Before you add a stored field, ask whether a roll-up summary or a formula already does the job with the platform keeping the copies straight.
+
+## Worked example: a support escalation that needs all three
+
+A software company tracks support escalations. An escalation is a record a support engineer files when a case needs engineering attention. Three requirements come back from the business, and each one maps to a different tool.
+
+**1. Escalations must attach to an Account, an Opportunity, or a Case.** The engineer files the escalation against whatever they are working on. This smells like polymorphism, and the correct instinct is to refuse the easy version of it. Rather than hunt for a custom polymorphic field, the architect looks for a common ancestor. Account, Opportunity, and Case all roll up to an Account in this org's model, so an escalation carries a lookup to the Account it belongs to, which every candidate parent already has. The engineer still files it in context, but the stored relationship is a normal, reportable lookup to one object. Where a context object lacks an account (rare), a junction records the escalation against the actual object. The polymorphism dissolved into an existing hierarchy instead of being imported as a wild field.
+
+**2. Escalations come in engineering subtypes.** "Bug," "Infrastructure," and "Product question" are different in execution: they need different priority picklists, different required fields, and different routing. They share one object, one lifecycle, and one reporting surface. That is a record type decision. [^4] The architect adds three record types to the escalation object, giving each its own layout and picklist values, and keeps all escalations reportable in one place. No new object, no join.
+
+**3. Account pages must show how many escalations are open.** Counting open escalations per account on every page view would mean an aggregate query per account, which is exactly the denormalization trigger. The escalation object holds a master-detail to Account (escalations live and die with the account and should inherit its security), which satisfies the master-detail requirement, and the architect adds a roll-up summary field on Account counting escalations where Status does not equal Closed. [^6] The page reads the cached count, the platform keeps it current, and no Apex aggregates on read.
+
+Here is where the three tools interlock in a way that exposes their differences. The record types in step 2 sit on one object, so the roll-up in step 3 counts across all of them without extra work. If the architect had instead split engineering subtypes into separate objects (the deep-divergence path), the Account roll-up could not count across three objects with one field, and each subtype object would need its own roll-up or a shared supertype. That is the hidden cost of choosing separate subtype objects, and it is the reason record types are the default until divergence genuinely forces you out. Meanwhile the polymorphic ask in step 1 was answered by finding a common parent, which kept the denormalized count and the reportability clean. Each requirement got a different tool, and the tools stayed out of each other's way because the architect did not let one requirement dictate the shape of the others.
+
+## The pitfalls to avoid
+
+**Treating inheritance as if the platform inherits data.** Salesforce objects do not extend one another. When you say "Vehicle is a supertype," you are choosing record types or a shared-parent lookup, not turning on data inheritance. Design the representation, and remember that a record type cannot hide a field from the database, only from the user.
+
+**Forcing unrelated records under one object to get a roll-up or a single report.** A roll-up summary needs a master-detail, and a master-detail forces lifecycle and security coupling. If your subtypes diverge that deeply, separate objects tied to a shared supertype is the cleaner inheritance choice, and you accept that aggregation across subtypes now needs more structure.
+
+**Reaching for a polymorphic field when the parents share an ancestor.** Polymorphism is the platform's own mechanism on `Who` and `What`, but on a custom object it tends to be a shape you should dissolve. If the candidate parents roll up to something common, point at the common thing. Save true polymorphism for the cases where no common ancestor honestly exists and the platform gives you the field.
+
+**Denormalizing by hand when the platform already maintains the copy.** A hand-written trigger-maintained count is duplicated state you own. A roll-up summary or a cross-object formula is duplicated state the platform reconciles for you. Prefer the platform-maintained version, and remember every roll-up is a write cost and a master-detail commitment, so budget it like the scarce resource it is.
+
+## Try it
+
+An insurance company needs a data model for policy endorsements. An endorsement is a change to a policy, and it can be attached to a policy, a claim, or a vehicle. Endorsements come in types that differ heavily: a "driver change" endorsement carries almost no shared fields with a "coverage limit" endorsement. A policy page must show how many endorsements are pending.
+
+Answer each with the tool you would reach for, and say what it costs you:
+
+1. The endorsement can attach to three different objects. Do you want a polymorphic field here, or can the polymorphism be dissolved? What common ancestor exists, and what does pointing at it buy or cost you?
+2. Driver-change and coverage-limit endorsements share almost no fields. Do you use record types or separate objects? Recall the mutual-exclusivity rule and the master-detail coupling in step 3 before you answer.
+3. The policy page needs a pending-endorsement count. Where does that number live, and what relationship does your step-2 choice force?
+
+**Answers:** (1) Resist the polymorphic field. Policy, claim, and vehicle all roll up to the Policy in this model, so the endorsement carries a lookup to the Policy and the context is recoverable from there; you lose a single free-form "point at anything" field and gain a reportable, securable lookup. [^2] (2) Separate objects. If the subtypes genuinely share almost nothing, forcing them into one object bloats it and creates meaningless fields, the exact failure mode of record types. Give each a shared supertype object holding the policy link and the common fields, which also lets step 3 aggregate in one place. [^1] (3) A roll-up summary count on the supertype object, which is why the shared parent in step 2 matters: if you had split subtypes with no common parent, no single master-detail could roll the pending count up. The master-detail requirement of the roll-up is what makes the shared-parent inheritance choice the load-bearing one. [^6]
+
+## What's next
+
+You can now hold apart the three tools that bend a data model around irregular records: inheritance for kinds of a thing, polymorphic relationships for one field pointing at many things, and denormalization for paying write cost to make reads fast, and you know which physical representation Salesforce gives each one. The next lesson steps out of Salesforce data entirely and into general systems architecture. It is a domain modeling lesson in the classic sense, defining entities, aggregates, and bounded contexts, and it applies those ideas to designing agents rather than objects. You will carry the discipline of deciding what belongs together and what the boundary between two systems is into a context where the "records" are agent responsibilities instead of rows.
+
+[^1]: developer.salesforce.com. [Salesforce Data Model Notation](https://developer.salesforce.com/docs/platform/data-models/guide/salesforce-data-model-notation.html)
+[^2]: developer.salesforce.com. [Understanding Relationship Fields and Polymorphic Fields, SOQL and SOSL Reference](https://developer.salesforce.com/docs/atlas.en-us.soql_sosl.meta/soql_sosl/sforce_api_calls_soql_relationships_and_polymorph_keys.htm)
+[^3]: developer.salesforce.com. [Working with Polymorphic Relationships in SOQL Queries, Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/langCon_apex_SOQL_polymorphic_relationships.htm)
+[^4]: salesforceben.com. [Complete Guide to Salesforce Record Types](https://www.salesforceben.com/salesforce-record-types/)
+[^5]: salesforceben.com. [An Architect's Decision Guide on Choosing a Data Model in Salesforce](https://www.salesforceben.com/an-architects-decision-guide-on-choosing-a-data-model-in-salesforce/)
+[^6]: trailhead.salesforce.com. [Optimize Roll-Up Summary Fields in Salesforce](https://trailhead.salesforce.com/content/learn/modules/point_click_business_logic/roll_up_summary_fields)

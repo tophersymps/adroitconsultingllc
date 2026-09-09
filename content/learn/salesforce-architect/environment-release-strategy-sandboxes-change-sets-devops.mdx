@@ -1,0 +1,147 @@
+---
+title: "Lesson 19: Environment and Release Strategy: Sandbox Types, Change Sets vs DevOps (sf/sfdx)"
+slug: environment-release-strategy-sandboxes-change-sets-devops
+series: "salesforce-architect"
+lesson: 19
+excerpt: "Where work happens and how it moves to production. The four sandbox types (Developer, Developer Pro, Partial Copy, Full), what each copies and how often it refreshes, then the release-mechanism fork: click-based change sets versus source-driven deployment with the sf CLI and a Git-based source of truth, including Salesforce DX and DevOps Center."
+date: "August 22, 2026"
+author: "Adroit Consulting"
+readTime: "10 min read"
+tags: [Salesforce, Architecture, Delivery, DevOps]
+---
+
+# Lesson 19: Environment and Release Strategy: Sandbox Types, Change Sets vs DevOps (sf/sfdx)
+
+Lesson 16 moved records into an org. This lesson is about the orgs themselves: where work happens, and how completed work travels from a developer's sandbox to production. Every release strategy rests on two decisions. First, which sandbox types you run, because each one copies a different slice of production and refreshes on a different cadence. Second, how you move metadata, and here the choice is starker: click-based change sets, or source-driven deployment with the sf CLI and a Git-based source of truth.
+
+This lesson defines the environment vocabulary, lays out the four sandbox types with their limits, walks change sets through their strengths and their breakage points, then compares that path to source-driven development with Salesforce DX and DevOps Center.
+
+## Define the terms first
+
+- **Sandbox**: a copy of your production org that is isolated from it. Operations you run in a sandbox do not affect production, which is what lets you build and test without risk to live users. [^1]
+- **Environment**: one org in the chain a change travels through, most commonly developer sandbox, then an integration or QA sandbox, then a pre-release or staging sandbox, then production. The word is a role, not a thing; the same sandbox type can play different roles in different pipelines.
+- **Change set**: a package of customizations you send from one Salesforce org to another related org. A change set contains metadata (objects, fields, Apex, flows, layouts), never data records. [^3]
+- **Deployment**: applying a set of metadata changes to a target org so they take effect there. Validation is a dry run of a deployment that reports errors without committing the change. [^3] [^4]
+- **Source of truth**: the single authoritative copy of your metadata. In change-set workflows the org is effectively the source of truth. In source-driven development the version control repository is. [^5]
+- **Scratch org**: a temporary, disposable org you spin up from a configuration definition for development and automated testing, used with Salesforce DX. [^5]
+- **Salesforce DX**: the set of tooling, built around the Salesforce CLI and source format, that moves metadata out of the org and into version control. [^5]
+- **DevOps Center**: Salesforce's native tool that layers pipelines and managed version control on top of your orgs, giving admins a clicks-not-code path into release management. [^7]
+
+## The four sandbox types
+
+Salesforce ships four sandbox types, and the differences are not cosmetic. They determine what gets copied, how much storage you get, and how often you can refresh. [^1] [^2]
+
+| Sandbox type | What it copies | Refresh interval | Storage |
+|---|---|---|---|
+| Developer | Metadata only | 1 day | 200 MB data, 200 MB file (400 MB each with a storage upgrade) |
+| Developer Pro | Metadata only | 1 day | 1 GB data, 1 GB file (2 GB each with a storage upgrade) |
+| Partial Copy | Metadata plus a sample of data defined by a template | 5 days | 5 GB data, file storage matching production |
+| Full | Metadata plus all data | 29 days | Same as production |
+
+Developer sandboxes copy only the configuration, so they are for pure build and test work where you do not need records. A Developer sandbox is the default place an individual developer or admin works. The refresh interval of one day means you can pull a fresh copy of production's metadata every day, which keeps you aligned with whatever other teams have shipped. [^2]
+
+Developer Pro sandboxes are the same isolation story with more headroom: larger data storage and file storage, so they can host larger data sets. Salesforce points them at more development and QA tasks, integration testing, and user training. They still copy metadata only, so the extra space is for data you load in yourself, not data pulled from production. [^1] [^2]
+
+Partial Copy sandboxes add a sample of production data, chosen through a sandbox template. That makes them the workhorse for quality assurance: user acceptance testing, integration testing, and training all want realistic data without the cost of a full copy. The template is required, not optional, because you must decide which records come across. [^1] [^2]
+
+Full sandboxes are a replica of production, metadata and all data, up to production's storage limits. They are the only type Salesforce says supports performance testing, load testing, and staging. The tradeoff is the 29-day refresh interval, which is why Salesforce recommends against using a Full sandbox for day-to-day development: by the time you refresh it, the work has moved on. Even here, Salesforce recommends applying a template so you pull only the records you need, and you choose whether to include field history and Chatter activity, both of which can bloat the copy and slow it down. [^1]
+
+## Editions and licensing
+
+The sandboxes you can create depend on your edition. The counts below are the sandboxes included with each edition before you buy add-ons. [^2]
+
+| Sandbox type | Professional | Enterprise | Unlimited | Performance |
+|---|---|---|---|---|
+| Developer | 10 | 25 | 100 | 100 |
+| Developer Pro | 0 | 0 | 5 | 5 |
+| Partial Copy | Not available | 1 | 1 | 1 |
+| Full | Not available | 0 | 1 | 1 |
+
+Three patterns matter to an architect. Enterprise gets a Partial Copy but no Full sandbox by default, so a small Enterprise org that needs a staging replica must buy a Full license. Add-on sandboxes come bundled with Developer sandboxes: a Developer Pro add-on includes five, a Partial Copy add-on includes ten, and a Full add-on includes fifteen. And sandbox licenses are hierarchical, which means a Full sandbox license lets you create a sandbox of any lower type if you need that flexibility. [^2]
+
+## How change sets work
+
+Change sets are Salesforce's original native deployment mechanism. You create an outbound change set in the source org, select the metadata components to include, upload it, and the target org receives it as an inbound change set that you then deploy. [^3]
+
+The mechanism has real limits baked into its design. Change sets only travel between related orgs, meaning orgs affiliated with the same production org: production to its sandbox, or one sandbox to a sibling sandbox. You cannot use a change set to move metadata between two unrelated production orgs, or between orgs belonging to different companies. [^3] [^6] A change set holds metadata only. It never carries data records, so moving a list of contacts is a data operation, not a change set. [^3]
+
+Selection is manual. You add each component yourself, and Salesforce does not detect what you changed. If you worked across a few objects, several flows, and an Apex class, you are rebuilding the package from memory or from whatever notes you kept. Miss a referenced field and you find out at deploy time, when the target org fails validation or, worse, the deployment succeeds but the feature is broken because a dependency was left behind. [^6]
+
+Once uploaded, a change set is locked. You cannot add a missing component or remove one you added by mistake. The recovery path is to clone the change set in the source org, fix it, and upload again, which leaves a trail of near-identical packages and no built-in way to trace which version actually reached production. [^6]
+
+Change sets cannot carry every type of metadata. Some component types are not available in a change set at all, and for those Salesforce's instruction is blunt: migrate them manually by repeating the steps you took to create them. [^4] The supported list is long but not complete, and it changes release to release, so the deployment support for a brand-new feature can lag behind the feature itself. [^6] Validation helps, but it only catches structural errors in the metadata, not logical errors in a flow that surfaces when a real user hits an untested record state. [^6]
+
+## Where change sets break down
+
+The failures cluster in three places.
+
+No rollback. Once a deployment completes, the change is committed to the target org, and there is no undo. To reverse it you have to know exactly what the previous state was, and change sets keep no snapshot of it. Your options are manual reversal in production or building a reverse change set from a sandbox, both of which depend on your own external records. [^6]
+
+No version control. The target org becomes the only record of what is live, and the source org holds whatever change sets happen to be lying around. Nobody can answer "what changed between the March and June releases" by looking at the tool. Teams keep spreadsheets to track it. [^7] [^6]
+
+Linear, hand-built deploys. Each step in a pipeline requires its own deployment connection and its own change set. You cannot define one package that deploys across dev, QA, staging, and production in sequence. Every leg is rebuilt and revalidated by hand. [^6]
+
+These are not problems for a small team pushing a handful of changes per sprint. They become the dominant cost as teams grow, release cadence rises, and orgs accumulate complexity, which is the point where source-driven tooling starts to win. [^6]
+
+## Source-driven development with Salesforce DX
+
+Salesforce DX changed where the metadata lives. Instead of the org being the source of truth, your version control system becomes the source of truth, and source code plus metadata exist outside the org. That move unlocks team workflows you cannot get from change sets: branching, code review, merge conflict resolution, and an auditable history of every change. [^5]
+
+The tooling is the Salesforce CLI, which gives you commands to create projects, retrieve and deploy source, spin up scratch orgs, and run continuous integration. Salesforce has been migrating its CLI commands from the older `sfdx` prefix to the newer `sf` prefix. The new commands are simpler. As one migration example, the old `sfdx force:source:deploy --checkonly --testlevel NoTestRun` becomes `sf project deploy validate`. [^8]
+
+A Salesforce DX project is a local directory structure holding your metadata in source format. Large source files, such as custom objects, are broken into smaller files, which makes them easier to manage in version control and reduces merge conflicts between developers working in parallel. Scratch orgs are defined by configuration, so a developer can spin up a clean environment to build and test a feature without waiting on a shared sandbox. [^5] Salesforce DX tracks both local project changes and scratch org changes, which replaces the sticky-note inventory of what you touched. [^5]
+
+Salesforce DX is aimed at the pro-code developer. It left admins behind, which is why Salesforce built DevOps Center. [^7]
+
+## Change sets versus a source of truth
+
+The comparison is less about tool preference and more about where your team sits on the maturity curve.
+
+Change sets fit teams that move a modest volume of configuration, have one or two people accountable for releases, and do not need per-change auditability. They are free, built into every org, and need only an authorized deployment connection. [^6]
+
+A source-driven approach fits teams that ship often, work in parallel, or need to answer "who changed this and when." It demands more setup: a Git repository, the Salesforce CLI, a discipline of committing metadata as source. In exchange you get diffs, rollback through version history, and automated validation in CI rather than a manual deploy at the end of a sprint.
+
+DevOps Center is Salesforce's attempt to give admins the source-driven benefits without the command line. It provides a single source of truth by managing an underlying source control repository for you, plus pipelines that move work items through stages such as development, testing, and production. It is a separate product from change sets, so the two can coexist while a team migrates. [^7]
+
+## Worked example: a release strategy for a growing team
+
+A 30-person services firm runs on Enterprise Edition, which gives them 25 Developer sandboxes, one Partial Copy, and no Full sandbox by default. They ship a release to production every three weeks, and the two lead admins are feeling the change-set friction. Here is how they reshape the environment and the pipeline.
+
+1. **Right-size the sandboxes.** They designate one Developer Pro sandbox as the shared integration environment where branches merge and integration tests run. They keep the Partial Copy sandbox for UAT and training, refreshed against a template that pulls the records QA actually needs. They budget a Full sandbox license for the quarterly performance test and the staging rehearsal before each major release. Developer sandboxes stay per-developer for daily build work, refreshed each morning. [^1] [^2]
+
+2. **Move the release path to source.** The team creates a Salesforce DX project and puts it in Git. The developer sandboxes and the integration environment connect to the repository, so metadata changes land as commits and merges instead of hand-built change sets. [^5]
+
+3. **Use `sf` commands for the pipeline.** A CI job validates every merge with `sf project deploy validate` before anything reaches the integration sandbox, catching metadata errors before human review. [^8]
+
+4. **Retire change sets in stages.** They keep change sets for the one-off admin tweaks that source does not cleanly cover while the team is migrating, since DevOps Center and change sets can coexist. They do not rely on change sets for the three-week release, where they now need diffs and rollback. [^7]
+
+The result is a release where the "what changed" question has a real answer (the Git history) and a failure can be rolled back to the prior commit instead of reconstructed from a spreadsheet. That is the entire point of the shift.
+
+## The pitfall to avoid
+
+**Treating the sandbox types as interchangeable, then hitting a wall at the wrong moment.** A Full sandbox cannot be your day-to-day dev environment because it refreshes every 29 days, and a Developer sandbox cannot host your UAT data because it copies metadata only and caps at 200 MB. The release plan fails when an environment is expected to do a job its type cannot do. [^1] [^2]
+
+The metadata-side pitfall is staying on change sets past the point where the pain is real and the fix is cheap. The cost of manual dependency management grows faster than headcount as orgs get complex, and a team that waits for the 11pm failed deploy to switch has already paid the price many times over. [^6] Match the tool to the release cadence, and match the sandbox type to the phase of the pipeline.
+
+## Try it
+
+Your org is on Unlimited Edition with one Full, one Partial Copy, five Developer Pro, and one hundred Developer sandboxes. Answer before reading on.
+
+1. Which sandbox do you use to rehearsal a performance test, and why can you not refresh it daily? *(Full sandbox, the only type that supports performance and load testing; it refreshes every 29 days.)* [^1] [^2]
+2. Your QA lead needs realistic data for user acceptance testing next week. Which sandbox type and why? *(Partial Copy, refreshed from a template that pulls a sample of production data; Developer sandboxes carry no data and Full is a heavier, slower option.)* [^1] [^2]
+3. You need to send a metadata change from a sandbox to production. What constraint does a change set impose on the two orgs? *(They must be related, both affiliated with the same production org; and the change set carries metadata only, never data records.)* [^3]
+4. You deploy a change set and production breaks. What does the tool give you to recover? *(Nothing automatic: change sets have no rollback and keep no pre-deployment snapshot, so you must reconstruct the prior state by hand.)* [^6]
+5. You want the answer to "what changed between the March and June releases" to come from a tool, not a spreadsheet. Which approach gives you that? *(Source-driven development, where Git is the source of truth and every change is a commit with history.)* [^5]
+
+## What's next
+
+You can now lay out an environment chain and pick a release mechanism that fits your team's size and cadence. The next lesson is a General Systems Architecture for AI slot, and it shows that the same discipline holds for machine learning and AI pipelines. You will see how environments, CI, and CD look when the artifact is a model rather than a metadata deploy, and how the release habits from this lesson carry over unchanged.
+
+[^1]: help.salesforce.com. [Sandbox Types and Templates](https://help.salesforce.com/s/articleView?language=en_US&id=platform.create_test_instance.htm&type=5)
+[^2]: help.salesforce.com. [Sandbox Licenses and Storage Limits by Type](https://help.salesforce.com/s/articleView?id=platform.data_sandbox_environments.htm&language=en_US&type=5)
+[^3]: help.salesforce.com. [Change Sets](https://help.salesforce.com/s/articleView?language=en_US&id=changesets.htm&type=5)
+[^4]: help.salesforce.com. [Components Available in Change Sets](https://help.salesforce.com/s/articleView?id=platform.changesets_about_components.htm&language=en_US&type=5)
+[^5]: developer.salesforce.com. [Salesforce DX Developer Guide: How Salesforce Developer Experience (DX) Tooling Changes the Way You Work](https://developer.salesforce.com/docs/atlas.en-us.sfdx_dev.meta/sfdx_dev/sfdx_dev_intro.htm)
+[^6]: gearset.com. [Salesforce change sets and their hidden limits](https://gearset.com/blog/salesforce-change-sets/)
+[^7]: admin.salesforce.com. [The Future of Salesforce DevOps Is Here: What's New for Admins](https://admin.salesforce.com/blog/2026/the-future-of-salesforce-devops-is-here-whats-new-for-admins)
+[^8]: gearset.com. [Salesforce DX explained: tools, features and its role in DevOps](https://gearset.com/blog/salesforce-dx/)

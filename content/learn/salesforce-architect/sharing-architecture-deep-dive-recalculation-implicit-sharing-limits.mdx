@@ -1,0 +1,138 @@
+---
+title: "Lesson 36: Sharing Architecture Deep Dive: Recalculation, Implicit Sharing, and When Sharing Can't Do the Job"
+slug: sharing-architecture-deep-dive-recalculation-implicit-sharing-limits
+series: "salesforce-architect"
+lesson: 36
+excerpt: "Sharing is not static, and it is not unlimited. When an org-wide default changes, the platform recalculates share records across the org, and on a big data volume that job can churn for hours. Implicit sharing hands out access automatically through parent-child relationships, whether you asked for it or not. And at a certain scale, declarative sharing stops being the right tool, which is when Apex managed sharing and restriction rules take over."
+date: "September 9, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Salesforce, Architecture, Security]
+---
+
+# Lesson 36: Sharing Architecture Deep Dive: Recalculation, Implicit Sharing, and When Sharing Can't Do the Job
+
+Lesson 11 gave you the four record-level controls and the rule that sharing only ever opens access. This lesson goes past the controls to the machinery underneath. Sharing is not a static configuration you set once. It is a live set of share records that the platform keeps in sync, and the work it does to stay in sync is a real cost you must plan around. This lesson covers three things the exam and the interview both probe: what happens when sharing gets recalculated, how implicit sharing hands out access without a single rule, and where declarative sharing stops being enough, which is when Apex managed sharing and restriction rules come in.[^1]
+
+## Define the terms
+
+- **Share record**: the row, stored on a `<Object>Share` object, that grants a user or group a specific access level to a specific record. Sharing is an access control list, not a switch.[^2]
+- **Sharing recalculation**: the automatic process that adds, removes, or adjusts share records across an object when its org-wide default changes or a rule is edited, so existing records reflect the new access model.[^1][^4]
+- **Implicit sharing**: automatic access that the platform grants through parent-child relationships, with no rule and no share record you manage. Parent implicit sharing and child implicit sharing work in opposite directions.[^1]
+- **Apex managed sharing**: programmatic sharing via Apex or the SOAP API, used when no declarative method can meet the requirement, and maintained when the record owner changes.[^3]
+- **Restriction rule**: a filter that further restricts which records a user can see, working in the opposite direction from every opening mechanism.[^1]
+
+## Recalculation: the cost of changing the access model
+
+Here is the part most architects underestimate. The moment you change an object's org-wide default from Private to Read Only, or back again, Salesforce does not just flip a flag. It runs a sharing recalculation that walks the existing records and updates every share record to match the new access model. The architect guide is explicit that OWD can be changed in either direction, Private to Controlled by Parent and back, but that these changes require sharing recalculation, and depending on volume could result in long processing times.[^1]
+
+A recalculation removes redundant shares as well as adding new ones. The Apex developer guide uses a concrete example: manual sharing that grants read-only access is deleted when an object's sharing model changes from Private to Public Read Only, because once the whole object is readable, that manual share grants nothing extra.[^4] So recalculation is a cleanup pass, not just an expansion.
+
+For an architect the operational takeaway is that a recalculation is a scheduled event, not an impulse. On a large org, changing OWD on a high-volume object triggers a background job that can run for a long time and consume a meaningful share of the platform's background capacity. You plan these changes for a maintenance window, you test the timing in a sandbox at representative volume, and you communicate the window, because until the recalculation finishes, access is in a transitional state.[^1]
+
+When you must make a big bulk change, such as a quarterly hierarchy realignment across two million accounts, Salesforce Support can enable a feature that defers automatic sharing calculations. Normally every change to the role hierarchy, territory hierarchy, groups, sharing rules, user roles, team membership, or ownership can kick off its own recalculation, and a bulk change can start many of them at once. Deferring lets you make the whole change and then run the sharing calculations once, all together, which is typically far more efficient on large volumes.[^1]
+
+The same discipline applies to Apex managed sharing. Every time a custom object's org-wide default is updated, any Apex recalculation classes defined for that object also execute. To recalculate Apex managed sharing on demand, you write a class that implements `Database.Batchable`, associate it with the custom object on its detail page, and run it from the Apex Sharing Recalculation related list, or invoke it programmatically with `Database.executeBatch`.[^4]
+
+## Implicit sharing: access the platform grants without asking
+
+Implicit sharing is the quiet one. You cannot turn it on or off, because it is native to the platform, not a configurable setting. But you must understand it, because it produces access you did not explicitly grant, and that surprises people who think they have locked data down.[^1]
+
+There are two directions.
+
+**Parent implicit sharing** gives a user access to a parent Account when they can see a child Opportunity, Case, or Contact on it. The data access policy is blunt: if a user can see a contact, opportunity, case, or order, they implicitly see the associated account. This is why sharing an opportunity can open up its account, the side effect Lesson 11 flagged.[^1]
+
+**Child implicit sharing** works the other way. The owner of an Account gets access to that account's child records, and the level is set per role in the role hierarchy. For each of the child objects (contact, opportunity, case), the role defines whether the account owner implicitly sees it, edits it, or has no access.[^1]
+
+Two limits matter. Implicit sharing does not apply to custom objects, only to those standard parent-child pairings. And the account hierarchy does not work like the role hierarchy: having a parent-child relationship between two accounts does not give the user access to the children account. The role and territory hierarchies roll access up, but the account hierarchy does not, which is a mistake people make constantly.[^1]
+
+## When declarative sharing can't do the job
+
+Sharing rules are capped, and they only open access. Both facts eventually force you past them. The architect guide names the limits: up to 300 sharing rules per object, including up to 50 criteria-based and guest user rules, and it recommends keeping the total public groups in an org to 100,000 and the role hierarchy to no more than 10 levels of branches.[^1]
+
+When a requirement cannot be met by any declarative method, the tool is **Apex managed sharing**: using code to build dynamic sharing. The developer guide lists the use cases: when no other sharing method meets the need, when an external system of truth continues to drive access, when native sharing components perform poorly at very large data volumes, and when you need team functionality on a custom object.[^1] Apex managed sharing stays maintained when the record owner changes, unlike a manual share, which is dropped on transfer.[^3]
+
+Apex managed sharing needs an Apex sharing reason, a label and name you define on the custom object's detail page, so the Reason column shows why a record was shared instead of an opaque manual share. The name, not the label, is what you reference in Apex and the API. Only users with Modify All Data can add or change Apex managed sharing on a record.[^3]
+
+The worked pattern, from the developer guide, is a trigger on a custom `Job__c` object that shares each job with its recruiter and hiring manager after insert:[^3]
+
+```apex
+trigger JobApexSharing on Job__c (after insert) {
+    if (trigger.isInsert) {
+        List<Job__Share> jobShrs = new List<Job__Share>();
+
+        for (Job__c job : trigger.new) {
+            Job__Share recruiterShr = new Job__Share();
+            Job__Share hmShr = new Job__Share();
+
+            recruiterShr.ParentId = job.Id;
+            hmShr.ParentId = job.Id;
+
+            recruiterShr.UserOrGroupId = job.Recruiter__c;
+            hmShr.UserOrGroupId = job.Hiring_Manager__c;
+
+            recruiterShr.AccessLevel = 'edit';
+            hmShr.AccessLevel = 'read';
+
+            recruiterShr.RowCause = Schema.Job__Share.RowCause.Recruiter__c;
+            hmShr.RowCause = Schema.Job__Share.RowCause.Hiring_Manager__c;
+
+            jobShrs.add(recruiterShr);
+            jobShrs.add(hmShr);
+        }
+
+        Database.insert(jobShrs, false, AccessLevel.USER_MODE);
+    }
+}
+```
+
+The trigger sets three fields per share: `ParentId` for the record, `UserOrGroupId` for who gets access, and `AccessLevel` for what they can do. It sets `RowCause` to the Apex sharing reason so the share is attributed to your code and not to manual sharing. The developer guide notes that if a share would grant an access level equal to or more permissive than the object's default, the insert returns a field-filter error for that record, which is fine because that share was never required.[^3]
+
+Apex managed sharing is the tool, but it is not the first tool. It is what you reach for when declarative sharing genuinely cannot express the requirement, because it is code that someone must test, maintain, and audit. The developer guide treats it as the programmatic extension of the same sharing model, not a separate security system: it still works through share records, it still respects the most-permissive-wins rule, and it still gets recalculated alongside everything else when OWD changes.[^3][^4]
+
+## The reverse direction: restriction rules
+
+Everything in Lesson 11 opened access. Restriction rules are the documented exception that tightens it. A restriction rule filters the records a user can see down to those meeting criteria you specify, and it works in the opposite manner from every opening mechanism, further restricting instead of expanding. They are available for custom objects, external objects, contracts, events, tasks, and time sheets, and they apply across list views, lookups, related lists, reports, search, SOQL, and SOSL. The limit is two active restriction rules per object in Enterprise and Developer editions, five in Performance and Unlimited.[^1]
+
+This matters to the sharing-architecture story because it is the answer to a question Lesson 11 could not answer. If your access problem is that certain users see too much, not too little, no sharing rule can help you, because sharing rules only open. Restriction rules are the tool for genuinely private access, for things like contracts and tasks where Private is hard to achieve with OWD alone.[^1]
+
+## Worked example: an acquisition brings sharing recalc and a volume problem
+
+A financial services firm runs Accounts and Cases at Private internally, with a role hierarchy and a handful of sharing rules. The firm acquires a smaller company and folds its accounts and cases into the same org. The architect has three distinct problems to solve.
+
+1. **OWD change and recalculation.** The acquired org kept Cases at Public Read Only. The consolidated org needs them Private. Flipping the OWD triggers a recalculation across every case in the org, and the case volume is in the millions. The architect schedules the change for a maintenance window, tests the recalculation timing in a sandbox at full volume first, and tells the team that case access will be in transition until the background job completes.[^1]
+
+2. **Ownership and data skew.** The acquisition concentrates hundreds of thousands of cases under a handful of account owners during migration. That is an ownership skew, and the architect guide warns it can cause long-running transactions when change occurs, recommending a ratio no higher than 1 owner to 10,000 records. The architect distributes the records and considers moving heavy owners out of the role hierarchy, because the guidance is that a user owning more than 10,000 records should not hold a role, or if they must, their role sits at the top of its own branch.[^1]
+
+3. **Access the rules cannot express.** After the merge, the compliance team must see specific cases across both business units on an ad-hoc, criteria-driven basis that no sharing rule can capture cleanly. The architect uses Apex managed sharing with a distinct sharing reason per business rule, so the Reason column shows exactly why each case is visible and the shares survive owner transfers, which manual shares would not. They are careful to keep the code bulkified, because the case volume is exactly the scenario where native sharing components underperform.[^1][^3]
+
+## The pitfalls to avoid
+
+**Treating a recalculation as instant.** Changing OWD on a large object starts a background job that can run for a long time. If you flip a default mid-afternoon on a high-volume object, you get a transitional access state and a busy background process, not a clean change. Plan it, test the timing, schedule the window.[^1]
+
+**Forgetting implicit sharing exists.** You lock Cases to Private and still find users seeing accounts through parent implicit sharing, because seeing a case grants access to its account. And you assume account hierarchy rolls up like role hierarchy, which it does not. Account to child account is not a sharing relationship.[^1]
+
+**Reaching for Apex managed sharing before exhausting declarative options.** It is code, with test and maintenance cost, and it is only meant for when no declarative method works. If a sharing rule can express the requirement, use the rule. Apex sharing is the escalation, not the default.[^1][^3]
+
+**Expecting sharing rules to restrict.** They cannot. If some users see too much, that is a restriction problem, and restriction rules are the only declarative tool that narrows access. Reaching for more sharing rules in that situation adds access you already have too much of.[^1]
+
+## Try it
+
+1. You change a custom object's OWD from Private to Read Only on a large org. What runs in the background, and what might it delete? *(A sharing recalculation. It may delete shares that now grant no additional access, like a read-only manual share, because the whole object is already readable.)*[^1][^4]
+
+2. A user who can see an Opportunity now sees its parent Account, and you never granted that. What is happening? *(Parent implicit sharing: access to a child opportunity, case, contact, or order grants access to the associated account.)*[^1]
+
+3. You need a custom object shared dynamically based on logic no declarative rule can express, and the shares must survive a record owner change. What tool, and what must the share record carry? *(Apex managed sharing. Each share record needs ParentId, UserOrGroupId, AccessLevel, and an Apex sharing reason as its RowCause.)*[^1][^3]
+
+4. A user can see records you have locked to Private, and no sharing rule explains it. Where do you look next? *(Implicit sharing through a child or parent relationship, and separately an object-level View All or Modify All permission, which bypasses the sharing model entirely.)*[^1]
+
+5. Your problem is that certain users see too much, not too little. Which tool narrows their access? *(A restriction rule, the only declarative mechanism that restricts rather than opens.)*[^1]
+
+## What's next
+
+You now understand sharing as a live, costly, bounded mechanism: recalculation keeps it in sync, implicit sharing grants access silently, and Apex managed sharing extends it past declarative limits. The next lesson shifts from record access to how work actually runs at scale. It covers Asynchronous Apex, the four flavors of background execution, batch, queueable, scheduled, and future, and how to choose the right one for a job that cannot run in the request thread. You will learn the tradeoffs between them and when each fits.
+
+[^1]: architect.salesforce.com. [Platform Sharing Architecture | Salesforce Architects](https://architect.salesforce.com/docs/architect/fundamentals/guide/platform-sharing-architecture)
+[^2]: developer.salesforce.com. [Understanding Sharing | Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_bulk_sharing_understanding.htm)
+[^3]: developer.salesforce.com. [Sharing a Record Using Apex | Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_bulk_sharing_creating_with_apex.htm)
+[^4]: developer.salesforce.com. [Recalculating Apex Managed Sharing | Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_bulk_sharing_recalc.htm)

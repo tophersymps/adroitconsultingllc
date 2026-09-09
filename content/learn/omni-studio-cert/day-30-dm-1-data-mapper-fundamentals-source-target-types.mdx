@@ -1,0 +1,128 @@
+---
+title: "OmniStudio DM-1: Data Mapper Fundamentals & Source/Target Types"
+slug: day-30-dm-1-data-mapper-fundamentals-source-target-types
+series: omni-studio-cert
+lesson: 30
+excerpt: "Define and configure the four Data Mapper types that extract, transform, load, and map data between Salesforce and outside systems. Learn what a Data Mapper is, why the four interfaces exist, which sources and targets a mapper can bridge, why field-level security makes mappers a safer data path than raw SOQL, and how to configure and test a mapper step by step. This lesson opens the Data Mappers domain and names the artifact that the whole exam keeps coming back to."
+date: "September 8, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [OmniStudio, DataMappers]
+---
+
+Every OmniScript you build in earlier lessons needed data to show, and needed to save what the user changed. A FlexCard that displays a customer's policies pulls those records from somewhere. An edit form that a rep fills in writes the result back to Salesforce. That somewhere is almost never a pile of hand-written Apex. It is a Data Mapper, and it is the subject of the next domain on the exam. Requirement DM-1 asks you to define and configure Data Mappers to extract, transform, load, and map data between sources and targets, and it is where the certification shifts from building screens and orchestrations to building the data layer underneath them. [^1]
+
+The name changed recently enough to matter. What every older Trailhead module, every blog post, and most Stack Exchange answers call a DataRaptor is now a Data Mapper. Same tool, renamed. [^1][^2] On the exam and in current documentation, the term is Data Mapper, so get comfortable with it, but do not be surprised to see the old word in archived study material. [^2] The underlying ideas are identical either way.
+
+## Deep Dive
+
+### What a Data Mapper is, and what it is for
+
+A Data Mapper is a mapping tool that lets you read, transform, and write Salesforce data without writing Apex. [^1] Read that definition slowly, because three words in it carry real weight. It reads, which means it pulls records out of the platform. It transforms, which means it reshapes data from one structure into another, renaming fields, converting formats, rearranging JSON. And it writes, which means it pushes records back in, creating, updating, or deleting. [^1] One declarative artifact covers all three directions of data movement. [^2]
+
+The point of building it declaratively is that you do not reach for a trigger or a class the moment data needs to move. Salesforce makes the recommendation bluntly: although Apex classes can read, write, and transform data, they take longer to create and are harder to maintain than Data Mappers, so using Data Mappers is a best practice. [^1] A Data Mapper is a config file you maintain in a designer, not code a developer owns. That is what makes it a fit for a consultant-led delivery rather than a pure engineering effort, and it is why the exam treats the mapper as the default tool for the job.
+
+Where does the mapper sit in the flow? The documentation gives the shape. Data Mappers typically supply data to Omniscripts, Integration Procedures, and Cards, and write updates from those components back to Salesforce. [^1] The canonical cycle has three moves. An Omniscript calls a Data Mapper Extract to read data from Salesforce, so the screen has something to show. The user interacts with the Omniscript and changes or enters data. Then the Omniscript calls a Data Mapper Load to write the result back to Salesforce. [^1][^2] Get that rhythm in your head: read for display, capture the change, write it back. Everything else in the domain is a refinement of those three moves. [^1]
+
+A Data Mapper is also reusable. Because it is a named, versioned artifact rather than code pasted into a screen, one mapper can be invoked by many OmniScripts, Integration Procedures, and FlexCards. [^1][^2] You configure the mapping once and every consumer calls the same definition. That is the single-source behavior the IP best practices lesson told you to lean on, and the Data Mapper is the thing being reused. [^3]
+
+### The four interfaces: intent decides the type
+
+A Data Mapper is not one tool. It is four, and you choose the type by what you want the mapper to do. The four types are Turbo Extract, Extract, Transform, and Load. [^1] The way to remember them is to think about intent, because each interface is built for a distinct direction of data work. Extract and Turbo Extract read data out of Salesforce. Load writes data into Salesforce. Transform reshapes data without touching Salesforce at all. [^1][^2]
+
+The distinction matters for the exam in a very direct way. Quiz question one asks which interface is optimized for a single object plus its related fields, and the answer is Turbo Extract. Quiz question two asks which interface writes or updates records, and the answer is Load. [^2] Those two questions are the exam checking that you did not blur the four types into one generic "data thing." Each type exists because its job has different requirements, so let me walk through each one.
+
+**Turbo Extract** reads data from a single Salesforce object type, with support for fields from related objects. [^1] It is the leanest of the readers. You filter the data, select the fields to return, and you are done. Its trade-offs make it fast and simple: it does not support formulas, it has no Output tab where you would use mappings to structure the output, and custom JSON, default values, attributes, and translations are not supported. [^1] What you give up in flexibility you get back in performance and simplicity, which is why Turbo Extract is described as optimized for single-object reads. [^2] The standard example is retrieving the contacts for an account when you already have the account Id. [^2]
+
+**Extract** is the full-featured reader. Data Mapper Extracts read Salesforce data and return results in JSON, XML, or custom formats, using complex field mappings. [^1][^5] Unlike Turbo Extract, Extract supports formulas, attributes, default values, and translations, and it can pull from one or more objects and from related objects. [^1][^5] When an Omniscript or FlexCard needs rich, structured internal data, an Extract is typically what provides it. [^1][^5] Think of Extract as the workhorse read for anything more involved than grabbing a handful of fields off one object. [^5]
+
+**Load** writes data to Salesforce. Data Mapper Loads accept data in JSON, XML, or custom input formats and write it to Salesforce objects. [^1] A Load updates records with changed data and creates new records, and it can do both in the same run. [^2] To shape the input you define formulas and transform values, and to say where the result lands you map fields from the output JSON to fields on Salesforce objects. [^2] Load is the write side of the read-capture-write cycle. It is the interface that turns a rep's edited form into an updated record. [^2]
+
+**Transform** performs intermediate data transformations without reading from or writing to Salesforce. [^1][^8] It is the shape-shifter. A Transform converts JSON input to XML output and back, restructures input and renames fields, and substitutes values. [^2] Because it never touches the database, it is the interface you reach for when you need to reshape a payload between two systems that do not speak the same structure. [^2] Two of its canonical uses are populating a DocuSign template and filling fields in a PDF document, which is how document generation enters the picture. [^2][^8]
+
+The examiner's shortcut comes from the official descriptions and is worth adopting as your own memory hook: Turbo Extract is the fast single-object read, Extract is the flexible multi-object read, Load is the write, and Transform is the reshape. [^1][^2] When a question names an action, match it to the interface whose purpose that action is. [^2]
+
+### Sources and targets: what a mapper can bridge
+
+The exam requirement lists the breadth explicitly. A Data Mapper maps data between sources such as JSON, XML, and a Custom Apex class, and targets such as JSON, XML, a Custom Apex class, an sObject, a PDF, and DocuSign. [^1] Quiz question three tests exactly this, asking which targets a Data Mapper can produce, and the full answer is JSON, XML, Apex class, sObject, PDF, and DocuSign. [^2] The trap is the instinct that mappers only speak JSON. They do not. They are the bridge between the platform and whatever format the outside world uses. [^1]
+
+The most common format is JSON, because that is what OmniScripts and FlexCards work with internally. But a mapper also handles XML, which matters for legacy systems and certain external integrations that still exchange XML. [^1] Beyond those two, a Custom Apex class can act as either a source or a target, letting a mapper interact with data shaped by your own code. [^1]
+
+On the write side the range widens to documents. A Load writes to sObjects, so Salesforce records are a first-class target. [^1][^7] A Transform can feed a PDF, by filling fields in a PDF document, or a DocuSign template, by populating the data a signature envelope needs. [^2] So when you hear "document generation" in an OmniStudio context, the pipeline almost always runs through a Data Mapper Transform that reshapes your data into the shape a PDF or DocuSign provider expects. [^2][^8]
+
+The documentation adds two reach extensions worth knowing. Data Mappers can access external objects and custom metadata as well as standard sObjects, with no special syntax or extra configuration. [^1] And both Extract and Load Data Mappers can handle custom data formats beyond JSON and XML by using a custom input or output class. [^1] If a partner hands you CSV or a proprietary format, you do not abandon the mapper. You give it a custom class that knows how to interpret that format, and the mapper does the mapping. [^1]
+
+Do not read this list as "memorize five formats." Read it as the answer to a design question the exam keeps asking: when a system needs data that lives outside the clean JSON world of an OmniScript, a Data Mapper is the tool that spans the gap. [^1][^2]
+
+### Field-level security: why mappers beat raw SOQL
+
+There is a security reason the platform steers you toward Data Mappers, and the exam will check that you understand it. A Data Mapper respects field-level security. When you enable the OmniStudio security setting `EnforceDMFLSAndDataEncryption` in the Omni Interaction Configuration, the platform automatically enforces field-level security for all Data Mappers. [^4] That means a mapper will not hand a field to a user who has no read access to it, and will not write a field the user cannot edit. [^4]
+
+Compare that to raw SOQL in Apex. A query written in an Apex class runs against the data layer in a context that does not apply field-level or sharing rules by default. To make that SOQL respect FLS you must add enforcement yourself, usually with `WITH SECURITY_ENFORCED` or by running the results through `Security.stripInaccessible`. [^4] That is work a developer can forget, and a forgotten clause becomes a quiet leak where a low-privilege user can see or change a field they should not touch. [^4]
+
+This is the substance behind the exam trap that says do not reach for SOQL where FLS matters. [^1][^4] When a scenario cares about who can read which field, the mapper is the safer default, because security is built into the data path rather than bolted on by whoever remembered to write the clause. [^4] The documentation makes the point from the other side too: Data Mappers respect field-level security, which is what makes them the recommended method when security matters, rather than writing raw queries and hoping they get wrapped correctly. [^1][^4]
+
+The reusable-artifact point folds back into security. Because the Data Mapper is one named, centrally configured definition, its security behavior is configured in one place and applies to every consumer that calls it. [^1][^4] That is harder to guarantee with per-screen SOQL scattered through many classes. One mapper, one security posture, many callers. [^4]
+
+### Reuse and governance: one definition, many consumers
+
+A Data Mapper earns its keep through reuse. OmniScripts, Integration Procedures, and FlexCards all call mappers, and a mapper built once can serve all three. [^1] This is the architectural point the IP lessons kept reaching toward, so it is worth stating cleanly here. Integration Procedures orchestrate, and the Data Mappers they call are the reusable data operations underneath them. [^3] Rather than each OmniScript re-implementing how it looks up an account, one Extract owns that lookup and every screen calls it. [^3]
+
+The governance practices for mappers echo the best practices you saw for IPs. Keep a Data Mapper targeted, so it only extracts or loads the data one operation needs. [^3] Keep the number of SObjects in a mapper to three or fewer to avoid server performance problems. [^3] Use relationship notation to pull parent and child data in one mapper instead of stacking multiple extract steps. [^3] And name response nodes and elements consistently so consumers can rely on the shape. [^3] The pattern is the same as a well-designed procedure: focused, well-named, single-sourced, and stable in what it returns. [^3]
+
+## Configuration Walkthrough
+
+Configuring a Data Mapper is a small, repeatable ritual. Walk through it once on a concrete example: an Extract that reads an Account and its Contacts so an Omniscript can display them. The steps carry over to the other three types with only the tabs changing.
+
+1. **Create the Data Mapper and choose its type.** In the OmniStudio Data Mapper tab, create a new mapper and name it to say what it does, for example `GetAccountWithContacts`. [^1][^2] Decide the interface by intent. This is a read for display, so it is an Extract. If you only needed a few fields off the Account, a Turbo Extract would be the faster choice, but because you want the Account plus its related Contacts with formulas and structured output, Extract is correct. [^1][^5]
+
+2. **Define the source.** For an Extract the source is Salesforce data, so add the Account object as the primary sObject. [^5] Then add the related Contact records using the relationship to the Account, so one mapper returns both the Account header and its Contacts. [^1][^5] The source is where you say what you are reading from, and here it is the objects in the platform. [^5]
+
+3. **Filter and map the output.** Choose the fields you want returned. If the Omniscript only needs the Account name, phone, and website plus each Contact's name and email, map only those fields, not the entire object. [^1][^5] Best practice is a targeted mapper that returns only what the operation needs. [^3] Add a filter, such as an Account Id passed in, so the Extract returns one record rather than the whole table. [^5]
+
+4. **Add formulas where the data needs reshaping.** If the output must include a value that is not a raw field, such as a formatted label or a concatenation, define a formula and map its output to a node in the output JSON. [^1][^5] Turbo Extract cannot do this, which is exactly why you chose the full Extract for a mapping that needs it. [^1]
+
+5. **Test with sample input and inspect the output.** Go to the Preview tab, supply a sample Account Id or input, and execute the mapper. [^2] Read what comes back. Confirm the Account fields are present, the Contacts array is populated, and every node you mapped appears with the value you expect. [^2][^5] This is the same test-before-you-wire discipline you used in the IP lessons, applied at the mapper level, and it is how you catch a dropped field or a wrong relationship before any OmniScript depends on it. [^3]
+
+The Load and Transform follow the same shape with different tabs. For a Load, you map from the incoming JSON or XML to target sObject fields and can use formulas, and you preview it by feeding JSON input and inspecting what gets created or updated. [^2][^7] For a Transform, there is no Salesforce source or target at all, just input-to-output mapping, and you test it by running JSON or XML in and reading the reshaped result out. [^2][^8]
+
+## Exam Traps
+
+- **Using raw SOQL where FLS matters.** A query in Apex does not enforce field-level security by itself; you have to add `WITH SECURITY_ENFORCED` or run results through `Security.stripInaccessible`. [^4] Data Mappers respect FLS automatically when the `EnforceDMFLSAndDataEncryption` setting is on, which makes them the recommended path when field security is a concern. [^1][^4]
+
+- **Confusing the four interface types.** Turbo Extract is the fast single-object reader, Extract is the flexible reader for one or more objects with formulas and structured output, Load is the writer, and Transform is the reshape tool that never touches Salesforce. [^1][^2] Blurring a Load with an Extract is the easiest way to lose the point of a scenario question. [^2]
+
+- **Assuming a mapper only handles JSON.** Data Mappers span JSON, XML, custom Apex classes, sObjects, and document targets such as PDF and DocuSign. [^1][^2] When a question lists target formats, the full set is the right answer, not "only JSON." [^2]
+
+- **Treating Turbo Extract and Extract as interchangeable.** Turbo Extract is faster and simpler but gives up formulas, output mappings, custom JSON, and translations. [^1] Pick Turbo Extract for a simple single-object read with related fields, and the full Extract when you need formulas or complex output structure. [^1][^2]
+
+- **Forgetting a mapper is a reusable, single-sourced artifact.** Rebuilding the same data operation in several OmniScripts creates multiple sources of truth. [^3] Define it once as a mapper and let every consumer call the same definition. [^1][^3]
+
+## Exam Tip
+
+Hold the intent as your hook: Extract reads, Turbo Extract reads fast from a single object plus its related fields, Load writes, and Transform reshapes without touching the database. [^1][^2] Sources and targets are broad, spanning JSON, XML, custom Apex classes, sObjects, and document formats such as PDF and DocuSign, so reject any answer that says a mapper only speaks JSON. [^1][^2] When security matters, prefer the mapper over raw SOQL, because mappers respect field-level security while a bare Apex query does not enforce it until you add the clause yourself. [^1][^4] And remember the mapper is a named, reusable artifact that OmniScripts, Integration Procedures, and FlexCards all call, which is why the best practices push targeted, single-sourced mappers that return only what the operation needs. [^1][^3]
+
+## Try It
+
+Open the Data Mapper Designer in a sandbox and build the `GetAccountWithContacts` Extract from the walkthrough. Start with an Extract, add Account as the primary sObject and its related Contacts, map only the fields a rep-facing screen would actually show, and add a filter on an Account Id. [^5] Then switch to the Preview, feed it a real Account Id, and confirm the Account header and the Contacts array come back shaped the way you expect. [^2][^5] Next, build the same read again but as a Turbo Extract and try to add a formula or an Output mapping, so you feel the limitation that makes the full Extract the right tool when structure matters. [^1] Finally, build a small Transform that takes a flat JSON payload and reshapes it into the structure a DocuSign template or a PDF expects, and preview it to see the output structure change. [^2][^8] Running all four types against one small dataset is the fastest way to lock in which interface does what. [^1][^2]
+
+## What's Next
+
+Now that you can define a Data Mapper and tell the four interfaces apart, the course turns to the details of the read side. Lesson 31, Extract Interface: Multi-Object, Filters & Parameters (DM-2), goes deeper into the full Data Mapper Extract, the flexible reader you started here. It covers pulling from multiple objects and related records, applying filters so an Extract returns only the rows you want, and passing parameters in so the same mapper serves different inputs at runtime. That lesson builds directly on the interface distinctions you just learned, taking the Extract from a simple mapping to a real, parameterized query tool.
+
+## Related Requirements
+
+- Data Mapper Fundamentals & Source/Target Types, lesson 30 of 46 (DM-1)
+- Extract Interface: Multi-Object, Filters & Parameters, lesson 31 of 46 (DM-2)
+- Integration Procedure Best Practices, lesson 29 of 46 (IP-8)
+
+## References
+
+[^1]: [Omnistudio Data Mappers (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_dataraptors.htm&type=5)
+[^2]: [Discover Data Mapper Types and Functions, Trailhead (Omnistudio DataRaptors module)](https://trailhead.salesforce.com/content/learn/modules/omnistudio-dataraptors/discover-dataraptor-types)
+[^3]: [Omnistudio Data Mapper Best Practices (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_dataraptor_best_practices.htm&type=5)
+[^4]: [Omnistudio Data Mapper and Integration Procedure Security Settings, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_and_integration_procedure_security_settings_56587.htm&language=en_US&type=5)
+[^5]: [Omnistudio Data Mapper Extract Overview (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_extract_overview.htm&language=en_US&type=5)
+[^6]: [Omnistudio Data Mapper Turbo Extract Overview (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_turbo_extract_overview.htm&language=en_US&type=5)
+[^7]: [Omnistudio Data Mapper Load Overview (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_load_overview.htm&language=en_US&type=5)
+[^8]: [Omnistudio Data Mapper Transform Overview (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_transform_overview.htm&language=en_US&type=5)

@@ -1,0 +1,135 @@
+---
+title: "Lesson 20: Observability, Tracing, Logging, and Replay for Agents"
+slug: observability-tracing-logging-langsmith-opentelemetry-replay
+series: "agentic-ai"
+lesson: 20
+excerpt: "An agent runs several model calls, tool invocations, and retrieval steps inside one request, and when it returns the wrong answer you have no idea which step caused it. This lesson builds observability from the bottom up: the trace that records every step as a span, the trace tree that shows how they connect, the OpenTelemetry gen_ai.* conventions that give the telemetry a standard shape, the structured logs that answer 'why' when a trace only shows 'what,' and the replay loop that turns a captured trace back into a repeatable bug you can fix and verify."
+date: "August 23, 2026"
+author: "Adroit Consulting"
+readTime: "15 min read"
+tags: [LLMs, AI Agents, Observability]
+---
+
+# Lesson 20: Observability, Tracing, Logging, and Replay for Agents
+
+Lesson 19 showed you how to measure an agent before release with golden datasets and an LLM-as-judge. That is the lab. This lesson is the production floor: what you do when the agent is live and the wrong answer arrives at 2 a.m. with no reproduction steps attached. A normal program either runs or it crashes, and when it crashes the stack trace names the file and line. An agent does not crash into a stack trace. It silently takes a wrong path: it retrieves the wrong context, calls a tool with a malformed argument, burns forty turns re-asking itself the same question, and then returns a confident answer that is simply wrong. [^1]
+
+The one idea to carry out of this lesson: **an agent that cannot show you its own steps is undebuggable, and the way you make it show you is a trace, a record of every model call, tool call, and retrieval that happened inside one request, shaped so a human or another model can read it back.** Everything else in observability, the logs, the replay, the dashboards, hangs off that trace. [^2]
+
+## What observability means for an agent
+
+Observability is the ability to answer questions about a running system from its outputs, without restarting it or adding new instrumentation on the fly. For a traditional service that means logs, metrics, and traces. For an agent it means the same three, but with a different center of gravity, because the agent's work is not a sequence of HTTP requests. It is a graph of decisions.
+
+Three questions observability has to answer, and they map to different tooling:
+
+1. **What happened?** Which steps ran, in what order, and what did each one see and return. This is tracing.
+2. **Why did it happen?** What was the state, the prompt, the tool result, the reasoning that led to the decision. This is logging plus the trace content.
+3. **Can I see it again?** Can I take the recorded run and reproduce the failure in a debugger, fix it, and confirm the fix. This is replay. [^3]
+
+A traditional service gets by with metrics and logs because its behavior is deterministic enough that "what" and "why" are close together. An agent is not. The same user message can produce different tool calls on different runs, because the model samples. So you need the full record of each specific run, not aggregates. That is the shift: agent observability is less about averages and more about the ability to open one specific run and read it end to end. [^4]
+
+## The trace: one request, every step
+
+The core unit of agent observability is the trace. A trace is a record of everything that ran in service of one operation, from the input that started it to the final output, with each step captured separately. In LangSmith's model, each unit of work, a model call, a tool invocation, a retrieval, is a run, and the runs for one operation are collected into a trace. If you have used OpenTelemetry, a run is essentially a span. [^2]
+
+A trace is structured as a tree, not a flat list. The outer span is the request. Nested under it are the steps that request triggered: a retrieval call, a model call, a tool call, a second model call that processes the tool result. That nesting is what makes the trace readable. When something goes wrong, you walk the tree from the root down to the branch that failed, and the depth of the tree tells you the shape of the failure. [^5]
+
+In LangSmith the hierarchy has three levels for a multi-turn session. A run is one unit of work. A trace is all the runs for one turn, one user message and everything the agent does in response. A thread is the sequence of traces that make up a multi-turn session, grouped by a shared `thread_id`. A fourth view, the trajectory, flattens the whole session into an ordered list of messages, human, AI, and tool, with the nesting removed, which is what you read when you want the story of the conversation rather than the execution details. [^2]
+
+The trace is the record you debug against. It is also the raw material for everything else: a golden dataset of failures, a replay session, a training set for evals. Nothing in the rest of this lesson works without it.
+
+## OpenTelemetry: the shared shape for telemetry
+
+LangSmith is one tool, and it is a good one, but observability only pays off if your telemetry has a shape your whole stack agrees on. This is where OpenTelemetry's GenAI semantic conventions come in. They define a standardized `gen_ai.*` attribute namespace so that a chat span from LangChain, a raw OpenAI SDK call, and a Claude agent all emit the same attribute names, and one dashboard can query all of them. [^6]
+
+The conventions cover three things: spans, metrics, and content events.
+
+- **Spans.** One span per LLM operation: a chat call, an embedding, a tool invocation, an agent step. Each span carries request and response metadata as attributes.
+- **Metrics.** Two standardized histogram instruments, one for token usage and one for operation duration, aggregatable across providers and models. These give you p95 latency and cost tracking.
+- **Content events.** Prompt and response bodies are deliberately NOT standard span attributes. They are opt-in, separately enabled events, because prompt and completion text routinely contains PII and you do not want it in every span by default. [^6]
+
+The core span attributes are stable enough to build dashboards on today. Every LLM span should carry `gen_ai.operation.name` (the operation type, `chat`, `embeddings`, `execute_tool`), `gen_ai.provider.name` (which provider served the call), `gen_ai.request.model`, `gen_ai.response.model` (which can differ if the provider routed to a dated snapshot), and `gen_ai.usage.input_tokens` and `gen_ai.usage.output_tokens`, the numbers that determine cost. [^6]
+
+Two stability notes matter before you build on this. First, content capture is opt-in specifically because of PII, so if you enable it, you are taking on a redaction responsibility, the same one Lesson 18 covered. Second, the stability tiers are not uniform. Core chat and embedding attributes are stable or release candidate, safe to build permanent dashboards on. Tool-call and multi-agent attributes are still marked development, and they change between OTel releases. Check the live spec before locking in a dashboard on anything from the agent or tool-orchestration sections. [^6]
+
+The pragmatic split, and it is a real one in the field: LangSmith and tools like it give you a polished, agent-specific tracing UI out of the box, with native tracing for popular agent frameworks plus OpenTelemetry support. OpenTelemetry gives you a vendor-neutral telemetry backbone that feeds whatever backend you already run, so agent telemetry joins the rest of your infrastructure in one system. You are not forced to choose one. LangSmith supports sending its trace data to your OTel tools and ingesting OTel data into itself, so you can start with whichever fits your stack and bridge to the other. [^7] [^1]
+
+## What a good trace actually contains
+
+Not every run is worth keeping, and not every detail belongs in a trace. The value of a trace comes from what it captures, and the discipline is knowing what that is.
+
+At minimum, each span should record: the exact input it received, the exact output it returned, the latency, and for LLM calls, the model, the token counts, and the finish reason. The finish reason matters more than people expect. `gen_ai.response.finish_reasons` tells you why generation stopped, `stop`, `tool_use`, or `length`, and a `length` finish reason is the trace-level signature of a response that got cut off mid-thought because it hit the token cap. [^6] That is a class of bug you would never find by reading the output alone, because the truncated output reads as a complete (if short) answer.
+
+The trace should also carry context that lets you group and filter it later: a `thread_id` for the session, tags for the environment or the feature, metadata like the application version and the prompt template version. LangSmith calls these enrichment. Without them, you can find a trace by its exact error, but you cannot answer "how many traces used the version-3 prompt" or "what did the 2 a.m. batch do differently." [^2]
+
+The cost of a trace is real and it is worth being honest about. LangSmith's SaaS retains trace data for 180 days, after which traces are permanently deleted, and a trace is capped at 25,000 runs, after which LangSmith rejects additional runs for that trace. [^2] If you want to keep a failure past the retention window, you move it into a dataset, which persists indefinitely. [^2] The lesson: treat traces as a working record, not an archive, and deliberately promote the runs that taught you something into a durable dataset.
+
+## Structured logging: answering why
+
+Tracing tells you what happened. Logging tells you why, and only if you log the right things in the right shape. The fatal failure mode in agent logging is the unstructured string, a line that reads "tool failed, retrying" with no tool name, no input, no error, no run ID. A thousand of those tell you nothing.
+
+Structured logging means writing each log entry in a consistent, parseable format, JSON being the default, with named fields you can filter on. For an agent, the fields that earn their keep are: a trace or run ID so the log line can be joined back to the trace it belongs to, the tool name and status, the input and output of the step, the agent or user ID, and the error code when one exists. [^8] When a log line carries a run ID, you can jump from the log to the full trace and back, and that join is the whole game: the log tells you which step and why, the trace shows you the surrounding context.
+
+There is a real tension here that the field names explicitly. Logging everything at debug level in production is an anti-pattern: it floods the store and makes the signal unfindable. But logging nothing about prompts and tool inputs leaves you blind exactly when the model does something surprising. The middle path is to log what you need to reconstruct the decision, mask or hash the sensitive payloads, and keep verbose capture behind a toggle you can flip on for a specific run when you are chasing a bug. [^9] The trace gives you the reconstruction; the log gives you the signal to search. [^8]
+
+## Replay: turning a trace into a repeatable bug
+
+The trace records a run, but a recording is only the start. Replay is the step that makes the recording useful: taking a captured trace and reproducing the run, or a branch of it, in a controlled environment so you can set breakpoints, inspect intermediate state, patch the logic, and confirm the fix.
+
+The payoff is that a failure stops being a one-off observation and becomes a reproducible case. The team can take the trace of the run that went wrong, replay it, and see exactly where the agent made the bad decision, whether it retrieved the wrong chunk, called a tool with a malformed argument, or looped on its own output. LangSmith's own guidance for debugging coding agents is explicit about this: traces let you inspect model calls, follow subagent fanouts, and compare how different agents behave on the same workflow, which is a form of replay across agents rather than across runs of one. [^10]
+
+The loop that this closes is the one that ties observability back to the evaluation lesson. A trace of a production failure becomes a new item in a golden dataset. Replay lets you reproduce it, fix it, and re-run the same input to confirm the fix, which is exactly the regression-gate workflow from Lesson 19 running on a real failure instead of a synthetic example. Observability feeds evaluation. [^3]
+
+## Worked example: tracing a failing retrieval agent
+
+Let me put the whole stack together on one concrete system. You are building an agent that answers questions from a company's support knowledge base. It retrieves candidate documents from a vector store, stuffs them into context, and generates an answer. Users start reporting that it occasionally answers confidently with information that is not in the source material.
+
+**Step one, turn on tracing.** You wrap the agent entry point and each tool with a tracing decorator. In LangSmith that is the `@traceable` wrapper, and it captures the function's inputs, outputs, and nested spans as a single trace. [^5] You also wrap the retrieval call as a tool span, so the trace tree shows the outer request, the retrieval, and the model call as separate nodes. [^5]
+
+**Step two, add the OpenTelemetry attributes.** Where you control the LLM call, you record `gen_ai.request.model`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, and `gen_ai.response.finish_reasons` on the span. You enable content events selectively, and you note that you have now taken on the PII redaction responsibility for whatever you capture. [^6]
+
+**Step three, read the failing trace.** The user reports a bad answer. You open the trace for that request. The tree shows retrieval returning three documents, and the model generating an answer. The finish reason is `stop`, so no truncation. You expand the model span and read the exact prompt: the retrieved context, the question, the system instructions. That is the moment the bug appears. One of the three retrieved documents is from a different product entirely, a marketing page about a feature your support docs never covered, and the model, being a model, used it as if it were authoritative. [^5]
+
+**Step four, write the structured log for the cause.** The trace showed what; the log has to capture why so you can find the pattern across runs. You add a log line on every retrieval that records the query, the retrieved document IDs, and each document's similarity score. Now "wrong answer" becomes searchable: any run where a low-scoring document made it into context is a candidate for the same failure. [^8]
+
+**Step five, replay and fix.** You save the trace into a dataset so it survives past retention. [^2] You reproduce the run, confirm it fails the same way, and then change the retrieval config to filter out results below a relevance threshold, or add a reranking step as Lesson 14 covered. You re-run the same input. The bad document no longer reaches context, the answer is grounded, and you have turned a 2 a.m. report into a fixed, verified regression test.
+
+That is the whole loop. Trace captures the run, structured logging makes the failure class searchable, replay makes it reproducible, and the fix lands back in a dataset that guards the regression forever. [^3]
+
+## The Fortress angle: observability already runs here
+
+This is not theoretical at Adroit. The Fortress runs the shape of this stack in miniature on its own local inference, and the failures it caught are the textbook cases.
+
+The hybrid stack in the local-infrastructure writeup routes background subsystems, including monitoring itself, to a local llama.cpp server, while tool-calling and structured completion gates stay on cloud models. [^11] That architecture exists because of observed failures, and the observable record is what diagnosed them. The most expensive one: a local Qwen model began emitting empty `{}` objects for nested tool-call arguments, which silently broke the kanban completion gate because tasks could never validate as complete. Free-text reasoning stayed correct; structured tool-call JSON was broken. [^11] The failure was only catchable because a validation layer existed to flag it, and the version regression that followed, an oMLX upgrade changing cache-eviction behavior until the server exhausted swap, was traced back by diffing upgrade history against observed behavior. [^11]
+
+The infrastructure lesson maps directly onto the agent lesson. A wired-memory watchdog restarts the local server when wired memory crosses 35 GB, a metric-level tripwire that catches a slow leak no individual trace would show. [^11] That is the same split you use for agents: traces and logs for the what-and-why of a single run, and a small set of aggregate metrics for the slow drift that no single run reveals. And this very lesson passes through a deterministic gate, `verify-lessons.py`, before it is committed, a regression check with the same logic as a golden dataset gate from Lesson 19. Instrumentation is only as good as the verification loop it feeds. [^11]
+
+## The pitfall to avoid
+
+The most common mistake is collecting traces and never reading them. Teams wire up LangSmith or OpenTelemetry, watch a dashboard of latency and cost tick up, and treat that as observability done. It is not. A dashboard of averages cannot show you the specific run that made the wrong decision, and that run is the whole point. Trace data is only observability when a human or an automated evaluator reads a trace end to end and learns something from it.
+
+The mirror-image mistake is capturing everything and redacting nothing. Enabling prompt and completion content capture without a PII plan means you have built a compliance incident waiting to happen, because the content you captured is exactly the sensitive data the conventions are designed to keep out of default attributes. [^6] If you enable content capture, budget for the redaction work in the same sprint.
+
+And a third failure: treating traces as permanent storage. Traces expire on a retention schedule and hit hard run caps. [^2] If your only record of a failure lives in a trace that gets deleted after 180 days, you lose the lesson. Promote what matters into a dataset or a documented incident note, deliberately, while the trace is still there.
+
+## Try it
+
+1. **Trace one agent run.** Take an agent you have built, or the mini retrieval agent from this lesson, and wrap the entry point and one tool with a tracing decorator or its equivalent in your framework. [^5] Run it once. Open the trace and write down the tree: which spans ran, what order, what each input and output was. Answer: where is the information that would tell you the model was given bad context?
+2. **Add the OpenTelemetry attributes.** On the LLM span, record the model, input and output token counts, and finish reason. [^6] Run the agent again on an input that should fail. Read the finish reason. If it is `length`, you have caught a truncation that reads as a complete answer. If it is `stop`, the model decided it was done, and the failure is in what it was given, not how it was cut off.
+3. **Capture and replay a failure.** Produce a failing run, save its trace to a persistent dataset, then reproduce it in a controlled environment and make one change that fixes it. [^2] Re-run the same input and confirm the failure is gone. This is the exact loop that turns a production bug into a golden-dataset regression test from Lesson 19. [^3]
+
+## What's next
+
+You can now trace and replay a running agent. Lesson 21 steps back to the terrain you will build on: the frameworks overview, LangChain, LangGraph, CrewAI, the OpenAI Agents SDK, and the Claude Agent SDK, what each is for and where they overlap. Observability told you whether your hand-built loop works; the next lesson maps the tools you can build it with.
+
+[^1]: langchain.com. [AI Agent Observability: Tracing, Testing, and Improving Agents](https://www.langchain.com/resources/agent-observability)
+[^2]: docs.langchain.com. [LangSmith Observability concepts: runs, traces, threads, trajectories](https://docs.langchain.com/langsmith/observability-concepts)
+[^3]: langchain.com. [The Agent Improvement Loop Starts with a Trace](https://www.langchain.com/blog/traces-start-agent-improvement-loop)
+[^4]: tao-hpu.medium.com. [Agent Observability: Making Black Boxes Transparent](https://tao-hpu.medium.com/agent-observability-making-black-boxes-transparent-85f59ef815c6)
+[^5]: docs.langchain.com. [LangSmith Tracing quickstart with @traceable](https://docs.langchain.com/langsmith/observability-quickstart)
+[^6]: openobserve.ai. [OpenTelemetry GenAI Semantic Conventions: A Practical Guide](https://openobserve.ai/blog/opentelemetry-genai-semantic-conventions/)
+[^7]: docs.langchain.com. [Trace with OpenTelemetry, LangSmith docs](https://docs.langchain.com/langsmith/trace-with-opentelemetry)
+[^8]: apxml.com. [Logging Tool Invocations and LLM Interactions](https://apxml.com/courses/building-advanced-llm-agent-tools/chapter-6-llm-tool-testing-monitoring-maintenance/logging-tool-invocations)
+[^9]: openobserve.ai. [Structured Logging in Production: Best Practices](https://openobserve.ai/blog/structured-logging-best-practices/)
+[^10]: langchain.com. [Your coding agents are a black box. Here's how to crack them open.](https://www.langchain.com/blog/your-coding-agents-are-a-black-box-heres-how-to-crack-them-open)
+[^11]: github.com. [Local LLM infrastructure 2026, Adroit blog](https://github.com/kelex1812/adroit-blog/blob/main/content/blog/local-llm-infrastructure-2026.mdx)

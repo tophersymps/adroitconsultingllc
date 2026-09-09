@@ -1,0 +1,140 @@
+---
+title: "Lesson 30: The Model Context Protocol (MCP): What It Is, Why It Matters, and How to Build a Server"
+slug: mcp-model-context-protocol-intro-build-server
+series: "agentic-ai"
+lesson: 30
+excerpt: "The Model Context Protocol (MCP) is an open standard that connects AI applications to the tools and data they act on. It attacks a problem every agent builder hits: bespoke integrations do not scale. Without a common protocol, each AI app wires itself to each tool with its own custom connector, and the number of connectors grows as the product of apps times tools. MCP breaks that pattern by defining one client-server protocol, so an AI application that speaks it can use any server that speaks it, and a server author writes the integration once for every compliant client. This lesson explains the three participants in that architecture (host, client, server), the three things a server can expose (tools, resources, prompts), the two transports that carry the messages, and walks through building a real server with the Python SDK."
+date: "September 2, 2026"
+author: "Adroit Consulting"
+readTime: "11 min read"
+tags: [LLMs, AI Agents, MCP, Tool Integration]
+---
+
+# Lesson 30: The Model Context Protocol (MCP): What It Is, Why It Matters, and How to Build a Server
+
+By the last few lessons you had a working agent: models with tool calling, retrieval over your own documents, guardrails, observability, and the security and compliance wrappers that make the whole thing defensible. Every one of those integrations was wired by hand. You wrote a function that calls your vector database, another that calls your calendar, another that reads a file, and you taught the model about each one through its tool schema. It works. Now double the number of tools, and it still works, just with twice the glue code. Now add a second model provider, and the glue doubles again, because each provider expects its own tool-calling format.
+
+This lesson is the point in the curriculum where that approach stops scaling, and where the industry landed on a shared answer.
+
+## The problem MCP exists to solve
+
+Think about how an agent gets its abilities today. A model alone produces text. Everything it can actually do, every file it can read, every database it can query, every action it can take on your behalf, arrives through a tool that you, the developer, exposed and wired. Nothing wrong with that, and lessons 7 through 9 covered how to do it cleanly.
+
+The trouble is that nothing about that wiring is standard. Anthropic's Claude expects tools in one shape, OpenAI in another, and local models in a third. Lesson 9 walked you through exactly how those tool-calling formats differ and why you had to normalize across them. A tool that talks to your CRM has to be re-taught to every client. A client you build has to learn a bespoke integration for every tool. With A applications and B tools, you end up maintaining up to A times B custom connectors, and every new model or new data source adds a full row or column of work. [^3]
+
+Anthropic named this problem when it open-sourced the Model Context Protocol on November 25, 2024. The protocol's job is to replace those fragmented, one-off integrations with a single standard, the way USB replaced a drawer of proprietary cables. One connector on each side, and anything that speaks the standard works with anything else that speaks it. [^1] The official documentation puts the analogy plainly: MCP is like a USB-C port for AI applications. [^2]
+
+That analogy carries the whole design. A laptop does not care which brand of monitor you plug into the USB-C port, and a monitor does not care which laptop is on the other end. Each side implements the same connector, and the pairing just works. MCP does the same for AI applications and the systems they connect to.
+
+## The three participants: host, client, server
+
+MCP uses a client-server architecture, and it names three distinct roles. Getting these straight matters, because people use the words loosely and the distinction is load-bearing. [^3]
+
+The **host** is the AI application itself. It is what the user actually talks to, the place where the model, the session, and the orchestration live. Think of Claude Desktop, Claude Code, VS Code, or a custom agent you deploy. The host is the product.
+
+The **client** is not a separate machine. It is a component inside the host. Each MCP server the host connects to gets its own client object, and that client maintains a dedicated connection to its server, handles the protocol messages, and brings context back for the host to use. So when VS Code connects to one server and then to another, the VS Code runtime creates one client per connection, not one client that talks to everything. [^3]
+
+The **server** is the program that provides context and capabilities. It is what exposes your tool, your data source, or your workflow to the world. A server can run locally on the same machine as the host, or remotely on a shared platform. The role is about what the program does, not where it runs. [^3]
+
+A concrete mapping makes it click. Claude Desktop is a host. When it launches a local filesystem server to read your files, that server runs on your machine using the stdio transport. When a different host connects to a remote service like Sentry's server, that server runs on Sentry's platform and uses HTTP. Both are MCP servers. The label describes the job, not the location. [^3]
+
+The protocol itself is JSON-RPC 2.0 underneath, the same request-response message structure you may know from other RPC systems, with notifications available when no reply is expected. MCP is stateless: each request carries the protocol version and relevant capabilities, so a server can handle each message on its own rather than depending on a conversation history it has to remember. [^3]
+
+## What a server can expose: tools, resources, prompts
+
+A server offers the host three kinds of things, and each has a distinct job. The official docs call them primitives. [^3]
+
+**Tools** are executable functions the AI can call to do something: run a file operation, make an API call, execute a database query, send a message. These are the actions. If you have built agents already, tools are what you have been wiring by hand since lesson 7.
+
+**Resources** are data sources the AI can read: a file's contents, a database record, an API response. These provide context. Where a tool changes the world, a resource just supplies information the model can reason over. [^3]
+
+**Prompts** are reusable templates that structure an interaction: a well-tested system prompt, a set of few-shot examples. These give the host a starting point for a kind of task, so the user does not have to write the instruction from scratch each time. [^3]
+
+The client finds out what a server offers through discovery. Each primitive type has list and get methods, so a client can ask for all available tools with `tools/list`, then run one with `tools/call`. Because listings are queries, not static configuration, a server can change what it exposes over time and the client stays current. [^3]
+
+Here is the design idea that makes MCP more than a shared API format. A single server can bundle all three kinds of things around one domain. The docs use the example of a database: the server exposes tools for querying the database, a resource holding the database schema, and a prompt with few-shot examples for talking to those tools. The model gets the ability to act, the context it needs to act well, and guidance on how to act, all from one server, all described by one protocol. [^3]
+
+The transport layer decides how those messages physically travel. MCP supports two mechanisms. **Stdio** uses standard input and output streams for a direct connection between two processes on the same machine, which is fast and needs no network. **Streamable HTTP** uses HTTP for client-to-server messages with optional server-sent events for streaming, which is how remote servers communicate and how you reach a server hosted somewhere else. The transport is abstracted from the protocol, so the same JSON-RPC messages ride over either channel. [^3]
+
+## Why it matters: write the integration once
+
+The payoff for all this structure is compounding. A server author writes an integration once, against one protocol, and every compliant client can use it. The Anthropic launch announcement shipped pre-built servers for common enterprise systems, including Google Drive, Slack, GitHub, Git, Postgres, and Puppeteer, precisely to show that wrapping a real system once makes it reachable everywhere. [^1]
+
+Support has since broadened well past Anthropic's own tools. The official docs list AI assistants like Claude and ChatGPT, and developer tools like Visual Studio Code and Cursor, as clients, which means the ecosystem has settled on MCP as a shared substrate rather than one vendor's connector. [^2]
+
+For a consultant building agents for clients, the value shows up in a specific place: you stop writing throwaway glue. If a client has an internal data source, you wrap it once as an MCP server, and now any agent framework or AI application your client already runs can use it without you rebuilding a bespoke connector for each one. The tool becomes reusable infrastructure instead of a one-off bridge. That is the difference between a script and a platform.
+
+## Security and trust: the other side of the coin
+
+Giving a model the ability to act is the source of MCP's power and the source of its danger. The same lesson that has run through this whole track applies here with force: a tool is a capability, and every capability is a surface an attacker, or a confused model, can misuse.
+
+The official build guide is explicit that tools are functions the LLM can call with user approval, which flags the intended trust model: the model proposes, and the human or the host policy disposes. [^4] Lesson 17 on prompt injection and lesson 25 on human-in-the-loop apply directly. When you expose an MCP server that can read files, run queries, or send messages, you have expanded the blast radius of any prompt injection that reaches the model, because the model now has a wider set of buttons to press. Design the server to need approval for destructive actions, scope it to the least access that does the job, and treat the protocol's convenience as something you earn with controls, not something you get for free.
+
+## Worked example: build a weather server in Python
+
+The most direct way to see MCP in action is to build a small server. The official quickstart builds a weather server that exposes two tools, and it is a good template because it is short, real, and testable against a live API. [^4]
+
+You need Python 3.10 or newer and the Python MCP SDK version 2.0.0 or higher. [^4] The project is a few files: install the SDK, write one module with two tool functions, and run it. The modern SDK leans on your function signatures to build the tool definitions, which removes a whole category of boilerplate. You write an ordinary async Python function with type hints and a docstring, decorate it with `@mcp.tool()`, and the SDK turns the signature and docstring into the schema the model needs. [^4]
+
+A trimmed version of the pattern looks like this:
+
+```python
+from mcp.server import MCPServer
+
+mcp = MCPServer("weather")
+
+@mcp.tool()
+async def get_alerts(state: str) -> str:
+    """Get weather alerts for a US state.
+
+    Args:
+        state: Two-letter US state code (e.g. CA, NY)
+    """
+    # fetch and format active alerts for the state
+    ...
+
+@mcp.tool()
+async def get_forecast(latitude: float, longitude: float) -> str:
+    """Get weather forecast for a location.
+
+    Args:
+        latitude: Latitude of the location
+        longitude: Longitude of the location
+    """
+    # fetch and format the forecast for the coordinates
+    ...
+
+if __name__ == "__main__":
+    mcp.run(transport="stdio")
+```
+
+The two decorated functions become two callable tools, and the docstrings become the descriptions the model reads when deciding which tool fits the user's request. That is the whole mechanism of discovery and execution made concrete: the model sees `get_alerts` and `get_forecast`, picks the right one, and calls it with arguments the docstring helped it shape. [^4]
+
+Running the server means pointing an MCP host at it. The quickstart registers the server in a host's configuration so the host launches the process and talks to it over stdio, and from there the model can answer questions that need live weather data instead of guessing. [^4]
+
+One detail in the official guide deserves emphasis because it trips up nearly everyone the first time. For a server that communicates over stdio, never write to standard output with something like `print()`. Stdio servers carry their JSON-RPC messages over stdout, so stray output corrupts the protocol stream and breaks the server. Log to stderr instead, via the standard `logging` module, and reserve stdout for the protocol. [^4] It is a small rule, and it is the difference between a server that works and one that fails mysteriously the moment you add a debug line.
+
+## The pitfalls to avoid
+
+The first is building every integration by hand anyway, out of habit. MCP is worth adopting not because hand-wired tools are wrong, but because a standard connector converts each tool from a one-off into an asset every client can use. If you keep writing bespoke glue for every new data source, you have solved your immediate problem and preserved your long-term scaling problem.
+
+The second is treating the server as the whole architecture. A server is only useful if a host can reach it. Think about transport from the start. A local stdio server is right when the host and the data live on the same machine. A remote HTTP server, with proper authentication, is right when the capability belongs on a shared platform. Picking the wrong transport means reworking the deployment later.
+
+The third is exposing power without controls. An MCP server that can run shell commands or write to a production database is a genuinely dangerous thing to leave unauthenticated or unapproved. Scope it, require approval for destructive actions, and carry the guardrail and human-in-the-loop work from lessons 17 and 25 into the server design. The protocol standardizes the connector. It does not standardize away your responsibility for what the connector lets the model do.
+
+## Try it
+
+1. **Build the weather server.** Work through the official quickstart and get the two-tool weather server running against a host. If you hit an error, check the host's MCP logs first; for stdio servers, the rule about not printing to stdout is the most common cause of silent failures. [^4]
+
+2. **Wrap one of your own tools.** Take a tool you built in lessons 7 or 8, a function that calls an internal API or reads a document, and expose it as an MCP server instead of wiring it directly into the model. Compare the effort of connecting that server to a second, different client against the effort of teaching that client the tool from scratch.
+
+3. **Inventory your glue.** List the custom connectors your agents currently use. For each, ask whether it is a tool (an action), a resource (context), or a prompt (a template), and sketch how you would expose it as an MCP server. You are planning the migration, not just admiring the protocol.
+
+## What's next
+
+You now know what MCP is, why it replaces bespoke integrations, and how to stand up a basic server. The next lesson, **MCP deep dive: tools, resources, prompts, sampling, and auth**, goes past the hello-world server into the parts you will actually tune in production. It covers how to design each of the three primitives well, how the client and server interact on the deeper protocol features, and how authentication works when a server is remote rather than local. Build the weather server from this lesson first, because the deep dive assumes you have touched a real one.
+
+[^1]: anthropic.com. [Introducing the Model Context Protocol](https://www.anthropic.com/news/model-context-protocol)
+[^2]: modelcontextprotocol.io. [What is the Model Context Protocol (MCP)?](https://modelcontextprotocol.io/docs/getting-started/intro)
+[^3]: modelcontextprotocol.io. [Architecture overview](https://modelcontextprotocol.io/docs/learn/architecture)
+[^4]: modelcontextprotocol.io. [Build an MCP server (quickstart)](https://modelcontextprotocol.io/quickstart)

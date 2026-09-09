@@ -1,0 +1,117 @@
+---
+title: "Lesson 25: Performance Engineering for AI: Latency Budgets, Caching, Throughput, and Batching"
+slug: performance-engineering-ai-latency-caching-throughput-batching
+series: "salesforce-architect"
+lesson: 25
+excerpt: "Performance stops being about one query and becomes a system-wide budget the moment AI is in the path. This lesson covers latency budgets, the difference between throughput and latency, the batch that makes LLM inference affordable, and the caches that skip work entirely."
+date: "August 28, 2026"
+author: "Adroit Consulting"
+readTime: "11 min read"
+tags: [Architecture, Performance, LLMs]
+---
+
+# Lesson 25: Performance Engineering for AI: Latency Budgets, Caching, Throughput, and Batching
+
+Lesson 24 was about making a single query fast: selective SOQL, indexes, Platform Cache. This lesson pulls back to the system level and asks the question the architect asks when an AI call is in the path. Your agent calls a model, the model takes seconds, and suddenly the budget you used to measure in milliseconds is gone. The discipline of this lesson is figuring out where the seconds go, which ones you can spend, and which ones you can make disappear with a cache or a well-packed batch.
+
+Performance engineering for AI is the same performance engineering you already know, applied where the expensive unit is a model call instead of a database read. The tools change names. The physics do not. A latency budget still tells you how much time each step is allowed. Throughput and latency still trade against each other. A cache still skips repeated work. And batching still converts many slow operations into one fast one. If you can name those four mechanisms and reason about their limits, you can design a system that feels instant even when an LLM is doing the heavy lifting.
+
+## Define the terms
+
+- **Latency**: the delay between a request and its response. AWS defines it as the delay in network communication, the time a message takes to travel from source to destination. [^2]
+- **Throughput**: the amount of work actually completed over a period of time. AWS contrasts it directly with latency: latency is delay, throughput is the volume of data that passes through over a specific time. [^2]
+- **Latency budget**: a fixed amount of time allocated to the whole user-facing operation, divided across every step so that the sum stays under the target. The RAIL model is a working example of budgets set by what a human perceives, not by what a machine prefers. [^1]
+- **Batching**: grouping several independent requests so they are processed together rather than one at a time. For LLM inference, continuous batching is the technique that lets a serving system pack many requests into each compute step. [^4]
+- **Cache**: a store of results that is cheaper to read than to recompute. The cache-aside pattern loads a value into the cache on demand and invalidates it on write. [^5]
+- **Cache hit and cache miss**: a hit is a read satisfied from the cache without running the underlying work; a miss is a read that returns nothing and forces you to load and store the value. [^5]
+- **Prompt caching**: an AI-specific cache that reuses the computed state of a stable prompt prefix so a repeat request does not reprocess it. [^6]
+- **Time to live (TTL)**: how long a cached value lives before it expires. [^5]
+- **Amdahl's law**: the formula that bounds the speedup you can get from adding parallel resources, set by the fraction of work that must stay sequential. [^3]
+
+## Latency budgets: set the target before you build
+
+The cheapest performance fix is deciding, up front, how much time the whole operation may take, then splitting that total into a budget each step must respect. Google's RAIL model shows the shape of a good budget because its numbers come from what humans perceive, not from what hardware prefers. [^1]
+
+RAIL stands for Response, Animation, Idle, and Load. The rules are concrete. Respond to user input in under 100 ms, and process the events behind that response in under 50 ms. Produce each animation frame in under 10 ms, which is the 16 ms a 60 fps screen allows minus the 6 ms the browser needs to render it. Work in idle-time chunks of 50 ms or less so the main thread stays free for the user. Load interactive content in under 5 seconds on a mid-range mobile device over slow 3G. [^1]
+
+The point is not that you must meet web numbers in an enterprise backend. The point is that RAIL gives you a model for thinking: every step of the user journey has a budget, and the budgets are derived from what a person will tolerate. An architect does the same thing with an AI operation. Before writing any code, you decide that the whole agent turn must complete in, say, 8 seconds. Then you split it. The model call gets 5. The tool call to fetch account data gets 1. The summarization call gets 1.5. The rest is headroom. Once each step has a number, you can see where the operation blows the budget, and you can decide whether to cache, batch, or cut.
+
+The failure mode this guards against is the unbounded pipeline: no target, no per-step allowance, and the system just accumulates work until it is slow and no one can say which step is at fault. A budget makes the slow step obvious because it is the one that exceeds its slice.
+
+## Throughput and latency are different numbers, and they fight
+
+Latency and throughput sound related and are not the same axis. Latency is the delay on one request. Throughput is how many requests you complete per unit of time. AWS puts the distinction plainly: latency is the delay in communication, while throughput is the volume of data that actually gets through over time. [^2]
+
+You can have excellent throughput and terrible latency at the same time. A train moving 500 passengers an hour has great throughput and awful per-passenger latency. A taxi has great per-passenger latency and terrible throughput. Serving systems have the same tension. If you pack a model server full of requests to maximize throughput, the individual requests queue and their latency rises. If you leave capacity idle to keep every request fast, you waste throughput.
+
+This is the trade that dominates AI serving. The Anyscale analysis of continuous batching is explicit that cost is downstream of the latency and throughput choice: how efficiently you can serve at a given latency determines what you pay. [^4] So the architect's job is not to maximize either number. It is to pick a latency target, then push throughput as high as it can go without breaking that target. You maximize throughput within the latency budget, not instead of it.
+
+## Amdahl's law: the sequential part is the ceiling
+
+When you do parallelize, one law governs how much you gain. Amdahl's law states that the maximum speedup from adding parallel resources is set by the fraction of work that cannot be parallelized. If half the work is parallelizable, the best possible speedup is 2x, no matter how many processors you throw at it. [^3]
+
+For an AI pipeline the sequential part is usually the reasoning itself. An agent that must call the model, inspect the result, decide, then call again is a chain of dependent steps. You cannot run step two before step one, because the output of one call feeds the next. No amount of parallel capacity fixes a serial chain. The lesson of Amdahl for AI is to spend your parallel resources on the independent branches, the calls that do not depend on each other, and to spend your optimization effort on the sequential spine, because that spine caps everything.
+
+## Batching: the technique that makes AI affordable
+
+Batching is how a serving system turns many slow operations into one efficient one. The mechanism matters because LLM inference is expensive in a specific way. Generating each token requires passing the input through billions of parameters, so the cost of a generation step is largely fixed regardless of how many requests share it. [^4] That shared cost is the opening batching exploits: pack several requests into the same compute step and you amortize the expensive part across all of them.
+
+The Anyscale analysis describes two approaches. Naive static batching groups requests once and processes them as a fixed batch, and its performance collapses as the variance in generation length grows, because short requests wait on long ones. Continuous batching fixes this by scheduling at the iteration level: each step, new requests are added to the batch when there is room, and finished requests leave immediately. The result is striking. Continuous batching delivered up to 23x the throughput of static batching in their benchmarks, and it improved median latency too, because a new request can join the batch immediately instead of waiting for the current batch to drain. [^4]
+
+The practical lesson for an architect is that batching is a throughput tool and it has a latency cost. Batching works when many requests are independent and can tolerate a little waiting to fill the batch. It fails when a single user is waiting on one result and you hold that result to make the batch bigger. So batch the work that is not latency-critical, the bulk scoring, the nightly enrichment, the backfill. Keep the interactive turns on a low-latency path and let them join the batch as they arrive, which is exactly what continuous batching does.
+
+## Caching: skip the work that repeats
+
+The most effective optimization is not making work faster. It is not doing the work at all. The cache-aside pattern is the standard shape. On a read, the application checks the cache first. On a hit it returns the cached value. On a miss it loads from the data store, stores the value, and returns it. On a write it invalidates the cached entry so the next read repopulates it. [^5]
+
+Two properties decide what belongs in a cache. The Azure guidance is direct: caching works best for relatively static data or data that applications read frequently. [^5] If a value changes every few minutes or is read once, a cache adds stale data and eviction churn for no benefit. The other property is the expiration policy. A TTL that is too short forces the application to keep reloading from the store. A TTL that is too long serves stale data. [^5] Caches also have finite size and evict by least recently used policy, so you size the cache to the working set and let the TTL retire what should no longer be trusted. [^5]
+
+AI adds two caches of its own. The first is semantic caching, where responses are reused based on meaning rather than an exact key, which reduces the number of requests and tokens sent to the language model. Azure's guidance is careful about it: only use semantic caching when the data supports semantic equivalence, does not risk returning unrelated responses, and does not contain private or sensitive data. [^5] Two users asking about their own salaries are not equivalent, even though the words are similar.
+
+The second is prompt caching, which targets the largest repeated cost in an AI system: the stable prefix of the prompt. In a long conversation or an agent with a big system prompt, the same instructions and context are sent on every turn. Prompt caching lets the API resume from a specific prefix instead of reprocessing it, which reduces processing time and cost for repetitive tasks with consistent elements, and the cache refreshes for no additional cost each time the cached content is used. [^6] The architectural rule is the same as for any cache: keep the expensive, stable part of your prompt as a fixed prefix, and vary only the tail. That is how you give the cache a stable key.
+
+## Worked example: a support agent with an 8 second budget
+
+A field service org deploys an AI support assistant that reads a customer's open cases, drafts a reply, and shows it to a rep. The architect sets an 8 second budget for the whole turn and walks each step.
+
+1. **Set the budget.** The whole turn gets 8 seconds. The architect splits it: 4.5 for the model call that reads the case context and drafts, 1.5 for the SOQL query that pulls the customer's cases, 1 for a second model call that checks the draft against the knowledge base, and 1 of headroom. [^1]
+
+2. **Measure where the time goes.** The first build blows the budget. Tracing shows the SOQL is fine at 0.6 seconds but the knowledge-base check reruns a large prompt on every turn. That is the step to fix.
+
+3. **Cache the stable context.** The customer's case summary and the org's knowledge base are stable within a session and read repeatedly. The architect caches the case data with the cache-aside pattern and a session-length TTL, so the SOQL does not re-run on every turn. [^5]
+
+4. **Cache the prompt prefix.** The system prompt, the org's style guide, and the product catalog are identical on every call. The architect moves them to the front of the prompt as a stable prefix and enables prompt caching, so the expensive part of the prompt is not reprocessed each turn. [^6]
+
+5. **Batch the non-interactive work.** The nightly job that drafts replies for all open cases is not latency-sensitive. The architect routes it through a batch path where many cases share each compute step, maximizing throughput, while the interactive rep-facing turn stays on the low-latency path. [^4]
+
+6. **Recheck the budget.** With the context cached, the SOQL gone from the hot path, and the prompt prefix cached, the turn fits inside the 8 seconds with room to spare. The architect leaves the extra headroom in place rather than spending it, because real traffic will arrive with more variance than the test.
+
+The pattern is the point: a budget made the slow step obvious, caching removed repeated work, and batching absorbed the work that could wait.
+
+## The pitfall to avoid
+
+**Optimizing the wrong number, and optimizing it without a target.** Two failures share a root. The first is tuning for throughput on a path where a single user is waiting, or tuning for latency on a bulk path, without deciding which one the operation actually needs. A model server maxed for throughput will make your interactive turn crawl, and a bulk job held open for one fast request wastes capacity. The second is optimizing before you set a budget. If you never decide that a turn may take 8 seconds and divide it, you have no way to know which step is slow, whether a cache is worth adding, or when to stop. Every optimization in this lesson is in service of a budget: Amdahl tells you the sequential spine is the ceiling, batching raises throughput, caching removes repeated work, and the budget tells you which one to reach for.
+
+The subtler failure is caching what should not be cached. A cache of private per-user data, or a semantic cache that collapses two users' distinct questions into one answer, is a correctness bug wearing a performance costume. [^5] Cache the stable, the shared, and the safe. Keep the variable and the sensitive on the real path.
+
+## Try it
+
+An insurance org runs a claims triage agent. A claims adjuster asks the agent to summarize a claim file and recommend next steps. The agent reads the claim, its attachments, the policy, and prior claims, then drafts a recommendation. It currently takes 22 seconds and adjusters are complaining.
+
+1. Before touching anything, set a latency budget. What number do you choose for a task an adjuster waits on, and how do you divide it across the reads, the model calls, and headroom? *(Pick a target you can defend from the RAIL lesson, then give each step a slice so the sum stays under it.)* [^1]
+2. Which step in this flow is the sequential spine that Amdahl's law says caps your speedup? *(The drafting call depends on the reads, so the read-to-draft chain is serial; you cannot parallelize across it.)* [^3]
+3. The claim file and the policy are identical on every turn of a conversation and are read repeatedly. Where do they belong, and what TTL do you give them? *(Cache them with cache-aside and a session-length TTL, because they are stable within the session and read often.)* [^5]
+4. The system prompt and underwriting rules are sent on every call. What do you do with them? *(Move them to a stable prompt prefix and enable prompt caching so the prefix is not reprocessed each turn.)* [^6]
+5. The org also runs a nightly batch that triages every open claim. Should that job share the same path as the interactive turn? *(No. Route the batch through a throughput-oriented path using batching, and keep the interactive turn on the low-latency path.)* [^4]
+6. Recheck your budget after each change. If the turn still exceeds it, which step do you examine next, and which lever does that step suggest? *(Whatever step exceeds its slice is the next target; if it is a repeated read, cache it; if it is serial, see if it can be parallelized or removed.)* [^1]
+
+## What's next
+
+You can now set a latency budget, separate throughput from latency, exploit Amdahl's law to find the ceiling, batch the work that can wait, and cache the work that repeats. The next lesson returns to the platform and applies the same rigor to the interface most Salesforce systems live behind: enterprise REST API design, covering versioning, pagination, bulk operations, and the best practices that keep an API fast and safe as its consumers grow.
+
+[^1]: web.dev. [Measure performance with the RAIL model](https://web.dev/articles/rail)
+[^2]: aws.amazon.com. [Throughput vs Latency: Difference Between Computer Network Metrics](https://aws.amazon.com/compare/the-difference-between-throughput-and-latency/)
+[^3]: en.wikipedia.org. [Amdahl's law](https://en.wikipedia.org/wiki/Amdahl%27s_law)
+[^4]: anyscale.com. [Achieve 23x LLM Inference Throughput and Reduce p50 Latency with Continuous Batching](https://www.anyscale.com/blog/continuous-batching-llm-inference)
+[^5]: learn.microsoft.com. [Cache-Aside Pattern | Azure Architecture Center](https://learn.microsoft.com/en-us/azure/architecture/patterns/cache-aside)
+[^6]: platform.claude.com. [Prompt caching | Claude Platform Docs](https://platform.claude.com/docs/en/build-with-claude/prompt-caching)

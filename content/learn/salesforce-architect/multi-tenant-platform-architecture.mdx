@@ -1,0 +1,106 @@
+---
+title: "Lesson 2: Multi-Tenant Platform Architecture: Orgs, Environments, and the Instance Model"
+slug: multi-tenant-platform-architecture
+series: "salesforce-architect"
+lesson: 2
+excerpt: "Why every Salesforce org rents a slice of a shared platform: multi-tenancy, metadata-driven design, the instance model, and the sandbox environments that keep Dev/QA/UAT/Prod safe."
+date: "August 05, 2026"
+author: "Adroit Consulting"
+readTime: "8 min read"
+tags: [Salesforce, Architecture]
+---
+
+# Lesson 2: Multi-Tenant Platform Architecture: Orgs, Environments, and the Instance Model
+
+Here is the single fact that explains most of what surprises newcomers to Salesforce: **you never own a server, a database, or even a schema. You rent a private, configurable slice of a platform that thousands of other companies share.** Almost every "weird" platform rule (governor limits, code-coverage gates, sandbox refresh windows, the instance your org lives on) is a direct consequence of that sharing. This lesson makes the mechanism concrete, because the System Architect exam (and real architecture work) constantly assumes you understand it.
+
+## The three terms you must nail
+
+**Multi-tenant.** Salesforce's own technical brief defines it plainly: the platform "isolates and concurrently supports the varying requirements of many tenants (organizations, business units, and so on)." [^1] One platform, many customers, strict isolation.
+
+**Org.** Every tenant on the platform is called an *organization*, or *org* for short. Every org-specific record in the shared database carries an **OrgID**, and the platform kernel uses that identifier to keep each org's activities private. [^1]
+
+**Metadata-driven.** When you create an object or write Apex, the platform does *not* create a physical table or compile code the way you'd expect. It stores **metadata** (data that describes the UI and business logic) and materializes virtual application components at runtime. A single instance runs on "a single shared multitenant database with a single schema" plus a multitenant kernel that reads metadata and data to serve each tenant. [^1]
+
+That last point is the architect's lever: your customizations are *descriptions*, not artifacts. That is why the platform can ship updates to every customer simultaneously, and why your metadata can evolve without downtime.
+
+## Under the hood: how one database stays private
+
+The shared data layer is worth knowing at a name level because exam questions describe it. Org-defined objects and fields live in the **Universal Data Dictionary (UDD)** (notably the `MT_Objects` and `MT_Fields` system tables), while application data lives in the big `MT_Data` table, where each row carries a GUID, the owning OrgID, and an ObjID. [^1]
+
+Isolation is enforced at the physical layer too: all platform data, metadata, and pivot tables are **partitioned by OrgID** using native database partitioning. Every query targets one org's data, so the optimizer only touches that org's partitions, a technique the brief calls "partition pruning." [^1]
+
+## The instance model
+
+Each org belongs to a single **instance**. [^2] Two kinds of infrastructure exist:
+
+- **First-party infrastructure**: owned and operated by Salesforce (data centers in Amsterdam, Stockholm, Tokyo, Osaka, and Virginia North/South). Your instance is actively served from one location, with transactions replicated asynchronously to a paired ready instance; Salesforce runs regular site switches for maintenance, compliance, and disaster recovery. [^2]
+- **Hyperforce**: Salesforce-managed infrastructure hosted on **AWS and GCP**. Hyperforce runs active/active across three availability zones, distributes requests through a load balancer, and validates failover with Game Day exercises and chaos engineering. [^2] Hyperforce also brings native end-to-end encryption, Zero Trust, and blue/green releases that keep planned maintenance to about one minute a year. [^1]
+
+You can find your org's instance in **Setup → Company Information** (the Instance field). Here's the naming tell: instance names that start with **two letters** (like `AP0` or `NA106`) are first-party; names that start with **three letters** (like `GBR10`) are Hyperforce. [^3]
+
+Why should an architect care? Data residency, latency, compliance, and maintenance windows all hang off the instance. That's why the platform brief explicitly recommends building applications "free from specific data center requirements." [^2]
+
+## Environments: production org + sandboxes
+
+Within one org's architecture you never develop in production. A **sandbox is a copy of your organization in a separate environment, completely isolated from production**: operations in a sandbox never affect the production org. [^4]
+
+The four types (with the numbers straight from Salesforce Help):
+
+| Sandbox type | Refresh interval | Storage | What's copied | Templates |
+|---|---|---|---|---|
+| Developer | 1 day | 200 MB data (400 MB with upgrade), 200 MB files | Metadata only | Not available |
+| Developer Pro | 1 day | 1 GB data (2 GB with upgrade), 1 GB files | Metadata only | Not available |
+| Partial Copy | 5 days | 5 GB data, files same as production | Metadata + sample data (up to 10k parent records and related children) | Required |
+| Full | 29 days | Same as production | Metadata + all data | Available |
+
+[^5] [^4]
+
+Entitlements differ by edition; the ones that matter for most architecture work: Developer sandboxes come with 25 (Enterprise), 100 (Unlimited), 100 (Performance); Developer Pro with 5 (Unlimited/Performance); Partial Copy with 1 (Enterprise/Unlimited/Performance); **Full with 1 (Unlimited/Performance) and none by default on Enterprise**. You can purchase Partial and Full sandboxes for Enterprise, Unlimited, and Performance editions. [^4]
+
+That maps to a classic environment ladder:
+
+- **Dev** → Developer sandboxes for feature work, Developer Pro when the work needs a data subset
+- **QA / integration testing** → Partial Copy: "a more agile solution than full copies to test specific application areas with selected sample data sets from production"
+- **UAT / release rehearsal** → Full Copy: "typically used for Quality Assurance (QA) and/or User Acceptance Testing (UAT) at the very end of development life cycle before deploying changes to production"
+- **Prod** → the production org, untouchable by development
+
+[^5]
+
+## Worked example
+
+A UK manufacturing client, 200 users, Enterprise edition, is taking over a Salesforce org on a Hyperforce London instance (`GBR10`, three-letter prefix, so Hyperforce). The architecture you propose:
+
+1. **Three Developer sandboxes** for parallel feature work (Enterprise includes 25, so no purchase needed).
+2. **One Developer Pro** for the integration developer who needs a small, refreshable dataset to test against the ERP.
+3. **One Partial Copy** for QA, with a sandbox template that pulls a representative 10k-parent-record sample of Accounts, Opportunities, and Cases.
+4. **One Full sandbox, purchased**, because Enterprise ships zero Full sandboxes by default. It refreshes every 29 days, so you align refresh to the week before each release rehearsal.
+5. **Production** stays isolated. Nothing automated, no integration developer, no direct metadata edits; changes arrive only through the release pipeline.
+
+The client pushes back on the Full-sandbox purchase. Your answer as an architect: the 29-day Full refresh is the only environment with production-identical data, and UAT before a production deployment is exactly what Salesforce documents Full sandboxes for. This is the difference between "tested" and "validated against reality."
+
+## The pitfall to avoid
+
+**Treating governor limits as a nuisance instead of the contract.** The platform has "an extensive set of governors and resource limits associated with platform code execution" (CPU time, memory, queries, DML statements, math operations, outbound callouts), specifically "to prevent malicious or unintentional monopolization of shared, multitenant system resources." [^1] The brief describes exactly what happens to a developer who codes a loop updating a thousand rows one at a time: runtime exceptions from resource limits, followed by a lesson in bulk processing. [^1] "My org is small" is not an argument: the limits exist because you share infrastructure with orgs that aren't.
+
+A second, operational pitfall: **refreshing many sandboxes at once.** Salesforce processes sandbox copy/refresh jobs *in series*, not parallel, so a batch of refreshes can look like it's stuck when it's simply queued. [^5] Also remember the sandbox's **org ID changes every refresh**; anything that treats a sandbox as a stable endpoint breaks after refresh. [^4]
+
+## Try it
+
+1. Your org's instance is `NA106`. First-party or Hyperforce?
+2. Your org's instance is `GBR10`. First-party or Hyperforce?
+3. A stakeholder wants to demo to executives with production-like data but can't wait 29 days. Which sandbox type fits, and what's the tradeoff?
+4. You're asked to justify buying a Full sandbox on an Enterprise org. What two facts from this lesson support the purchase?
+5. Why does row-by-row DML inside a loop fail on a shared platform even though your org has only 50 users?
+
+**Answers:** (1) First-party, two-letter prefix. (2) Hyperforce, three-letter prefix. (3) Partial Copy: it refreshes every 5 days and pulls up to 10k parent records via a template, but it's a sample, not a full copy. (4) Enterprise includes zero Full sandboxes by default, and Full is the documented environment for UAT at the end of the lifecycle. A full-data rehearsal is the only way to validate against production reality. (5) Governor limits cap per-transaction work to protect shared resources; the platform is designed to push you toward bulk processing.
+
+## What's next
+
+Multi-tenancy is the container every other System Architect topic lives in, and you now know how orgs, environments, and instances fit together on the shared platform. Lesson 3 moves inside the org and gets concrete: the core building blocks. It covers objects, fields, relationships, record types, and when to reach for a formula field versus a rollup.
+
+[^1]: architect.salesforce.com. [architect.salesforce.com](https://architect.salesforce.com/docs/architect/fundamentals/guide/platform-multitenant-architecture.html)
+[^2]: help.salesforce.com. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000396845&language=en_US&type=1)
+[^3]: help.salesforce.com. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000384755&language=en_US&type=1)
+[^4]: help.salesforce.com. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=sf.data_sandbox_environments.htm&type=5)
+[^5]: help.salesforce.com. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000387743&language=en_US&type=1)

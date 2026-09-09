@@ -1,0 +1,130 @@
+---
+title: "Lesson 20: General Systems Architecture: Environments and CI/CD in ML and AI Pipelines"
+slug: environments-cicd-in-ml-ai-pipelines
+series: "salesforce-architect"
+lesson: 20
+excerpt: "The same environment-and-release discipline from Lesson 19, applied to machine learning and AI systems. Why the ML artifact is more than code (code, data, and model all change), the continuous X's (CI, CD, CT, CM), the MLOps maturity levels, how a model promotes from a development environment to production, and what changes when the artifact is a nondeterministic agent that needs eval gates instead of unit tests."
+date: "August 23, 2026"
+author: "Adroit Consulting"
+readTime: "11 min read"
+tags: [Architecture, AI Infrastructure, CI/CD, Delivery, AI Agents]
+---
+
+# Lesson 20: General Systems Architecture: Environments and CI/CD in ML and AI Pipelines
+
+Lesson 19 gave you the environment and release playbook for a Salesforce org: sandbox types, change sets versus source-driven deployment, and the path a change travels before it reaches production. This lesson takes that same discipline and moves it to machine learning and AI systems. The environment vocabulary and the release mechanics carry over. What changes is the artifact you are shipping.
+
+Here is the thesis, stated plainly: in traditional software the artifact is code, and a release moves code. In an ML or AI system the artifact is a bundle of code, training data, and a trained model, and any one of those three can change independently. That means your release pipeline has to handle three different kinds of change, plus a fourth one that plain software never faces, which is the model silently degrading on live data. The discipline is the same as Lesson 19. The number of moving parts is not.
+
+## Define the terms first
+
+- **Environment**: one stage in the chain a change travels through before production, the same role it played in Lesson 19. For an ML system the chain is usually a development environment for experimentation, a staging or pre-production environment that mirrors production, and a production environment that serves the model to real users. [^1]
+- **Continuous integration (CI)**: automatically building and testing the system when new code is committed. In MLOps, CI extends the usual code tests by also testing and validating data and models. [^2]
+- **Continuous delivery (CD)**: automatically delivering the trained pipeline and model to a target environment so a prediction service can serve them. [^2]
+- **Continuous training (CT)**: a property unique to ML systems, where the model is retrained automatically on new data and re-deployed, without a human starting each training run. [^1] [^2]
+- **Continuous monitoring (CM)**: watching production data and model performance, and tying those signals to business metrics. [^2]
+- **Model registry**: a store for trained model artifacts, where each model gets a version, metadata about how it was trained, and a record of which version is live. [^2]
+- **Artifact**: any versioned deliverable that flows through the pipeline. Code is an artifact. So is a dataset. So is a trained model, and so is a prompt template. [^3]
+- **Promotion**: moving an artifact from one environment to the next, usually after it passes a gate such as a validation suite or an evaluation score. [^2]
+- **Evaluation gate**: a check that scores a model or an agent against a reference set of cases and blocks the release if the score drops below a threshold. [^6]
+
+## Why the ML artifact is more than code
+
+A 2015 Google paper, "Hidden Technical Debt in Machine Learning Systems," made the point that most of an ML system is not the ML code. The paper diagrams an ML system as a thin inner loop of model code surrounded by a large ring of configuration, data collection, data verification, testing and debugging, resource management, model analysis, metadata management, serving infrastructure, and monitoring. [^4] Google's own MLOps documentation reproduces that diagram and uses it to make the same claim: only a small fraction of a real-world ML system is the model code itself. [^1]
+
+That reframing explains the whole design of MLOps. A release is not "merge the code and deploy." A release has to consider whether the training data changed, whether the model was retrained, and whether the serving infrastructure still matches the model's expectations. Each of those is a separate trigger for a build, and the SIG MLOps group lists the reasons a model changes: new training data, new training approaches, self-learning, degradation over time, deployment to new applications, attack and revision, and rollback to a previous serving version. [^2]
+
+## The continuous X's
+
+MLOps does not stop at CI and CD. The SIG MLOps principles describe four continuous practices. [^2]
+
+**Continuous integration** extends the usual build-and-test cycle by adding validation of data and models alongside code. A CI run might test that a new feature-transform function produces the expected columns, that a dataset passes schema checks, and that the model specification still trains without errors.
+
+**Continuous delivery** is where MLOps diverges most from plain software. Google states it directly: CD is no longer about a single software package, but a system, an ML training pipeline, that should automatically deploy another service, the model prediction service. [^1] You are not just shipping one deployable. You are shipping a pipeline that itself produces the thing you serve.
+
+**Continuous training** is new. It exists because models decay. The SIG MLOps definition is that CT automatically retrains models for re-deployment, and the trigger is new data arriving, a schedule firing, or a monitoring event. [^2]
+
+**Continuous monitoring** closes the loop. The SIG MLOps principle is that you monitor production data and model performance metrics and bind them to business outcomes. Monitoring is what feeds the trigger that starts the next training cycle. [^2]
+
+## Three levels of MLOps maturity
+
+The SIG MLOps principles and Google's MLOps guide both describe the same three maturity levels, which map neatly onto how much of the pipeline is automated. [^1] [^2]
+
+**Level 0: manual process.** Data preparation, model training, and testing all run by hand, usually in notebooks. This is where most data science work starts. It is iterative and fast to explore with, but nothing about it is repeatable or safe to release at scale.
+
+**Level 1: ML pipeline automation.** Training runs automatically. Whenever new data is available, retraining is triggered, and data and model validation steps run as part of that automation. The model is still deployed by hand.
+
+**Level 2: CI/CD pipeline automation.** Now the CI/CD system builds, tests, and deploys the data, the model, and the training pipeline components automatically. This is the level where the environment chain and the release discipline from Lesson 19 become the whole point. [^1] [^2]
+
+## Environments and the promotion path
+
+Google's MLOps guide lays out a promotion path that reads like a more cautious version of a Salesforce release pipeline. [^1]
+
+- **Automated deployment to a test environment**, triggered by pushing code to the development branch.
+- **Semi-automated deployment to a pre-production environment**, triggered by merging code to the main branch after reviewers approve the changes.
+- **Manual deployment to production**, only after the pipeline has run successfully on the pre-production environment several times.
+
+The deliberate asymmetry is worth noticing. Test environments update freely. Pre-production requires human approval on a merge. Production is manual, on purpose, because a model that looks good in training can behave badly against real traffic, so the human checkpoint stays in place. Google summarizes the whole goal: deploying an ML system in production does not only mean exposing a model as an API, it means deploying an ML pipeline that automates the retraining and deployment of new models. [^1]
+
+## Versioning three kinds of artifacts
+
+Because code, data, and model all change, you version all three. The SIG MLOps group is explicit that ML training scripts, models, and datasets should be first-class citizens in version control, and that every model specification should go through code review and be versioned so training is auditable and reproducible. [^2]
+
+Data version control is the piece that has no analog in plain software. Tools like DVC store the metadata and pointers in Git while pushing the actual data content to cloud storage, so a commit captures a reproducible snapshot of which data, which parameters, and which model produced a given result. [^3] DVC's own framing is that models, data, and metrics are treated as code: the meta-information lives in Git, and the heavy content lives in storage. [^3] A model registry then stores the trained model artifacts themselves and tracks which version is serving production. [^2]
+
+The reason this matters is reproducibility and rollback. If a model in production degrades, you need to know exactly which data, which hyperparameters, and which training code produced it, and you need a path back to a prior version that still exists. The SIG MLOps list of versioning reasons includes audit and investigation requirements, compliance, and the ability to quickly roll back to a previous serving version. [^2]
+
+## Worked example: a lead-scoring model promoted through three environments
+
+A mid-sized services firm runs Salesforce and wants to score inbound leads with a model that predicts likelihood to close. Here is the environment and release design, following the discipline from Lesson 19 with the ML additions from this one.
+
+1. **Development environment for experimentation.** Data scientists work on feature engineering and model selection here. Each experiment is a branch or a tracked run, and the output is a candidate model plus the code and dataset that produced it, all versioned. Nothing here touches shared environments until it passes an evaluation against a held-out test set. [^2]
+
+2. **Automated tests on commit.** Every push to the development branch runs CI: data validation on the training set, unit tests on the feature-transform code, and a quick model train to confirm the pipeline still executes. This is level 1 automation, triggered by a code or data change. [^1] [^2]
+
+3. **Staging, triggered by a merge to main.** A merge to the main branch deploys the pipeline to a pre-production environment. There the newly trained model is served against a shadow copy of production data, so the team can compare its predictions with the current model before committing. The model artifact lands in the model registry with its metrics recorded. [^1] [^2]
+
+4. **Manual promotion to production.** After the staging run looks right, a human promotes the model to production. The model is served as an API, and the scoring results flow into Salesforce as lead fields. [^1]
+
+5. **Continuous training and monitoring.** A scheduled job retrains the model on fresh data each week. Monitoring watches prediction distributions and model performance, and if a metric drifts, monitoring becomes the trigger for the next training and release cycle. [^2]
+
+The point of the whole chain is that no single manual step is the release. The environment chain, the evaluation gates, the registry, and the monitoring loop are what make the release safe and repeatable. That is the same conclusion Lesson 19 reached about change sets versus source-driven deployment.
+
+## The agentic AI twist: nondeterminism and eval gates
+
+Everything above assumed a predictive model: same input, roughly same output. Generative and agentic AI systems break that assumption, and the CI/CD discipline has to stretch to match.
+
+Red Hat's team, building CI/CD for an agentic self-service IT agent, spells out why agents need CI/CD more than plain software. Agents run on large language models, which are nondeterministic. One test run is never enough, because responses change with every run. You cannot reach 100% accuracy, so you track how often errors occur and manage risk. LLM behavior drifts over time, and externally hosted models can change as providers tweak them. [^5]
+
+Galileo makes the same point about what breaks: traditional CI assumes the same input produces the same output and that a passing build means a working system. Autonomous agents violate all of that. A prompt change shipped on a Friday can make an agent hallucinate in a small percentage of interactions over the weekend, and no exact-match unit test catches it. The fix is eval-driven CI, where the unit test is replaced by an evaluation suite that scores behavior across dimensions like instruction adherence, tool selection quality, and hallucination detection. [^6]
+
+Two adaptations carry most of the weight. First, exact-match assertions give way to statistical validation, tolerance thresholds, and confidence intervals, because a single response varying is expected, not a bug. [^6] Second, the artifacts you version expand to include prompt templates, system instructions, retrieval configurations, tool definitions, and the eval datasets themselves. When a production agent starts behaving differently, you need to know whether the change came from code, a prompt update, a data shift, or a configuration change. Without versioning all of them, debugging is guesswork. [^6]
+
+The evaluation suite is the mechanism that keeps all of this safe. A golden dataset of representative interactions, edge cases, and known failure modes is maintained and versioned, and every build runs against it. Production incidents get folded back in as new eval cases, so the gate grows stronger over time. [^6] Red Hat echoes the pattern in practice, running end-to-end evaluations in pull-request testing and nightly runs, and keeping CI as a thin wrapper over the same make targets developers run locally, which kills the "it passed on my machine" class of surprise. [^5]
+
+## The pitfall to avoid
+
+**Treating ML releases like plain software releases, and shipping the model without the data and pipeline that produced it.** If you version the code but not the dataset, or you record the model artifact but not its metrics, then the first time the model degrades you cannot reproduce what you shipped, and you cannot safely roll back. The hidden technical debt diagram is warning you about exactly this: the model code is the visible sliver, and the release discipline has to cover the whole surrounding system. [^1] [^4]
+
+The agentic version of the same pitfall is trusting a green build. A pipeline that only checks that code compiles will look healthy while an agent drifts into unacceptable behavior, because the output is probabilistic and the build tool never measured it. [^6] A release is not safe because it built. It is safe because it passed evaluation against a versioned reference set, and because the environment chain and the monitoring loop confirm it still works on live traffic.
+
+## Try it
+
+Answer before reading on. Your team runs a churn-prediction model that scores Salesforce accounts each week.
+
+1. A data scientist improves a feature-transform function and pushes it to the development branch. What should the CI run check beyond "the code compiles"? *(Data validation on the training set, unit tests on the transform, and a short training run to confirm the pipeline still executes; in MLOps, CI validates data and models too, not just code.)* [^1] [^2]
+2. The model in production has been degrading for two weeks but the build has been green. Which practice would have caught this, and which term names it? *(Continuous monitoring, which watches production data and model performance and binds them to business outcomes; the degradation is model drift, which exact-match tests cannot see.)* [^2] [^6]
+3. Your team changes the prompt on a production agent. What must you version alongside the prompt to be able to debug a regression later? *(The system instructions, retrieval configuration, tool definitions, the eval dataset, and the model version; you need traceability across code, data, and configuration.)* [^6]
+4. Why is production deployment deliberately manual in Google's MLOps promotion path? *(A model that looks good in training can behave badly against real traffic, so a human checkpoint stays in place; test and pre-production can be automated, but production keeps a manual gate.)* [^1]
+5. You need to roll the churn model back to the version that served three weeks ago. What must exist for that to be possible? *(A model registry with versioned model artifacts, plus a versioned record of the data, hyperparameters, and training code that produced each version.)* [^2] [^3]
+
+## What's next
+
+You can now lay out an environment chain and a release pipeline for a model or an agent, and you know why the artifact is a bundle of code, data, and model rather than a single deployable. The next lesson returns to the platform and to the start of every good build: solution design. It covers turning a requirement into an architecture document, capturing the non-functional requirements, and recording the tradeoffs you made along the way.
+
+[^1]: docs.cloud.google.com. [MLOps: Continuous delivery and automation pipelines in machine learning](https://docs.cloud.google.com/architecture/mlops-continuous-delivery-and-automation-pipelines-in-machine-learning)
+[^2]: ml-ops.org. [MLOps Principles](https://ml-ops.org/content/mlops-principles)
+[^3]: doc.dvc.org. [CI/CD for Machine Learning, Data Version Control](https://doc.dvc.org/example-scenarios/ci-cd-for-machine-learning)
+[^4]: papers.nips.cc. [Hidden Technical Debt in Machine Learning Systems (Sculley et al., NeurIPS 2015)](https://papers.nips.cc/paper/5656-hidden-technical-debt-in-machine-learning-systems.pdf)
+[^5]: developers.redhat.com. [Deploy with confidence: Continuous integration and continuous delivery for agentic AI](https://developers.redhat.com/articles/2026/05/18/ci-cd-delivery-agentic-ai)
+[^6]: galileo.ai. [How to Build a Continuous Integration Pipeline for AI Agents](https://galileo.ai/blog/continuous-integration-ci-ai-fundamentals)

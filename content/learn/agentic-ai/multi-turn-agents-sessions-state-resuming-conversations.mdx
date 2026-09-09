@@ -1,0 +1,129 @@
+---
+title: "Lesson 16: Multi-Turn Agents: Sessions, State, and Resuming Conversations"
+slug: multi-turn-agents-sessions-state-resuming-conversations
+series: "agentic-ai"
+lesson: 16
+excerpt: "An LLM is stateless: every call forgets the one before it, so multi-turn behavior has to be built, not assumed. This lesson defines the session, the state it carries, and the checkpointing that lets an agent resume where it left off: the difference between a thread and a durable store, why the state schema is the real design, and how production systems survive restarts and long conversations."
+date: "August 19, 2026"
+author: "Adroit Consulting"
+readTime: "11 min read"
+tags: [LLMs, AI Agents, Salesforce]
+---
+
+# Lesson 16: Multi-Turn Agents: Sessions, State, and Resuming Conversations
+
+Lesson 3 gave you the agent loop and Lesson 15 gave you the discipline of keeping that loop's context small and coherent. This lesson answers the question the loop hides: how does an agent remember anything *between* turns? The answer is that it does not, on its own. A large language model is stateless by construction. Send it a message, get a reply, and the model retains nothing for the next call. Everything you think of as the agent "remembering" a conversation is the application layer working to keep the model honest about what happened before. [^1] [^4]
+
+That is the mental model for this whole lesson: **multi-turn behavior is not a property of the model, it is a property of the system you build around it.** An agent that carries a conversation across turns is one that stores state somewhere, reattaches the right slice of it to each new call, and can pick that state back up after the process dies. Nail those three and you have a stateful agent. Miss any of them and you have a chatbot that forgets mid-sentence, which users read as the agent being confused, which reads as a failed product.
+
+## What a multi-turn conversation actually is
+
+A single-turn interaction is a self-contained exchange: query in, answer out, done. A multi-turn conversation is any sequence of two or more such exchanges where the meaning of each message depends on what was said in earlier ones. [^1] That dependency is the entire problem. When a customer says "can you change that to the blue one?", the word "that" and "the blue one" only mean something because of an earlier turn that established which order, which item, and which color options exist. The model cannot resolve that reference unless the earlier context is present in the call.
+
+Decagon's framing is worth keeping: a multi-turn system is solving a *state-tracking problem*. What was established, promised, or decided in earlier turns must be available and correctly interpreted when each new message arrives. [^1] As long as the accumulated history fits in the context window, the model can reference any prior exchange. The moment it stops fitting, or the moment you fail to send it, the agent starts guessing, and the conversation starts to fall apart.
+
+The real-world weight of this is concrete. Decagon reports that enterprise AI support platforms average 4.2 turns per resolved session, and that sessions involving a transaction, like a refund or an account change, run 6 to 8 turns. Single-turn interactions make up only 20 to 25% of volume, mostly simple FAQ lookups. [^1] So a system that cannot handle multi-turn correctly is structurally unable to serve most real requests. This is not a nice-to-have you bolt on later. It is the core competency.
+
+## Stateless model, stateful application
+
+The cleanest way to see where state lives is to remember what the API call actually is. Each request to an LLM is standalone. The model has no memory of the call before it, and no way to know about a previous turn unless you include it. [^1] [^4] This forces a sharp architectural rule that the Maxim team spells out: the responsibility for memory and state management sits entirely in the application layer. [^4] You, the builder, own the state.
+
+That means the naive multi-turn implementation is just: keep a list of every message so far, and send the whole list back with each new user turn. [^1] It works until it stops working. The list grows, the prompt grows, and you hit the wall from Lesson 15: longer contexts degrade recall, cost more tokens, and slow every call down. So production systems do not blindly replay history. They *curate* it, which is where sessions and state schemas come in.
+
+Three terms anchor the rest of the lesson, and they are easy to conflate, so keep them separate:
+
+- **A turn** is one exchange in the conversation: a user message plus the agent's response (and any tool calls in between).
+- **A session** is the container for a whole conversation: one customer's interaction, one agent run, one thread of turns. [^4]
+- **State** is everything the session needs to remember to keep behaving coherently: the history, plus the working facts and decisions that have accumulated.
+
+The distinction that matters is between the session and the *state it carries*. A session is the identity. State is the content. You can restart a session only if you have both, and most failure modes come from having the identity without the content.
+
+## Sessions and threads: identity that lets you resume
+
+The single most practical tool for multi-turn agents is the session identifier, usually called a `thread_id` or session ID. It is a stable key that ties every turn of one conversation together, and it is the mechanism that makes resumption possible at all.
+
+LangChain's LangGraph framework is the clearest reference for how this works. You compile a graph with a checkpointer, and every invocation passes a `thread_id`. The graph then knows which conversation this turn belongs to, loads that thread's state, and appends the new turn to it. [^2] The persistence docs describe the two complementary systems that together cover the whole problem [^2]:
+
+- **Checkpointers** persist a thread's graph state as snapshots, scoped to a single thread. They are short-term, thread-scoped memory, and they are the piece that powers conversation continuity, human-in-the-loop workflows, time travel, and fault tolerance. [^2]
+- **Stores** persist application-defined data outside the graph state, scoped across threads. They are long-term, cross-thread memory for user preferences, facts, and shared knowledge. [^2]
+
+That split maps almost exactly onto the memory taxonomy from Lesson 14. The checkpointer is episodic and thread-scoped: it remembers *this* conversation. The store is semantic and cross-thread: it remembers *what you know about this user*. The LangGraph guidance is that most applications use both: a checkpointer tracks the current thread, a store tracks durable information across threads. [^2]
+
+The critical realization is what a checkpointer enables beyond simple recall. LangGraph's docs list it directly: continue a conversation, resume after an interruption, recover from a failure, and remember across interactions. [^2] A checkpoint is a snapshot of the graph's entire state at a point in time. Because you can reload that snapshot, you can resume exactly where you left off, and in advanced cases re-run from an earlier point with modified state. [^3] That is what turns a fragile one-shot call into a durable, resumable unit of work.
+
+## The state schema is the real design
+
+If the session is the container and the checkpointer is the mechanism, the state schema is the actual product design. It is the decision about what a session remembers, and getting it wrong is where production systems quietly fail.
+
+ActiveWizards' engineering breakdown of LangGraph state management is the best concise treatment, and its core rule is blunt: put in state the minimum that conditional edges need to route correctly, plus the accumulating artifacts the LLM needs to reason. [^3] State is serialized and stored after every node execution, so every field pays a cost: serialization time, storage size, and context budget when you inject those fields back into the prompt. [^3] The temptation to "put everything in state so nodes can access it" is precisely the trap.
+
+Three patterns from that writeup are worth internalizing [^3]:
+
+1. **Store references, not content.** A research agent that fetches a 40-page PDF should store the object key or database row ID, not the document text. The node that needs the document fetches it on demand. The checkpoint stays kilobytes, not megabytes.
+2. **Append-only accumulation with reducers.** In LangGraph, marking a list field with a reducer (the `Annotated[list, operator.add]` pattern) tells the framework to *merge* partial updates rather than overwrite. Without it, any node touching a list must return the full list or it clobbers earlier entries. Reducers also make parallelism safe: two branches can append to the same list independently. [^3]
+3. **Keep routing fields primitive.** Enums, strings, and integers. If a conditional edge needs to evaluate a complex object to decide where to route, the routing logic belongs in a function, not nested in state. [^3]
+
+There is also a practical sizing test that catches most over-engineering: serialize your state object with `json.dumps(state)` and check the byte count. If a single checkpoint exceeds roughly 50KB, something belongs in an external store. [^3] That number is a heuristic, not a law, but it is a useful tripwire for the "put everything in state" instinct.
+
+## The checkpointer backend: a decision people get wrong first
+
+The persistence layer choice is, per ActiveWizards, the one LangGraph teams get wrong first. [^3] The classic failure: ship to production on `MemorySaver`, watch a pod restart kill twenty in-flight agent threads, then spend the next sprint reverse-engineering a database schema. [^3] The in-memory saver is perfect for local dev and unit tests, and it loses everything the moment the process restarts. [^2] [^3]
+
+The backend tiers, summarized [^3]:
+
+- **MemorySaver** for local dev and tests. Never production.
+- **SqliteSaver** for a single-process server with low concurrency. File-backed durability, no external dependency, ACID writes. But SQLite write locks serialize concurrent threads, so it does not scale horizontally.
+- **PostgresSaver** for multi-process or containerized deployment. ACID, queryable, doubles as an audit log, scales with connection pooling. Requires proper async connection pooling, because a blocking connection can stall the event loop.
+- **Redis-backed** for low-latency workflows with a sub-10ms checkpoint budget, with the caveat that Redis needs AOF persistence configured or it loses data on restart.
+- **Custom savers** (DynamoDB, S3) to match existing infrastructure, with the warning that subtle bugs in `put()` cause silent state loss.
+
+The through-line is the same every time: pick the durability that matches your restart and concurrency reality, and measure before you commit. The other recurring operational issue is that checkpoints grow unboundedly over long conversations, so you need a retention policy, often a cron job that deletes checkpoints older than N days. [^2]
+
+## Consistency: the thing that actually degrades
+
+Sessions and state give you the machinery. The reason you need the machinery is that multi-turn consistency is genuinely fragile. Maxim reports that leading LLMs show significantly lower performance in multi-turn settings than single-turn, with an average drop of 39% across generation tasks in one study. [^4] That is a huge number, and it is worth pausing on: the same model that answers a single question cleanly loses a third of its generation quality once you string it into a conversation.
+
+The failure mode underneath that drop has a name. Models often make premature assumptions in early turns and then fail to recover when those assumptions prove wrong, a "getting lost in conversation" effect where the agent leans on an early decision and the error cascades through every later response. [^4] The consistency dimensions at risk are [^4]:
+
+- **Contextual continuity**: using prior information and resolving references across turns.
+- **Factual consistency**: not contradicting what the agent or the user said earlier.
+- **Task progression**: keeping the user's goal in focus and building toward completion instead of drifting.
+- **Persona adherence**: keeping a stable tone and behavior boundary.
+
+The architectural remedies for these are the ones already covered in this lesson and the last few: session management systems that carry state across interactions, memory systems that augment the context window with retrieved history, and state machines that define the valid conversation states and transitions so the agent cannot jump into an invalid state. [^4] On the context side, selective injection and hierarchical summarization keep the window relevant rather than bloated. [^4]
+
+## Worked example: how the Fortress resumes a conversation
+
+This is not abstract at Adroit. Hermes, the framework that runs the Fortress, is itself a multi-turn agent, and its design is a clean, small instance of everything in this lesson. [^5]
+
+Two memory files, `MEMORY.md` and `USER.md`, hold the agent's durable facts and preferences, capped at 2,200 and 1,375 characters respectively, and injected into the system prompt as a frozen snapshot at session start. [^5] That is the cross-thread, semantic store from this lesson: facts that survive from one session to the next. The frozen-snapshot design is deliberate, because it keeps the system prompt's prefix stable so prompt caching works. Changes are written to disk immediately but only appear in the prompt at the next session start. [^5]
+
+The episodic, thread-scoped side is where session resumption shows up. Every CLI and messaging session is stored in a SQLite database with full-text search, and the agent has a `session_search` tool to find things it discussed weeks ago, even when they are no longer in active context. [^5] That is the checkpointing model applied simply: the raw conversation persists to disk, searchable on demand, and only the distilled facts earn a spot in the small curated store.
+
+The failure discipline is the same one ActiveWizards warns about, inverted. Because memory does not auto-compact, a write that would overflow returns an error, and the agent must consolidate in the same turn before retrying. [^5] The system refuses to let state grow unboundedly, which is exactly the retention-policy instinct from the LangGraph guidance, enforced by design rather than by a cleanup job. [^2] [^5]
+
+The lesson to carry out of this: a production multi-turn agent does not need a heavy framework to get state right. It needs a durable store for the thread, a bounded curated store for durable facts, and a mechanism to reach into past sessions when context runs out. Hermes does all three with two small files and one SQLite database.
+
+## The pitfall to avoid
+
+The most common failure is conflating "session" with "state" and assuming that opening a session is the same as remembering the conversation. It is not. A session ID with no persisted state behind it resumes into a blank slate, which is exactly as confusing to a user as starting over. The equivalent mistake on the other side is treating the checkpointer as a place to dump everything, then watching latency and storage climb as every node snapshots megabytes of content. [^3]
+
+The second failure is not sizing the durability to your restart reality. If your agent runs in containers that restart, an in-memory saver is not a shortcut, it is a data-loss incident waiting for a deploy. [^3] Choose the backend that survives the failure mode you actually have, and put a retention policy on the checkpoints before they grow without bound. [^2]
+
+The third is subtler and comes from the 39% number: assuming that because a model is good at single turns, it will be good at conversations. It will not, unless you give it the state to lean on and keep that state coherent. The model is the easiest part of a multi-turn system. The state schema, the persistence layer, and the curate-don't-replay discipline are the hard parts, and they are all your code.
+
+## Try it
+
+1. **Trace a session ID.** Pick an agent you have built or used. What is its thread identifier? Where does it live in the request? What happens to a conversation when that ID changes or is lost? Write down the answer, and you will likely find the first multi-turn bug in your system.
+2. **Design a state schema.** Take a customer-support agent and write its state as a `TypedDict`: the routing fields (current step, retry count), the accumulated artifacts (messages, collected facts), and the external references (order IDs, document keys) instead of content. Then run `json.dumps` on a realistic sample and check the byte count against the 50KB heuristic. [^3]
+3. **Kill it and resume it.** Build the smallest LangGraph agent you can with a persistent checkpointer, run a few turns, restart the process, and pass the same `thread_id` again. The graph should continue where it left off. Then repeat with `MemorySaver` and watch the state vanish on restart. That contrast is the whole durability lesson in one exercise. [^2] [^3]
+
+## What's next
+
+You now have an agent that carries state across turns. Lesson 17 is the first security lesson, and it is the reason you do not let a stranger's words run your agent: prompt injection defense, system boundaries, and input validation. An agent that remembers and acts is powerful, which is exactly why you must control what it trusts and what it will obey.
+
+[^1]: decagon.ai. [decagon.ai](https://decagon.ai/glossary/what-is-a-multi-turn-conversation)
+[^2]: docs.langchain.com. [docs.langchain.com](https://docs.langchain.com/oss/python/langgraph/persistence)
+[^3]: activewizards.com. [activewizards.com](https://activewizards.com/blog/langgraph-state-management-checkpointing-recovery-and-the-persistence-layer-decision/)
+[^4]: getmaxim.ai. [getmaxim.ai](https://www.getmaxim.ai/articles/how-to-ensure-consistency-in-multi-turn-ai-conversations/)
+[^5]: hermes-agent.nousresearch.com. [hermes-agent.nousresearch.com](https://hermes-agent.nousresearch.com/docs/user-guide/features/memory)

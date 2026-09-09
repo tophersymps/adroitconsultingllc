@@ -1,0 +1,158 @@
+---
+title: "Lesson 32: Building your first enterprise agent: project setup, end to end"
+slug: first-enterprise-agent-project-setup
+series: "agentic-ai"
+lesson: 32
+excerpt: "You have the pieces: the loop, tools, context, memory, evaluation. This lesson is the first time they stop being separate techniques and become one running system. It walks the full setup of an enterprise agent project, from picking a bounded problem and scaffolding the repository, through wiring the model, defining the agent, and registering tools, to running it end to end behind a small API. The point is not to write clever code. It is to make the boring decisions deliberately, the ones that decide whether your agent survives contact with a real codebase, a real API key, and a real deployment. A worked example ties it together: a ticket-triager agent you stand up from an empty folder to a running endpoint in one pass."
+date: "September 4, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [LLMs, AI Agents, Architecture, Tool Integration]
+---
+
+# Lesson 32: Building your first enterprise agent: project setup, end to end
+
+The last thirty-one lessons handed you the pieces: the agent loop, tool design, context, memory, evaluation, observability, security, MCP. Each one is a technique you can practice in isolation. This lesson is where they stop being separate techniques and become one running system. The difference between a notebook and an enterprise agent is not a better model. It is a set of boring decisions made deliberately: what the agent is allowed to touch, how it finds its configuration, where its code lives, and how a human runs it without reading a six-page README.
+
+Setup is where most first agents die. Not because the model fails, but because the project around it is ambiguous. An agent cannot work in a repository it cannot understand, cannot respect limits it was never given, and cannot be operated by a team that has no shared starting point. The teams that ship working agents spend their early time on structure, not on prompt poetry, and that investment is what separates a demo from something a colleague can run on Monday. [^1]
+
+This lesson walks the setup end to end. You pick a bounded problem, scaffold the repository, wire the model, define the agent, register tools, and run it behind a small API. A single worked example, a ticket-triager agent, carries you through every step, so by the end you have stood up a real project from an empty folder to a running endpoint.
+
+## Pick a bounded problem first
+
+Before you write a line of code, decide what the agent does and, just as important, what it refuses to do. The single biggest setup mistake is starting with a vague ambition, "an AI assistant for our customers," and letting the scope grow to fill the empty repository. An enterprise agent needs a boundary it can state in one sentence, because every design decision downstream, the tools, the permissions, the evaluation set, follows from that sentence. [^1]
+
+Pick a task that is narrow, has a clear success condition, and involves tools the agent genuinely needs. A support-ticket triager is the canonical first project: it reads an incoming ticket, classifies it, routes it, and drafts a reply. It has a bounded input, a measurable output, and it forces you to build real tools (read the ticket, look up the account, write a routing note) rather than a chat bot that answers from thin air. The OpenAI practical guide makes the same point: start with a task where the value is obvious and the boundary is crisp, and expand only after the narrow version runs. [^2]
+
+Two things to settle before scaffolding. First, what is the agent allowed to do autonomously, and what requires a human? Write that down in the project notes, because it becomes the permissions model. Second, what counts as a good run? A triager is good when the right tickets reach the right queue, so your test set is real tickets with known correct routes, not a vibe check. If you cannot say what a good run looks like, you are not ready to build. [^2]
+
+## Scaffold a repository that communicates
+
+The repository is the first thing a new teammate, human or model, encounters. Make it say what the project is and how to run it. The modern convention is a root instruction file, `AGENTS.md` for agent-oriented tools or `CLAUDE.md` for Claude Code, that carries the project overview, the exact commands to build, test, lint, and run, and the non-negotiable rules about security and generated files. [^3] This is not documentation you write for its own sake. It is the contract that lets any tool or person operate the project without a hand-off briefing. Teams that ship agent-ready repositories get faster iteration and safer diffs, because the structure removes the ambiguity that causes agents to make wrong edits. [^3]
+
+A minimal enterprise agent project has a small set of directories, each with a job:
+
+```
+ticket-triager/
+├── AGENTS.md            # what it is, how to run it
+├── README.md
+├── .env.example         # documented keys, no secrets
+├── .gitignore           # .env, caches, checkpoints
+├── src/
+│   ├── agent.py         # the agent definition
+│   ├── tools.py         # tool implementations
+│   ├── state.py         # the typed state schema
+│   └── config.py        # loads configuration
+├── tests/
+├── api.py               # FastAPI wrapper
+└── pyproject.toml
+```
+
+This layout does three things. It separates the agent's identity (what it is told and what it can call) from its mechanics (how it loads config and serves requests). It keeps the entry points explicit, one CLI and one API, so nobody has to guess where the code starts. And it puts the rules up front in `AGENTS.md`, so the structure survives contact with a new person or a new model. Keep the root instruction file short, under a hundred lines, and point it at deeper docs rather than embedding everything. [^3] [^4]
+
+## Isolate the environment and keep secrets out of the repo
+
+Enterprise agents run in clean, reproducible environments. Start every project in its own virtual environment, never in the global Python install, because agent frameworks pin specific dependency versions that will collide with whatever else sits on the machine. [^5] A dedicated `venv` plus a `pyproject.toml` that locks the exact framework and model-client versions means the code runs the same on your laptop, in CI, and in production. [^1]
+
+Secrets live in the environment, not in the repository. Create a `.env` file, add `.env` to `.gitignore` so it never gets committed, and commit a documented `.env.example` instead that lists every key with a comment explaining what it is. [^1] The two that matter for almost every agent are the model API key and, if you use tracing, the tracing project credentials. Load them at process start and fail loudly if a required key is missing, with an assertion that names the missing variable, so a broken environment surfaces the first second instead of failing mysteriously halfway through a run. [^1]
+
+The rule of thumb for what belongs in `.env` is simple: anything that differs between environments (keys, endpoints, feature flags) is configuration, while anything that is the same everywhere (the agent's system prompt, its tool list) belongs in code. Keeping configuration out of the code makes the same agent deployable to staging and production by swapping one file, and it keeps credentials out of version control where a leaked commit becomes a security incident.
+
+## Wire the model and define the agent
+
+The model connection is where you choose how much machinery to carry. Most agent frameworks give you a runner that owns the whole loop, model call, tool execution, result feeding, repeat until done, so you do not have to reimplement the reason-act-observe cycle by hand. [^6] The OpenAI Agents SDK expresses this as an `Agent`, a large language model configured with instructions, tools, and optional runtime behavior, driven by a `Runner`. [^6] In that mental model the agent definition is short and declarative:
+
+```python
+from agents import Agent, Runner
+from agents.decorators import tool
+
+@tool
+def get_ticket(ticket_id: str) -> str:
+    """Fetch a support ticket by id and return its text."""
+    return query_ticket_store(ticket_id)
+
+triager = Agent(
+    name="Ticket triager",
+    instructions=(
+        "Classify each ticket into one of: billing, outage, feature, other. "
+        "Route it to the matching queue. If the account is affected by an "
+        "outage, flag it urgent."
+    ),
+    tools=[get_ticket],
+    output_type=TriageResult,
+)
+
+result = Runner.run_sync(triager, "Ticket #8841: we cannot log in")
+print(result.final_output)
+```
+
+Two decisions in that definition deserve attention. The `instructions` field is the agent's entire sense of its job, so write it as operating guidance, what to do and how to decide, not as a vague personality. [^6] And the `output_type` field forces the model to return structured data, here a `TriageResult` schema, instead of free-form text, which is what lets downstream systems consume the agent's output programmatically. [^6]
+
+The model choice is configuration, not code, so the agent definition should not hard-code a specific model string that only works for one provider. The tools and the graph structure stay the same whether the underlying model comes from OpenAI, Anthropic, or a local server; only the model client and key change. That is the same principle this series hit in the routing lesson, and setup is where you bake it in, by reading the model and provider from configuration rather than typing them into the agent file. [^1]
+
+## Register tools with real schemas
+
+Tools are where the agent touches your systems, so the tool layer is the part that deserves the most care during setup. A tool in most frameworks is an ordinary Python function with a docstring that becomes the model's description of when to call it and what it returns. [^6] The docstring is the interface, the same principle as the MCP tool design in lesson 31, so write it the way you would brief a new teammate, with the trigger condition and the return shape, not a vague verb. [^1]
+
+Keep tool implementations defensive. An enterprise tool that raises an exception on a bad input crashes the whole agent run, so a well-built tool catches its errors and returns an error string the model can read and recover from. [^1] The pattern is to make every tool fail closed into a readable message rather than a stack trace, so the agent can explain what went wrong instead of dying silently.
+
+Start with the smallest tool set the bounded task needs. A triager needs to read a ticket, look up the account, and write a routing note. It does not need web search or code execution, and every extra tool is both a wider attack surface and more context the model must reason over. Add tools only when the task proves it needs them, and treat each addition as a reviewable change, not a convenience. [^2]
+
+## Define state before you add persistence
+
+Every agent run carries state, the messages exchanged, the accumulated results, and any custom fields like approval flags or ticket ids. Frameworks differ in how seriously they treat this state. A plain chat SDK keeps an in-process conversation list, which is fine for a script and fragile for anything that must survive a restart or run across multiple workers. A graph runtime like LangGraph models state as a typed schema that a checkpointer freezes after every step, which is what unlocks resume-after-crash and human-in-the-loop approval. [^1]
+
+For the first project, start with the framework's in-memory persistence and move to a durable store only when you have a reason. The common guidance is blunt: use `MemorySaver` for local graphs and tests, because it is single-process and disappears on restart, and move to a database-backed saver before you run multiple workers or need to resume a run after a deploy. [^1] Deciding this at setup, rather than discovering it in an outage, is the difference between a demo and a service.
+
+Whatever you choose, model the state explicitly. If the agent carries a `thread_id` or a ticket id through its run, put it in the typed state schema so every node and every checkpoint records it. Frameworks that only keep a chat list make it hard to persist the custom fields that actually matter for your domain, so define them up front. [^1]
+
+## Run it end to end, then put an API in front
+
+The first run should be a CLI invocation, not an API endpoint, because the CLI is the fastest way to exercise the whole loop and see where it breaks. Point the script at a real ticket, watch the agent classify it, and inspect the structured output before you add any networking. [^1] Debugging a model that misroutes a ticket is miserable through an HTTP layer you do not need yet.
+
+Once the loop works, wrap it in a small API. A FastAPI app that accepts a ticket id, runs the agent, and returns the structured `TriageResult` is a few functions, and it turns the agent from a script into a service other systems can call. [^1] Two production considerations belong in this step. First, keep the checkpointer and any durable state behind the API so a resumed run continues where it stopped. Second, put authentication in front of the endpoint from day one, even in staging, because an agent endpoint that can read tickets is a genuine thing to leave open. [^1] The agent itself is the product; the API is how the rest of your systems reach it, so treat the API with the same care as any internal service.
+
+## Worked example: stand up the ticket triager
+
+Put it together in one pass. Create the folder, initialize the virtual environment, and pin the framework and model-client versions in `pyproject.toml`. Write `AGENTS.md` in three lines: what the project is, how to run it, and the rule that nothing writes to the production ticket store without a human. Add `.env.example` with the model key and the tracing project id, and a `.gitignore` that excludes `.env`. [^1] [^3]
+
+Define the state in `state.py` as a typed schema with the ticket id and the result, so every checkpoint records what this run was about. [^1] Define the tools in `tools.py`: `get_ticket` to fetch the text, `get_account_status` to check for an active outage flag, and `route_ticket` to write the routing note. Each one returns an error string on failure instead of raising. [^1]
+
+Define the agent in `agent.py`. Give it instructions that name the queues and the urgency rule, bind the three tools, and set `output_type` to the `TriageResult` schema so the reply is structured. [^6] Write a CLI entry point that loads `.env`, asserts the model key exists, and runs the agent against a ticket id the caller passes in. [^1]
+
+Run it. Feed it a real ticket about a login failure and confirm it classifies it as an outage or a billing issue, flags urgency when the account is affected, and returns the routing note as structured data. Then wrap it in `api.py`, put auth in front of the endpoint, and run it behind the framework's durable checkpointer before you widen what it is allowed to do. [^1]
+
+That is the whole setup. A bounded task, a repository that states its own rules, an isolated environment with secrets outside version control, a model wired through configuration, an agent defined in a few declarative fields, a small defensive tool set, typed state, and a CLI that graduates into an authenticated API. Every one of those decisions is boring. Together they are what makes the agent operable by anyone, not just the person who wrote it.
+
+## The pitfalls to avoid
+
+The first is skipping the boundary and scaffolding a vague assistant. Every design decision follows from what the agent is and is not allowed to do, so settle the scope in one sentence before you create the folder. [^2]
+
+The second is committing secrets. A `.env` that reaches the repository is an incident waiting for a fresh clone, and it is entirely preventable with a `.gitignore` and a documented `.env.example`. [^1]
+
+The third is letting tools crash the run. An enterprise tool must return a readable error the model can recover from, not raise into the loop. [^1]
+
+The fourth is leaving state in memory and calling it production. In-memory persistence vanishes on restart and is not shared across workers, so pick a durable store before you depend on resuming a run. [^1]
+
+The fifth is exposing the agent without an API boundary and without authentication. An endpoint that can read and route tickets is a real service with real access, so wrap it, gate it, and observe it from the first deploy. [^1]
+
+## Try it
+
+1. **Write the boundary.** Take one sentence that states what a small agent of yours does and refuses to do, then list the three tools it needs and the one thing it must not do autonomously. [^2]
+
+2. **Scaffold the repository.** Create the layout above for a project of your own, including an `AGENTS.md` under a hundred lines and an `.env.example` with every key documented. [^3] [^4]
+
+3. **Wire and run the loop.** Pick a framework, define one agent with a typed output, and run it end to end through a CLI before you add any API. Confirm the structured output comes back as expected. [^6]
+
+4. **Graduate it to an API.** Wrap the working agent in a small authenticated endpoint and move persistence to a durable checkpointer. Confirm a resumed run continues where it stopped. [^1]
+
+## What's next
+
+You now have a running agent project, end to end, with a bounded task, an isolated repository, wired model, defensive tools, typed state, and an API in front. Lesson 33 takes the next step and goes hands-on with one framework, building a real agent that does real work. Where this lesson stood up the skeleton around the pieces you already know, lesson 33 makes that skeleton do a concrete job and walks the framework's own primitives as you build it. Keep this project close, because lesson 33 is where you bring it to life.
+
+[^1]: howdoaiagentswork.com. [LangGraph Tutorial: Build a Production AI Agent (2026)](https://howdoaiagentswork.com/langgraph-ai-agent-tutorial)
+[^2]: cdn.openai.com. [A Practical Guide to Building Agents (OpenAI)](https://cdn.openai.com/business-guides-and-resources/a-practical-guide-to-building-agents.pdf)
+[^3]: medium.com. [Agent-Ready Repo Structure (2026)](https://medium.com/@huseyinkaplandev/agent-ready-repo-structure-2026-90af2ac8aed2)
+[^4]: luismori.dev. [Agentic Workspaces: Multi-Repo Skills, Knowledge, and Spec-Driven AI Workflows](https://luismori.dev/article/agentic-workspace-submodules-skills-knowledge-spec-driven-delivery)
+[^5]: tech-insider.org. [LangGraph Tutorial: AI Agents in 13 Steps (2026)](https://tech-insider.org/langgraph-tutorial-python-stateful-agent-13-steps-2026)
+[^6]: openai.github.io. [Agents (OpenAI Agents SDK)](https://openai.github.io/openai-agents-python/agents/)

@@ -1,0 +1,189 @@
+---
+title: "Lesson 21: Frameworks overview - LangChain, LangGraph, CrewAI, OpenAI Agents SDK, Claude Agent SDK"
+slug: agent-frameworks-overview-langchain-langgraph-crewai-openai-claude
+series: "agentic-ai"
+lesson: 21
+excerpt: "By now you can build a single agent: a model, a loop, some tools. The hard part is deciding what holds the pieces together when the work grows. This lesson surveys the five frameworks you will actually meet in the wild, and it is honest about what each one is for. LangChain is an integration ecosystem. LangGraph is a stateful graph runtime for workflows that branch and loop. CrewAI is a role-based layer for teams of agents with jobs and backstories. The OpenAI Agents SDK is a deliberately tiny set of primitives with clean handoffs and guardrails. The Claude Agent SDK gives the agent a computer with built-in file, shell, and edit tools. You will learn the mental model behind each one, see the same small task written in two of them so the difference is concrete, and finish with a decision path for choosing a framework instead of trusting star counts."
+date: "August 24, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [LLMs, AI Agents, Architecture]
+---
+
+# Lesson 21: Frameworks overview - LangChain, LangGraph, CrewAI, OpenAI Agents SDK, Claude Agent SDK
+
+The last twenty lessons taught you the pieces: the agent loop, tool design, context, memory, evaluation, observability. Each one you could build by hand. This lesson is about the layer that decides how much you build by hand at all.
+
+When a single agent is not enough, you start needing the things that frameworks exist to provide: a way to describe which agent acts next, a way to keep state across steps and failures, a way to hand work off between agents, and a way to observe the whole thing afterward. Teams call these coordination primitives, and every framework in this lesson is a different bet on how to give them to you. [^9]
+
+The frameworks have not converged. They solve different problems, and the practical skill here is not memorizing APIs. It is recognizing which problem each one is shaped to solve, so that when you see a codebase or an architecture you can tell what its author decided and why.
+
+## What a framework actually provides
+
+Before comparing names, compare the three decisions every framework encodes for you.
+
+**Orchestration model.** How does the system decide what runs next? LangGraph models this as a directed graph with nodes, edges, and conditional branches. CrewAI models it as a crew of role-holders executing tasks in a process. The OpenAI Agents SDK models it as explicit handoffs where one agent delegates to another. These are three different answers to the same question, and the answer you pick shapes how you think about your problem. [^9]
+
+**State management.** Where does shared state live, and does it survive a crash? LangGraph persists every state transition through checkpointing, which is what makes time-travel debugging and human-in-the-loop approval possible. The OpenAI Agents SDK keeps state in sessions and context variables that are ephemeral unless you persist them. CrewAI passes task outputs forward through the sequence. [^9]
+
+**Communication pattern.** Do agents talk by handing off control, by sharing a common memory, or by reading each other's outputs? Handoffs are the OpenAI model. A shared state object is the LangGraph model. Task-to-task output passing is the CrewAI model. [^9]
+
+Those three axes, orchestration, state, and communication, are the real differences. Everything else, the star counts and the marketing pages, is noise on top of them.
+
+## LangChain and LangGraph: the ecosystem and the runtime
+
+LangChain and LangGraph are from the same company and are not rivals. They are two layers. [^2]
+
+**LangChain** is the ecosystem: integrations for models, vector stores, document loaders, and retrievers, plus the abstractions that string them into chains. Its breadth is the point. The project reports well over a thousand integrations, and that coverage is why it has the highest download volume of the group. LangChain hit a 1.0 general availability release in October 2025, which added a simpler `create_agent` primitive, semantic versioning, and a middleware layer for summarization, PII detection, and human-in-the-loop patterns. [^1] The honest tradeoff is that breadth costs debuggability. When something breaks deep inside a chain, you can end up debugging the framework's internals rather than your own logic. [^9]
+
+**LangGraph** is the orchestration runtime. It models an agent as a `StateGraph`: a typed state schema, a set of nodes that are just Python functions, and edges that decide which node runs next, including conditional edges that branch on the current state. The graph can loop back on itself, which is how you get retries and tool-calling loops, and it can pause for human input and resume later. [^2] [^3]
+
+The core primitive is worth seeing in code, because it is the mental model for the whole framework:
+
+```python
+from typing import TypedDict
+from langgraph.graph import StateGraph, START, END
+
+class State(TypedDict):
+    question: str
+    answer: str
+
+def research(state: State) -> dict:
+    return {"answer": f"researched: {state['question']}"}
+
+def write(state: State) -> dict:
+    return {"answer": f"polished: {state['answer']}"}
+
+builder = StateGraph(State)
+builder.add_node("research", research)
+builder.add_node("write", write)
+builder.add_edge(START, "research")
+builder.add_edge("research", "write")
+builder.add_edge("write", END)
+graph = builder.compile()
+```
+
+Each node takes the current state and returns a partial update. The graph compiles into a runnable, and the shared `State` flows through every node. That shared, typed, checkpointable state object is what separates LangGraph from a plain function pipeline. It is what lets the graph loop, pause, and recover. [^2]
+
+LangGraph reached GA in May 2025 and its own 1.0 milestone in October 2025, and its production adopters include companies you have heard of. [^3] It is model-agnostic: different nodes can call different providers, which matters if you want to route cheap work to one model and hard reasoning to another. The cost is verbosity. Even a simple two-agent flow asks you to define a state schema, nodes, edges, and a compile step. For a linear pipeline with no branching, LangChain alone is often enough, and reaching for LangGraph is overkill. [^2] [^9]
+
+## CrewAI: agents with roles, goals, and backstories
+
+CrewAI takes a different route. Instead of a graph, it gives you a team. The primitives are the `Agent`, the `Task`, and the `Crew`. [^6]
+
+An `Agent` in CrewAI is defined by its `role`, its `goal`, and its `backstory`. The framework literally reads those fields and turns them into the system prompt that shapes the agent's behavior. A `Researcher` agent with the role "Senior Data Researcher" and a goal to "uncover developments in {topic}" is a different creature from a `Writer` agent whose role is to draft a report. You assemble a `Crew` from a list of agents and a list of tasks, and a `Process` decides how they run, sequential by default. [^6]
+
+The mental model is deliberately human. You are assembling a team where each member has one job, and the framework handles passing the work along. Here is the same research flow from the LangGraph example, expressed as a crew with two agents and two tasks:
+
+```python
+from crewai import Agent, Task, Crew, Process
+
+researcher = Agent(
+    role="Research Analyst",
+    goal="Find and summarize information about the topic",
+    backstory="An experienced researcher with attention to detail",
+)
+writer = Agent(
+    role="Content Writer",
+    goal="Write a clear summary from the research",
+    backstory="A precise writer who turns findings into prose",
+)
+
+research = Task(
+    description="Research {topic} and produce key findings",
+    expected_output="A concise briefing",
+    agent=researcher,
+)
+write = Task(
+    description="Write a summary using the research",
+    expected_output="A polished summary",
+    agent=writer,
+)
+
+crew = Crew(
+    agents=[researcher, writer],
+    tasks=[research, write],
+    process=Process.sequential,
+)
+result = crew.kickoff(inputs={"topic": "AI agents"})
+```
+
+The contrast with LangGraph is stark. LangGraph asks you to model coordination as explicit state and edges. CrewAI gives you role, goal, and backstory and infers the coordination from the team structure. [^6] That is why CrewAI is the fastest way to a working multi-agent prototype, and its own team claims the role-and-task framing radically reduces how much code its customers write. [^9]
+
+The tradeoff shows up under load. CrewAI is lighter on checkpointing than LangGraph, so the durable-execution guarantees that make LangGraph strong for long, crashable workflows are thinner here. You are trading a low barrier to entry for less control over the hard states. [^9] CrewAI is a good default when the task really is a team of specialists doing a handoff chain, and a weak fit when you need fine-grained conditional routing and pause-and-resume.
+
+## The OpenAI Agents SDK: a few primitives, done well
+
+The OpenAI Agents SDK comes from the other end of the design spectrum. Its stated design principle is to have enough features to be worth using but few enough primitives to learn quickly. It is the production-grade successor to OpenAI's earlier Swarm experiment. [^4]
+
+The primitive set is small: `Agent`, which is an LLM plus instructions and tools, `Handoffs`, which let one agent delegate to another, `Guardrails`, which validate inputs and outputs, `Sessions`, which carry memory, and built-in `Tracing`. [^4] That is nearly the whole API. A working agent is a few lines:
+
+```python
+from agents import Agent, Runner
+
+agent = Agent(name="Assistant", instructions="You are a helpful assistant")
+result = Runner.run_sync(agent, "Explain what a handoff is.")
+print(result.final_output)
+```
+
+Two things make this SDK worth learning even if you do not deploy on it. First, the handoff model is clean. An agent can hold another agent as a tool, and delegating to it is just calling a tool, so the composition rules are consistent. Second, guardrails run in parallel with agent execution and fail fast, and tracing is built in rather than bolted on. [^4] That is a genuinely nice development loop for someone who wants the runtime to manage turns, tool execution, guardrails, and handoffs without owning those loops themselves. [^4]
+
+The limits are real and they matter for an enterprise setting. It is a lightweight, handoff-oriented design, not a graph state machine, so if you need durable checkpointing across a long crashable run you are on the wrong tool. The hosted tools, web search, file search, and code interpreter, are OpenAI-only, and the SDK is most natural when your models stay in the OpenAI family. [^9]
+
+## The Claude Agent SDK: give the agent a computer
+
+Anthropic's Claude Agent SDK is built on a different philosophy again. Its slogan, and its design, is to give the agent a computer. The SDK runs on the same runtime as Claude Code and exposes the same built-in tools: `Read`, `Write`, `Edit`, `Bash`, and `Grep`, plus web search. [^5] [^8]
+
+Where the OpenAI SDK assumes an agent that mostly calls functions you define, the Claude Agent SDK assumes an agent that can read files, run commands, and edit code directly. That makes it the strongest choice for coding agents, research agents that work over a filesystem, and anything that fits the "agent-as-computer" pattern. [^8] The other pieces that matter in production are there too: subagents for spawning focused workers, MCP for connecting external tools and data sources, permission modes that control which tools run automatically and which need approval, sessions that resume, and hooks that run custom code at points in the agent lifecycle. [^5]
+
+The design choice carries a cost. The SDK is Claude-first. Its deep strengths, extended thinking, computer use, and the built-in OS tools, assume Anthropic's models, and the orchestration features are lighter than LangGraph's. If you are committed to Claude, this is the shortest path from an idea to an agent that edits files and runs commands. If you need to swap models freely across a heterogeneous fleet, it is the wrong anchor. [^8]
+
+## The Fortress angle: lightweight beats heavyweight here
+
+This survey is not academic at Adroit, and it is worth stating which way the pendulum swung for us. The Fortress runs real agents, the Hermes workers that write and publish the content you are reading, and it deliberately does not run them on a heavyweight orchestration framework. Each agent is a small program with a system prompt, a set of tools, and a loop, coordinated by a scheduler and a kanban workspace rather than by a graph runtime or a role-based crew.
+
+That is a defensible decision, and this lesson explains why. The coordination needs here are modest: a cron fires, an agent does a bounded job, a verifier gates the result. There is no long-running branching workflow that needs checkpointing, no team of agents delegating to each other mid-run, so LangGraph's durable execution and CrewAI's role system would add machinery without adding value. The frameworks earn their complexity precisely when those needs appear. The lesson for your own systems: choose the framework that matches the coordination you actually have, not the one with the best marketing.
+
+## Worked example: the same task, two mental models
+
+To make the difference concrete, here is one small task, a research-and-summarize job, expressed in two frameworks. This is the task that keeps appearing in agent tutorials because it is the minimal case that needs more than one step.
+
+In LangGraph you define the shape of the problem as a graph. Two nodes, `research` and `write`, a shared state, and edges that run them in order. The framework gives you the structure; you are the one who decided it is a two-node pipeline and that state is a question and an answer. [^2]
+
+In CrewAI you define the shape of the problem as a team. A `Researcher` role and a `Writer` role, two tasks, a crew that runs them sequentially. The framework reads your roles and goals and builds the prompts from them. [^6]
+
+Same output, same two logical steps, two completely different ways to think about it. In one you modeled the flow, in the other you modeled the people. That difference, not the API syntax, is what you should be choosing between. When you look at a real codebase, ask which of these the author thought in, because you will have to think in it too to extend their work.
+
+## How to choose
+
+Put the axes together and a decision path falls out.
+
+If your work is a branching, looping workflow with state that must survive failures, with human-in-the-loop approvals and audit trails, LangGraph is the strongest match. The graph model and checkpointing exist for exactly that. [^9]
+
+If you want the fastest route to a working team of specialists and the coordination really is a handoff chain, CrewAI gets you there in an afternoon. Plan to re-evaluate when you hit its thinner state-management and checkpointing limits. [^9]
+
+If you are already in the OpenAI world and want a clean, small, opinionated API with guardrails and tracing built in, the OpenAI Agents SDK is the sharpest tool. Reach for it when handoffs, not durable graphs, are the pattern you need. [^4]
+
+If your agent needs to work over a computer, read and edit files, run commands, and you are committed to Claude, the Claude Agent SDK is the shortest path, and its permission model gives you control over exactly what it can touch. [^5]
+
+None of these is the best framework. The question is which coordination model your problem actually has. And if the honest answer is "none of them, I just need a cron to run a bounded job," then you do not need a framework at all, and that is a fine and common answer too.
+
+## Try it
+
+1. **Map the axes.** Take a problem you have already built, or the mini retrieval agent from an earlier lesson, and write one paragraph on each axis: what is the orchestration model, how does state flow, and how do agents communicate. Most single-agent systems have trivial answers, which is exactly the point.
+2. **Write the same task twice.** Pick the research-and-summarize task and implement it in both LangGraph and CrewAI using the examples above as a starting point. Do not optimize. Just feel the difference between thinking in a graph and thinking in a team. [^2] [^6]
+3. **Price the complexity.** For each framework, write down the minimum viable version of a two-step pipeline, then the minimum version of a pipeline with a conditional branch and a retry. Compare how much machinery each one makes you carry. That delta is what you are really choosing between.
+
+## What's next
+
+You now have the map of the framework terrain and the axes to read any framework against. Lesson 22 is the antidote to that abstraction: building without a framework, writing the agent loop by hand in about a hundred lines. Once you have built the loop yourself, a framework stops being a black box and becomes a convenience you can inspect.
+
+[^1]: blog.langchain.com. [LangChain and LangGraph Agent Frameworks Reach v1.0 Milestones](https://blog.langchain.com/langchain-langgraph-1dot0)
+[^2]: docs.langchain.com. [LangGraph Graph API overview](https://docs.langchain.com/oss/python/langgraph/graph-api)
+[^3]: blog.langchain.com. [LangChain and LangGraph Agent Frameworks Reach v1.0 Milestones](https://blog.langchain.com/langchain-langgraph-1dot0)
+[^4]: openai.github.io. [OpenAI Agents SDK documentation](https://openai.github.io/openai-agents-python/)
+[^5]: code.claude.com. [Claude Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/overview)
+[^6]: docs.crewai.com. [CrewAI Agents concepts](https://docs.crewai.com/concepts/agents)
+[^7]: github.com. [crewAIInc/crewAI repository](https://github.com/crewaiinc/crewai)
+[^8]: composio.dev. [Claude Agents SDK vs. OpenAI Agents SDK vs. Google ADK](https://composio.dev/content/claude-agents-sdk-vs-openai-agents-sdk-vs-google-adk)
+[^9]: speakeasy.com. [LangChain vs LangGraph vs CrewAI vs PydanticAI vs Mastra](https://www.speakeasy.com/blog/ai-agent-framework-comparison/)

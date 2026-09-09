@@ -1,0 +1,103 @@
+---
+title: "Lesson 26: Enterprise Deployment, Serving, API Design, Rate Limits, and Quotas"
+slug: enterprise-deployment-serving-api-design-rate-limits-quotas
+series: "agentic-ai"
+lesson: 26
+excerpt: "A working agent is a different thing from an agent many people can use. This lesson puts the three boundaries around it that make the difference: the serving layer that decides how much concurrent work the model can do, the API boundary that gives every consumer one stable interface, and the policy layer of rate limits and quotas that stops a single tenant from overwhelming the hardware or blowing the budget. It works through the numbers you need to size a deployment, and it shows how those three layers meet at the same number."
+date: "August 29, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [LLMs, AI Agents, Delivery]
+---
+
+# Lesson 26: Enterprise Deployment, Serving, API Design, Rate Limits, and Quotas
+
+Lesson 25 handed you control: approvals, interrupts, and kill switches for an agent that can act on its own. That control layer answers what the agent is allowed to do. This lesson answers how you run it for many users without it collapsing or blowing the bill. A single-user agent either answers fast enough or it does not, and when it does not you wait, because you are the only person in line. Enterprise deployment removes that luxury. Dozens of tenants, some of them agents running unattended, all arrive at the same model at once, and each of them believes its request is the urgent one.
+
+The one idea to carry out of this lesson: **enterprise deployment is putting three boundaries around a model that already works: a serving boundary that decides how much concurrent work the hardware can do, an API boundary that gives every consumer one stable interface, and a policy boundary of rate limits and quotas that stops any single consumer from overwhelming the serving layer or spending the whole month's budget in an afternoon.** None of the three is optional, and all three meet at the same number: tokens per minute. [^1]
+
+## What serving a model actually means
+
+Serving is the act of making model weights answer requests concurrently, instead of one at a time. The thing that makes this hard is how autoregressive generation behaves. A transformer does not produce its answer in one shot. It emits one token, then the next, and each token depends on the ones before it, so the work is sequential. A single request therefore occupies GPU memory for its entire lifetime, even during the gaps when it is not computing, because the model has to remember what it has already generated to decide what comes next. [^2]
+
+That remembered state is the KV cache, the attention key and value tensors for every token in the context. It is the hidden tax of long contexts. For Llama-3-70B in FP16, the KV cache works out to roughly 160 KB per token across all layers. [^2] Multiply that by a 100,000-token context and a single request is holding tens of gigabytes of state before it has emitted a word. Memory, not raw compute, is usually the first constraint on how many requests a server can hold at once.
+
+Naive serving handles this badly. The classic approach batches several requests, runs them together, and returns all the answers at once, so the whole batch waits for its slowest member and sits idle while shorter requests finish. Continuous batching fixes the waste. Instead of locking a batch together for the full run, the server admits new requests as soon as a slot frees up, at every decoding step. A finished sequence leaves the batch immediately and a waiting one takes its place. The team behind vLLM reported this one change gives up to 23x higher throughput on a real workload while cutting p50 latency, because the GPU stops idling between generations. [^3]
+
+Two serving decisions follow from that. First, pick a serving stack that does continuous batching rather than a toy that batches by hand. vLLM, TGI, and TensorRT-LLM all do it; the differences are in how well they pack a specific GPU and how mature their tool-calling and streaming support is. [^3] Second, decide between someone else's servers and your own. Cloud APIs skip the whole hardware layer, and self-hosting trades the capital cost of GPUs and the ops burden of keeping them alive for full control over the endpoint, the data, and the cost curve. [^4] The right answer depends on volume and on whether your data can leave your perimeter at all. That decision framework shows up again in the Fortress angle later in this lesson.
+
+## The API boundary: one stable interface
+
+Once the model can serve many requests, you need the interface every consumer speaks. The industry settled on one: the OpenAI-compatible API. It is the de facto standard because so much tooling, from the OpenAI SDKs to LangChain and LiteLLM, speaks it natively. Serving frameworks lean into this. vLLM ships an HTTP server that implements the OpenAI API protocol directly, with endpoints such as list models, create chat completion, and create completion, so the same client code that hits `api.openai.com` works against a model you host by changing only the base URL. [^5]
+
+That single interface is the reason you can swap providers without rewriting your application. The OpenAI Python SDK accepts a `base_url`; point it at a vLLM server on your own hardware and your existing `client.chat.completions.create` call runs unchanged. [^6] This is the same trick that lets a router in front of several providers treat them all as one. Design your own internal API the same way: expose the OpenAI-compatible shape, and keep provider-specific features behind optional fields rather than new endpoints.
+
+Streaming is the other half of API design for agents. Nobody wants to stare at a spinner while a model thinks, and a single token at a time arrives hundreds of milliseconds after the request, not seconds. Server-Sent Events over HTTP is how every major provider streams tokens: OpenAI, Anthropic, and Google all return SSE, because LLM token streaming is one-way, the client sends a prompt and the server sends tokens back, and that is exactly the pattern SSE was built for. [^7] Anthropic structures the stream into typed events such as `message_start`, `content_block_delta`, and `message_stop`; OpenAI streams inline JSON chunks. [^8] Your agent's own API should mirror this: a non-streaming response for cheap calls, and an SSE stream for anything a user waits on.
+
+## Rate limits: how fast any one consumer can go
+
+Rate limits are the policy that stops a burst from overwhelming the serving layer. Provider rate limits measure two different things, and the confusion between them is where most teams get burned. Requests per minute (RPM) counts raw API calls, regardless of size. Tokens per minute (TPM) counts the combined input and output tokens across all requests in a rolling window. [^1] A single call with a 10,000-token prompt is one RPM but consumes 10,000-plus TPM, so a large-prompt workload exhausts TPM long before RPM matters, while a fleet of tiny classification calls exhausts RPM first. [^9] The binding constraint is whichever limit the workload trips first.
+
+TPM also counts input and output tokens together, which surprises people who think of cost in terms of the answer alone. OpenAI's own example makes it concrete: send 20 requests of 100 tokens each and you can fill an RPM limit of 20 while using only a fraction of a 150,000-token TPM budget. [^1] On a tiered account the numbers scale with spending history. A Tier 1 GPT-4o account starts around 500 RPM and 30,000 TPM; a Tier 5 account reaches 10,000 RPM and millions of tokens per minute. [^9] Those exact figures move as providers republish them, so treat the number as an example and read your own account's current limits rather than assuming.
+
+Providers differ in how they replenish those limits. Anthropic uses the token bucket algorithm, where capacity continuously refills up to the maximum instead of resetting on a fixed clock, and it sets limits at the organization level per model family. [^10] Some models share a limit pool, so calls to any model in the shared group draw from the same bucket. [^1] Whatever the mechanism, the response headers tell you where you stand: OpenAI returns fields like `x-ratelimit-limit-requests`, `x-ratelimit-limit-tokens`, and `x-ratelimit-reset-tokens`, so a well-behaved client can back off before it gets a 429 instead of after. [^1]
+
+When you do trip a limit, the API returns HTTP 429, and your client has to decide what to do. The right shape is retry with backoff, and the wrong shape is every tenant retrying at the same moment the window resets, which recreates the burst you were trying to avoid. [^11] Expose limit status in your own response headers the same way, and give clients a warning header as they approach the ceiling rather than cutting them off with no notice. [^12]
+
+## Quotas: how much total any one consumer may spend
+
+Rate limits govern speed. Quotas govern the total. A rate limit of 30,000 TPM still lets a runaway agent loop bill for a million tokens in a month if nobody caps the aggregate. Quotas are the dollar- or token-denominated ceiling that turns "how fast" into "how much, ever."
+
+The clean way to enforce both, at scale, is a gateway in front of all your providers. A gateway holds the real provider keys, hands out virtual keys to each team, app, or customer, and enforces per-key rate limits and budget caps before a request ever reaches a model. LiteLLM is the common open-source choice: it supports RPM and TPM limits per user, team, or key, and budget limits in dollars over configurable periods, all backed by a Postgres store. [^13] The architectural point is that rate limiting belongs at the infrastructure layer, not scattered through application code. Provider keys stay hidden, retry logic stays out of your services, and every decision is observable from one place. [^14]
+
+Quotas nest. You want an organization cap, team caps inside it, and individual key caps inside those, because a single engineer experimenting should not be able to spend the whole org's month on one bad loop. [^15] And you want the caps to measure the right thing. Token-based limits control compute, which is fine, but cost is not linear in tokens across models, a frontier model and a small local model differ in price per token by an order of magnitude. [^15] A budget in dollars, measured against the actual model price per token, is the limit that protects the P&L.
+
+The operational pattern for budgets is soft thresholds with a hard stop. Watch usage at 50%, 80%, and 95% of a budget and alert the owner at each step; at 100%, block the request or route it to an explicitly approved fallback model. [^16] That gives a human time to react to a trend before the cap itself is the only guardrail left. It is the spending equivalent of the kill switch from Lesson 25: automatic protection that is wired before the runaway, not after it.
+
+## Worked example: the three layers meet at one number
+
+Put the layers together on a concrete case. An internal support agent serves 200 employees, each sending about 20 requests a day across an 8-hour workday, an average of 8.3 requests per minute with occasional 5x bursts. Each request carries a 2,000-token prompt and a 500-token response, so 2,500 tokens consumed per call.
+
+Average demand is modest: 8.3 calls a minute times 2,500 tokens is about 21,000 TPM. The burst is what decides the tier. At 5x, 42 requests per minute times 2,500 tokens is roughly 105,000 TPM, well past a Tier 1 GPT-4o ceiling of around 30,000 TPM. [^9] You have three ways to close that gap, and they are the whole lesson in miniature. Raise the tier, which costs money and still has a ceiling. Route the bulk of traffic to a smaller model with a much higher TPM ceiling, which is what OpenAI's mini models and your own local tiers are for. Or add a queue and a client-side limiter that smooths the burst across the window instead of firing all 42 requests in the same minute. [^17] The API design, the rate limit, and the quota all stare at the same number, so you size all three together, never one in isolation.
+
+## The Fortress angle: deployment decisions already run here
+
+Adroit runs this exact shape in miniature on its own inference stack, and the failures it hit are the textbook cases. The Fortress runs a hybrid two-tier architecture: cloud models for agentic workloads that need reliable tool-calling and structured output, and a local llama.cpp server running a 35B Qwen model for background subsystems such as context compression, title generation, and monitoring. [^18] That split is a serving decision, made because local models failed structured tool-calling outright, emitting empty `{}` objects for nested tool arguments and silently breaking the kanban completion gate, so every structured workload moved to cloud while free-text work stayed local. [^18]
+
+The serving math bit hard too. For a 35B model the KV cache runs roughly 1.3 MB per token, so a 98,000-token context would demand a worst-case 128 GB of KV cache on a 64 GB machine that always swaps. The fix was capping the context window to 32K, capping concurrency to 1, and quantizing the KV cache to 8-bit. [^18] That is the KV-cache tax from earlier in this lesson, measured the hard way: compute it before you buy hardware, not after you start crashing. The same writeup notes that continuous batching, the 23x technique, finally reached Apple Silicon in 2026, though the consensus remains that llama.cpp or MLX serves local Macs while vLLM on GPU servers handles production multi-tenant load. [^18] Lesson 20 showed you how the Fortress observes these runs; this lesson shows you how it decides what hardware and which interface carries them.
+
+## The pitfall to avoid
+
+The most common mistake is treating RPM as the only limit and ignoring tokens. Teams size a deployment for request volume, then discover that one agent with an enormous retrieval context burns the entire TPM budget in a handful of calls. [^9] The mirror-image failure is building retry logic that is aggressive at exactly the wrong moment: every tenant backs off, then retries simultaneously the instant the window resets, recreating the burst that caused the 429s. [^11]
+
+A second, quieter failure is skipping the quota layer because rate limits feel sufficient. Rate limits did not stop the agent in Lesson 25 that burned forty turns re-asking itself the same question; they just throttled it politely. Only a dollar-denominated budget with a hard stop catches a runaway that is technically within every per-minute limit all month long. [^16] And a third mistake is identifying consumers by IP address instead of by API key or authenticated identity, because IPs are shared and change, which makes your limits both too strict for shared legitimate users and trivially bypassed. [^12]
+
+## Try it
+
+1. **Serve a model behind an OpenAI-compatible endpoint.** Run `vllm serve` with a small model, or use Ollama, and hit `curl http://localhost:8000/v1/models`. [^5] Confirm it answers a chat completion.
+2. **Point an existing agent at it.** Take any agent you built in an earlier lesson and change the `base_url` on its OpenAI client to your local endpoint. [^6] It should run with no other code change, which is the whole point of the shared API boundary.
+3. **Read the rate limit headers.** Make a real call to a provider and print the `x-ratelimit-*` response headers. [^1] Compute how many of your typical requests fit in the remaining TPM before you need to queue.
+4. **Set a budget in a gateway.** Configure a team budget and a dollar cap in a gateway like LiteLLM, then run your agent against it and watch a soft-threshold alert fire. [^13]
+
+## What's next
+
+You can now put a working agent in front of many users: serving it, giving it one stable API, and bounding it with rate limits and quotas. Lesson 27 moves from protecting the system to protecting the bill: cost control. You will learn how caching avoids paying for the same answer twice, how routing across model tiers cuts spend while keeping quality, how budget caps and hard stops keep any single run inside its allocation, and how spend dashboards turn cost from a surprise into a number you watch. Deployment tells you how to run at scale. The next lesson tells you how to run it cheaply, which is the difference between an agent your company funds and one it kills.
+
+[^1]: developers.openai.com. [Rate limits | OpenAI API](https://developers.openai.com/api/docs/guides/rate-limits)
+[^2]: runpod.io. [vLLM Explained: PagedAttention and Continuous Batching](https://www.runpod.io/articles/guides/vllm-pagedattention-continuous-batching)
+[^3]: anyscale.com. [How continuous batching enables 23x LLM inference throughput while reducing p50 latency](https://www.anyscale.com/blog/continuous-batching-llm-inference)
+[^4]: spheron.network. [Build a Self-Hosted OpenAI-Compatible API with vLLM](https://www.spheron.network/blog/openai-compatible-api-self-hosted/)
+[^5]: docs.vllm.ai. [Quickstart: vLLM online serving](https://docs.vllm.ai/en/latest/getting_started/quickstart/)
+[^6]: docs.vllm.ai. [vLLM OpenAI-Compatible Server](https://docs.vllm.ai/en/latest/serving/openai_compatible_server/)
+[^7]: buildmvpfast.com. [SSE vs WebSockets for Streaming LLM Responses](https://www.buildmvpfast.com/blog/streaming-llm-responses-sse-vs-websockets-2026)
+[^8]: zylos.ai. [LLM Output Streaming and Real-Time Token Delivery Architectures](https://zylos.ai/research/2026-03-28-llm-output-streaming-token-delivery-architectures/)
+[^9]: inference.net. [OpenAI Rate Limits: Complete Guide to TPM, RPM & Tier Limits](https://inference.net/content/openai-rate-limits-guide/)
+[^10]: platform.claude.com. [Rate limits | Claude Platform Docs](https://platform.claude.com/docs/en/api/rate-limits)
+[^11]: portkey.ai. [Rate limiting for LLM applications: Why it matters and how to implement it](https://portkey.ai/blog/rate-limiting-for-llm-applications)
+[^12]: gravitee.io. [API Rate Limiting at Scale: Patterns, Failures, and Control Strategies](https://www.gravitee.io/blog/rate-limiting-apis-scale-patterns-strategies)
+[^13]: docs.litellm.ai. [Budgets, Rate Limits | LiteLLM proxy](https://docs.litellm.ai/docs/proxy/users)
+[^14]: getmaxim.ai. [5 Tools for Rate Limiting LLM APIs at Scale](https://www.getmaxim.ai/articles/5-tools-for-rate-limiting-llm-apis-at-scale/)
+[^15]: truefoundry.com. [Rate Limiting in AI Gateway: The Ultimate Guide](https://www.truefoundry.com/blog/rate-limiting-in-llm-gateway)
+[^16]: almtoolbox.com. [LiteLLM Budget Control: How to Reduce AI and LLM Costs](https://www.almtoolbox.com/blog/litellm-budget-control-reduce-ai-costs/)
+[^17]: inference.net. [OpenAI Rate Limits: practical strategies including client-side rate limiting](https://inference.net/content/openai-rate-limits-guide/)
+[^18]: github.com. [Local LLM infrastructure 2026, Adroit blog](https://github.com/kelex1812/adroit-blog/blob/main/content/blog/local-llm-infrastructure-2026.mdx)

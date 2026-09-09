@@ -1,0 +1,97 @@
+---
+title: "Lesson 6: Choosing Models & Providers: Capability Tiers, Routing, and Fallbacks"
+slug: choosing-models-providers-routing-fallbacks
+series: "agentic-ai"
+lesson: 6
+excerpt: "The biggest agent-ops mistake is picking one 'best' model and pointing everything at it. This lesson builds the three-tier capability model, the three jobs of a router, and the fallback chains that keep agents alive when providers fail."
+date: "August 09, 2026"
+author: "Adroit Consulting"
+readTime: "8 min read"
+tags: [LLMs, AI Agents]
+---
+
+# Lesson 6: Choosing Models & Providers: Capability Tiers, Routing, and Fallbacks
+
+Lessons 1–5 built the agent loop, its prompts, and its economics. This lesson answers the question underneath all of them: *which model should run which step?* The default answer ("the best model we can afford, for everything") is how every expensive, fragile agent system starts. LogRocket describes the pattern precisely: teams launch with a single strong model and scale it across every use case, then discover they're "paying supercomputer prices to solve calculator problems." [^1]
+
+The fix is hospital triage: nobody sends every patient to the most specialized surgeon; simple cases go to fast, cheap care and complex cases escalate. **Routing** is the decision logic that directs each request to the model that fits it. [^1]
+
+## What a model router actually is
+
+An **LLM router** (or gateway) sits between your application and the provider APIs, choosing where each request lands across models from OpenAI, Anthropic, Google, and others based on rules, scores, or fallback logic. Because it's a layer, swapping a model becomes a config change, not a code change. A distinction matters: routing *platforms* are not routing *destinations*. Groq or Together are destinations a request can land on; the router is the decision-making layer that selects among them. [^2]
+
+Braintrust's guide breaks routing into **three jobs**, each with a different success measure: [^2]
+
+1. **Resilience routing.** When the primary model returns a 5xx, times out, or rate-limits, send the request to a fallback. Success = uptime during a provider incident.
+2. **Cost routing.** Match each request to the cheapest model that can handle it well. Success = spend reduction *without* quality loss.
+3. **Quality routing.** Choose models based on measured performance on real traffic (evals, traces, scorers). It's the most durable discipline, because selection follows evidence.
+
+## Capability tiers: stop naming models, start naming tiers
+
+The mental model that makes routing tractable is the **capability tier**: instead of routing to flagship names that change every quarter, route to *small / medium / large* and let config resolve each tier to a concrete model and provider. MindStudio's three-tier guidance names them **fast, smart, and power**; most systems benefit from at least three tiers, with fallback chains between them. [^3]
+
+A community RFC on tier-based dispatch formalizes the same idea as config: a `model_tiers` block maps `small`, `medium`, `large` to concrete model+provider pairs, a `role_defaults` block assigns tiers to roles (planner → large, implementer → medium, monitoring → small), and each tier lists multiple providers so the router can fall back within a tier before escalating. [^4]
+
+Tiers decouple routing logic from model specifics. When a provider releases a new flagship, you update the tier mapping, not the routing code. *Note: I'm keeping model names out of this lesson deliberately; frontier names and prices rotate quarterly. Check current model cards and price pages before committing to any tier mapping.*
+
+## What actually drives the routing decision
+
+Four dimensions, roughly in priority order [^1]:
+
+- **Cost and volume.** High-volume, low-value requests (a support bot answering "where's my order?") go to cheap models; low-volume, high-value work justifies a frontier model.
+- **Latency.** Interactive requests (autocomplete, chat, code completion) need low time-to-first-token; background requests (summarization, overnight processing) can tolerate slow-and-cheap.
+- **Task complexity.** "Extract an email address" needs pattern matching, not intelligence; a regex with a fallback works. Middle-complexity tasks are the hard cases; start with heuristics (input length, keywords like "analyze" vs. "extract"); you don't need perfect prediction, being right 80% of the time still saves most of the money.
+- **Privacy and compliance.** These create hard boundaries that override cost: HIPAA data needs providers with Business Associate Agreements, EU user data may need EU data centers, and routing must enforce this from request metadata and data-classification tags.
+
+## The three patterns that matter in production
+
+Most production routing is conditional logic, not ML [^1]:
+
+1. **Rule-based routing.** If-then rules on input length, user tier, endpoint, region. Five to ten rules handle about 80% of routing needs; centralize them so they stay maintainable.
+2. **Confidence-based routing (escalation).** Send to a fast, cheap model first; if confidence is below a threshold, escalate to a bigger model. If 70% of requests are handled confidently by the cheap model, you cut expensive-model usage by 70%.
+3. **Fallback chains + circuit breakers.** Requests cascade through providers until something succeeds. Circuit breakers matter: if a model is timing out on most requests, stop sending traffic to it and test it after a cooling-off period.
+
+Design the *end of the chain* explicitly: when every model in a tier fails, decide in advance whether to route up a tier, serve a cached response, fall to a self-hosted model, or return a clear error. [^3]
+
+One warning from the tooling itself: fallbacks handle **provider errors**, not low-quality answers that return successfully. A router can't detect a bad answer unless you add a quality check on top. [^2]
+
+## Where the router lives: build vs. buy
+
+You have three honest options:
+
+- **Build your own:** a few hundred lines in your backend. Full control, deep integration with feature flags and cost tracking; you own the bugs and monitoring. [^1]
+- **Managed gateways:** OpenRouter gives one API across many providers, with a per-request `provider` object: `order`, `allow_fallbacks`, `sort` by price/throughput/latency, `max_price`, and `data_collection` privacy controls. Its default strategy load-balances across stable providers weighted by inverse-square of price. [^5]
+- **Self-hosted gateways:** LiteLLM is the open-source standard: a `model_list` of deployments behind a shared `model_name` alias, load balancing across them, cooldowns, retries, weighted failover, and routing strategies. Requests never leave your infrastructure. [^6]
+
+Managed platforms are fastest to start; self-hostable routers give you data-residency control. Differentiators: provider breadth, failover mechanics, and whether routing connects to evaluation and tracing. [^2]
+
+## Worked example: the Fortress's two-tier decision
+
+This isn't hypothetical at Adroit. Our Fortress runs a hybrid inference stack that is, in effect, a two-tier router: **cloud frontier models for kanban agent workers** (tool-calling and structured completion gates: work that must produce valid JSON), and a **local llama.cpp server** (Qwen 35B-A3B MoE, Q4_K_M, port 8080) for free-text background subsystems: context compression, title generation, triage, monitoring. [^7]
+
+The division wasn't chosen on a whiteboard; it was forced by a failure. A local Qwen model began emitting empty `{}` objects for nested tool-call arguments, silently breaking the kanban completion gate (tasks could never validate complete). Free-text reasoning stayed correct; structured tool-call JSON was broken. The rule: **if your workload depends on strict structured output, keep it on the tier you've verified, and put a validation layer in front of anything that doesn't.** [Source: Fortress of Solitude incident record t_db6b0a22, via local-llm-infrastructure-2026]
+
+The economics match Lesson 5's routing lever: routing ~70% of calls to smaller models with quality-equivalent outputs drops a $50K/month workload to $8–15K/month in published 2026 analysis. [^8]
+
+## The pitfall to avoid
+
+Routing for cost without a **quality bar**. It's the most common failure: aggressively send traffic to cheap models, watch the bill drop, and discover weeks later that completion rates, retry counts, or structured-output validity quietly degraded. Monitor quality metrics alongside cost; if retries or dissatisfaction rise, you're not saving money, you're shipping debt. [^1]
+
+## Try it
+
+1. **Write a tier map for your own agent.** Define `small` / `medium` / `large` tiers, assign each step of a workflow you already run (Lesson 3's loop) to a tier, and justify each on one of the four dimensions: cost, latency, complexity, compliance.
+2. **Configure a real fallback chain.** Pick a managed or self-hosted gateway; try LiteLLM's `model_list` with two deployments behind one alias, then kill the primary and watch the request fail over. [^6]
+3. **Add routing observability.** Log every routed request with model, matched rule, and request ID. After a week, check: what fraction hit the cheap tier, and did the answers hold up? [^1]
+
+## What's next
+
+You can now choose and route models. Lesson 7 is the step that turns a model into a component your code can depend on: structured output, getting JSON mode and function calling to return what you asked for, and designing tool schemas properly. A good model is only useful if you can reliably parse what it returns, and that is exactly what this lesson builds.
+
+[^1]: blog.logrocket.com. [blog.logrocket.com](https://blog.logrocket.com/llm-routing-right-model-for-requests/)
+[^2]: braintrust.dev. [braintrust.dev](https://www.braintrust.dev/articles/best-llm-routers-2026)
+[^3]: mindstudio.ai. [mindstudio.ai](https://www.mindstudio.ai/blog/set-up-ai-model-router-llm-stack-c2610)
+[^4]: github.com. [github.com](https://github.com/gastownhall/gastown/discussions/2531)
+[^5]: openrouter.ai. [openrouter.ai](https://openrouter.ai/docs/features/provider-routing)
+[^6]: docs.litellm.ai. [docs.litellm.ai](https://docs.litellm.ai/docs/routing)
+[^7]: github.com. [github.com](https://github.com/kelex1812/adroit-blog/blob/main/content/blog/local-llm-infrastructure-2026.mdx)
+[^8]: vdf.ai. [vdf.ai](https://vdf.ai/resources/on-premise-llm-cost-comparison-2026/)
