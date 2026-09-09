@@ -26,6 +26,22 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const GENERIC_SIGNIN_ERROR = "Invalid email or password.";
 const GENERIC_SIGNUP_ERROR =
   "Unable to create account. Please try again later.";
+/**
+ * Distinct-but-fixed signal for the unconfirmed-email sign-in case (a11y,
+ * t_be6b4bd2). PR #10 collapsed EVERY sign-in failure to GENERIC_SIGNIN_ERROR,
+ * which made the client's US-5 unconfirmed-email recovery branch (/confirm/i
+ * on the response) dead code. We restore a way for the sign-in path ONLY to
+ * distinguish "credentials wrong" from "email not confirmed" — via a distinct
+ * status code (403) and a FIXED message that never echoes the raw GoTrue
+ * error. Genuine bad-credential / unknown-email sign-ins still get the generic
+ * 401 (no enumeration); sign-up mode is untouched (registration enumeration).
+ */
+const UNCONFIRMED_SIGNIN_ERROR =
+  "Your email hasn't been confirmed yet. Check your inbox for the confirmation link, or resend it below.";
+const UNCONFIRMED_SIGNIN_STATUS = 403;
+/** GoTrue reports an unconfirmed account via a code or message mentioning
+ *  confirmation. Match both, but never pass the raw value to the client. */
+const UNCONFIRMED_RE = /confirm|not_confirmed/i;
 
 export async function POST(req: NextRequest) {
   // Cross-origin POST protection (H1) — before touching the body.
@@ -84,9 +100,18 @@ export async function POST(req: NextRequest) {
 
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
-      // Same generic message for unknown-email, wrong-password, disabled-account,
-      // etc. — no enumeration; real detail stays server-side.
+      // Log the real reason server-side. Only for an UNCONFIRMED-email sign-in
+      // do we return a distinct-but-fixed 403 signal so the client can reach
+      // the US-5 recovery path (resend confirmation). Genuine bad-credential /
+      // unknown-email failures still get the fixed generic 401 (no enumeration);
+      // the raw GoTrue error.code/message is never echoed to the client.
       console.error("[auth/login] signInWithPassword failed", error.message);
+      if (UNCONFIRMED_RE.test(error.message ?? "") || UNCONFIRMED_RE.test(error.code ?? "")) {
+        return NextResponse.json(
+          { error: UNCONFIRMED_SIGNIN_ERROR },
+          { status: UNCONFIRMED_SIGNIN_STATUS },
+        );
+      }
       return NextResponse.json({ error: GENERIC_SIGNIN_ERROR }, { status: 401 });
     }
 

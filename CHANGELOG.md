@@ -9,6 +9,19 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 
 ## [Unreleased]
 
+### a11y: restore US-5 unconfirmed-email recovery path on login (`v2`, t_be6b4bd2)
+
+**What** - PR #10's H1 hardening collapsed every `POST /api/auth/login` sign-in failure to the fixed generic `"Invalid email or password."` (401), which made the client's unconfirmed-email branch (`/confirm/i.test(data.error)` in `src/app/login/page.tsx`) dead code: an existing-but-unconfirmed account signing in got a misleading `role="alert"` and no way to resend the confirmation email. Fixed by restoring a NON-enumerating, fixed-but-distinct signal for the sign-in path only: when GoTrue reports the account is unconfirmed (error message or code matching `/confirm|not_confirmed/i`), `route.ts` now returns a distinct status 403 with the fixed friendly message, while genuine wrong-password / unknown-email sign-ins still return the fixed generic 401. The client now keys off `res.status === 403` to reach the US-5 guidance + working "Resend confirmation email" button (which calls `/api/auth/resend-confirmation`).
+
+**Why** - WCAG 3.3.1 (error identification) + 3.3.3 (error suggestion) and the US-5 functional recovery path were broken: the friendly guidance and resend button were unreachable. The fix keeps H1's no-enumeration guarantee for bad credentials, does not reintroduce sign-up enumeration, and never echoes the raw GoTrue `error.message`/`error.code` to the client on any path.
+
+**What changed**
++ `src/app/api/auth/login/route.ts` - on `signInWithPassword` failure, if GoTrue reports an unconfirmed email (`confirm`/`not_confirmed` in message or code), return fixed `UNCONFIRMED_SIGNIN_ERROR` with status 403; all other sign-in failures keep the generic 401. Sign-up path unchanged.
++ `src/app/login/page.tsx` - the unconfirmed branch now keys off `res.status === 403` (was the dead `/confirm/i` regex on the server message, which could never match after PR #10).
++ `src/app/api/auth/login/route.test.ts` - added 4 tests: distinct 403 on unconfirmed sign-in (no raw echo), generic 401 on wrong-password, no confirmation leak on sign-up, generic 401 on non-confirm failures.
+
+**Known issues** - None. The 403 signal is specific to the sign-in path; sign-up and all other failures remain generic.
+
 ### Security hardening: login rate-limit + origin + no error echo; completion_events server-write-only (`v2`, t_bd7ac2a0)
 
 **What** - Closed the two remaining steel-scoped findings (H1 HIGH, M2 MEDIUM) from val-el's full merged-site security audit (t_0a1bd35a; report at deliverables/security-audit.html). The C1/H2/M1 findings from that audit were already resolved on the current v2 head by PR #6 (next 16.3.4, sharp 0.35.4, npm audit 0 vulns, contact rate-limit via getClientIp + reCAPTCHA fail-closed) and were re-verified here. H1: `src/app/api/auth/login/route.ts` - the highest-value brute-force / credential-stuffing target - was the only auth mutation with no rate limit, no origin (CSRF) check, and it echoed raw Supabase/GoTrue error.message on failure (account enumeration). It now applies `checkOrigin` (403) and `checkRateLimit(getClientIp(req))` (429) before parsing the body (mirroring reset-password/request) and returns fixed generic messages ("Invalid email or password." / "Unable to create account. Please try again later.") while logging the real detail server-side only. M2: completion_events could be self-forged by an authenticated client via the anon key + its own JWT (INSERT policy `with check (auth.uid() = user_id)`), letting a user mint certificate/course/exam completions without earning them. New migration `012_completion_events_server_write_only.sql` revokes the client INSERT (deny-guard `with check (false)`, mirroring migration 006 for quiz_run/quiz_attempt); all completion_events INSERTs now route through `getSupabaseServiceClient()` (BYPASSRLS), with reads staying on the RLS-bound client.
