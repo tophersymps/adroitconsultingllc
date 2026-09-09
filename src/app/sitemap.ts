@@ -51,12 +51,39 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // Static / hub pages — no natural content date, so lastmod is OMITTED
   // (B-12: omitting lastmod kills per-deploy re-crawl churn; a hub page's
-  // freshness is implied by its children's lastmods).
+  // freshness is implied by its children's lastmods). Includes the ported
+  // marketing routes (merger B4: consolidated sitemap for marketing + blog +
+  // learn) — root is the marketing home.
   const staticPages: MetadataRoute.Sitemap = [
     {
       url: siteConfig.url,
       changeFrequency: "monthly",
       priority: 1,
+    },
+    {
+      url: `${siteConfig.url}/platform-strategy`,
+      changeFrequency: "monthly",
+      priority: 0.9,
+    },
+    {
+      url: `${siteConfig.url}/operational-intelligence`,
+      changeFrequency: "monthly",
+      priority: 0.9,
+    },
+    {
+      url: `${siteConfig.url}/digital-experience`,
+      changeFrequency: "monthly",
+      priority: 0.9,
+    },
+    {
+      url: `${siteConfig.url}/contact`,
+      changeFrequency: "yearly",
+      priority: 0.8,
+    },
+    {
+      url: `${siteConfig.url}/privacy`,
+      changeFrequency: "yearly",
+      priority: 0.3,
     },
     {
       url: `${siteConfig.url}/blog`,

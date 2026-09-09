@@ -1,17 +1,22 @@
 "use client";
 
 import { useEffect } from "react";
-import { initAnalytics } from "@/lib/analytics";
+import { getConsentState, initAnalytics } from "@/lib/analytics";
 
 /**
- * GA4 initializer (backlog B-06 / D5). Mounted once in the root layout to load
- * gtag.js after hydration. Env-gated inside initAnalytics — a no-op until
- * NEXT_PUBLIC_GA_MEASUREMENT_ID is configured, so this renders nothing and
- * ships zero bytes of GA code to visitors until analytics is switched on.
+ * GA4 initializer (merger B1: consent-gated). Mounted once in the root layout.
+ *
+ * Consent mode: gtag.js is only loaded once the visitor has made a consent
+ * decision. Returning visitors with a saved grant initialize immediately;
+ * a saved deny (or an undecided visitor) loads nothing until the cookie banner
+ * grants, at which point the banner calls initAnalytics. Env-gated inside
+ * initAnalytics — a complete no-op until NEXT_PUBLIC_GA_MEASUREMENT_ID is set.
  */
 export default function AnalyticsInit() {
   useEffect(() => {
-    initAnalytics();
+    if (getConsentState() === "granted") {
+      initAnalytics();
+    }
   }, []);
 
   return null;

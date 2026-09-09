@@ -18,6 +18,10 @@ const eslintConfig = defineConfig([
     "design/.scratch/**",
     // Designer's one-off headless-chromium capture scripts (design deliverables).
     "design/v4/shots/**",
+    // apps/web — the grafted marketing origin source, kept read-only as the
+    // port reference (ADR-004). Its own lint/tsc live in its own package.json
+    // tree; it is inert for the root build until removed at cutover.
+    "apps/**",
   ]),
 ]);
 

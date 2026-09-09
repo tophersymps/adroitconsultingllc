@@ -9,6 +9,33 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 
 ## [Unreleased]
 
+### Adroit site + blog merger: marketing port + unified chrome (`v2-dev`, t_953e04ab)
+
+**What** - Ported the six adroit.io marketing pages into the blog host and unified the site chrome, per the merger build plan (t_bf0336b5) and kara's unified design tokens (t_f9f4d486). Root `/` is now the marketing home (the blog redirect to /blog is removed). New routes: `/`, `/platform-strategy`, `/operational-intelligence`, `/digital-experience`, `/contact`, `/privacy`, plus a unified `Header` + `Footer` (Home, Services dropdown x3, Blog, Learn, Contact, search, theme toggle, sign in/avatar) reading one shared `SiteNavModel` from `src/lib/nav.ts`. No external adroit.io self-links remain (Contact and the service pages are local routes). Added consent-gated GA4 (`CookieConsent` + `AnalyticsInit`, localStorage `adroit_cookie_consent`), the marketing brand + band tokens (carmine/navy/charcoal/slate) into `globals.css` for both light and dark mode, the marketing brand favicon/OG/manifest assets in `public/`, a full-site `siteConfig`, the ported `/api/contact` (honeypot, reCAPTCHA v3, 3/hr/IP rate limit, Salesforce Web-to-Lead with `SALESFORCE_OID`, origin-allowlist gate), and a consolidated sitemap covering marketing + blog + learn.
+
+**Why** - The merger moves the live site from a standalone marketing app onto the productive blog host so one repo, one design system, one SEO surface, and one Supabase project serve the whole site. Root routes now market Adroit while blog (/blog) and learn (/learn) keep their machinery untouched.
+
+**What changed** (host = root src tree; marketing reference stays under `apps/web`, inert for the root build, ADR-004)
++ `src/lib/nav.ts` (new) - SiteNavModel source of truth; Header/Footer read from it.
++ `src/components/Header.tsx`, `Footer.tsx` - unified nav (Services dropdown), no external adroit.io links, Footer repointed to local destinations and band-token styled.
++ `src/components/CookieConsent.tsx` (new) - drives GA4 consent mode; `src/components/Analytics/AnalyticsInit.tsx` + `src/lib/analytics.ts` now consent-gated (default denied, load gtag.js after grant).
++ `src/app/globals.css` - added carmine/navy-royal/charcoal/slate brand tokens, always-dark `--surface-band*` bands, `--surface-section-alt`/`--ink-heading`/icon-chip/orb tokens (light + dark), and the marketing hero orb-drift keyframes.
++ `src/app/layout.tsx` - full-site metadata (title/description/OG/favicons/manifest); mounts CookieConsent.
++ `src/lib/seo.ts` - `siteConfig` title/description/OG image are now full-site Adroit branding.
++ `src/app/page.tsx` - marketing home (replaces `/blog` redirect).
++ `src/app/platform-strategy|operational-intelligence|digital-experience|privacy/page.tsx` - ported with copy kept as-is, token-driven for dark-mode parity.
++ `src/app/not-found.tsx` - added a Back-to-home CTA; local Contact link (no external adroit.io).
++ `src/app/contact/page.tsx` (new) + `src/app/api/contact/route.ts` (new) - ported contact form + Web-to-Lead API with honeypot, reCAPTCHA, rate limit, origin allowlist.
++ `src/app/sitemap.ts` - consolidated sitemap adds the six marketing routes.
++ `src/components/Marketing/**` (new) - ported HeroSection, SectionContainer, ServiceCard, ServiceModule, CTABlock, Button, and effects (ScrollReveal, StaggerChildren, GradientMesh, ParticleNetwork) on semantic tokens; `MarketingPage` chrome wrapper.
++ `public/` - copied marketing brand favicon/OG/manifest assets from `apps/web/public`.
++ `package.json` - added `framer-motion`, `@tsparticles/react`, `@tsparticles/slim` (client-safe).
++ `.github/workflows/ci.yml` - triggers now include `v2` and `v2-dev`.
++ `tsconfig.json` / `eslint.config.mjs` - exclude `apps/**` (reference-only graft, ADR-004).
++ Tests updated: Header nav contract (Home instead of Posts), not-found CTAs; all 643 tests green.
+
+**Known issues** - `apps/web` (the grafted marketing origin reference) is excluded from the root tsc + eslint; it is removed at the final cutover after the port is QA'd. The merged v2/v2-dev preview origins will need to be added to `src/lib/api-security.ts` `ALLOWED_ORIGINS` once the Vercel relink happens (step 8), before state-changing routes on the preview are exercised. The contact form's in-memory rate limit is per-instance (accepted, matches prior behavior). `src/components/MDX/MDXArticle.tsx` has one pre-existing unused-variable warning.
+
 ### Admin drawer: focus-on-open (`fix/admin-drawer-focus-open-t_6bfc64a0`)
 
 **What** — When the mobile off-canvas admin drawer opens (a <md viewport), focus now moves to the first nav link instead of staying on the hamburger trigger. A keyboard-only admin's forward-Tab from an open drawer now walks the drawer's nav links rather than dropping onto page content behind the navy scrim.

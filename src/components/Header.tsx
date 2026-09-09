@@ -8,20 +8,16 @@ import AvatarMenu from "@/components/AvatarMenu";
 import ThemeToggle from "@/components/Theme/ThemeToggle";
 import SearchOverlay from "@/components/SearchOverlay";
 import { avatarHueClass, initialsFromEmail } from "@/lib/avatar";
-
-const navLinks = [
-  { href: "/blog", label: "Posts" },
-  { href: "/blog/categories", label: "Categories" },
-  { href: "/tags", label: "Tags" },
-  { href: "/learn", label: "Learn" },
-  { href: "https://adroit.io", label: "Adroit.io", external: true },
-];
+import { NAV } from "@/lib/nav";
+import type { SiteRoute } from "@/shared/contracts";
 
 export default function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [servicesOpen, setServicesOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const isLearnActive = pathname === "/learn" || pathname.startsWith("/learn/");
+  const isHome = pathname === "/";
   const { user, isLoading } = useAuth();
   const [isSigningOut, startTransition] = useTransition();
 
@@ -37,6 +33,12 @@ export default function Header() {
     });
   }
 
+  const serviceActive = (href: string) =>
+    pathname === href || (pathname === "/platform-strategy" && href === "/platform-strategy");
+
+  const isActive = (href: SiteRoute) =>
+    href === "/" ? isHome : href === "/learn" ? isLearnActive : pathname === href;
+
   const authControl = isLoading ? null : user ? (
     <AvatarMenu user={user} onSignOut={handleSignOut} isSigningOut={isSigningOut} />
   ) : (
@@ -51,46 +53,61 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-50 bg-[var(--surface-card)]/95 backdrop-blur border-b border-[var(--border-default)] shadow-[0_1px_0_rgba(11,29,58,0.03)]">
       <div className="max-w-[1120px] mx-auto px-6 h-16 flex items-center justify-between">
-        <Link href="/blog" className="flex items-center gap-2.5 no-underline text-[var(--ink-primary)] group">
+        <Link href={NAV.brand.homeHref} className="flex items-center gap-2.5 no-underline text-[var(--ink-primary)] group">
           <div className="w-8 h-8 bg-[var(--surface-inverse)] rounded-sm flex items-center justify-center text-[var(--ink-on-inverse)] font-extrabold text-sm transition-transform duration-150 group-hover:scale-105">
             A
           </div>
           <span className="font-bold text-lg tracking-tight">Adroit</span>
-          <span className="bg-[var(--accent-bg)] text-[var(--accent-on-accent)] text-[0.6rem] font-bold px-1.5 py-0.5 rounded-[3px] tracking-wider uppercase">
-            BLOG
-          </span>
         </Link>
 
         {/* Desktop Nav */}
         <nav aria-label="Main" className="hidden md:flex items-center gap-7">
-          {navLinks.map((link) =>
-            link.external ? (
-              <a
-                key={link.href}
-                href={link.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="relative text-[var(--ink-muted)] text-sm font-medium hover:text-[var(--ink-primary)] transition-colors duration-150 no-underline"
-              >
-                {link.label}
-              </a>
+          {NAV.primary.map((link) =>
+            link.label === "Services" ? (
+              <div key={link.href} className="relative" onMouseLeave={() => setServicesOpen(false)}>
+                <button
+                  type="button"
+                  onClick={() => setServicesOpen((o) => !o)}
+                  onMouseEnter={() => setServicesOpen(true)}
+                  aria-expanded={servicesOpen}
+                  aria-haspopup="true"
+                  className="relative text-[var(--ink-muted)] text-sm font-medium hover:text-[var(--ink-primary)] transition-colors duration-150 no-underline inline-flex items-center gap-1 cursor-pointer bg-none border-none"
+                >
+                  Services
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                  </svg>
+                </button>
+                {servicesOpen && (
+                  <div className="absolute left-0 top-full pt-2">
+                    <div className="w-64 rounded-lg bg-[var(--surface-card)] border border-[var(--border-default)] shadow-[var(--shadow-menu)] p-2 flex flex-col">
+                      {NAV.services.links.map((s) => (
+                        <Link
+                          key={s.href}
+                          href={`/${s.href}` as SiteRoute}
+                          aria-current={serviceActive(`/${s.href}`) ? "page" : undefined}
+                          onClick={() => setServicesOpen(false)}
+                          className="rounded-md px-3 py-2 text-sm font-medium text-[var(--ink-body)] hover:bg-[var(--surface-sunken)] hover:text-[var(--ink-primary)] no-underline aria-[current=page]:text-[var(--ink-primary)] aria-[current=page]:font-semibold"
+                        >
+                          {s.label}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             ) : (
               <Link
                 key={link.href}
                 href={link.href}
-                aria-current={
-                  link.href === "/learn" && isLearnActive ? "page" : undefined
-                }
+                aria-current={isActive(link.href as SiteRoute) ? "page" : undefined}
                 className="relative text-[var(--ink-muted)] text-sm font-medium hover:text-[var(--ink-primary)] transition-colors duration-150 no-underline aria-[current=page]:text-[var(--ink-primary)] aria-[current=page]:font-semibold"
               >
                 {link.label}
                 <span
                   aria-hidden
                   className={`absolute -bottom-[18px] left-0 right-0 h-[2px] rounded-full bg-[var(--accent)] transition-opacity duration-150 ${
-                    (link.href === "/learn" && isLearnActive) ||
-                    pathname === link.href
-                      ? "opacity-100"
-                      : "opacity-0"
+                    isActive(link.href as SiteRoute) ? "opacity-100" : "opacity-0"
                   }`}
                 />
               </Link>
@@ -100,7 +117,7 @@ export default function Header() {
             <SearchOverlay />
             <ThemeToggle authed={!!user} iconOnly />
             <Link
-              href="https://adroit.io/contact"
+              href="/contact"
               className="inline-flex items-center bg-[var(--surface-inverse)] text-[var(--ink-on-inverse)] px-[18px] h-9 rounded-sm text-[0.8rem] font-semibold hover:bg-[var(--surface-inverse-hover)] hover:-translate-y-px active:scale-[0.98] transition-all duration-150 no-underline"
             >
               Contact Us
@@ -132,24 +149,29 @@ export default function Header() {
           aria-label="Mobile"
           className="md:hidden flex flex-col px-5 py-4 gap-4 border-t border-[var(--border-default)] bg-[var(--surface-card)]"
         >
-          {navLinks.map((link) =>
-            link.external ? (
-              <a
-                key={link.href}
-                href={link.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[var(--ink-body)] text-sm font-medium py-2 border-b border-[var(--border-subtle)] no-underline"
-              >
-                {link.label}
-              </a>
+          {NAV.primary.map((link) =>
+            link.label === "Services" ? (
+              <div key={link.href} className="flex flex-col gap-2 py-1 border-b border-[var(--border-subtle)]">
+                <span className="text-[var(--ink-body)] text-sm font-medium">
+                  Services
+                </span>
+                {NAV.services.links.map((s) => (
+                  <Link
+                    key={s.href}
+                    href={`/${s.href}` as SiteRoute}
+                    aria-current={serviceActive(`/${s.href}`) ? "page" : undefined}
+                    className="pl-3 text-[var(--ink-muted)] text-sm font-medium py-1 no-underline aria-[current=page]:text-[var(--ink-primary)] aria-[current=page]:font-semibold"
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    {s.label}
+                  </Link>
+                ))}
+              </div>
             ) : (
               <Link
                 key={link.href}
                 href={link.href}
-                aria-current={
-                  link.href === "/learn" && isLearnActive ? "page" : undefined
-                }
+                aria-current={isActive(link.href as SiteRoute) ? "page" : undefined}
                 className="text-[var(--ink-body)] text-sm font-medium py-2 border-b border-[var(--border-subtle)] no-underline aria-[current=page]:text-[var(--ink-primary)] aria-[current=page]:font-semibold"
                 onClick={() => setMobileOpen(false)}
               >
@@ -220,7 +242,7 @@ export default function Header() {
             </>
           )}
           <Link
-            href="https://adroit.io/contact"
+            href="/contact"
             className="bg-[var(--surface-inverse)] text-[var(--ink-on-inverse)] text-center px-[18px] py-2 rounded-sm text-sm font-semibold hover:bg-[var(--surface-inverse-hover)] no-underline"
             onClick={() => setMobileOpen(false)}
           >

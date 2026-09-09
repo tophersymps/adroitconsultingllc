@@ -71,9 +71,9 @@ describe("Header mobile nav toggle (t_c4c0a710)", () => {
     expect(hamburger).toHaveAttribute("aria-expanded", "true");
     const drawer = screen.getByRole("navigation", { name: "Mobile" });
     expect(drawer).toHaveAttribute("id", "mobile-nav");
-    // Newsletter/blog nav surface present inside the drawer.
+    // Unified nav surface present inside the drawer (Home is the marketing root).
     expect(
-      within(drawer).getByRole("link", { name: "Posts" }),
+      within(drawer).getByRole("link", { name: "Home" }),
     ).toBeInTheDocument();
   });
 
@@ -87,7 +87,7 @@ describe("Header mobile nav toggle (t_c4c0a710)", () => {
     const drawer = screen.getByRole("navigation", { name: "Mobile" });
     expect(drawer).toBeInTheDocument();
 
-    await user.click(within(drawer).getByRole("link", { name: "Posts" }));
+    await user.click(within(drawer).getByRole("link", { name: "Home" }));
     expect(hamburger).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("navigation", { name: "Mobile" })).toBeNull();
   });
