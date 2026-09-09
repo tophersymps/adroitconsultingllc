@@ -121,8 +121,8 @@ export type ThemeTokenName =
 
 /**
  * Client -> POST /api/contact payload. Field names match the existing marketing
- * form + Salesforce Web-to-Lead mapping (see apps/web/src/app/api/contact in the
- * grafted origin copy).
+ * form + Salesforce Web-to-Lead mapping (ported from the grafted origin copy,
+ * which was removed at the visual-parity cutover t_d4138a75).
  */
 export interface ContactLeadPayload {
   fullName: string;

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { NAV } from "@/lib/nav";
 import type { SiteRoute } from "@/shared/contracts";
 
@@ -9,7 +10,9 @@ import type { SiteRoute } from "@/shared/contracts";
  * model so it never drifts from the Header.
  *
  * The always-dark --surface-band background + band inks keep the footer
- * readable in BOTH light and dark mode (kara design t_f9f4d486).
+ * readable in BOTH light and dark mode (kara design t_f9f4d486). The white
+ * monochrome company logo is used on this dark band (matching live prod
+ * footer which pairs the brand with the Adroit mark).
  */
 export default function Footer() {
   return (
@@ -18,14 +21,18 @@ export default function Footer() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 mb-10">
           {/* Brand */}
           <div className="sm:col-span-2 lg:col-span-1">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-7 h-7 bg-[var(--surface-band-elev)] rounded-sm flex items-center justify-center text-[var(--ink-band)] font-extrabold text-xs">
-                A
-              </div>
+            <Link href={NAV.brand.homeHref} className="inline-flex items-center gap-3 mb-3 no-underline group">
+              <Image
+                src="/adroit-logo-monochrome-white.svg"
+                alt="Adroit Consulting"
+                width={44}
+                height={44}
+                className="h-11 w-11 transition-opacity duration-150 group-hover:opacity-90"
+              />
               <span className="font-bold text-lg tracking-tight text-[var(--ink-band)]">
                 {NAV.brand.name}
               </span>
-            </div>
+            </Link>
             <p className="text-sm leading-relaxed max-w-[280px] text-[var(--ink-band-muted)]">
               Salesforce platform strategy, operational intelligence, and
               AI-enhanced digital experiences. Helping businesses modernize and

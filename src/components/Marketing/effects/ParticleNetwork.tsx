@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Particles, ParticlesProvider } from "@tsparticles/react";
 import { loadSlim } from "@tsparticles/slim";
 import type { ISourceOptions } from "@tsparticles/engine";
@@ -40,31 +39,26 @@ const OPTIONS: ISourceOptions = {
 };
 
 /**
- * Marketing hero particle network (tsparticles v4 provider pattern). The
- * ParticlesProvider wraps a single <Particles> so the slim engine is registered
- * once on the client. Renders nothing until the engine is loaded.
+ * Marketing hero particle network (tsparticles v4 provider pattern).
+ *
+ * IMPORTANT: <Particles> must be a CHILD of <ParticlesProvider>. The provider
+ * loads the slim engine and exposes `loaded` through context; <Particles> reads
+ * that context and only mounts its canvas once the engine is ready. Rendering
+ * <Particles> outside the provider (as the earlier port did, behind a local
+ * ready flag) loses the context and the canvas never appears. (t_d4138a75)
  */
 export default function ParticleNetwork() {
-  const [ready, setReady] = useState(false);
-
-  if (!ready) {
-    return (
-      <ParticlesProvider
-        init={async (engine) => {
-          await loadSlim(engine);
-          setReady(true);
-        }}
-      >
-        <span />
-      </ParticlesProvider>
-    );
-  }
-
   return (
-    <Particles
-      className="absolute inset-0 transition-opacity duration-1000"
-      id="hero-particles"
-      options={OPTIONS}
-    />
+    <ParticlesProvider
+      init={async (engine) => {
+        await loadSlim(engine);
+      }}
+    >
+      <Particles
+        className="absolute inset-0 transition-opacity duration-1000"
+        id="hero-particles"
+        options={OPTIONS}
+      />
+    </ParticlesProvider>
   );
 }

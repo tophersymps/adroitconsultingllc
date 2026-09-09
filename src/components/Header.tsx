@@ -2,6 +2,7 @@
 
 import { useRef, useState, useTransition, type KeyboardEvent } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth, notifyAuthChanged } from "@/lib/hooks/useAuth";
 import AvatarMenu from "@/components/AvatarMenu";
@@ -55,11 +56,25 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-50 bg-[var(--surface-card)]/95 backdrop-blur border-b border-[var(--border-default)] shadow-[0_1px_0_rgba(11,29,58,0.03)]">
       <div className="max-w-[1120px] mx-auto px-6 h-16 flex items-center justify-between">
-        <Link href={NAV.brand.homeHref} className="flex items-center gap-2.5 no-underline text-[var(--ink-primary)] group">
-          <div className="w-8 h-8 bg-[var(--surface-inverse)] rounded-sm flex items-center justify-center text-[var(--ink-on-inverse)] font-extrabold text-sm transition-transform duration-150 group-hover:scale-105">
-            A
-          </div>
-          <span className="font-bold text-lg tracking-tight">Adroit</span>
+        <Link href={NAV.brand.homeHref} className="flex items-center no-underline group" aria-label="Adroit Consulting">
+          {/* Light mode: full-color company logo on the light header surface. */}
+          <Image
+            src="/adroit-logo-fullcolor-lightbg.svg"
+            alt="Adroit Consulting"
+            width={160}
+            height={40}
+            priority
+            className="h-10 w-auto dark:hidden"
+          />
+          {/* Dark mode: white monochrome logo on the dark header surface (#121a2e). */}
+          <Image
+            src="/adroit-logo-monochrome-white.svg"
+            alt="Adroit Consulting"
+            width={160}
+            height={40}
+            priority
+            className="hidden h-10 w-auto dark:block"
+          />
         </Link>
 
         {/* Desktop Nav */}
