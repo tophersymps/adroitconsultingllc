@@ -216,4 +216,34 @@ describe("GET /api/admin/access/effective — consolidated accessor (ADR-223)", 
     const res = await GET();
     expect(res.status).toBe(500);
   });
+
+  it("logs the true error server-side but keeps the client response opaque", async () => {
+    admin();
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const boom = new Error(`courses query failed: column "nope" does not exist`);
+      mocks.service.from.mockImplementation(() => {
+        const promise = Promise.resolve({ data: null, error: boom });
+        const builder = {
+          select: () => builder,
+          order: () => builder,
+          is: () => builder,
+          eq: () => builder,
+          then: promise.then.bind(promise),
+        };
+        return builder;
+      });
+      const res = await GET();
+      expect(res.status).toBe(500);
+      // Client sees only the opaque message, never the internal cause.
+      await expect(res.json()).resolves.toEqual({ ok: false, error: "Server error" });
+      // The true cause is logged server-side so the failure is never opaque.
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      const [tag, payload] = errorSpy.mock.calls[0] as [string, unknown];
+      expect(tag).toBe("[admin-access-effective] failed to load effective access");
+      expect(payload).toMatchObject({ name: "Error", message: boom.message });
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });

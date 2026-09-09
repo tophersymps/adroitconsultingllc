@@ -161,7 +161,18 @@ export async function GET() {
         subscriberPulse: pulse,
       },
     } satisfies AdminAccessEffectiveResponse);
-  } catch {
+  } catch (err) {
+    // Log the true failure server-side (structured, no internals leaked to the
+    // client). The current admin request cannot be completed without a readable
+    // root cause; the client must never see the internal error, so the response
+    // stays opaque while Vercel logs carry the exact cause. Covers the missing
+    // SUPABASE_SERVICE_ROLE_KEY env failure (getSupabaseServiceClient fails
+    // closed), a GoTrue listAuthUsers failure, or a PostgREST read error.
+    console.error("[admin-access-effective] failed to load effective access", {
+      message: err instanceof Error ? err.message : String(err),
+      name: err instanceof Error ? err.name : undefined,
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return NextResponse.json({ ok: false, error: "Server error" }, { status: 500 });
   }
 }

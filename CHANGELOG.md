@@ -9,6 +9,21 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 
 ## [Unreleased]
 
+### Fix: /api/admin/access/effective 500 - 'Failed to load effective access' (t_73b751bd)
+
+**What** - Admin panel on live adroit.io was broken: the client hook threw "Failed to load effective access" because GET /api/admin/access/effective returned a bare 500. Root cause: the prod adroitconsultingllc Vercel env was missing `SUPABASE_SERVICE_ROLE_KEY`. The route's first line inside the try block, `getSupabaseServiceClient()` (src/lib/supabase/service.ts), fails closed and throws when that env var is absent, and `listAuthUsers()` (src/lib/supabase/auth-admin.ts) requires it too. The catch block swallowed the real error into a bare `{"ok":false,"error":"Server error"}` 500, so the client (and operators) could not tell a 403 gate from a downstream read failure.
+
+- `src/app/api/admin/access/effective/route.ts` - catch block now logs the true error server-side as structured `console.error` (`[admin-access-effective] failed to load effective access` with `message`/`name`/`stack`); the client response stays opaque `{"ok":false,"error":"Server error"}` 500 (no internals leaked).
+- `src/app/api/admin/access/effective/route.test.ts` - added a test that asserts a read failure logs the real cause server-side while the client still receives only the opaque body.
+
+**Why** - This was the first real production load of the admin-access surface (landed in the big cutover merge 3728dd4). The learner-facing site only uses the anon/cookie client, so it was unaffected; the admin surface is the first code path exercising the service-role key in prod. The key existed on the fortress `adroit-blog` project but was never carried onto the `adroitconsultingllc` prod env at merge.
+
+**Root-cause evidence (prod, not guessed)** - Vercel API env inventory of project `prj_kwnzxAfroamiEve8fQPXwz7eLbrs` (adroitconsultingllc) showed `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` but NO `SUPABASE_SERVICE_ROLE_KEY`. Dedicated probe against the same prod Supabase project `zrggxfdyptiahskogwnn` using the service-role key returned HTTP 200 on all 5 PostgREST reads (courses, user_roles, user_profiles, user_entitlements with revoked_at filter, subscriptions with the exact selected columns) plus the GoTrue `listAuthUsers` call, proving no schema/column drift exists once the key is present. Post-merge, added `SUPABASE_SERVICE_ROLE_KEY` (production target) to the adroitconsultingllc Vercel project (confirmed via env inventory); a prod redeploy is required for running functions to pick it up (the orchestrator's push handles that).
+
+**Verification** - `npm test` 88 files / 672 tests pass (route suite 5/5); `npm run lint` exit 0; `npm run build` exit 0. Live: prod env now carries `SUPABASE_SERVICE_ROLE_KEY`; the route's 6 reads succeed against prod Supabase when the key is present.
+
+**Known issues** - The env fix only takes effect on the running prod functions after a redeploy and requires an admin session to exercise end-to-end; those are handled by the orchestrator's push + QA live check.
+
 ### Spacing sweep: normalize Learn/Atlas hub vertical rhythm + full-site audit (t_6a43944e)
 
 **What** - Fixed the cramped Filters-to-Continue-Learning seam on the /learn hub and normalized the hub's vertical rhythm to the site's established ~36px section gap. In `src/components/Learn/LearnHub.tsx` the card sections were `mt-9 first:mt-4`; because Continue Learning renders before them, no section is ever the `:first-child`, so `first:mt-4` silently stopped firing (the defect pattern) and the dead selector is now removed. In `src/components/Learn/ContinueLearning.tsx` the dark banner was `mb-7` with no top margin, leaving the Filters row to banner gap cramped. Changed it to `mt-9` (36px top). Net result: Filters, Continue Learning, and every card section now sit at a uniform 36px (mt-9) boundary whether or not Continue Learning renders.
