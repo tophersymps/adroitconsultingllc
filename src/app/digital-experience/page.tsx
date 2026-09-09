@@ -12,6 +12,7 @@ export const metadata: Metadata = {
   description:
     "Build digital experiences that earn trust, drive conversion, and connect directly to your operational systems, with AI-enhanced personalization and performance.",
   openGraph: {
+    url: "https://adroit.io/digital-experience",
     title: "Digital Experience | Adroit Consulting",
     description:
       "Professional web development, Salesforce-integrated digital experiences, and AI-enhanced UX for businesses that need more than a brochure site.",

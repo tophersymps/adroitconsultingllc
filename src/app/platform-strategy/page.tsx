@@ -12,6 +12,7 @@ export const metadata: Metadata = {
   description:
     "Salesforce implementation, architecture, and optimization, from org design and integrations to AI readiness and Agentforce planning.",
   openGraph: {
+    url: "https://adroit.io/platform-strategy",
     title: "Salesforce Platform Strategy | Adroit Consulting",
     description:
       "Salesforce architecture, integration, adoption, and AI-readiness consulting for growing businesses with real-world complexity.",

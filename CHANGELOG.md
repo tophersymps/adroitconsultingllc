@@ -9,6 +9,24 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 
 ## [Unreleased]
 
+### SEO fix: marketing subpage canonical/og metadata no longer leaks homepage (`v2`, t_03dcbe82)
+
+**What** - Fixed the SEO HIGH finding from the a11y/SEO audit (t_3778281e): the five merged marketing subpages (`/platform-strategy`, `/operational-intelligence`, `/digital-experience`, `/contact`, `/privacy`) were emitting the HOMEPAGE canonical (`https://adroit.io`) and homepage og:url in their rendered `<head>`, so Google treated each as a duplicate of `/`. `/contact` and `/privacy` also inherited the homepage og:title/og:description/twitter:title ("Adroit Consulting"). Added a co-located server `layout.tsx` for each of the five routes that exports `buildMetadata({ title, description, path })` with the route's own path — exactly mirroring the proven `/blog`, `/learn`, `/login` layout pattern — so canonical, og:url, and twitter resolve per page. For `/contact` (a client component that cannot export metadata), the server layout is the sole metadata source. Because Next.js replaces rather than deep-merges a page-level `openGraph` object, the three service pages also gained an explicit `og:url` in their own metadata to guarantee it renders.
+
+**Why** - Each subpage declaring the homepage as canonical told Google it was a duplicate of `/`, suppressing its own ranking and funneling any subpage links/authority to the homepage. With distinct per-page canonical + og:url, each route is indexed on its own merits.
+
+**What changed**
++ `src/app/platform-strategy/layout.tsx` (new) - per-route metadata (canonical/og/twitter) via `buildMetadata`, path `/platform-strategy`.
++ `src/app/operational-intelligence/layout.tsx` (new) - path `/operational-intelligence`.
++ `src/app/digital-experience/layout.tsx` (new) - path `/digital-experience`.
++ `src/app/contact/layout.tsx` (new) - server layout for the client-component contact page; descriptive "Contact Adroit Consulting" title/description; path `/contact`.
++ `src/app/privacy/layout.tsx` (new) - descriptive "Privacy Policy" title/description; path `/privacy`.
++ `src/app/platform-strategy/page.tsx`, `src/app/operational-intelligence/page.tsx`, `src/app/digital-experience/page.tsx` - added `og:url` to each page's openGraph so it renders (Next.js replaces the layout openGraph when the page defines one).
+
+**Verification** - `tsc --noEmit` exit 0; `eslint` 0 errors; 652 tests pass (86 files); `npm run build` exit 0. Live dev-server check: all five routes now render canonical + og:url = their own `https://adroit.io/<route>`; `/` unchanged (`https://adroit.io`); `/blog` `/learn` `/login` unchanged (regression guard); `/contact` and `/privacy` emit descriptive per-page og:title/og:description/twitter:title.
+
+**Known issues** - None. Non-goals respected: blog/learn/login layouts untouched; no JSON-LD/schema.org added (separate enhancement card).
+
 ### Security hardening: contact reCAPTCHA CSP + fail-closed, rate-limit IP, dependency bump (`v2-dev`, t_fd9f68c2)
 
 **What** - Fixed the four findings from val-el's security review of the merged Adroit site (t_953e04ab, v2 6702179). Added `https://www.google.com` and `https://www.gstatic.com` to the served CSP `script-src` (plus the same hosts to `connect-src`, `frame-src` for the reCAPTCHA iframe, and `gstatic` to `img-src`) so the contact form's reCAPTCHA v3 actually loads in production instead of being blocked. The `/api/contact` rate limit is now keyed on the trusted proxy-provided client IP via the shared `getClientIp()` helper (prefers `x-real-ip`, else the rightmost `x-forwarded-for` hop) instead of the attacker-spoofable leftmost hop. reCAPTCHA now fails CLOSED in production when `RECAPTCHA_SECRET_KEY` is unset (returns 503) rather than silently running with bot defense off. Bumped `next` 16.3.0 to 16.3.4, added `sharp` 0.35.4 (previously transitive <0.35.4, both in the Aug-2026 CVE range), and ran `npm audit fix` (now 0 vulnerabilities).

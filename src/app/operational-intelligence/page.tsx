@@ -12,6 +12,7 @@ export const metadata: Metadata = {
   description:
     "Turn process complexity into operational advantage with intelligent automation, cross-system integration, AI-augmented workflows, and real-time operational analytics.",
   openGraph: {
+    url: "https://adroit.io/operational-intelligence",
     title: "Operational Intelligence | Adroit Consulting",
     description:
       "Workflow automation, AI-augmented processes, and operational analytics for teams ready to operate smarter.",
