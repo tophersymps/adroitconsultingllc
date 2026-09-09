@@ -9,6 +9,23 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 
 ## [Unreleased]
 
+### Security hardening: contact reCAPTCHA CSP + fail-closed, rate-limit IP, dependency bump (`v2-dev`, t_fd9f68c2)
+
+**What** - Fixed the four findings from val-el's security review of the merged Adroit site (t_953e04ab, v2 6702179). Added `https://www.google.com` and `https://www.gstatic.com` to the served CSP `script-src` (plus the same hosts to `connect-src`, `frame-src` for the reCAPTCHA iframe, and `gstatic` to `img-src`) so the contact form's reCAPTCHA v3 actually loads in production instead of being blocked. The `/api/contact` rate limit is now keyed on the trusted proxy-provided client IP via the shared `getClientIp()` helper (prefers `x-real-ip`, else the rightmost `x-forwarded-for` hop) instead of the attacker-spoofable leftmost hop. reCAPTCHA now fails CLOSED in production when `RECAPTCHA_SECRET_KEY` is unset (returns 503) rather than silently running with bot defense off. Bumped `next` 16.3.0 to 16.3.4, added `sharp` 0.35.4 (previously transitive <0.35.4, both in the Aug-2026 CVE range), and ran `npm audit fix` (now 0 vulnerabilities).
+
+**Why** - The HIGH finding: the contact page loads reCAPTCHA from `www.google.com` / `www.gstatic.com`, but the served CSP script-src blocked those hosts, so with a site key configured every user hit "reCAPTCHA verification failed" (DoS) and with the key unset the anti-bot control was inert. The rate-limit and fail-open issues let an attacker bypass the 3/hr/IP cap / silently disable bot defense via a single env misconfig. Dependency bump clears GHSA-p293-qw3h-jr36, GHSA-2xp9-vwfh-vxw4 (next), and the sharp <0.35.4 high.
+
+**What changed**
++ `next.config.ts` - CSP `script-src`/`connect-src`/`frame-src` now allow the reCAPTCHA hosts; `img-src` allows `gstatic`.
++ `src/app/api/contact/route.ts` - rate-limit keyed on `getClientIp(request)` (not leftmost XFF); reCAPTCHA fails closed (503) in production when the secret is unset.
++ `package.json` / `package-lock.json` - next 16.3.4, sharp 0.35.4, eslint-config-next 16.3.4; dev-transitives updated by `npm audit fix` (0 vulnerabilities).
++ `src/app/api/contact/route.test.ts` (new) - 4 tests: fail-closed 503, valid-token path, 429 after 3 from same real IP despite spoofed leftmost hop, no shared bucket across different real IPs sharing one spoofed hop.
++ `src/config/next.config.test.ts` (new) - 3 tests asserting CSP includes reCAPTCHA hosts in script-src/frame-src and that HSTS/nosniff/frame-deny/referrer-policy remain.
+
+**Verification** - `tsc --noEmit` exit 0; `eslint` 0 errors; 650 tests pass (643 + 7 new); `npm run build` succeeds with `/api/contact` in the route table; `npm audit` 0 vulnerabilities. Live dev-server check: CSP header served with reCAPTCHA hosts, and with a site key set the reCAPTCHA script + invisible iframes load from google/gstatic (was CSP-blocked before).
+
+**Known issues** - The contact rate limit remains in-memory per-instance (accepted, matches prior behavior and val-el's acknowledgment). The fail-closed 503 path requires the secret to be present in the deployed env (it is set on the adroit.io Vercel project). `src/components/MDX/MDXArticle.tsx` still has the pre-existing unused-variable warning.
+
 ### Adroit site + blog merger: marketing port + unified chrome (`v2-dev`, t_953e04ab)
 
 **What** - Ported the six adroit.io marketing pages into the blog host and unified the site chrome, per the merger build plan (t_bf0336b5) and kara's unified design tokens (t_f9f4d486). Root `/` is now the marketing home (the blog redirect to /blog is removed). New routes: `/`, `/platform-strategy`, `/operational-intelligence`, `/digital-experience`, `/contact`, `/privacy`, plus a unified `Header` + `Footer` (Home, Services dropdown x3, Blog, Learn, Contact, search, theme toggle, sign in/avatar) reading one shared `SiteNavModel` from `src/lib/nav.ts`. No external adroit.io self-links remain (Contact and the service pages are local routes). Added consent-gated GA4 (`CookieConsent` + `AnalyticsInit`, localStorage `adroit_cookie_consent`), the marketing brand + band tokens (carmine/navy/charcoal/slate) into `globals.css` for both light and dark mode, the marketing brand favicon/OG/manifest assets in `public/`, a full-site `siteConfig`, the ported `/api/contact` (honeypot, reCAPTCHA v3, 3/hr/IP rate limit, Salesforce Web-to-Lead with `SALESFORCE_OID`, origin-allowlist gate), and a consolidated sitemap covering marketing + blog + learn.
