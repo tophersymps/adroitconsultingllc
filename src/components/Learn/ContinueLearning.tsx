@@ -35,7 +35,7 @@ export default function ContinueLearning() {
   if (!items || items.length === 0) return null;
 
   return (
-    <section aria-label="Continue learning" className="mb-7">
+    <section aria-label="Continue learning" className="mt-9">
       {items.map((item) => (
         <div
           key={item.seriesSlug}

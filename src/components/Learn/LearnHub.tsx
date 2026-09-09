@@ -124,7 +124,7 @@ export default function LearnHub({
           const sectionCount = sectionCards.length;
 
           return (
-            <section key={section.slug} className="mt-9 first:mt-4">
+            <section key={section.slug} className="mt-9">
               <div className="flex items-center gap-3 mb-4">
                 <span className="w-[3px] h-4 rounded-sm bg-[var(--accent)]" aria-hidden />
                 <h2 className="font-mono text-[12px] font-bold text-[var(--ink-faint)] uppercase tracking-[0.1em]">

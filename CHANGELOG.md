@@ -9,6 +9,18 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 
 ## [Unreleased]
 
+### Spacing sweep: normalize Learn/Atlas hub vertical rhythm + full-site audit (t_6a43944e)
+
+**What** - Fixed the cramped Filters-to-Continue-Learning seam on the /learn hub and normalized the hub's vertical rhythm to the site's established ~36px section gap. In `src/components/Learn/LearnHub.tsx` the card sections were `mt-9 first:mt-4`; because Continue Learning renders before them, no section is ever the `:first-child`, so `first:mt-4` silently stopped firing (the defect pattern) and the dead selector is now removed. In `src/components/Learn/ContinueLearning.tsx` the dark banner was `mb-7` with no top margin, leaving the Filters row to banner gap cramped. Changed it to `mt-9` (36px top). Net result: Filters, Continue Learning, and every card section now sit at a uniform 36px (mt-9) boundary whether or not Continue Learning renders.
+- `src/components/Learn/ContinueLearning.tsx` — `<section>` className `mb-7` → `mt-9` (top space from the Filters row; bottom spacing now comes from the following sections' `mt-9`, no double-gap).
+- `src/components/Learn/LearnHub.tsx` — card `<section>` className `mt-9 first:mt-4` → `mt-9` (removed the never-firing `first:mt-4`).
+
+**Why** - Chris flagged a spacing defect on the Learn/Atlas page; root cause was three stacked regions (Filters wrapper with no bottom margin, Continue Learning banner with no top margin, card sections relying on a `first:` selector that could not fire). Full-site rhythm is otherwise normalized through shared components (Header, Footer, marketing SectionContainer py-20/py-28 bands, SectionHeader/section grids), so the fix is local to the hub.
+
+**Verification** - `npm run lint` exit 0; `npx vitest run` 88 files / 671 tests pass; `npm run build` exit 0. Live render checked on the DB-independent public surfaces at desktop + 375px in light and dark: `/`, `/blog`, a `/blog/[slug]` article, `/tags`, `/tags/[tag]`, `/contact`, `/privacy`, `/digital-experience`, `/platform-strategy`, `/operational-intelligence`, `/learn` (filters render; card sections are Supabase-gated and render empty in this headless copy because `.env` creds are absent — pre-existing and unrelated). No horizontal overflow and no cramped/oversized region gaps found beyond the fixed Learn seam.
+
+**Known issues** - The Learn card sections and Continue Learning banner require Supabase credentials to render, so their exact pixel rhythm is verified by CSS margin-collapse reasoning (all boundaries `mt-9` = 36px) rather than a live screenshot in this environment.
+
 ### Fix: /blog/categories SEO title no longer overrides the Field Notes layout (t_4eab5500)
 
 **What** - `src/app/blog/categories/page.tsx` exported its own `metadata` whose `title: "Blog Categories | Adroit Consulting"` overrode the correctly-renamed layout metadata (`"Categories | Field Notes"`), because Next.js page-level metadata takes precedence over the nested route layout's. Fixed `page.tsx` metadata title to `"Categories | Field Notes"` (description and `path` unchanged).
