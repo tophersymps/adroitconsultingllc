@@ -23,7 +23,7 @@ export const NAV: SiteNavModel = {
   primary: [
     { label: "Home", href: "/" },
     { label: "Services", href: "platform-strategy" },
-    { label: "Blog", href: "/blog" },
+    { label: "Field Notes", href: "/blog" },
     { label: "Learn", href: "/learn" },
     { label: "Contact", href: "/contact" },
   ],

@@ -49,7 +49,7 @@ export default function PreviewStrip({
           </div>
         </div>
         <Link href={backHref} className="preview-strip-back-link no-underline">
-          &larr; Back to {backHref.startsWith("/learn") ? "Series" : "Blog"}
+          &larr; Back to {backHref.startsWith("/learn") ? "Series" : "Field Notes"}
         </Link>
       </div>
     </div>

@@ -43,7 +43,7 @@ export default function Footer() {
           {/* Blog Links */}
           <div>
             <h4 className="text-[var(--ink-band)] text-xs font-semibold uppercase tracking-[0.06em] mb-3.5">
-              Blog
+              Field Notes
             </h4>
             <ul className="list-none space-y-2">
               {NAV.footer.blog.map((link) => (

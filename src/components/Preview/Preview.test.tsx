@@ -53,7 +53,7 @@ describe("PreviewStrip", () => {
   it("shows the draft title and a back link to /blog", () => {
     render(<PreviewStrip title="My Draft" status="draft" backHref="/blog" />);
     expect(screen.getByText("My Draft")).toBeInTheDocument();
-    const back = screen.getByRole("link", { name: /Back to Blog/ });
+    const back = screen.getByRole("link", { name: /Back to Field Notes/ });
     expect(back).toHaveAttribute("href", "/blog");
   });
 

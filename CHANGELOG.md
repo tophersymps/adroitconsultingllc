@@ -9,6 +9,22 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 
 ## [Unreleased]
 
+### Branding: rename "Blog" label to "Field Notes" (nav/footer/breadcrumb/SEO; routes unchanged, t_418bab6d)
+
+**What** - Renamed the user-facing label for the Adroit insights article hub from "Blog" to "Field Notes" in the four display surfaces that carry it. This is a label-text rename ONLY — the route/URL `/blog` (and `/blog/categories`, `/tags`) is unchanged to avoid redirect/SEO/bookmark risk.
+- `src/lib/nav.ts` — primary nav item `{ label: "Blog", href: "/blog" }` → `{ label: "Field Notes", href: "/blog" }` (href unchanged; single source of truth that the Footer renders from).
+- `src/components/Footer.tsx` — footer link-group heading `<h4>Blog</h4>` → `<h4>Field Notes</h4>`. The `NAV.footer.blog` link array beneath it is unchanged (those are the link hrefs/labels).
+- `src/app/blog/layout.tsx` — SEO title `"Adroit Consulting Blog | Insights on Salesforce, React & AI"` → `"Field Notes | Adroit Consulting"`; description tightened to `"Insights on Salesforce, React, AI, and digital transformation from the Adroit team."` (dropped "smarter" hype). `path: "/blog"` unchanged.
+- `src/app/blog/categories/layout.tsx` — SEO title `"Blog Categories | Adroit Consulting"` → `"Categories | Field Notes"`; description lightly edited. `path: "/blog/categories"` unchanged.
+- `src/components/Preview/PreviewStrip.tsx` — breadcrumb `"Back to …"` falls back to `"Field Notes"` instead of `"Blog"` (the learn/`Series` branch stays).
+- `src/components/Preview/Preview.test.tsx` — updated the PreviewStrip back-link assertion `Back to Blog` → `Back to Field Notes` to match the new label.
+
+**Why** - Chris chose "Field Notes" as the name for the Adroit insights blog.
+
+**Verification** - `npx eslint` on the 5 changed files exit 0 (0 errors/warnings); `npx tsc --noEmit` exit 0 (proves route unions untouched); `npm run build` exit 0; full vitest suite 88 files / 671 tests pass. Runtime: `/` nav renders "Field Notes" linking to `/blog`; `/blog` renders `<title>Field Notes | Adroit Consulting</title>`; `/blog` and `/blog/categories` both resolve HTTP 200. `git diff` is label-text only (no href/route/logic changes). The auth-gated `/preview/blog/[slug]` returns 500 in this headless environment because it requires a Supabase session (`getSupabaseServerClient()` gate) — pre-existing and unrelated to this change; the back-link is verified via the component test.
+
+**Known issues** - None. Out-of-scope "Blog" strings remain intentionally untouched per the card (BackLink "Back to Blog", BlogListing "Adroit Consulting Blog", tags/blog-post SEO titles, categories page copy).
+
 ### Cleanup: remove dead `kind` prop from MDXArticle (lint bed, t_6146a0f3)
 
 **What** - `MDXArticle` carried an unused `kind?: "blog" | "learn"` prop (with default `"blog"`) that its body never read, producing an `@typescript-eslint/no-unused-vars` lint warning. Since 2026-08-16 both blog and learn apply the footnote->Sources rename unconditionally, so the blog/learn branch it once drove no longer exists. Removed the prop declaration + doc line and the `kind = "blog"` default, and dropped `kind=` from all 4 call sites that passed it (`PreviewFirstLesson.tsx`, `/preview/blog/[slug]`, `/preview/learn/[series]/[slug]`, `/learn/[series]/[slug]`). `/blog/[slug]/page.tsx` already passed no `kind`.

@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { buildMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = buildMetadata({
-  title: "Adroit Consulting Blog | Insights on Salesforce, React & AI",
+  title: "Field Notes | Adroit Consulting",
   description:
-    "Insights on Salesforce, React, AI, and digital transformation to help your business scale smarter.",
+    "Insights on Salesforce, React, AI, and digital transformation from the Adroit team.",
   path: "/blog",
 });
 
