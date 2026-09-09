@@ -13,6 +13,7 @@
  * DerivedProgress, CompletionEventRow).
  */
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import type {
   CompletionEventRow,
   CompletionInput,
@@ -179,15 +180,24 @@ export async function appendCompletionEvent(input: {
     if (error) throw error;
     if (data) return; // already logged — no duplicate
 
-    await supabase.from("completion_events").insert({
-      user_id: input.userId,
-      course_id: input.courseId ?? null,
-      event_type: input.eventType,
-      lesson: input.lesson ?? null,
-      lesson_slug: input.lessonSlug ?? null,
-      metadata: input.metadata ?? null,
-      completed_at: new Date().toISOString(),
-    });
+    // M2 (t_bd7ac2a0): the INSERT goes through the service-role client.
+    // Migration 012 denies the `authenticated` role's INSERT on completion_events
+    // (CWE-807 self-forge close, mirroring migration 006 for quiz_run/quiz_attempt),
+    // so an anon-key / cookie client can no longer write. The service_role key
+    // carries BYPASSRLS and remains the only legitimate write path. The reads
+    // above stay on the RLS-bound client so a value is never written for a user
+    // whose session has not been resolved by auth.
+    await getSupabaseServiceClient()
+      .from("completion_events")
+      .insert({
+        user_id: input.userId,
+        course_id: input.courseId ?? null,
+        event_type: input.eventType,
+        lesson: input.lesson ?? null,
+        lesson_slug: input.lessonSlug ?? null,
+        metadata: input.metadata ?? null,
+        completed_at: new Date().toISOString(),
+      });
   } catch (err) {
     console.error("[completion-event]", input.eventType, err);
   }

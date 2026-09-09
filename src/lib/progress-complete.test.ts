@@ -19,6 +19,13 @@ vi.mock("@/lib/supabase/server", () => ({
   getSupabaseServerClient: async () => ({ from: mocks.from }),
 }));
 
+// completion_events INSERT now routes via the service-role client (M2,
+// t_bd7ac2a0, migration 012) — point it at the same capture fake so the
+// course/lesson event assertions still observe the writes.
+vi.mock("@/lib/supabase/service", () => ({
+  getSupabaseServiceClient: () => ({ from: mocks.from }),
+}));
+
 import {
   checkCoveredLessonSlugs,
   completeCheckLessonsOnPerfectScore,
