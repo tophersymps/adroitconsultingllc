@@ -70,11 +70,17 @@ const nextConfig: NextConfig = {
             // rendered from trusted in-repo content.
             value: [
               "default-src 'self'",
-              "img-src 'self' data: blob: https://www.google-analytics.com",
+              "img-src 'self' data: blob: https://www.google-analytics.com https://www.gstatic.com",
               "style-src 'self' 'unsafe-inline'",
               "font-src 'self' data:",
-              "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com",
-              "connect-src 'self' https://*.supabase.co https://www.google-analytics.com https://*.google-analytics.com https://analytics.google.com https://*.analytics.google.com https://googleads.g.doubleclick.net",
+              // reCAPTCHA v3 (contact form) loads from www.google.com and its
+              // runtime assets from www.gstatic.com. Without these hosts the
+              // script is CSP-blocked and the anti-bot control either breaks
+              // the form (site key set) or is inert (key unset). See
+              // src/app/contact/page.tsx:139. (t_fd9f68c2)
+              "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://www.google.com https://www.gstatic.com",
+              "connect-src 'self' https://*.supabase.co https://www.google-analytics.com https://*.google-analytics.com https://analytics.google.com https://*.analytics.google.com https://googleads.g.doubleclick.net https://www.google.com https://www.gstatic.com",
+              "frame-src 'self' https://www.google.com",
               "object-src 'none'",
               "frame-ancestors 'none'",
               "base-uri 'self'",

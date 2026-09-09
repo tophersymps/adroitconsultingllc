@@ -3,7 +3,7 @@ import type {
   ContactLeadPayload,
   ContactSubmitResult,
 } from "@/shared/contracts";
-import { checkOrigin } from "@/lib/api-security";
+import { checkOrigin, getClientIp } from "@/lib/api-security";
 
 // ---------------------------------------------------------------------------
 // Simple in-memory rate limiter (resets on redeploy / cold start). Ported from
@@ -34,6 +34,8 @@ async function verifyRecaptcha(
 ): Promise<{ valid: boolean; detail: Record<string, unknown> }> {
   const secret = process.env.RECAPTCHA_SECRET_KEY;
   if (!secret) {
+    // Callers guard on RECAPTCHA_SECRET_KEY before reaching here in
+    // production, so this branch is dev-only (test/verification path).
     console.warn("RECAPTCHA_SECRET_KEY not configured - skipping verification");
     return { valid: true, detail: { skipped: true } };
   }
@@ -89,10 +91,25 @@ export async function POST(request: NextRequest): Promise<NextResponse<ContactSu
       return NextResponse.json({ ok: true });
     }
 
-    // reCAPTCHA verification (skipped in development, enforced in production)
+    // reCAPTCHA verification. In development (no secret) it is skipped;
+    // in production a missing secret is a hard failure (503) so the
+    // anti-bot control can never silently go inert: fail closed, not open.
     const isDev = process.env.NODE_ENV === "development";
-    const recaptchaConfigured = !!process.env.RECAPTCHA_SECRET_KEY;
-    if (recaptchaConfigured && !isDev) {
+    if (!isDev && !process.env.RECAPTCHA_SECRET_KEY) {
+      console.error(
+        "RECAPTCHA_SECRET_KEY is not configured - refusing contact submission (fail closed)",
+      );
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Contact form is temporarily unavailable. Please email us directly.",
+          status: 503,
+        },
+        { status: 503 },
+      );
+    }
+
+    if (!isDev) {
       if (!body.recaptchaToken) {
         return NextResponse.json(
           { ok: false, error: "reCAPTCHA verification failed. Please try again.", status: 400 },
@@ -109,9 +126,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<ContactSu
       }
     }
 
-    // Rate limiting
-    const forwarded = request.headers.get("x-forwarded-for");
-    const ip = forwarded?.split(",")[0]?.trim() ?? "unknown";
+    // Rate limiting (keyed on the trusted proxy-provided client IP, not a
+    // client-spoofable header; see getClientIp in lib/api-security).
+    const ip = getClientIp(request);
     if (isRateLimited(ip)) {
       return NextResponse.json(
         { ok: false, error: "Too many submissions. Please try again later.", status: 429 },
