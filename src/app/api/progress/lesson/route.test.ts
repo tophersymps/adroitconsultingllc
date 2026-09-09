@@ -26,6 +26,13 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
+// completion_events INSERT now routes via the service-role client (M2,
+// t_bd7ac2a0, migration 012) — point it at the same fake so the route's
+// completion-event append assertions still observe the write.
+vi.mock("@/lib/supabase/service", () => ({
+  getSupabaseServiceClient: () => ({ from: mocks.from }),
+}));
+
 // The lesson route now gates writes through the access seam (US-006). The
 // canonical slug under test belongs to a live course, so the seam grants it.
 vi.mock("@/lib/access", () => ({
