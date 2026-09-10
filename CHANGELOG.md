@@ -51,6 +51,19 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 
 **Known issues** - Atlas series/lesson pages (`/atlas/<series>`, `/atlas/<series>/<slug>`) return 500 in this workspace because Supabase creds are absent locally (`Supabase URL and anon key are required`) — pre-existing, unrelated to this change, and confirmed identical on series whose lessons were not touched. Some historical domain notes in the article-engine skill (canonical domain + "adroit.io/blog intentionally not wired") remain as-is — they record prior decisions and are not active internal-link publishing instructions. NOT pushed (report boundary — Kelex pushes via daily-planet-push.sh main).
 
+### Fix: mobile hamburger renders as one long line - add flex-col to toggle (t_ec2ae7ae)
+
+**What** - The mobile menu toggle button in `src/components/Header.tsx` is an `inline-flex` container but was missing `flex-col`, so its three `w-5 h-[2px]` bars laid out side-by-side horizontally as a single ~60px line on Android. Added `flex-col` to the toggle button className so the three bars stack vertically into a proper hamburger glyph.
+
+- `src/components/Header.tsx` - mobile toggle button className now `bg-none border-none cursor-pointer inline-flex items-center justify-center flex-col min-w-[44px] h-11`. Touch target (`min-w-[44px] h-11`) and the three span bars' own classes are unchanged; desktop nav and all other flex containers untouched.
+- `src/components/Header.test.tsx` - added a regression test asserting the toggle carries `inline-flex` + `flex-col`, preserves `min-w-[44px] h-11`, and contains exactly three bars.
+
+**Why** - Chris reported the adroit.io mobile menu showed one long horizontal line instead of three stacked hamburger bars (confirmed in a private/incognito tab = live deploy bug, not cache). Root cause was verified live via getComputedStyle/getBoundingClientRect before the fix.
+
+**Verification** - `npx vitest run src/components/Header.test.tsx` 9/9 pass; full suite 88 files / 673 tests pass (673, +1 from the new regression test); `npm run lint` exit 0; `npm run build` exit 0. Runtime verified in a 390x844 mobile viewport on a live dev server: the toggle button renders 44x44 and its three bars share x=334 (same column) at y=23/31/39 (stacked vertically), not one continuous line.
+
+**Known issues** - None. (fix: add flex-col to mobile hamburger toggle so bars stack vertically (t_ec2ae7ae))
+
 ### URL migration: /blog → /field-notes, /learn → /atlas (route rename + 301s + code refs; t_1ab5ef9f)
 
 **What** - Moved the Adroit content-hub URL paths to match the brand names (Field Notes + The Atlas). This is the code/route half (Parts A-D of the migration plan); content MDX rewrite + gate change land separately in Task 2.
