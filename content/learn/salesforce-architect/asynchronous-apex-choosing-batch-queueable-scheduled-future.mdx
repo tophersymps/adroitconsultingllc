@@ -1,0 +1,225 @@
+---
+title: "Lesson 37: Asynchronous Apex: Batch, Queueable, Scheduled, and Future, and How to Choose"
+slug: asynchronous-apex-choosing-batch-queueable-scheduled-future
+series: "salesforce-architect"
+lesson: 37
+excerpt: "Four ways to move work out of the user's transaction, and they are not interchangeable. Future methods are fire-and-forget with primitive parameters only, queueable jobs carry real objects and hand back a job Id you can monitor, batch Apex trades immediacy for volume by running each chunk as its own transaction, and scheduled Apex is a timer that should do nothing but start one of the other three. Pick wrong and you either hit the synchronous ceiling you were escaping or you burn the org's shared async budget on work a single call could have done."
+date: "September 10, 2026"
+author: "Adroit Consulting"
+readTime: "13 min read"
+tags: [Salesforce, Architecture, Apex, Asynchronous]
+---
+
+# Lesson 37: Asynchronous Apex: Batch, Queueable, Scheduled, and Future, and How to Choose
+
+Lesson 33 put a ceiling over everything Apex does. One transaction gets 100 SOQL queries, 150 DML statements, 10 seconds of CPU time, and 6 MB of heap, and that budget is shared by every trigger, Flow, and class that fires in the same execution context. When the work genuinely does not fit, you cannot optimize your way out of it. You move the work into a different transaction.
+
+That is what asynchronous Apex is: a way to hand work to the platform, let the current transaction commit, and have the work run later in a transaction with its own fresh budget. Salesforce ships four primitives for it, plus event-driven options like Platform Events that Lesson 19 covered. The four are future methods, queueable Apex, batch Apex, and scheduled Apex.[^8] They share one queue, one daily ceiling, and one common mistake: engineers reach for the first one they learned and keep using it for problems it was never shaped for.
+
+## Define the terms
+
+- **Future method**: a static Apex method annotated `@Future` that runs in its own thread, later, when system resources are available. It takes primitive parameters, returns void, and cannot be chained or monitored.[^1]
+- **Queueable Apex**: a class implementing the `Queueable` interface with an `execute(QueueableContext)` method, submitted with `System.enqueueJob()`, which returns the Id of an `AsyncApexJob` record you can query for status.[^2]
+- **Batch Apex**: a class implementing `Database.Batchable` with `start()`, `execute()`, and `finish()`, designed to process record sets too large for one transaction by splitting them into chunks.[^3]
+- **Scheduled Apex**: a class implementing the `Schedulable` interface, registered with `System.schedule()` against a cron expression, which creates a `CronTrigger` record representing the job.[^4]
+- **QueryLocator**: the object `start()` most often returns, built from `Database.getQueryLocator()`. Using it bypasses the normal SOQL row ceiling inside a batch and can scope up to 50 million records.[^3]
+- **AsyncApexJob**: the record every one of these creates, queryable for `Status`, `NumberOfErrors`, and progress counters. It is the reason queueable and batch jobs are observable and future methods are not.[^2][^3]
+- **Flex queue**: the holding area for batch jobs that cannot run yet. Salesforce allows five batch jobs queued or active at a time per org, and additional submissions wait in the flex queue until a slot opens.[^3]
+- **Shared async ceiling**: a single 24-hour budget for all asynchronous Apex executions (batch, future, queueable, and scheduled combined): 250,000, or the number of user licenses in the org multiplied by 200, whichever is greater.[^5]
+
+## The one number that makes async a shared resource
+
+Every async primitive draws from the same daily pool. That matters architecturally because it means async capacity is an org-level resource, not a per-feature one. A data migration that enqueues 90,000 queueable jobs tonight can starve the integration that runs at 3 a.m., and neither team will see it coming because each feature looks reasonable on its own.[^5]
+
+Salesforce also caps **concurrent** work. Only five batch jobs can be queued or active at once, and submissions beyond that sit in the flex queue.[^3] Scheduled jobs are capped at 100 at a time.[^4] Those are org-wide numbers, which is why "just run it as a batch job" is not a free architectural decision.
+
+The upside of a separate transaction is real: asynchronous Apex runs with higher limits, including more SOQL queries, a larger heap, and more CPU time than synchronous code gets.[^5] You are not just escaping the user's clock. You are buying a bigger budget.
+
+## Future methods: smallest, oldest, most constrained
+
+A future method runs later, in its own thread, and returns nothing. It must be static and void, and its parameters must be primitives or collections of primitives. You cannot pass an `Account` or a custom type, so the usual shape is a list of Ids that the method re-queries.[^1]
+
+```apex
+public with sharing class LegacyNotify {
+    @Future(callout=true)
+    public static void notifyErp(List<Id> accountIds) {
+        List<Account> accts = [
+            SELECT Id, Name FROM Account WHERE Id IN :accountIds
+        ];
+        // make the callout and process the results
+    }
+}
+```
+
+Three properties define the primitive's limits as a design tool. Order is not guaranteed, so two future calls can run concurrently and collide on the same record. There is no job Id returned, so you have no handle to query or retry. And future methods cannot be chained: you cannot call a future method from a future method or from a batch class, though `System.isFuture()` exists precisely so you can detect the context and avoid recursion.[^1]
+
+The remaining honest use for future methods is narrow. A short fire-and-forget callout, a trigger that needs callout isolation, and legacy code you are not going to rewrite. Salesforce's own guidance points new work at queueable instead.[^2]
+
+## Queueable Apex: the modern default
+
+Queueable Apex is a superset of future methods. It accepts sObjects and custom types through the constructor, it returns a job Id from `System.enqueueJob()`, and it can chain.[^2]
+
+```apex
+public with sharing class ErpSyncJob implements Queueable, Database.AllowsCallouts {
+    private List<Account> scope;
+
+    public ErpSyncJob(List<Account> scope) {
+        this.scope = scope;
+    }
+
+    public void execute(QueueableContext ctx) {
+        HttpRequest req = new HttpRequest();
+        req.setEndpoint('callout:ERP/accounts');
+        req.setMethod('POST');
+        req.setBody(JSON.serialize(scope));
+
+        HttpResponse res = new Http().send(req);
+        if (res.getStatusCode() == 200) {
+            for (Account a : scope) {
+                a.Needs_Sync__c = false;
+            }
+            update scope;
+        }
+        // On a non-200 the flag stays set, so the next run picks it back up.
+    }
+}
+```
+
+When you need to know whether it worked, you query the job:
+
+```apex
+Id jobId = System.enqueueJob(new ErpSyncJob(scope));
+AsyncApexJob job = [
+    SELECT Id, Status, NumberOfErrors, JobItemsProcessed, TotalJobItems
+    FROM AsyncApexJob WHERE Id = :jobId
+];
+```
+
+Chaining is what makes queueable a workflow tool rather than a single hop. A running job may enqueue exactly one child, so a chain is sequential rather than a fan-out. Salesforce enforces no depth limit on chained jobs in production, but Developer Edition and trial orgs cap the stack at five jobs, and there is a configurable stack-depth feature when you need to test a long chain deliberately.[^2][^6]
+
+Two constraints to remember. You can add up to 50 jobs with `System.enqueueJob` in a single transaction, and each job execution counts as one against the shared daily ceiling.[^2] A pattern that enqueues one job per record will work in a test and then be the reason the org runs out of async budget in production.
+
+## Batch Apex: for volume, not for convenience
+
+Batch exists to handle more records than one transaction can hold. Its execution model is the feature: the job is split into chunks, each chunk runs as its own transaction with its own governor limits, and a chunk that fails does not roll back the chunks that succeeded.[^3]
+
+```apex
+public with sharing class AccountSyncBatch
+    implements Database.Batchable<sObject>, Database.Stateful {
+
+    private Integer recordsProcessed = 0;
+
+    public Database.QueryLocator start(Database.BatchableContext bc) {
+        return Database.getQueryLocator([
+            SELECT Id, Name, Needs_Sync__c
+            FROM Account WHERE Needs_Sync__c = true
+        ]);
+    }
+
+    public void execute(Database.BatchableContext bc, List<Account> scope) {
+        System.enqueueJob(new ErpSyncJob(scope));
+        recordsProcessed += scope.size();
+    }
+
+    public void finish(Database.BatchableContext bc) {
+        // Post-processing. Chain the next step, or email the summary
+        // using the recordsProcessed count.
+    }
+}
+```
+
+`start()` is called once and returns the record set. `execute()` runs once per chunk. `finish()` runs once after everything, and it is where post-processing and chain-to-next-job logic belongs.[^3]
+
+The scope size defaults to 200 and can be set explicitly:
+
+```apex
+Database.executeBatch(new AccountSyncBatch(), 200);
+```
+
+When `start()` returns a `QueryLocator`, the scope parameter can go up to 2,000 records, and Salesforce chunks anything larger into batches of at most 2,000. The default of 200 is usually right: smaller chunks cost more transactions and more overhead, larger chunks leave less headroom under the per-transaction limits. Salesforce's own advice is to use batch only when you have more than one batch worth of records, and to use queueable when you do not.[^3]
+
+The stateful option deserves care. Plain batch Apex is stateless because each chunk is a discrete transaction; instance variables do not survive. Adding `Database.Stateful` makes instance members persist across chunks at the cost of serializing that state at every chunk boundary. Use it for counters and summaries, not for carrying large collections between chunks.[^3]
+
+Two hard restrictions come with batch. Future methods are not allowed in a class that implements `Database.Batchable`, and you cannot call a future method from batch code. Enqueue a queueable instead.[^3]
+
+## Scheduled Apex: a timer, not a worker
+
+The scheduler answers "when," and nothing else. A class implementing `Schedulable` gets one `execute(SchedulableContext)` method, and you register it with a cron expression:
+
+```apex
+public with sharing class NightlyAccountSync implements Schedulable {
+    public void execute(SchedulableContext ctx) {
+        Database.executeBatch(new AccountSyncBatch(), 200);
+    }
+}
+
+// Seconds Minutes Hours Day_of_month Month Day_of_week [Year?]
+String sch = '0 0 2 * * ?';
+System.schedule('Nightly Account Sync', sch, new NightlyAccountSync());
+```
+
+`System.schedule()` uses the running user's timezone as the basis for the schedule, and each registration creates a `CronTrigger` record with `TimesTriggered` and `NextFireTime` you can query.[^4] You can also register jobs from Setup through the Scheduled Jobs page.
+
+Scheduled Apex runs under tight synchronous-style limits, so its `execute()` body is the wrong place for real work. The pattern is a one-line handoff: the schedulable starts a batch job or enqueues a queueable, and the asynchronous primitive does the processing.[^7] Synchronous callouts are not supported directly from scheduled Apex either. If the scheduled work needs callouts, put them in the batch or queueable class it starts, or inside a `@Future(callout=true)` method.[^4]
+
+The 100-job cap is worth designing around. A scheduled class registered per user, or a trigger that schedules a job, is how orgs quietly hit that ceiling.[^4]
+
+## Choosing, in practice
+
+| Primitive | Reach for it when | Hard limits to respect |
+|---|---|---|
+| Future | Legacy code, or one short fire-and-forget callout | 50 per transaction, primitives only, no chaining or monitoring[^1] |
+| Queueable | Most background work, callouts, multi-step sequential logic | 50 enqueued per transaction, one child per running job[^2] |
+| Batch | Volume: thousands to millions of records, chunk-level fault isolation | 5 concurrent jobs, 200 default scope, up to 50M via QueryLocator[^3][^5] |
+| Scheduled | Time-based kickoff of one of the above | 100 scheduled jobs, no synchronous callouts[^4] |
+
+The decision collapses into a short set of questions. Is the trigger time-based rather than event-based? Schedule something, and have it delegate. Does the work span more records than one transaction can hold, or does it need to survive as independent chunks? Batch. Does it need to accept real objects, make a callout, chain, or be monitored? Queueable. Is it a small primitive-parameter job in code you are already not touching? Future, and only then.
+
+The composite pattern is the one worth memorizing, because it is how the four primitives are actually meant to stack. Scheduled Apex starts a batch job, the batch splits the volume into transactions, and each chunk enqueues a queueable that owns the callout and the retry decision. The scheduler holds the clock, batch holds the volume, and queueable holds the unit of work that can fail and be tracked on its own.
+
+That raises the retry question the pattern only half answers. A queueable that fails has no automatic retry, and a batch chunk that fails is simply recorded as an error on the `AsyncApexJob`. Designing the flag that tells the next run what still needs doing, the `Needs_Sync__c` in the example above, is usually more valuable than any retry configuration. Idempotent, self-describing work is what makes async reliable, and Lesson 21 covered the dead-letter and retry design that surrounds it.
+
+## The pitfalls to avoid
+
+**Reaching for future methods by habit.** No job Id, no chaining, primitive parameters only. If the work might grow, start with queueable.[^2]
+
+**One async job per record.** Enqueueing a job inside a loop over records multiplies the shared 24-hour budget by the record count. Chunk first, then enqueue.[^5]
+
+**Doing real work in a scheduler.** The schedulable should start a batch or queueable and exit. Long callouts and heavy queries do not belong in its `execute()`.[^4]
+
+**Ignoring concurrency caps.** Five concurrent batch jobs and 100 scheduled jobs are org-wide. A feature that looks safe in isolation can push another feature's job into the flex queue at the worst time.[^3][^4]
+
+**Assuming async is ordered.** Future methods and batch chunks are explicitly not guaranteed to execute in the order they were submitted. Any design that depends on order has to enforce it through chaining or through a status field it polls.[^1][^3]
+
+**Treating async as free capacity.** The 250,000 per 24 hours is shared with everything else in the org, including whatever the integration team shipped last quarter.[^5]
+
+## Try it
+
+An org has four backgrounds to design. Name the primitive and the reason:
+
+1. A trigger fires on Case insert and must send a short notification to an external system. No further processing is needed. *(Future method with `callout=true`, or queueable if you want a job Id. The work is one short callout with primitive input, which is the future method's remaining sweet spot.)*[^1]
+
+2. A nightly process must reconcile 40,000 Accounts against an ERP, retrying failures on the next night's run and reporting a total. *(Batch Apex, with a `Database.Stateful` counter and a status flag on each record so failed ones are picked up next run. Scheduled Apex should start it.)*[^3]
+
+3. A service class must be able to accept a `List<Account>` and make an HTTP callout inside its `execute()` method. *(Queueable Apex with `Database.AllowsCallouts`. Future methods cannot take sObjects or non-primitive types at all.)*[^2]
+
+4. A time-based job must run at 2 a.m. local time for each user's timezone. *(Scheduled Apex, and note that `System.schedule()` bases the schedule on the running user's timezone, so a per-timezone requirement needs a job per timezone.)*[^4]
+
+5. A batch `execute()` method needs to move one record's processing to an isolated transaction it can monitor. *(Enqueue a queueable. You cannot call a future method from a batch class at all.)*[^3]
+
+6. An architect proposes enqueueing one queueable per record while iterating a 50,000-record query in a trigger. What is wrong with the plan, and what is the fix? *(It consumes the shared daily async budget in proportion to record count, and the trigger would hit the 50-job-per-transaction enqueue cap long before that. Fix: batch the work, or enqueue a single job that processes a collection.)*[^2][^5]
+
+7. A nightly batch job and an integration both enqueue heavily at 2 a.m. and the integration starts failing intermittently. What is the most likely shared resource, and how would you have caught it in design? *(The shared 250,000-execution-per-24-hour async ceiling and the five-concurrent-batch-job cap. Design review question: what else in the org runs async at this hour, and how much of the daily budget does it use?)*[^5]
+
+## What's next
+
+You can now move work out of the user's transaction and choose between four primitives on evidence rather than habit: future for narrow legacy callouts, queueable as the default, batch for volume, scheduled for the clock. The next lesson turns to the constraint all four of them run underneath. Lesson 38 is Governor-limit-aware design: SOQL, SOSL, and DML budgets, and the practices that keep code inside them. That lesson covers how the query and DML budgets are calculated and shared, how SELECT and WHERE choices change statement cost, how SOSL differs from SOQL in what it can and cannot search, and the design habits that make a limit exception something you catch in review rather than in production.
+
+[^1]: trailhead.salesforce.com. [Use Future Methods | Asynchronous Apex | Trailhead](https://trailhead.salesforce.com/content/learn/modules/asynchronous_apex/async_apex_future_methods)
+[^2]: trailhead.salesforce.com. [Control Processes with Queueable Apex | Trailhead](https://trailhead.salesforce.com/content/learn/modules/asynchronous_apex/async_apex_queueable)
+[^3]: trailhead.salesforce.com. [Use Batch Apex | Asynchronous Apex | Trailhead](https://trailhead.salesforce.com/content/learn/modules/asynchronous_apex/async_apex_batch)
+[^4]: trailhead.salesforce.com. [Schedule Jobs Using the Apex Scheduler | Trailhead](https://trailhead.salesforce.com/content/learn/modules/asynchronous_apex/async_apex_scheduled)
+[^5]: developer.salesforce.com. [Execution Governors and Limits | Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_gov_limits.htm)
+[^6]: developer.salesforce.com. [Queueable Apex | Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_queueing_jobs.htm)
+[^7]: developer.salesforce.com. [Apex Scheduler | Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_scheduler.htm)
+[^8]: developer.salesforce.com. [Asynchronous Apex | Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_async_overview.htm)
