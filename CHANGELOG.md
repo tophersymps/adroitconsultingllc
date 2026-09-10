@@ -9,6 +9,16 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 
 ## [Unreleased]
 
+### Fix: /field-notes LCP ~6s — eager-load the featured hero banner (t_d912a075)
+
+**What** - Added a `priority` prop to `BannerImage` (`src/components/BlogListing/BannerImage.tsx`) and set it `true` only on the featured card (`src/components/BlogListing/FeaturedPost.tsx`). Because Next.js 16.3.4's `priority` enables eager loading + a `<link rel="preload">` but does NOT emit `fetchpriority="high"` on its own, `BannerImage` also passes `fetchPriority="high"` when `priority` is true.
+
+**Why** - The featured hero banner was the LCP element on `/field-notes` but was lazy-loaded (`priority={false}` → `loading="lazy"` on every banner), failing the `lcp-lazy-loaded` audit (score 0) and holding LCP at ~6 s. Making only the above-the-fold featured banner eager + `fetchpriority="high"` lets it start immediately; below-fold `PostCard` banners and article heroes keep `priority={false}` so they stay lazy.
+
+**Verified** - prod build exit 0; `tsc --noEmit` clean; 672/672 tests pass; rendered HTML shows the featured banner img + its preload link with `fetchpriority="high"` and no `loading="lazy"`, while all below-fold card images remain `loading="lazy"`; Lighthouse 13.4.1 `lcp-discovery-insight` (the successor to `lcp-lazy-loaded`) now scores **1** with `fetchpriority=high applied`, `requestDiscoverable`, and `eagerlyLoaded` all true; CLS stays **0** (stable across 2 runs).
+
+**Known Issues** - Local (unthrottled) prod-build LCP still reads ~6 s on this machine, but the image subparts are only ~300 ms (TTFB 13 ms / load delay 5 ms / load 24 ms / render 257 ms) — the remainder is main-thread parse of the serialized posts RSC payload, a separate pre-existing concern outside this card's scope. The lazy-loading defect itself (the failing audit) is resolved.
+
 ### Fix: stale section-name copy after URL migration (hub h1s + title templates; t_66e03332)
 
 **What** - Copy-only fix aligning visible section names with the renamed routes (/blog→/field-notes, /learn→/atlas) that Task 1 (ddec282) left behind:

@@ -33,6 +33,7 @@ export default function FeaturedPost({ post }: FeaturedPostProps) {
               post={post}
               className="min-h-[160px] md:min-h-[240px]"
               watermark
+              priority
             />
           </div>
           {/* Category chip on image */}

@@ -11,6 +11,12 @@ interface BannerImageProps {
   className?: string;
   /** Show the category letter watermark when falling back to gradient. */
   watermark?: boolean;
+  /**
+   * Eager-load this image (Next.js `priority` → `fetchpriority="high"`).
+   * Pass true only for the above-the-fold LCP banner (featured card on the
+   * /field-notes hub). Keep false for below-fold cards to stay lazy.
+   */
+  priority?: boolean;
 }
 
 const gradientMap: Record<string, string> = {
@@ -31,6 +37,7 @@ export default function BannerImage({
   post,
   className = "",
   watermark = true,
+  priority = false,
 }: BannerImageProps) {
   const grad = gradientMap[post.categoryColor] || gradientMap.sf;
 
@@ -45,7 +52,8 @@ export default function BannerImage({
           fill
           sizes="(max-width: 768px) 100vw, 560px"
           className="object-cover"
-          priority={false}
+          priority={priority}
+          fetchPriority={priority ? "high" : undefined}
         />
       ) : (
         <>
