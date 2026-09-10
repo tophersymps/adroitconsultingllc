@@ -6,7 +6,7 @@ import { getAllTags } from "@/lib/tags";
 import { buildMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = buildMetadata({
-  title: "Tags — Adroit Consulting Blog",
+  title: "Tags — Field Notes — Adroit Consulting",
   description: "Browse all blog post tags covering Salesforce, React, AI, and digital transformation.",
   path: "/tags",
 });

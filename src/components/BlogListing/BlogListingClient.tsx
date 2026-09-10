@@ -184,7 +184,7 @@ function BlogListingContent({
             Adroit Consulting &mdash; Field Notes
           </div>
           <h1 className="text-[clamp(2.25rem,5vw,3rem)] font-extrabold text-navy tracking-[-0.03em] leading-[1.05] mb-3 bg-gradient-to-r from-navy to-navy-light dark:from-slate-100 dark:to-slate-300 bg-clip-text text-transparent">
-            Adroit Consulting Blog
+            Field Notes
           </h1>
           <p className="text-[1.0625rem] text-gray-500 max-w-[560px] leading-relaxed">
             Insights on Salesforce, React, AI, and digital transformation to

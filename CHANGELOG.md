@@ -9,6 +9,19 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 
 ## [Unreleased]
 
+### Fix: stale section-name copy after URL migration (hub h1s + title templates; t_66e03332)
+
+**What** - Copy-only fix aligning visible section names with the renamed routes (/blog→/field-notes, /learn→/atlas) that Task 1 (ddec282) left behind:
+
+- `/field-notes` hub h1: "Adroit Consulting Blog" → "Field Notes" (`BlogListingClient.tsx`), so it now matches the eyebrow ("Adroit Consulting — Field Notes") and the `<title>` ("Field Notes | Adroit Consulting") without verbatim duplication.
+- `/atlas` hub h1: "Learn" → "The Atlas" (`atlas/page.tsx`), matching the nav label and `<title>`; eyebrow "Adroit Academy" unchanged.
+- `<title>` templates: trailing "Adroit Consulting Blog" → "Field Notes — Adroit Consulting" in the article (`field-notes/[slug]/page.tsx`), tag listing (`tags/[tag]/page.tsx`), tags index (`tags/page.tsx`), and both draft-preview titles (`preview/field-notes/[slug]/page.tsx` locked + draft). Draft-preview titles are noindex but updated for consistency.
+
+**Why** - The h1s/titles contradicted the site's own navigation and the route names — an SEO/consistency defect (h1 must describe the page the URL and title describe), flagged LIVE by the A11y/SEO audit (t_7f14b97a, LOW).
+
+**Known Issues** - None. Pure copy change; no layout/design impact. `src/lib/seo.ts` header comment still reads "Adroit Consulting Blog" (code comment only, not user-facing copy) — left untouched to keep the diff minimal.
+
+
 ### URL migration Task 2: content path rewrite + publishing gate (Parts E/F; t_5974fce6)
 
 **What** - The content + gate half of the URL migration, landed after Task 1 (ddec282) renamed the routes. This is scripted + reviewable, not hand-edited:

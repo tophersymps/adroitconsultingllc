@@ -194,7 +194,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   } = await supabase.auth.getUser();
   if (!user || !isPreviewEmailAllowed(user.email)) {
     return {
-      title: "Preview locked | Adroit Consulting Blog",
+      title: "Preview locked | Field Notes — Adroit Consulting",
       robots: { index: false, follow: false },
     };
   }
@@ -205,7 +205,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const title = (fm?.title as string) || slug;
   const excerpt = (fm?.excerpt as string) || "";
   return {
-    title: `Draft preview: ${title} | Adroit Consulting Blog`,
+    title: `Draft preview: ${title} | Field Notes — Adroit Consulting`,
     description: excerpt,
     robots: { index: false, follow: false },
   };

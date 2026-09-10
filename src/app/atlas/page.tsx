@@ -91,7 +91,7 @@ export default async function LearnLandingPage() {
               Adroit Academy
             </div>
             <h1 className="text-[clamp(2.5rem,5vw,3.25rem)] font-extrabold tracking-[-0.03em] leading-[1.05] text-[var(--ink-primary)] mb-4 bg-gradient-to-r from-[var(--ink-primary)] to-[var(--surface-inverse-hover)] dark:to-[#94A3B8] bg-clip-text text-transparent">
-              Learn
+              The Atlas
             </h1>
             <p className="text-[17px] text-[var(--ink-muted)] max-w-[560px] leading-relaxed">
               Certifications, multi-level Tracks, and standalone Learning Paths

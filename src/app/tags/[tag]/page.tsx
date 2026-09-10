@@ -18,7 +18,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!tagInfo) return {};
 
   return buildMetadata({
-    title: `${tagInfo.tag} — Adroit Consulting Blog`,
+    title: `${tagInfo.tag} — Field Notes — Adroit Consulting`,
     description: `Posts tagged with "${tagInfo.tag}" covering Salesforce, React, AI, and digital transformation insights.`,
     path: `/tags/${tag}`,
   });
