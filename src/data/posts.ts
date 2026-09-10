@@ -2,6 +2,31 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "agent-sandbox-scope-egress-state-2026",
+    "title": "The Agent Sandbox Is the Easy Part",
+    "excerpt": "MicroVM-per-execution is settled. The three places agent sandboxing actually fails are scope, egress, and state, and most teams have audited none of them.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "September 10, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "13 min read",
+    "featured": false,
+    "tags": [
+      "AI Agents",
+      "Security",
+      "Sandboxing",
+      "Firecracker",
+      "gVisor",
+      "AI Infrastructure",
+      "Code Execution",
+      "Multi-Agent Pipelines"
+    ],
+    "bannerImage": "/banners/agent-sandbox-scope-egress-state-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "fullstack-type-safety-2026",
     "title": "The Type System Stops at the Wire: Type Safety in 2026",
     "excerpt": "TypeScript goes silent at the network boundary. Three architectures close that gap, and 2026 is when the choice gets honest.",
