@@ -9,6 +9,25 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 
 ## [Unreleased]
 
+### URL migration Task 2: content path rewrite + publishing gate (Parts E/F; t_5974fce6)
+
+**What** - The content + gate half of the URL migration, landed after Task 1 (ddec282) renamed the routes. This is scripted + reviewable, not hand-edited:
+
+- **Content bulk-rewrite (Part E).** New one-shot script `scripts/rewrite-content-paths.js` ran against `content/` (dry-run → reviewed diff → apply) and rewrote every internal link across 101 MDX files (79 blog + 22 learn) + repointed stale absolute citations:
+  - `](/blog/<slug>)` → `](/field-notes/<slug>)` (162 links)
+  - `](/learn/<series>/<slug>)` → `](/atlas/<series>/<slug>)` (6 links)
+  - `https://adroit-blog-two.vercel.app/(blog|learn)/...` endnote citations → `https://adroit.io/(field-notes|atlas)/...` (70 URLs), including the visible `[adroit-blog-two.vercel.app]` anchor labels → `[adroit.io]`.
+  - **External** `/blog/`/`/learn/` URLs (salesforce.com, trailhead, nextjs.org, etc.) were deliberately untouched — the targeted `](/blog/`, `](/learn/`, and vercel-host patterns cannot match them.
+  - Verified path-only two ways: (1) dry-run diff review confirmed 212 changed lines are pure path swaps; (2) a definitive check applied the rewrite to the HEAD version of each changed file and compared byte-for-byte to the working tree — 0 mismatches, 0 em-dashes introduced.
+- **`npm run prebuild`** regenerated `src/data/posts.ts` (81) + `src/data/learn.ts` (172 lessons, 7 series); slug lists are byte-identical (URLs come from route + slug, so posts keep identity). posts.ts/learn.ts show no git diff.
+- **Publishing gate (Part F).** Updated `verify-article.py` `INTERNAL_LINK` gate to accept `/field-notes/` (primary) and, during transition, legacy `/blog/` — still enforcing "at least one contextual internal link." Applied to **all 4 copies** (per the recurring 4-copies lesson): `~/.hermes/scripts/`, `Fortress-Infra/scripts/`, and both skill-bundled copies (which were stale pre-gate versions; synced to current + added the `verify_spacing.py` dependency). Also updated the skill/cron path references that instructed writers to use `/blog/` internal links → `/field-notes/` (adroit-blog-article-engine SKILL.md + references, adroit-writing-standards [none found], ad-hoc-article-dispatch, and `jimmy-ad-hoc-article.py` public-URL handoff). Filesystem-only scripts (`jimmy-learning-scheduler.py`, `perry-audit-context.py`, `jimmy-blog-audit-fix-context.py`) unchanged (on-disk paths don't move).
+
+**Why** - The routes moved in Task 1; the published MDX still linked to `/blog/`/`/learn/` and the gate still hard-failed on `/blog/` only, which would have broken Jimmy/Perry publishing. Rewriting content + relaxing the gate together keeps internal links working and publishing uninterrupted.
+
+**Verification** - `verify-article.py` on a `/field-notes/` sample: `INTERNAL_LINK: OK` + `RESULT: PASS`; legacy `/blog/` link also accepted during transition; a no-link sample still `FAIL`s. Sweep across all 81 blog articles: `INTERNAL_LINK` PASS 81 / FAIL 0 (learn lessons are gated by `verify-lessons.py`, not this gate — pre-existing). `npx tsc --noEmit` 0 errors; `npx vitest run` 88 files / 672 tests pass; `npm run lint` exit 0; `npm run build` exit 0. Runtime on dev server: `/field-notes`, `/field-notes/<slug>` (rewritten article), `/atlas` all HTTP 200; `/blog/*` + `/learn/*` 308-redirect to the new paths.
+
+**Known issues** - Atlas series/lesson pages (`/atlas/<series>`, `/atlas/<series>/<slug>`) return 500 in this workspace because Supabase creds are absent locally (`Supabase URL and anon key are required`) — pre-existing, unrelated to this change, and confirmed identical on series whose lessons were not touched. Some historical domain notes in the article-engine skill (canonical domain + "adroit.io/blog intentionally not wired") remain as-is — they record prior decisions and are not active internal-link publishing instructions. NOT pushed (report boundary — Kelex pushes via daily-planet-push.sh main).
+
 ### URL migration: /blog → /field-notes, /learn → /atlas (route rename + 301s + code refs; t_1ab5ef9f)
 
 **What** - Moved the Adroit content-hub URL paths to match the brand names (Field Notes + The Atlas). This is the code/route half (Parts A-D of the migration plan); content MDX rewrite + gate change land separately in Task 2.
