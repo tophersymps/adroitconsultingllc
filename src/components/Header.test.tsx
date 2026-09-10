@@ -62,6 +62,21 @@ describe("Header mobile nav toggle (t_c4c0a710)", () => {
     expect(screen.queryByRole("navigation", { name: "Mobile" })).toBeNull();
   });
 
+  it("stacks the three bars vertically (flex-col) so the hamburger glyph renders as stacked lines, not one long row (t_ec2ae7ae)", () => {
+    renderHeader();
+    const hamburger = screen.getByRole("button", { name: "Toggle menu" });
+    // Regression lock for the live deploy bug: the toggle was inline-flex
+    // without flex-col, so its three 20x2px bars laid out side-by-side as a
+    // single ~60px horizontal line. flex-col restores vertical stacking.
+    expect(hamburger.className).toContain("inline-flex");
+    expect(hamburger.className).toContain("flex-col");
+    // Touch target preserved (WCAG 2.5.8): min-w-[44px] h-11 unchanged.
+    expect(hamburger.className).toContain("min-w-[44px]");
+    expect(hamburger.className).toContain("h-11");
+    // Exactly three bars inside the toggle.
+    expect(hamburger.querySelectorAll("span")).toHaveLength(3);
+  });
+
   it("opens the drawer and flips aria-expanded on tap", async () => {
     const user = userEvent.setup();
     renderHeader();

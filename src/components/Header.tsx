@@ -159,7 +159,7 @@ export default function Header() {
         <div className="flex items-center gap-3 md:hidden">
           <button
             ref={mobileToggleRef}
-            className="bg-none border-none cursor-pointer inline-flex items-center justify-center min-w-[44px] h-11"
+            className="bg-none border-none cursor-pointer inline-flex items-center justify-center flex-col min-w-[44px] h-11"
             onClick={() => setMobileOpen(!mobileOpen)}
             onKeyDown={(e: KeyboardEvent<HTMLButtonElement>) => {
               if (e.key === "Escape" && mobileOpen) {
