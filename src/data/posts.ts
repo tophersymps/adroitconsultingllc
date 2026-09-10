@@ -27,6 +27,28 @@ export const posts: BlogPost[] = [
     "status": "published"
   },
   {
+    "slug": "llm-inference-autoscaling-2026",
+    "title": "LLM Inference Autoscaling: The Queue Is the Signal",
+    "excerpt": "HPA scales on CPU, but inference is GPU-bound: it sees a healthy pod while the queue grows. Scale on queue depth, and treat cold start as the real cost.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "September 10, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "10 min read",
+    "featured": false,
+    "tags": [
+      "DevOps",
+      "AI Infrastructure",
+      "Kubernetes",
+      "Autoscaling",
+      "Model Serving"
+    ],
+    "bannerImage": "/banners/llm-inference-autoscaling-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "fullstack-type-safety-2026",
     "title": "The Type System Stops at the Wire: Type Safety in 2026",
     "excerpt": "TypeScript goes silent at the network boundary. Three architectures close that gap, and 2026 is when the choice gets honest.",
