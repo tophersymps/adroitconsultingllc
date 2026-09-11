@@ -2,6 +2,30 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "backlog-refinement-story-slicing-2026",
+    "title": "The Story Is Too Big: How Refinement Decides Delivery",
+    "excerpt": "A story that never fits a sprint is a slicing failure, not a team failure. Refinement is where work gets sized, and AI made skipping it more expensive.",
+    "category": "Project Management",
+    "categoryColor": "pm",
+    "categoryGradient": "from-teal to-teal-dark",
+    "date": "September 11, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "Project Management",
+      "Agile",
+      "Scrum",
+      "Backlog Refinement",
+      "Story Splitting",
+      "Delivery",
+      "AI"
+    ],
+    "bannerImage": "/banners/backlog-refinement-story-slicing-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "ux-writing-content-design-2026",
     "title": "UX Writing Is Infrastructure: The Words Users Actually Read",
     "excerpt": "The words users read at every decision point are a designed, plain-language layer. Fix them first and completion rises, support tickets drop, and WCAG follows.",
