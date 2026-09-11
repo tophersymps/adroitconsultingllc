@@ -2,6 +2,30 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "ux-writing-content-design-2026",
+    "title": "UX Writing Is Infrastructure: The Words Users Actually Read",
+    "excerpt": "The words users read at every decision point are a designed, plain-language layer. Fix them first and completion rises, support tickets drop, and WCAG follows.",
+    "category": "UI/UX",
+    "categoryColor": "ux",
+    "categoryGradient": "from-violet to-violet-dark",
+    "date": "September 11, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "UX Writing",
+      "Content Design",
+      "Microcopy",
+      "Plain Language",
+      "Accessibility",
+      "Interface Patterns",
+      "UI/UX"
+    ],
+    "bannerImage": "/banners/ux-writing-content-design-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "agent-sandbox-scope-egress-state-2026",
     "title": "The Agent Sandbox Is the Easy Part",
     "excerpt": "MicroVM-per-execution is settled. The three places agent sandboxing actually fails are scope, egress, and state, and most teams have audited none of them.",
