@@ -1191,9 +1191,25 @@ export const learnSeries: LearningSeries[] = [
           "LLMs"
         ],
         "status": "published"
+      },
+      {
+        "slug": "scaling-a-practice-from-solo-to-team",
+        "title": "Lesson 17: Case Study: Scaling a Practice from Solo to Team",
+        "series": "hermes-consultant-advanced",
+        "lesson": 17,
+        "excerpt": "A full worked case study of a practice that stopped being a solo operation with employees and became a team that runs without the founder in the loop. Defines the real unit of scaling, the unit of distance between the principal and every work product, names the three separations that unlock capacity, walks one firm through the entire transition with its numbers, and shows how the delivery system the course has been building becomes the team's operating layer.",
+        "date": "September 11, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
       }
     ],
-    "totalLessons": 16,
+    "totalLessons": 17,
     "curriculumLessons": 20
   },
   {
@@ -3052,6 +3068,22 @@ export const learnLessons: LearnLesson[] = [
     "date": "September 11, 2026",
     "author": "Adroit Consulting",
     "readTime": "16 min read",
+    "tags": [
+      "AI Agents",
+      "Consulting",
+      "LLMs"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "scaling-a-practice-from-solo-to-team",
+    "title": "Lesson 17: Case Study: Scaling a Practice from Solo to Team",
+    "series": "hermes-consultant-advanced",
+    "lesson": 17,
+    "excerpt": "A full worked case study of a practice that stopped being a solo operation with employees and became a team that runs without the founder in the loop. Defines the real unit of scaling, the unit of distance between the principal and every work product, names the three separations that unlock capacity, walks one firm through the entire transition with its numbers, and shows how the delivery system the course has been building becomes the team's operating layer.",
+    "date": "September 11, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "17 min read",
     "tags": [
       "AI Agents",
       "Consulting",
