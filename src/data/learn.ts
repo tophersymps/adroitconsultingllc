@@ -8,6 +8,505 @@ import { LearnLesson, LearningSeries } from "./types";
 /** All series, sorted by newest lesson date DESC (ties → slug asc). Empty dirs included with lessons: []. */
 export const learnSeries: LearningSeries[] = [
   {
+    "slug": "omni-studio-cert",
+    "name": "OmniStudio Developer Certification",
+    "description": "A deep dive for the Salesforce Certified OmniStudio Developer exam. One official exam-guide requirement per day, with config walkthroughs, exam traps, and practice questions.",
+    "gradient": "from-red to-rose-600",
+    "lessons": [
+      {
+        "slug": "day-01-f1-omnistudio-solution-and-industry-use-cases",
+        "title": "OmniStudio F-1: OmniStudio Solution & Industry Use Cases",
+        "series": "omni-studio-cert",
+        "lesson": 1,
+        "excerpt": "Describe the OmniStudio solution as it applies to common customer use case scenarios in different industries (telco, energy, healthcare, public sector, etc.). Day 1 of the OmniStudio Developer exam prep.",
+        "date": "August 03, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "6 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-02-f2-project-needs-requirements-assumptions-risks-const",
+        "title": "OmniStudio F-2: Project Needs: Requirements, Assumptions, Risks, Constraints",
+        "series": "omni-studio-cert",
+        "lesson": 2,
+        "excerpt": "Determine a project's needs by evaluating a customer's requirements, assumptions, risks, and constraints. Day 2 of the OmniStudio Developer exam prep.",
+        "date": "August 04, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "6 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-03-f3-managed-package-vs-standard-runtime-upgrades",
+        "title": "OmniStudio F-3: Managed Package vs Standard Runtime; Upgrades",
+        "series": "omni-studio-cert",
+        "lesson": 3,
+        "excerpt": "Explain Managed Package Runtime vs. Standard Runtime, Automatic Upgrades, and Manual Intervention Upgrade. Day 3 of the OmniStudio Developer exam prep.",
+        "date": "August 05, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "6 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-04-f4-licensing-permission-set-licenses-permission-sets",
+        "title": "OmniStudio F-4: Licensing, Permission Set Licenses & Permission Sets",
+        "series": "omni-studio-cert",
+        "lesson": 4,
+        "excerpt": "Explain OmniStudio license requirements, Permission Set licenses and Permission Sets. Day 4 of the OmniStudio Developer exam prep.",
+        "date": "August 06, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "6 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-05-f5-implementation-toolchain-sfcli-vbt-migration",
+        "title": "OmniStudio F-5: Implementation Toolchain: SFCLI, VBT, Migration",
+        "series": "omni-studio-cert",
+        "lesson": 5,
+        "excerpt": "Describe the tools required to complete the end-to-end implementation process (SFCLI, VBT, Migration, etc.). Day 5 of the OmniStudio Developer exam prep.",
+        "date": "August 07, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "6 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-06-f-6-testing-versioning-cloning",
+        "title": "OmniStudio F-6: Testing, Versioning & Cloning Components",
+        "series": "omni-studio-cert",
+        "lesson": 6,
+        "excerpt": "Explain testing, versioning, and cloning through OmniStudio components. This covers save vs. publish, cloning workflows, and version snapshots for deployment.",
+        "date": "August 8, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-07-fc-1-flexcard-data-sources-testing-json",
+        "title": "OmniStudio FC-1: FlexCard Data Sources & Testing JSON",
+        "series": "omni-studio-cert",
+        "lesson": 7,
+        "excerpt": "Configure data sources such as SOQL, Data Mapper, Integration Procedure, Custom, etc. and test resulting JSON structure.",
+        "date": "August 9, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "8 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-08-fc-2-single-multi-level-cards-layouts-repeaters",
+        "title": "OmniStudio FC-2: Single/Multi-Level Cards, Layouts & Repeaters",
+        "series": "omni-studio-cert",
+        "lesson": 8,
+        "excerpt": "Construct single and multi-level FlexCards, organizing data using layouts, and repeaters.",
+        "date": "August 10, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "6 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-09-fc-3-binding-components-configuring-properties",
+        "title": "OmniStudio FC-3: Binding Components & Configuring Properties",
+        "series": "omni-studio-cert",
+        "lesson": 9,
+        "excerpt": "Bind essential components to construct FlexCards and configure their properties.",
+        "date": "August 11, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "6 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-10-fc-4-complex-card-actions-launch-fire-update",
+        "title": "OmniStudio FC-4: Complex Card Actions (Launch, Fire, Update)",
+        "series": "omni-studio-cert",
+        "lesson": 10,
+        "excerpt": "Define and implement complex card actions, including launching OmniScripts, firing events, and updating other components.",
+        "date": "August 12, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "6 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-11-fc-5-advanced-flexcard-properties",
+        "title": "OmniStudio FC-5: Advanced FlexCard Properties",
+        "series": "omni-studio-cert",
+        "lesson": 11,
+        "excerpt": "Configure advanced FlexCard properties: Event Listeners, Session Variables, Public Attributes, multi-language, child FlexCards, and custom LWC integration.",
+        "date": "August 13, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "6 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-12-fc-6-flexcard-styling-themes",
+        "title": "OmniStudio FC-6: FlexCard Styling & Themes",
+        "series": "omni-studio-cert",
+        "lesson": 12,
+        "excerpt": "Control FlexCard appearance two ways: element-level inline styling for one-off tweaks and shared themes for consistent branding.",
+        "date": "August 14, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "5 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-13-fc-7-conditional-rendering-with-states",
+        "title": "OmniStudio FC-7: Conditional Rendering with States",
+        "series": "omni-studio-cert",
+        "lesson": 13,
+        "excerpt": "Use FlexCard states and element-level conditions to show, hide, or restyle content when expressions against card data evaluate true.",
+        "date": "August 15, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "5 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-14-fc-8-embedding-flexcards-across-channels",
+        "title": "OmniStudio FC-8: Embedding FlexCards Across Channels",
+        "series": "omni-studio-cert",
+        "lesson": 14,
+        "excerpt": "Embed one FlexCard definition across Lightning pages, Experience Cloud sites, OmniScripts, and mobile, and design it for reuse with public attributes.",
+        "date": "August 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "5 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-15-fc-9-flexcard-best-practices",
+        "title": "OmniStudio FC-9: FlexCard Best Practices",
+        "series": "omni-studio-cert",
+        "lesson": 15,
+        "excerpt": "Validate your JSON, keep data sources lean, test every state and channel, and respect FLS. That combination is what separates a card that survives production from one that goes blank.",
+        "date": "August 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "5 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-16-os-1-omniscript-elements-dynamic-interactions",
+        "title": "OmniStudio OS-1: OmniScript Elements & Dynamic Interactions",
+        "series": "omni-studio-cert",
+        "lesson": 16,
+        "excerpt": "OmniScripts are guided journeys built from named elements that all land in one data JSON. If you understand that JSON contract, formulas, actions, and debugging all follow. If you don't, nothing else works.",
+        "date": "August 18, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "6 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-17-os-2-child-omniscripts-flexcards-custom-lwcs",
+        "title": "OmniStudio OS-2: Child OmniScripts, FlexCards & Custom LWCs",
+        "series": "omni-studio-cert",
+        "lesson": 17,
+        "excerpt": "Child OmniScripts handle reuse, FlexCards handle display, and custom LWCs handle custom UI. Pick the right embed for the job, wire its data back into the script JSON, and complex flows compose cleanly.",
+        "date": "August 19, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "5 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-18-os-3-omniscript-styling-themes",
+        "title": "OmniStudio OS-3: OmniScript Styling & Themes",
+        "series": "omni-studio-cert",
+        "lesson": 18,
+        "excerpt": "Themes define the design system across OmniScripts; element-level styling handles one-off exceptions. Use the theme as the source of truth, override sparingly, and verify responsive widths on desktop and mobile.",
+        "date": "August 20, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "5 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-19-os-4-advanced-omniscript-properties",
+        "title": "OmniStudio OS-4: Advanced OmniScript Properties",
+        "series": "omni-studio-cert",
+        "lesson": 19,
+        "excerpt": "Configure the advanced properties that carry an OmniScript beyond a bare flow: multi-language translations, Save Options for draft-and-resume, Knowledge Articles for in-flow help, and the Messaging Framework for SMS and email. Match the property to the scenario.",
+        "date": "August 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "5 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-20-os-5-embedding-omniscripts-across-channels",
+        "title": "OmniStudio OS-5: Embedding OmniScripts Across Channels",
+        "series": "omni-studio-cert",
+        "lesson": 20,
+        "excerpt": "One OmniScript definition embeds across Lightning pages, Experience Cloud, mobile, and web. Pass record context so it opens pre-populated, drop it in via the auto-generated LWC wrapper, and verify context per channel.",
+        "date": "August 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "5 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-21-os-6-omniscript-best-practices",
+        "title": "OmniStudio OS-6: OmniScript Best Practices",
+        "series": "omni-studio-cert",
+        "lesson": 21,
+        "excerpt": "Build OmniScripts that survive contact with users and production. Compose from child scripts instead of one giant flow, name elements as if they were JSON keys (because they are), test every branch in debug mode before publish, and push heavy orchestration into Integration Procedures.",
+        "date": "August 30, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-22-ip-1-ip-design-server-side-orchestration",
+        "title": "OmniStudio IP-1: IP Design, Server-Side Orchestration",
+        "series": "omni-studio-cert",
+        "lesson": 22,
+        "excerpt": "Learn what an Integration Procedure actually is: a declarative, server-side process that runs many actions in one server call. Design the input and output JSON contracts before you add a single action, order actions so output feeds input, and know why this one-call design is what makes IPs the right data source for FlexCards and OmniScripts.",
+        "date": "August 31, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-23-ip-2-ip-action-types-groups-data-mapper-http-remote-sub",
+        "title": "OmniStudio IP-2: IP Action Types: Groups, Data Mapper, HTTP, Remote, Sub-IP",
+        "series": "omni-studio-cert",
+        "lesson": 23,
+        "excerpt": "Learn the building blocks you place inside an Integration Procedure: Groups for structure and conditional execution, Data Mapper actions for the data layer, HTTP actions for REST callouts, Remote actions for Apex logic, and Sub-IPs for composition. Map each action to its job, wire outputs to inputs with JSON paths, and avoid the auth, reuse, and mapping traps the exam tests.",
+        "date": "September 1, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-24-ip-3-conditional-logic-loops-branching-in-ips",
+        "title": "OmniStudio IP-3: Conditional Logic, Loops, and Branching in Integration Procedures",
+        "series": "omni-studio-cert",
+        "lesson": 24,
+        "excerpt": "Control the execution path of an Integration Procedure. Use Execution Conditional Formulas to gate individual actions, Loop Blocks to iterate over arrays so per-item work repeats, and Conditional Blocks to route between distinct input states. Read the IP's data JSON, shape it so conditions stay simple, and test every branch with representative input. This is requirement IP-3, one of two pattern-heavy requirements in the Integration Procedures domain.",
+        "date": "September 2, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-25-ip-4-chainable-integration-procedures",
+        "title": "OmniStudio IP-4: Chainable Integration Procedures",
+        "series": "omni-studio-cert",
+        "lesson": 25,
+        "excerpt": "Split long-running Integration Procedures into multiple transactions with chaining. Learn why one synchronous transaction blows governor limits, how the Chainable, Queueable Chainable, and Chain On Step settings decide when a step continues in a fresh transaction, and why every link in a chain needs its own error handling because rollback does not carry across transactions. This is requirement IP-4 in the Integration Procedures domain.",
+        "date": "September 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-26-ip-5-caching-in-integration-procedures",
+        "title": "OmniStudio IP-5: Caching in Integration Procedures",
+        "series": "omni-studio-cert",
+        "lesson": 26,
+        "excerpt": "Determine and configure caching mechanisms within Integration Procedures to maximize performance. Learn what OmniStudio actually caches (metadata versus data), how Org Cache and Session Cache split shared versus per-user scope, how Time To Live controls freshness, and why cache keys decide whether a repeated request gets the right stored answer. This is requirement IP-5 in the Integration Procedures domain.",
+        "date": "September 4, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-27-ip-6-exception-handling-try-catch-rollback",
+        "title": "OmniStudio IP-6: Exception Handling: Try/Catch & Rollback",
+        "series": "omni-studio-cert",
+        "lesson": 27,
+        "excerpt": "Implement robust exception handling in Integration Procedures with Try/Catch blocks and proper rollback. Learn how a Try/Catch Block wraps risky work, what the Catch branch must do, why Load and write actions belong after risky calls, and how the Response Action returns a controlled error shape to callers. This is requirement IP-6 in the Integration Procedures domain.",
+        "date": "September 5, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-28-ip-7-response-action-the-ip-output-contract",
+        "title": "OmniStudio IP-7: Response Action: The IP Output Contract",
+        "series": "omni-studio-cert",
+        "lesson": 28,
+        "excerpt": "Configure the Response Action to return specific data and control every byte an Integration Procedure sends back. Learn why the Response Action is the contract every caller depends on, how to map success data, computed fields, and a consistent error branch, why only what you map gets returned, and how to test the response shape before any FlexCard or OmniScript is wired to it. This is requirement IP-7 in the Integration Procedures domain.",
+        "date": "September 6, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-29-ip-8-integration-procedure-best-practices",
+        "title": "OmniStudio IP-8: Integration Procedure Best Practices",
+        "series": "omni-studio-cert",
+        "lesson": 29,
+        "excerpt": "Describe the best practices that turn a working Integration Procedure into a reliable, maintainable one. Learn why focused, well-named IPs beat monolithic ones, how stable contracts with error branches make IPs dependable building blocks, where reusable data logic belongs, when chaining is the right call, and why testing each action before you promote it prevents the failures that slip into production. This is the final requirement in the Integration Procedures domain.",
+        "date": "September 7, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-30-dm-1-data-mapper-fundamentals-source-target-types",
+        "title": "OmniStudio DM-1: Data Mapper Fundamentals & Source/Target Types",
+        "series": "omni-studio-cert",
+        "lesson": 30,
+        "excerpt": "Define and configure the four Data Mapper types that extract, transform, load, and map data between Salesforce and outside systems. Learn what a Data Mapper is, why the four interfaces exist, which sources and targets a mapper can bridge, why field-level security makes mappers a safer data path than raw SOQL, and how to configure and test a mapper step by step. This lesson opens the Data Mappers domain and names the artifact that the whole exam keeps coming back to.",
+        "date": "September 8, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "OmniStudio",
+          "DataMappers"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-31-dm-2-extract-interface-multi-object-filters-parameters",
+        "title": "OmniStudio DM-2: Extract Interface: Multi-Object, Filters & Parameters",
+        "series": "omni-studio-cert",
+        "lesson": 31,
+        "excerpt": "Configure and retrieve data from multiple objects with various filter options using the Data Mapper Extract Interface. Learn how a single Extract pulls related records across objects in one definition, how WHERE clauses and input parameters make filters reusable, how the output mapping shapes the exact JSON callers receive, why filtering early and selecting only needed fields keeps queries fast, and how Extract respects field-level security. This lesson turns the full-featured reader you met in DM-1 into a real, parameterized query tool.",
+        "date": "September 9, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "OmniStudio",
+          "DataMappers"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-32-dm-3-turbo-extract-interface",
+        "title": "OmniStudio DM-3: Turbo Extract Interface",
+        "series": "omni-studio-cert",
+        "lesson": 32,
+        "excerpt": "Configure and retrieve data from a single object and its related fields using the Turbo Extract Interface. Learn why Turbo Extract is the performance-optimized reader for the common case, how related fields come back through an object's lookups and child relationships in one optimized pass, where the single-object ceiling sits, when to choose Turbo Extract over the full Extract, and how to build one for pre-filling an OmniScript, sourcing a FlexCard, or doing a quick lookup by Id.",
+        "date": "September 10, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "OmniStudio",
+          "DataMappers"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-33-dm-4-load-interface-multi-object-writes",
+        "title": "OmniStudio DM-4: Load Interface: Multi-Object Writes",
+        "series": "omni-studio-cert",
+        "lesson": 33,
+        "excerpt": "Configure and import data to multiple objects using the Load Interface. Learn how Load maps input JSON to Salesforce records for insert, update, and delete, how lookups by Id or external ID link child records to parents in a single multi-object write, how external-ID upserts make Load idempotent so repeated integration runs do not create duplicates, and how rollback-on-error keeps a failed write from leaving partial data.",
+        "date": "September 11, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "OmniStudio",
+          "DataMappers"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-34-dm-5-transform-interface-document-generation",
+        "title": "OmniStudio DM-5: Transform Interface & Document Generation",
+        "series": "omni-studio-cert",
+        "lesson": 34,
+        "excerpt": "Configure the Transform Data Mapper to prepare data for downstream use and document generation. Learn how Transform reshapes input into a required output structure without reading from or writing to the org, how the output JSON template drives the shape, how field mappings and formulas satisfy an API contract, and how the same output feeds PDF and DocuSign templates as the data model for the document.",
+        "date": "September 12, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "OmniStudio",
+          "DataMappers"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 34,
+    "curriculumLessons": 46
+  },
+  {
     "slug": "salesforce-architect",
     "name": "Salesforce System Architect Primer",
     "description": "A practical deep dive into Flow design, Apex patterns, and platform architecture for teams scaling on Salesforce.",
@@ -2572,495 +3071,26 @@ export const learnSeries: LearningSeries[] = [
     ],
     "totalLessons": 16,
     "curriculumLessons": 25
-  },
-  {
-    "slug": "omni-studio-cert",
-    "name": "OmniStudio Developer Certification",
-    "description": "A deep dive for the Salesforce Certified OmniStudio Developer exam. One official exam-guide requirement per day, with config walkthroughs, exam traps, and practice questions.",
-    "gradient": "from-red to-rose-600",
-    "lessons": [
-      {
-        "slug": "day-01-f1-omnistudio-solution-and-industry-use-cases",
-        "title": "OmniStudio F-1: OmniStudio Solution & Industry Use Cases",
-        "series": "omni-studio-cert",
-        "lesson": 1,
-        "excerpt": "Describe the OmniStudio solution as it applies to common customer use case scenarios in different industries (telco, energy, healthcare, public sector, etc.). Day 1 of the OmniStudio Developer exam prep.",
-        "date": "August 03, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "6 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-02-f2-project-needs-requirements-assumptions-risks-const",
-        "title": "OmniStudio F-2: Project Needs: Requirements, Assumptions, Risks, Constraints",
-        "series": "omni-studio-cert",
-        "lesson": 2,
-        "excerpt": "Determine a project's needs by evaluating a customer's requirements, assumptions, risks, and constraints. Day 2 of the OmniStudio Developer exam prep.",
-        "date": "August 04, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "6 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-03-f3-managed-package-vs-standard-runtime-upgrades",
-        "title": "OmniStudio F-3: Managed Package vs Standard Runtime; Upgrades",
-        "series": "omni-studio-cert",
-        "lesson": 3,
-        "excerpt": "Explain Managed Package Runtime vs. Standard Runtime, Automatic Upgrades, and Manual Intervention Upgrade. Day 3 of the OmniStudio Developer exam prep.",
-        "date": "August 05, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "6 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-04-f4-licensing-permission-set-licenses-permission-sets",
-        "title": "OmniStudio F-4: Licensing, Permission Set Licenses & Permission Sets",
-        "series": "omni-studio-cert",
-        "lesson": 4,
-        "excerpt": "Explain OmniStudio license requirements, Permission Set licenses and Permission Sets. Day 4 of the OmniStudio Developer exam prep.",
-        "date": "August 06, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "6 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-05-f5-implementation-toolchain-sfcli-vbt-migration",
-        "title": "OmniStudio F-5: Implementation Toolchain: SFCLI, VBT, Migration",
-        "series": "omni-studio-cert",
-        "lesson": 5,
-        "excerpt": "Describe the tools required to complete the end-to-end implementation process (SFCLI, VBT, Migration, etc.). Day 5 of the OmniStudio Developer exam prep.",
-        "date": "August 07, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "6 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-06-f-6-testing-versioning-cloning",
-        "title": "OmniStudio F-6: Testing, Versioning & Cloning Components",
-        "series": "omni-studio-cert",
-        "lesson": 6,
-        "excerpt": "Explain testing, versioning, and cloning through OmniStudio components. This covers save vs. publish, cloning workflows, and version snapshots for deployment.",
-        "date": "August 8, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-07-fc-1-flexcard-data-sources-testing-json",
-        "title": "OmniStudio FC-1: FlexCard Data Sources & Testing JSON",
-        "series": "omni-studio-cert",
-        "lesson": 7,
-        "excerpt": "Configure data sources such as SOQL, Data Mapper, Integration Procedure, Custom, etc. and test resulting JSON structure.",
-        "date": "August 9, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "8 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-08-fc-2-single-multi-level-cards-layouts-repeaters",
-        "title": "OmniStudio FC-2: Single/Multi-Level Cards, Layouts & Repeaters",
-        "series": "omni-studio-cert",
-        "lesson": 8,
-        "excerpt": "Construct single and multi-level FlexCards, organizing data using layouts, and repeaters.",
-        "date": "August 10, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "6 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-09-fc-3-binding-components-configuring-properties",
-        "title": "OmniStudio FC-3: Binding Components & Configuring Properties",
-        "series": "omni-studio-cert",
-        "lesson": 9,
-        "excerpt": "Bind essential components to construct FlexCards and configure their properties.",
-        "date": "August 11, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "6 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-10-fc-4-complex-card-actions-launch-fire-update",
-        "title": "OmniStudio FC-4: Complex Card Actions (Launch, Fire, Update)",
-        "series": "omni-studio-cert",
-        "lesson": 10,
-        "excerpt": "Define and implement complex card actions, including launching OmniScripts, firing events, and updating other components.",
-        "date": "August 12, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "6 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-11-fc-5-advanced-flexcard-properties",
-        "title": "OmniStudio FC-5: Advanced FlexCard Properties",
-        "series": "omni-studio-cert",
-        "lesson": 11,
-        "excerpt": "Configure advanced FlexCard properties: Event Listeners, Session Variables, Public Attributes, multi-language, child FlexCards, and custom LWC integration.",
-        "date": "August 13, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "6 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-12-fc-6-flexcard-styling-themes",
-        "title": "OmniStudio FC-6: FlexCard Styling & Themes",
-        "series": "omni-studio-cert",
-        "lesson": 12,
-        "excerpt": "Control FlexCard appearance two ways: element-level inline styling for one-off tweaks and shared themes for consistent branding.",
-        "date": "August 14, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "5 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-13-fc-7-conditional-rendering-with-states",
-        "title": "OmniStudio FC-7: Conditional Rendering with States",
-        "series": "omni-studio-cert",
-        "lesson": 13,
-        "excerpt": "Use FlexCard states and element-level conditions to show, hide, or restyle content when expressions against card data evaluate true.",
-        "date": "August 15, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "5 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-14-fc-8-embedding-flexcards-across-channels",
-        "title": "OmniStudio FC-8: Embedding FlexCards Across Channels",
-        "series": "omni-studio-cert",
-        "lesson": 14,
-        "excerpt": "Embed one FlexCard definition across Lightning pages, Experience Cloud sites, OmniScripts, and mobile, and design it for reuse with public attributes.",
-        "date": "August 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "5 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-15-fc-9-flexcard-best-practices",
-        "title": "OmniStudio FC-9: FlexCard Best Practices",
-        "series": "omni-studio-cert",
-        "lesson": 15,
-        "excerpt": "Validate your JSON, keep data sources lean, test every state and channel, and respect FLS. That combination is what separates a card that survives production from one that goes blank.",
-        "date": "August 17, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "5 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-16-os-1-omniscript-elements-dynamic-interactions",
-        "title": "OmniStudio OS-1: OmniScript Elements & Dynamic Interactions",
-        "series": "omni-studio-cert",
-        "lesson": 16,
-        "excerpt": "OmniScripts are guided journeys built from named elements that all land in one data JSON. If you understand that JSON contract, formulas, actions, and debugging all follow. If you don't, nothing else works.",
-        "date": "August 18, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "6 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-17-os-2-child-omniscripts-flexcards-custom-lwcs",
-        "title": "OmniStudio OS-2: Child OmniScripts, FlexCards & Custom LWCs",
-        "series": "omni-studio-cert",
-        "lesson": 17,
-        "excerpt": "Child OmniScripts handle reuse, FlexCards handle display, and custom LWCs handle custom UI. Pick the right embed for the job, wire its data back into the script JSON, and complex flows compose cleanly.",
-        "date": "August 19, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "5 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-18-os-3-omniscript-styling-themes",
-        "title": "OmniStudio OS-3: OmniScript Styling & Themes",
-        "series": "omni-studio-cert",
-        "lesson": 18,
-        "excerpt": "Themes define the design system across OmniScripts; element-level styling handles one-off exceptions. Use the theme as the source of truth, override sparingly, and verify responsive widths on desktop and mobile.",
-        "date": "August 20, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "5 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-19-os-4-advanced-omniscript-properties",
-        "title": "OmniStudio OS-4: Advanced OmniScript Properties",
-        "series": "omni-studio-cert",
-        "lesson": 19,
-        "excerpt": "Configure the advanced properties that carry an OmniScript beyond a bare flow: multi-language translations, Save Options for draft-and-resume, Knowledge Articles for in-flow help, and the Messaging Framework for SMS and email. Match the property to the scenario.",
-        "date": "August 21, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "5 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-20-os-5-embedding-omniscripts-across-channels",
-        "title": "OmniStudio OS-5: Embedding OmniScripts Across Channels",
-        "series": "omni-studio-cert",
-        "lesson": 20,
-        "excerpt": "One OmniScript definition embeds across Lightning pages, Experience Cloud, mobile, and web. Pass record context so it opens pre-populated, drop it in via the auto-generated LWC wrapper, and verify context per channel.",
-        "date": "August 22, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "5 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-21-os-6-omniscript-best-practices",
-        "title": "OmniStudio OS-6: OmniScript Best Practices",
-        "series": "omni-studio-cert",
-        "lesson": 21,
-        "excerpt": "Build OmniScripts that survive contact with users and production. Compose from child scripts instead of one giant flow, name elements as if they were JSON keys (because they are), test every branch in debug mode before publish, and push heavy orchestration into Integration Procedures.",
-        "date": "August 30, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-22-ip-1-ip-design-server-side-orchestration",
-        "title": "OmniStudio IP-1: IP Design, Server-Side Orchestration",
-        "series": "omni-studio-cert",
-        "lesson": 22,
-        "excerpt": "Learn what an Integration Procedure actually is: a declarative, server-side process that runs many actions in one server call. Design the input and output JSON contracts before you add a single action, order actions so output feeds input, and know why this one-call design is what makes IPs the right data source for FlexCards and OmniScripts.",
-        "date": "August 31, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "OmniStudio",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-23-ip-2-ip-action-types-groups-data-mapper-http-remote-sub",
-        "title": "OmniStudio IP-2: IP Action Types: Groups, Data Mapper, HTTP, Remote, Sub-IP",
-        "series": "omni-studio-cert",
-        "lesson": 23,
-        "excerpt": "Learn the building blocks you place inside an Integration Procedure: Groups for structure and conditional execution, Data Mapper actions for the data layer, HTTP actions for REST callouts, Remote actions for Apex logic, and Sub-IPs for composition. Map each action to its job, wire outputs to inputs with JSON paths, and avoid the auth, reuse, and mapping traps the exam tests.",
-        "date": "September 1, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "OmniStudio",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-24-ip-3-conditional-logic-loops-branching-in-ips",
-        "title": "OmniStudio IP-3: Conditional Logic, Loops, and Branching in Integration Procedures",
-        "series": "omni-studio-cert",
-        "lesson": 24,
-        "excerpt": "Control the execution path of an Integration Procedure. Use Execution Conditional Formulas to gate individual actions, Loop Blocks to iterate over arrays so per-item work repeats, and Conditional Blocks to route between distinct input states. Read the IP's data JSON, shape it so conditions stay simple, and test every branch with representative input. This is requirement IP-3, one of two pattern-heavy requirements in the Integration Procedures domain.",
-        "date": "September 2, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "OmniStudio",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-25-ip-4-chainable-integration-procedures",
-        "title": "OmniStudio IP-4: Chainable Integration Procedures",
-        "series": "omni-studio-cert",
-        "lesson": 25,
-        "excerpt": "Split long-running Integration Procedures into multiple transactions with chaining. Learn why one synchronous transaction blows governor limits, how the Chainable, Queueable Chainable, and Chain On Step settings decide when a step continues in a fresh transaction, and why every link in a chain needs its own error handling because rollback does not carry across transactions. This is requirement IP-4 in the Integration Procedures domain.",
-        "date": "September 3, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "OmniStudio",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-26-ip-5-caching-in-integration-procedures",
-        "title": "OmniStudio IP-5: Caching in Integration Procedures",
-        "series": "omni-studio-cert",
-        "lesson": 26,
-        "excerpt": "Determine and configure caching mechanisms within Integration Procedures to maximize performance. Learn what OmniStudio actually caches (metadata versus data), how Org Cache and Session Cache split shared versus per-user scope, how Time To Live controls freshness, and why cache keys decide whether a repeated request gets the right stored answer. This is requirement IP-5 in the Integration Procedures domain.",
-        "date": "September 4, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "OmniStudio",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-27-ip-6-exception-handling-try-catch-rollback",
-        "title": "OmniStudio IP-6: Exception Handling: Try/Catch & Rollback",
-        "series": "omni-studio-cert",
-        "lesson": 27,
-        "excerpt": "Implement robust exception handling in Integration Procedures with Try/Catch blocks and proper rollback. Learn how a Try/Catch Block wraps risky work, what the Catch branch must do, why Load and write actions belong after risky calls, and how the Response Action returns a controlled error shape to callers. This is requirement IP-6 in the Integration Procedures domain.",
-        "date": "September 5, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "OmniStudio",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-28-ip-7-response-action-the-ip-output-contract",
-        "title": "OmniStudio IP-7: Response Action: The IP Output Contract",
-        "series": "omni-studio-cert",
-        "lesson": 28,
-        "excerpt": "Configure the Response Action to return specific data and control every byte an Integration Procedure sends back. Learn why the Response Action is the contract every caller depends on, how to map success data, computed fields, and a consistent error branch, why only what you map gets returned, and how to test the response shape before any FlexCard or OmniScript is wired to it. This is requirement IP-7 in the Integration Procedures domain.",
-        "date": "September 6, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "OmniStudio",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-29-ip-8-integration-procedure-best-practices",
-        "title": "OmniStudio IP-8: Integration Procedure Best Practices",
-        "series": "omni-studio-cert",
-        "lesson": 29,
-        "excerpt": "Describe the best practices that turn a working Integration Procedure into a reliable, maintainable one. Learn why focused, well-named IPs beat monolithic ones, how stable contracts with error branches make IPs dependable building blocks, where reusable data logic belongs, when chaining is the right call, and why testing each action before you promote it prevents the failures that slip into production. This is the final requirement in the Integration Procedures domain.",
-        "date": "September 7, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "OmniStudio",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-30-dm-1-data-mapper-fundamentals-source-target-types",
-        "title": "OmniStudio DM-1: Data Mapper Fundamentals & Source/Target Types",
-        "series": "omni-studio-cert",
-        "lesson": 30,
-        "excerpt": "Define and configure the four Data Mapper types that extract, transform, load, and map data between Salesforce and outside systems. Learn what a Data Mapper is, why the four interfaces exist, which sources and targets a mapper can bridge, why field-level security makes mappers a safer data path than raw SOQL, and how to configure and test a mapper step by step. This lesson opens the Data Mappers domain and names the artifact that the whole exam keeps coming back to.",
-        "date": "September 8, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "OmniStudio",
-          "DataMappers"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-31-dm-2-extract-interface-multi-object-filters-parameters",
-        "title": "OmniStudio DM-2: Extract Interface: Multi-Object, Filters & Parameters",
-        "series": "omni-studio-cert",
-        "lesson": 31,
-        "excerpt": "Configure and retrieve data from multiple objects with various filter options using the Data Mapper Extract Interface. Learn how a single Extract pulls related records across objects in one definition, how WHERE clauses and input parameters make filters reusable, how the output mapping shapes the exact JSON callers receive, why filtering early and selecting only needed fields keeps queries fast, and how Extract respects field-level security. This lesson turns the full-featured reader you met in DM-1 into a real, parameterized query tool.",
-        "date": "September 9, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "OmniStudio",
-          "DataMappers"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-32-dm-3-turbo-extract-interface",
-        "title": "OmniStudio DM-3: Turbo Extract Interface",
-        "series": "omni-studio-cert",
-        "lesson": 32,
-        "excerpt": "Configure and retrieve data from a single object and its related fields using the Turbo Extract Interface. Learn why Turbo Extract is the performance-optimized reader for the common case, how related fields come back through an object's lookups and child relationships in one optimized pass, where the single-object ceiling sits, when to choose Turbo Extract over the full Extract, and how to build one for pre-filling an OmniScript, sourcing a FlexCard, or doing a quick lookup by Id.",
-        "date": "September 10, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "OmniStudio",
-          "DataMappers"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-33-dm-4-load-interface-multi-object-writes",
-        "title": "OmniStudio DM-4: Load Interface: Multi-Object Writes",
-        "series": "omni-studio-cert",
-        "lesson": 33,
-        "excerpt": "Configure and import data to multiple objects using the Load Interface. Learn how Load maps input JSON to Salesforce records for insert, update, and delete, how lookups by Id or external ID link child records to parents in a single multi-object write, how external-ID upserts make Load idempotent so repeated integration runs do not create duplicates, and how rollback-on-error keeps a failed write from leaving partial data.",
-        "date": "September 11, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "OmniStudio",
-          "DataMappers"
-        ],
-        "status": "published"
-      }
-    ],
-    "totalLessons": 33,
-    "curriculumLessons": 46
   }
 ];
 
 /** Flat list of every lesson, NEWEST FIRST (for sitemap, nav, flat lookups). */
 export const learnLessons: LearnLesson[] = [
+  {
+    "slug": "day-34-dm-5-transform-interface-document-generation",
+    "title": "OmniStudio DM-5: Transform Interface & Document Generation",
+    "series": "omni-studio-cert",
+    "lesson": 34,
+    "excerpt": "Configure the Transform Data Mapper to prepare data for downstream use and document generation. Learn how Transform reshapes input into a required output structure without reading from or writing to the org, how the output JSON template drives the shape, how field mappings and formulas satisfy an API contract, and how the same output feeds PDF and DocuSign templates as the data model for the document.",
+    "date": "September 12, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "15 min read",
+    "tags": [
+      "OmniStudio",
+      "DataMappers"
+    ],
+    "status": "published"
+  },
   {
     "slug": "transaction-lifecycle-state-save-order-trigger-contexts",
     "title": "Lesson 39: Transaction Lifecycle: State, Save Order, and the 4 Trigger Contexts in One Transaction",
