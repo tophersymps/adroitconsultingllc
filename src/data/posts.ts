@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "salesforce-stack-cost-modeling-2026",
+    "title": "Modeling the Cost of an Agentic Salesforce Stack",
+    "excerpt": "Salesforce moved from per-seat to per-action billing. Agentforce, Data 360, and Experience Cloud each meter a different curve; model them before the quote.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "September 12, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "11 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "Agentforce",
+      "Data Cloud",
+      "Experience Cloud",
+      "Pricing",
+      "ROI"
+    ],
+    "bannerImage": "/banners/salesforce-stack-cost-modeling-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "backlog-refinement-story-slicing-2026",
     "title": "The Story Is Too Big: How Refinement Decides Delivery",
     "excerpt": "A story that never fits a sprint is a slicing failure, not a team failure. Refinement is where work gets sized, and AI made skipping it more expensive.",
