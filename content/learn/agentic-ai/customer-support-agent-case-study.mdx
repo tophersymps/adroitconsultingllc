@@ -1,0 +1,162 @@
+---
+title: "Lesson 40: Case Study: Customer Support Agent Architecture"
+slug: customer-support-agent-case-study
+series: "agentic-ai"
+lesson: 40
+excerpt: "This lesson stops teaching patterns one at a time and puts the whole path together. It walks a customer support agent from scratch: when the routing layer is a workflow rather than an agent, how the retrieval step keeps answers grounded, where you draw the tool boundary so the agent can act without becoming dangerous, how escalation to a human stays clean, and what you instrument so you can tell the difference between resolution and hallucination. Everything previous lessons covered, meaning intent detection, RAG, tool schemas, testing, and observability lands in one architecture, with each choice argued and each dead end named."
+date: "September 12, 2026"
+author: "Adroit Consulting"
+readTime: "17 min read"
+tags: [LLMs, AI Agents, Case Study]
+---
+
+# Lesson 40: Case Study: Customer Support Agent Architecture
+
+Lesson 39 handed you the debugging order: read the trace for repetition, then check the tool results, then check the token curve. This lesson is what you build before you ever need that order. It is a case study of one system, a customer support agent, built from the ground up using the patterns you have collected across this path. Instead of learning one more pattern, you watch the tradeoffs of the patterns you already know get decided in a concrete setting.
+
+A case study deserves a definition up front. It is not a worked example, because a worked example demonstrates one technique inside one turn. A case study is an architecture. It shows how the pieces you already know, intent classification from the prompting lessons, retrieval from the RAG lessons, tool schemas from Lesson 17, escalation logic from the multi-agent lessons, observability from Lessons 38 and 39, combine into a single deployable system, and it makes the fights between them visible. This one follows the shape of support agents that are actually in production, with sources you can check.
+
+Here is the setup. A software company with about eighty thousand customers, a product with a handful of billing tiers, a help center of a few hundred articles, and a live chat channel where customers expect a reply in minutes. The goal is an agent that resolves the easy cases end to end and hands the hard ones to a person with full context. The goal is not full automation of everything, and that distinction decides most of what follows.
+
+The one idea to carry out: **a support agent is mostly a routing problem with a retrieval step in the middle and a hard limit on what it is allowed to do. Get the routing right, keep the answers grounded in your own content, and cap the blast radius of every action, and the model does the rest. Most production support agents fail at one of those three, not at the reasoning.**
+
+## Decide it is a workflow first, an agent only where it has to be
+
+The framing comes from Anthropic's engineering guidance, and it is the single most useful distinction in agent design. A workflow is a system where LLMs and tools are orchestrated through predefined code paths. An agent is a system where the LLM dynamically directs its own processes and tool usage, maintaining control over how it accomplishes the task.[^1] The recommendation that follows is direct: find the simplest solution possible and only increase complexity when needed, and for many applications optimizing a single LLM call with retrieval and in-context examples is already enough.[^1]
+
+Apply that to support. Most of your traffic is a small set of intents: "my bill is wrong", "I need to cancel", "where is my order", "reset my password". These are well-defined tasks with a known end state, and that is precisely what workflows are for. Predictability and consistency for well-defined tasks is the benefit Anthropic lists for workflows, while agents win where flexibility and model-driven decision-making are needed at scale.[^1] So you do not hand a free-running agent the whole conversation. You build a routing step that classifies the intent, then hands each intent a constrained, mostly predetermined path with a few decision points inside.
+
+The routing example in Anthropic's post describes this exact split. Routing is for directing different types of customer service queries, like general questions, refund requests, and technical support, into different downstream processes, prompts, and tools, and for sending easy, common questions to smaller, cheaper models while hard or unusual ones go to more capable models.[^1] That cost split matters at support volume, because your easy questions are the majority and your expensive model is not needed for most of them.
+
+Here is the consequence. The thing you build is not an agent in the free-running sense for the common cases. It is a workflow with three of the building blocks stacked: routing at the front, a retrieval step in the middle, and an action boundary at the edge. You reach for an open-ended agent for the long tail of weird, unstructured requests, where the workflow gets stuck and a model that can improvise is genuinely better. Most of your design effort goes into the routing and the boundary, not into making the model smarter.
+
+## The routing layer: classify before you act
+
+Before the agent can help, it has to know what the customer is trying to do. This is intent classification, and it has been running in customer service for years as a workflow concept long before LLMs. Microsoft's Customer Intent Agent, for example, discovers intents in a contact center and uses them to determine what a customer wants, feeding both self-service copilots and assisted service where it hands the representative the collected intent and context.[^2] Databricks frames the same idea as the entry point of the whole system: AI customer service interprets customer intent, generates personalized responses, and routes requests to a virtual assistant or a human agent.[^3]
+
+Two design points keep this layer accurate. First, make it a separate step, not an ambient property of the chat. Anthropic's own guidance on parallelization notes that one model instance handles the core response while another screens inputs, and this tends to perform better than having the same LLM call handle both guardrails and the core response.[^1] Separate the classifier from the answerer. A customer who types "I want to cancel and get a refund" is not one intent, and a classifier that returns a single label will route incorrectly. Compound inputs need multi-intent classification so the downstream path can trigger both workflows.
+
+Second, keep a low-cost, high-precision fallback. Intercom's Fin does this implicitly: it checks whether a workflow automation or a custom answer should be triggered based on topic and context, and it runs safety checks to filter out anything Fin should not be answering, before the heavy generation step even runs.[^4] A cheap classification pass that catches the obvious intents and rejects the unsafe ones is faster, cheaper, and more predictable than asking the generative model to do everything. Reserve the expensive model for the cases the cheap layer is unsure about.
+
+The routing table is where this becomes concrete. Your production routing table looks something like this.
+
+| Intent | Route | Escape |
+| --- | --- | --- |
+| Password reset, account lock | Predefined workflow, small model | Straight to a human if identity is unclear |
+| Order status, tracking | Retrieval over order system, read-only | Escalate if order is anomalous (soft-deleted, refunded) |
+| Billing dispute | Retrieval over policy, then a bounded action tool | Escalate for amounts above a threshold |
+| Technical troubleshooting | Retrieval over help articles | Escalate after two failed attempts at a fix |
+| Anything else, abuse, or unclear | Escalate directly | Do not attempt |
+
+The escape column is the part people skip. Every row needs a defined way out, because the cost of a wrong confident answer is higher than the cost of a handoff. Build the handoff into every branch, not as an afterthought.
+
+## The retrieval step: ground every answer in your own content
+
+The routing layer knows what the customer wants. The generative layer has to answer without inventing the answer. This is where retrieval-augmented generation earns its place, and the support domain is its most natural home because you have a bounded, owned corpus: the help center, the policy documents, past resolved tickets.
+
+Intercom's Fin AI Engine is a good model for this because it names the mechanism and the failure it exists to prevent. Its engine refines the customer query, then uses a retrieval-augmented generation step to pull relevant information from approved content, past conversations, help center articles, PDFs, and URLs, integrates it with the refined input, and generates a response grounded in that material, reducing the risk of inaccuracies like hallucinations.[^4] The key phrase is approved content. The retrieval step only draws from sources you have explicitly whitelisted as accurate and safe.[^4] That is the whole job of an AI support answer: it should be groundable back to a source you control.
+
+What makes this hard in practice is not the search. It is the refinement. Customers do not phrase clean queries. They write partial context, typos, half a thought, so Intercom's first phase exists to disambiguate and clarify what the customer meant before the LLM sees it, and the engine explicitly asks for clarification when the model's output does not meet its certainty parameters.[^4] Your retrieval quality is capped by your query quality. If the model searches on the raw, garbled input, you get garbage retrieval no matter how good your embeddings are.
+
+Two failure modes to design against here, both from the RAG lessons earlier in this path. Retrieval can return the wrong chunk, in which case the model builds a fluent answer on the wrong fact, and retrieval can return nothing relevant, in which case the model hallucinates an answer rather than admitting it does not know. Intercom's third phase, validate accuracy, exists to catch both. It compares the generated response to the original query, determines whether the response answers it well enough, and checks whether the response is grounded in the knowledge resources as the source of truth. If the checks fail, Fin tells the customer it cannot answer and escalates to a human.[^4] Copy that structure. The validation step is not decoration. It is the gate that separates a grounded answer from a confident fabrication.
+
+## The tool boundary: read freely, write under guard
+
+Retrieval gives the agent answers. Tools give it the ability to act. This is where a support agent turns from a chatbot into something with risk, and where most of the security budget belongs.
+
+The core principle is containment, and Anthropic's thinking here is directly usable. Containment means you supervise what the agent is able to do, not just what it does, by enforcing access boundaries through sandboxes, virtual machines, and egress controls.[^5] Anthropic separates the risks into three components that map onto support agents cleanly: the model the agent consults, the environment it runs in, and the external content it can reach.[^5] For a support agent, the environment is your customer data and billing systems, and the external content is the knowledge base and any third-party integrations it pulls from.
+
+The design rule that falls out: default every tool to read-only, and add write only where a specific, narrow action is needed. A tool that cancels an order is dangerous; a tool that returns order status is not. A read-only agent can be deployed far more broadly than one that writes to production, and limiting tool permissions is one of the cheapest ways to cap blast radius.[^5] Start with zero write tools and add them one at a time, each gated behind its own policy check.
+
+Two containment lessons apply even at small scale. The first is that the model layer never catches everything. Anthropic's telemetry on human-in-the-loop approvals found users approved roughly 93 percent of permission prompts, meaning the more approvals a human sees, the less attention they pay to each one. Approval fatigue is real, and it is why you should not rely on a human reviewing every action a support agent takes.[^5] Put the limit in the environment, not in the prompt.
+
+The second is about credentials. In Anthropic's managed agent architecture, the structural fix for credential theft is to ensure tokens are never reachable from the sandbox where the model's generated code runs. Git credentials are wired into the local remote so push and pull work without the agent ever handling the token, and custom tool tokens live in a vault behind a proxy.[^6] For a support agent, the same shape means your CRM and billing credentials never enter the conversation context. The agent calls a tool, and the tool owns its own credential. A prompt injection can then steal a fact, but it cannot steal a password it was never shown.
+
+The tool boundary is also where retrieval and action meet. A good support agent can look up an order, but changing it is a separate, guarded capability. Keep the lookup and the mutation as different tools, because the difference between them is exactly your blast radius. Lesson 39's warning about tools that report success while returning nothing applies harder here, since the caller is a model that will otherwise assume the empty result is the answer.[^7]
+
+## Escalation: the handoff is part of the design, not a failure
+
+Every support agent eventually meets a case it should not resolve. The design question is whether the handoff is clean. Two things have to be true. The customer's problem and intent have to reach the human intact, and the agent has to know when to stop trying.
+
+On knowing when to stop, Intercom is explicit: if the necessary parameters for safety are not met at any step, Fin tells the customer it cannot answer and escalates to human support.[^4] On preserving context, this is where the session design from the managed agents work matters. Anthropic's managed agent separates the session, an append-only log of everything that happened, from the harness that runs the loop and the sandbox where actions execute.[^6] That separation means a failed agent run is recoverable, and the durable session log lets a new harness pick up the state and continue from the last event.[^6]
+
+For a support handoff, you want the equivalent of a durable session: the resolved intent, the retrieved sources consulted, the tools called, and the partial state all attached to the ticket before a human opens it. That is what makes the transfer feel effortless to the customer, who should not have to restate the whole problem to the human. Intercom's assisted-service description names exactly this: the representative is brought up to speed on the intent and the collected information rather than starting cold.[^2]
+
+The escalation threshold deserves explicit numbers. It is not a vibe. You define, per intent, the conditions that force a handoff. Amount above a threshold. Identity unverifiable. Two failed troubleshooting attempts. Any sign of the customer asking the impossible or the unsafe. Write these as rules, test them in your eval suite from Lesson 21, and let them be a stable, auditable part of the routing table rather than something the model decides on its own.
+
+## The session and context: keep state outside the window
+
+Long support conversations use up context fast, and the fix from the context lesson applies directly. The model's context window is not the durable record of the conversation. Anthropic's managed agent makes this precise: the session is not Claude's context window, and long-horizon tasks routinely exceed its length, so the standard answers are compaction, which saves a summary, and a memory or note-taking tool, which writes context to files so it survives across sessions.[^6]
+
+For a support agent, the practical version is that you store the conversation and the recovered customer facts somewhere you control, and you feed the model only a prepared view of them. That is the same shaping Intercom's refine step does, and the same reason its engine keeps the retrieved knowledge separate from the raw model call.[^4] When a customer comes back in a follow-up message, the agent should read the durable state, not reconstruct it from what happened to remain in a window. This is also what makes escalation and reframing work, because the handoff reads from the same store.
+
+Context bloat also runs through the tool choices you expose in a support agent. If your agent loads the tools for billing, order lookup, password reset, and technical troubleshooting all at once, those definitions consume context before a single message arrives. Anthropic measured a five-server setup at 58 tools consuming roughly 55,000 tokens before the conversation even starts, and they have seen definitions reach 134,000 tokens before optimization.[^8] The fix is on-demand loading, keeping only the tools relevant to the current task, which one measured configuration cut from about 72,000 tokens to about 8,700, an 85 percent reduction that preserved 95 percent of the context window.[^8] A routing layer that loads only the tools for one intent is the same optimization, applied by design rather than by a search tool.
+
+## Worked example: the refund request that went end to end
+
+Now the architecture does its job. This is a single interaction walked through the system, the numbered sequence you would actually observe in the traces.
+
+A customer writes: "I got charged twice for my subscription and I want one of them refunded, also my login is broken but I can reset that myself."
+
+**Step one, route.** The classifier sees two intents, a billing dispute and a password reset. The password part is trivial and self-serve, so the system acknowledges it and hands the customer the reset path. The billing part routes to the refund workflow, which loads only the billing tools and the refund policy chunks. The expensive model is not needed, so the cheap classifier's confidence lets the routing skip up-leveling.
+
+**Step two, retrieve.** The retrieval step pulls the refund policy and the customer's account context. The refined query is "two subscription charges on the same billing cycle, request one refund", and the retrieval returns the policy section covering duplicate charges plus the two charge records from the billing tool.
+
+**Step three, validate against policy.** The agent has a read-only tool that returns charges, and it confirms a duplicate exists, same amount, same cycle. The refund policy allows duplicate refunds below a threshold without a human. This specific amount is below it, so the policy check passes.
+
+**Step four, act under guard.** The agent calls the refund tool, a write tool. That tool enforces its own policy, the amount threshold and a rate limit, and it requires a fresh confirmation, so it does a narrow, approved mutation. The credential that authorizes it lives in the vault, not in the conversation.
+
+**Step five, validate the answer.** The response generator produces the confirmation message, and the validation gate checks it against the original query and confirms it is grounded in the retrieved policy rather than invented. It passes.
+
+**Step six, log the outcome.** The resolved intent, the sources retrieved, the two charges, and the result all append to the session log and attach to the ticket. The observability layer records resolution, latency, and token cost, so the pipeline from Lesson 38 has something to chart and Lesson 39 has a clean trace to read if anything goes sideways later.
+
+The whole thing ran as a bounded workflow, never as a free-running agent, touched one narrow write tool under two separate policy gates, and left a complete record. That is the architecture working.
+
+One comparison sharpens why the design choices matter. Klarna reported its AI assistant handled two-thirds of customer service chats in its first month, resolved errands in under two minutes, and drove a 25 percent drop in repeat inquiries.[^9] Those are the numbers a vendor wishes were the whole story, and they are worth reading with the skepticism the rest of this lesson teaches. Resolution to one customer can be an argument for cancellation to another, and a metric that counts chats "handled" inflates fast when the escalation path is hidden. Treat vendor-reported metrics as evidence to interrogate, not as a benchmark you copy, and judge your own agent by resolution rate and re-contact rate separately, not by the volume of messages it answers.
+
+## The data you need: resolution and hallucination, measured apart
+
+Databricks puts the strategy in one line: successful deployment starts with a narrow pilot, clear CSAT and resolution-rate metrics, and human-in-the-loop governance before scaling across support tiers.[^3] Two metrics deserve special care because they pull against each other.
+
+Resolution rate is the share of conversations that end without a handoff to a human, and teams chase it upward. Hallucination rate is the share of answers that are confident and wrong, and teams chase it downward. The trap is that you can raise resolution by letting the agent answer more confidently, which raises hallucination, or you can lower hallucination by escalating more, which lowers resolution. Intercom advertises the Fin engine as balancing industry-high resolutions with industry-low hallucinations, and the mechanism is the validation phase plus the escalate-when-uncertain rule, not a cleverer model.[^4] Measure the two apart, plot them together, and treat moving the dial on one without checking the other as a regression. Naming this explicitly matters because support is where an inflated resolution metric hides the worst kind of failure, a confident wrong answer that a customer acts on.
+
+## Pitfalls that will cost you weeks
+
+A short list of the mistakes this architecture is specifically shaped to avoid.
+
+**A broad tool set loaded by default.** Every tool you expose costs context and raises the chance of the model choosing the wrong one, which happens more when tools have similar names.[^8] Route first, load the tools for that route, and keep the write tools behind their own policy layer.
+
+**Trusting the model to know its own limits.** It will answer beyond what it can verify unless a validation gate stops it. The refine-validate gates are not optional.[^4]
+
+**A human approving every action.** The 93 percent approval rate shows supervision decays with volume.[^5] Enforce the boundary in the environment, not by asking a person to read every tool call.
+
+**One intent per message.** Customers send compound requests. A classifier that returns one label loses half the request. Handle multi-intent routing or you will freshly generate the second half of every confused conversation.
+
+**No defined escalation.** Every branch needs a handoff condition before it ships. The customer who cannot get a human will remember the bot that trapped them far longer than they remember the bot that resolved the easy thing.
+
+## Try it
+
+1. **Draw your routing table.** Take a real or imagined product and list its top five support intents. For each, write the route, the retrieval source it reads, the tools it can call, and the escalation condition. This is the whole skeleton of a production support agent, and it costs nothing but a page.[^1]
+2. **Split one classifier from one answerer.** Pick a single intent and write two prompts: one that classifies a customer message, one that generates the grounded answer from retrieved content. Then write a third prompt that does both in one call and compare them on ten real messages. The separate-step version is slower and usually more accurate.[^1]
+3. **Audit one action tool's blast radius.** Take the most dangerous tool in your system, the one that writes or mutates. List everything it can touch, and mark the narrowest permission set the agent actually needs. Then move the credential so the model never sees it, mirroring the vault pattern.[^6]
+4. **Define your two metrics.** Write the exact definition of resolution rate and of hallucination, or grounded-answer failure, for your own system, and decide how you will measure each apart from the other. Plot them together before you claim any improvement.[^3]
+
+## Summary
+
+A customer support agent is not primarily a reasoning problem. It is a routing problem with a retrieval step in the middle and a hard limit on what it can do. Route first, and make routing a separate cheap classifier rather than a property of the chat.[^1] Ground every answer in content you own through retrieval that refines the query before it searches and validates the answer after it generates.[^4] Draw the tool boundary so the agent reads freely and writes only under guard, with credentials the model never sees.[^5] [^6] Make escalation a designed branch with durable session context, not a failure path. And measure resolution and hallucination apart, because an agent can buy one by trading the other.[^3]
+
+The architecture earns its keep at the edges. The easy cases do not need intelligence, they need correct routing. The hard cases need to reach a human with full context. Everything in between, the retrieval, the guardrails, the validation, exists to keep a fluent model from saying something confidently wrong in your company's voice. When that holds, you get the resolution numbers without the scandal that usually follows them.
+
+## What's next
+
+You have now seen the full customer support architecture built from the patterns in this path, from routing through retrieval, tool boundaries, escalation, and observability. Lesson 41 continues the case study format with a different shape of agent: research and summarization agents. Where support agents are bounded, request-and-respond systems, research agents are open-ended, long-horizon ones that gather across multiple sources and synthesize. The same underlying patterns, the augmented LLM, routing, tool design, and context management, reappear, but the balances shift, and the case study will show you which tradeoffs invert when the job changes from resolving a ticket to producing a well-sourced brief.
+
+[^1]: Anthropic. [Building effective agents](https://www.anthropic.com/engineering/building-effective-agents)
+[^2]: Microsoft Learn. [Overview of Customer Intent Agent](https://learn.microsoft.com/en-us/dynamics365/contact-center/administer/overview-customer-intent-agent)
+[^3]: Databricks. [AI customer service: strategy, agents, and solutions guide](https://www.databricks.com/blog/ai-customer-service)
+[^4]: Intercom. [The Fin AI Engine](https://www.intercom.com/help/en/articles/9929230-the-fin-ai-engine)
+[^5]: Anthropic. [How we contain Claude across products](https://www.anthropic.com/engineering/how-we-contain-claude)
+[^6]: Anthropic. [Scaling Managed Agents: Decoupling the brain from the hands](https://www.anthropic.com/engineering/managed-agents)
+[^7]: Anthropic. [Writing effective tools for agents](https://www.anthropic.com/engineering/writing-tools-for-agents)
+[^8]: Anthropic. [Introducing advanced tool use on the Claude Developer Platform](https://www.anthropic.com/engineering/advanced-tool-use)
+[^9]: Klarna. [Klarna AI assistant handles two-thirds of customer service chats in its first month](https://www.klarna.com/international/press/klarna-ai-assistant-handles-two-thirds-of-customer-service-chats-in-its-first-month/)
