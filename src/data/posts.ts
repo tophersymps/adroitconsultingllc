@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "prompt-caching-ai-infrastructure-2026",
+    "title": "The 90% Discount on Tokens You're Not Claiming",
+    "excerpt": "Agent loops re-prefill the same system prompt every turn. Prompt caching is the cheapest lever in an AI stack, and agent workloads are what break it.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "September 12, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "11 min read",
+    "featured": false,
+    "tags": [
+      "AI Infrastructure",
+      "Cost Optimization",
+      "Prompt Caching",
+      "KV Cache",
+      "Agents",
+      "FinOps"
+    ],
+    "bannerImage": "/banners/prompt-caching-ai-infrastructure-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "salesforce-stack-cost-modeling-2026",
     "title": "Modeling the Cost of an Agentic Salesforce Stack",
     "excerpt": "Salesforce moved from per-seat to per-action billing. Agentforce, Data 360, and Experience Cloud each meter a different curve; model them before the quote.",
