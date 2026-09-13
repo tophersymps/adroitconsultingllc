@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "realtime-subscription-lifecycle-supabase-2026",
+    "title": "Real-Time Apps Break at the Subscription Layer",
+    "excerpt": "A real-time demo works and production falls over. Connection limits, leaked channels, and stale presence are the walls most Supabase apps hit first.",
+    "category": "React & Web Dev",
+    "categoryColor": "react",
+    "categoryGradient": "from-emerald to-emerald-dark",
+    "date": "September 13, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "11",
+    "featured": false,
+    "tags": [
+      "TypeScript",
+      "React",
+      "Next.js",
+      "Supabase",
+      "Real-Time",
+      "Web Development"
+    ],
+    "bannerImage": "/banners/realtime-subscription-lifecycle-supabase-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "prompt-caching-ai-infrastructure-2026",
     "title": "The 90% Discount on Tokens You're Not Claiming",
     "excerpt": "Agent loops re-prefill the same system prompt every turn. Prompt caching is the cheapest lever in an AI stack, and agent workloads are what break it.",
