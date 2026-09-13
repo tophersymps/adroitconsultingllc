@@ -25,6 +25,31 @@ export const posts: BlogPost[] = [
     "status": "published"
   },
   {
+    "slug": "salesforce-release-discipline-2026",
+    "title": "Salesforce Doesn't Fail at the Build. It Fails at the Release.",
+    "excerpt": "Most orgs can build a modern stack. The failure point is moving Flow, Apex, Experience Cloud and the security retirements between orgs without taking production down. Here is the discipline that holds.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "September 13, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "DevOps Center",
+      "Metadata API",
+      "Destructive Changes",
+      "Flow",
+      "Apex",
+      "Agentforce",
+      "Security"
+    ],
+    "bannerImage": "/banners/salesforce-release-discipline-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "prompt-caching-ai-infrastructure-2026",
     "title": "The 90% Discount on Tokens You're Not Claiming",
     "excerpt": "Agent loops re-prefill the same system prompt every turn. Prompt caching is the cheapest lever in an AI stack, and agent workloads are what break it.",
