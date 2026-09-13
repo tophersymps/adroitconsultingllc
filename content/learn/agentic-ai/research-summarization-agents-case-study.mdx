@@ -1,0 +1,146 @@
+---
+title: "Lesson 41: Case Study: Research & Summarization Agents"
+slug: research-summarization-agents-case-study
+series: "agentic-ai"
+lesson: 41
+excerpt: "This lesson puts the case study format to work on a second, very different shape of agent: research and summarization. Where the customer support agent from Lesson 40 was bounded, request-and-response, and routed, a research agent is open-ended, long-horizon, and built to gather across many sources before it writes anything. You watch the same underlying patterns, the augmented LLM, tool loops, context management, and observability, rebalance for a job where the hard part is deciding what to look at next, not knowing what you already have. It argues the case for an orchestrator-worker architecture, walks a research brief end to end, and explains why the token bill for these systems is so high."
+date: "September 13, 2026"
+author: "Adroit Consulting"
+readTime: "18 min read"
+tags: [LLMs, AI Agents, Case Study, Research]
+---
+
+# Lesson 41: Case Study: Research & Summarization Agents
+
+Lesson 40 gave you an architecture for a bounded agent. Support work is deterministic at the edges: you route an intent, retrieve from content you own, take a narrow guarded action, escalate when uncertain. This lesson is the polar opposite. It is a case study of research and summarization agents, and the first thing to unlearn is that a research agent is a support agent with broader search tools. It is not. The whole architecture inverts, and seeing how it inverts is the lesson.
+
+A case study, as Lesson 40 defined it, is an architecture, not a worked example. It shows how the patterns you already learned combine into one deployable system and makes the fights between them visible. Research is the second case in this format, and it deserves the same treatment because the optimizations that make it work are the reverse of the ones you just studied.
+
+Here is the setup. A consultancy wants a research agent for its analysts. The inputs are open-ended briefs: "map the competitive landscape for enterprise data platforms in the US market", "summarize what has changed in the FastAPI release cycle this year", "who are the board members and major investors behind the ten biggest open-source vector databases". These have no fixed end state and no owned corpus. The knowledge lives across the whole public web, it is live, and it changes while you are looking at it. The output is a written brief with citations a reader can check. The failure you most want to avoid is a confident summary built on sources the writer never actually read.
+
+That last sentence is the thesis, and it is the whole reason this architecture looks the way it does. **A research agent is a token-scaling machine whose accuracy is bounded by how faithfully it can compress many sources into one brief without losing the source of each claim. Everything you design, the subagents, the memory, the citation verifier, exists to stop a fluent summary from outrunning the evidence it quotes.** Hold that and the rest of the lesson is decisions falling out of it.
+
+## Why this job needs agents at all
+
+Support could be a workflow for most calls because the intents were known in advance. Research cannot, and Anthropic's engineering post on its multi-agent research system says exactly why. Research is open-ended, and it is very difficult to predict the required steps in advance. You cannot hardcode a fixed path for exploring complex topics, because the process is inherently dynamic and path-dependent. People adjust their approach as they go, following leads that only appear during the investigation, and that unpredictability is precisely what makes the task agent-shaped.[^1]
+
+That framing lands clean on an earlier lesson in this path. Anthropic's "Building effective agents" distinguishes workflows, where the LLM and tools are orchestrated through predefined code paths, from agents, where the LLM dynamically directs its own process and tool usage. The advice there is to prefer the simplest solution and reach for agents only where they earn it.[^2] Research is the clearest case for the agent end of that spectrum, because no one can write the plan in advance. The plan is the output of the first few searches.
+
+But "agent" here does not mean "one model with a web search tool, looping". It means the specific coordinated shape you are about to see, and the distinction matters for cost and for accuracy.
+
+## The architecture: orchestrator-worker, not a solo loop
+
+The system Anthropic shipped for Claude Research uses an orchestrator-worker pattern. A single LeadResearcher agent coordinates the whole process, while specialized Subagents run in parallel, each with its own context window and its own search task.[^1] You do not send one agent out to browse 200 pages in a single context window. You decompose the question, hand independent threads to separate agents running at the same time, and have the lead synthesize what they return.
+
+The mechanism that makes this better than a solo agent is compression. Anthropic puts it directly: the essence of search is compression, distilling insights from a vast corpus, and subagents do that compression by operating in parallel with their own context windows, exploring different aspects of the question before condensing the most important tokens for the lead.[^1] Each subagent is also a separation of concerns. It has distinct tools, prompts, and a distinct exploration trajectory, which reduces path dependency and lets each investigation stay thorough and independent.[^1]
+
+There is real measured support for the multi-agent shape, not just an argument from taste. Anthropic found that a multi-agent system with Claude Opus 4 as the lead and Claude Sonnet 4 subagents outperformed a single Opus 4 agent by 90.2% on their internal research eval. Their example is telling: asked to identify all the board members of companies in the Information Technology S&P 500, the multi-agent system decomposed the task and found the answers, while the single agent failed after slow, sequential searches.[^1] Breadth is the differentiator. When a question has many independent branches, parallel subagents win because a solo agent would have to hold the entire search log in one window and can run out of room before it reaches the finish.
+
+Token economics explain the win and the cost at the same time. In their BrowseComp analysis, token usage alone explained 80% of the variance in a browsing agent's ability to locate hard-to-find information, and together with tool-call count and model choice it explained 95%.[^1] That is the mathematical heart of the thesis above: research performance is a function of how many tokens you invest. Multi-agent architectures exist to spend tokens where a single context window cannot.[^1] The graphs in this analysis trace lesson 38's observability story directly, since every one of those tokens is something you pay for and should be able to trace.
+
+## Dynamic search beats static retrieval
+
+The agent loop here is not RAG, and it is worth pinning down the difference because people blur them. Anthropic draws the line clearly. Traditional RAG uses static retrieval: you fetch the chunks most similar to a query and generate a response from them, and the source material does not change between queries. Their research architecture instead uses a multi-step search that dynamically finds relevant information, adapts to new findings, and analyzes results to formulate answers.[^1]
+
+The academic framing that generalizes this is the arXiv position paper on agentic deep research, which describes the shift from static keyword search toward systems that integrate autonomous reasoning, iterative retrieval, and information synthesis into a single dynamic feedback loop, and offers a test-time scaling law to formalize how computational depth affects reasoning and search quality.[^3] The operative words are feedback and iterative. You do not search once and then write. You search, read, realize you are missing a dimension, search again with a sharper question, and keep going until the coverage is enough or you hit a stop condition.
+
+OpenAI's deep research product is the reference implementation of that loop in shipping form. It conducts multi-step research that can find, analyze, and synthesize hundreds of online sources into a report at the level of a research analyst, and it was trained with reinforcement learning on hard browsing and reasoning tasks so it learned to plan and execute a multi-step trajectory, backtracking and reacting to real-time information as it goes.[^4] The key phrase is backtracking. A good research agent is not a linear reader. It follows a dead end, abandons it, and re-plans. Anything that makes backtracking expensive, like a single crowded context window, directly degrades the result.
+
+## Delegation is the skill the lead has to learn
+
+The lead agent's real job is not reading. It is deciding what to read, who should read it, and when to stop. Anthropic learned this the hard way, and their early systems made the mistakes you will see in any naive implementation: spawning 50 subagents for a simple query, scouring the web endlessly for sources that do not exist, and distracting each other with excessive updates.[^1]
+
+Their fix was to teach the orchestrator how to delegate, and the prompt contract they converge on is worth copying in your own steering prompts. Each subagent needs an objective, an output format, guidance on the tools and sources to use, and clear task boundaries.[^1] Without those four, the system breaks in characteristic and expensive ways. Anthropic's own account of the failure is vivid: one subagent explored the 2021 automotive chip crisis while two others duplicated work investigating 2025 supply chains, because there was no effective division of labor.[^1] The task description is not metadata. It is the coordination protocol, and half the engineering effort of a research system goes into writing prompts that force distinct trajectories.
+
+There is also a scaling rule for how much effort each query deserves, and it should be encoded in the prompt, not left to the model's mood. Anthropic recommends scaled effort: simple fact-finding needs one agent with three to ten tool calls, direct comparisons might want two to four subagents with ten to fifteen calls each, and complex research can use more than ten subagents with clearly divided responsibilities.[^1] Early versions overinvested in simple queries because nothing told the model to stop, and the result was a small question costing a commercial research run's worth of tokens. Give the orchestrator explicit effort bands so it does not spend a resume on a lookup.
+
+This delegation layer is the same "subagents" and "orchestrator-worker" thinking from Lesson 24, applied to a concrete product, and the prompt contract above is the practical version of the supervisor instructions from that lesson.
+
+## Summarization is where accuracy dies
+
+Now the syntheses step, and this is the part every slide deck about deep research skips. Producing a good summary is not the difficult phase of a research agent. Producing a summary that is still traceable to its sources after several layers of condensation is the difficult phase, and it is where fluent models fail most spectactularly.
+
+Anthropic names the failure mechanism the game of telephone. Their early system let the lead agent both draft the report and reconstruct its citations from memory, and because sources get condensed and re-summarized through several subagent returns, the URLs degraded and the lead ended up citing from recollection rather than from ground truth.[^5] (I am citing a distillation of that system here, so I am using warning signs, not treating it as original reporting.)
+
+The structural fix Anthropic adopted is a separate citation phase. When the research loop finishes, the system passes everything to a CitationAgent, a dedicated agent that reads the actual documents alongside the draft report and identifies the specific locations where each claim should be attributed, rather than asking the drafting model to recall them.[^1] You have a reasoner-agent do the synthesis and a different verifier-agent do the sourcing. Separating the two responsibilities keeps the drafting model from being the sole judge of what it just claimed.
+
+Two supporting patterns make this work. First, subagent output should persist to a filesystem rather than round-trip through the lead's context. Anthropic's advice is to let specialized agents write their work to external storage and pass lightweight references back to the coordinator, which prevents information loss during multi-stage processing and reduces the token overhead of copying large outputs through conversation history.[^1] The subagent stores the findings; the lead stores a pointer. Second, the "thinking" between searches should be interleaved, meaning the subagent evaluates each tool result before deciding the next search, rather than batching all its thinking up front. Interleaved thinking is the mechanism Anthropic cites for how subagents evaluate tool results during the loop.[^1]
+
+This separation is the direct descendant of lesson 18's and lesson 21's message: verify with a mechanism, not with the generator's confidence. A research agent is an extreme case because it generates far more text than a support reply, which means more room to string together plausible but wrong source attributions.
+
+## Context is a liability, so put the plan in memory
+
+A research run is long-horizon by construction, and long-horizon means the context window overflows. Anthropic's system handles this in two ways that you already met conceptually in lessons 15 and 16, now applied for real.
+
+The lead saves its research plan to memory so the plan survives even if the active context is truncated. Anthropic notes the context window can exceed 200,000 tokens and get truncated, so it is important to retain the plan.[^1] The plan, not the raw history, is what keeps the agent coherent across a long run. The broader pattern is to summarize completed phases and store them in external memory before moving to new tasks, so when context limits approach, the agent can spawn fresh subagents with clean contexts while continuity is preserved through careful handoffs and by retrieving stored context rather than losing it.[^1]
+
+This is the compaction and windowing from lesson 15 operating inside a production system. The reason it matters here more than in support is the volume. A research run burns context orders of magnitude faster than a support turn, so a research agent without a durable plan-and-memory layer does not degrade gracefully. It just forgets what it was doing and starts searching for things it already found.
+
+## The cost problem is structural, not incidental
+
+Every strength above is bought with tokens, and you should see the bill coming before you build. Anthropic's own numbers are the most honest statement of the economics you will find from a vendor. Agents typically use about four times more tokens than chat interactions, and multi-agent systems use about fifteen times more.[^1] For economic viability, they argue, multi-agent research requires tasks whose value is high enough to pay for the increased performance, and some domains, mostly ones where all agents must share context or where there are heavy inter-agent dependencies, are not a good fit.[^1]
+
+Read that as the grant of permission to be cheap. Not every question deserves a 15x token bill. A well-designed system applies lesson 27's model tiers and lesson 5's token discipline: cheap mostly-read passes where confidence is high, expensive subagent research only for the narrow, high-stakes core. The effort-scaling prompt from earlier is precisely the mechanism for keeping the bill proportional to the question. If a one-agent, five-tool-call lookup answers it, the system is misconfigured if it launches ten subagents.
+
+OpenAI, for its part, quantifies what the bill buys in capability. Deep research scored 26.6% on Humanity's Last Exam with browsing and Python tools, against 13.0% for o3-mini at high effort and 10.5% at medium, and the pattern holds on the GAIA benchmark's three difficulty tiers.[^4] Those are hard multi-step tasks that defeat a model reading from memory alone. The 90.2% gap Anthropic reports on its internal eval is the same phenomenon from the other direction.[^1] The lesson is not that one vendor wins. It is that the capability delta between a research agent and a single context-limited call is enormous, and that delta is made of tokens, so you should spend them deliberately and trace them with the telemetry from lessons 38 and 39.
+
+## Worked example: the competitive intelligence brief
+
+Here is the system doing its job, a single brief walked through the numbered sequence you would see in a trace.
+
+An analyst submits: "Produce a brief on the competitive landscape for enterprise vector databases in the US, covering Pinecone, Weaviate, Milvus, pgvector, and one open-source option per provider, with pricing signals and consolidation notes, for a client deciding where to standardize."
+
+**Step one, plan.** The LeadResearcher classifies this as complex research: five vendors, live pricing, consolidation, and a decision-oriented output. Under the effort-scaling rule it budgets for more than five subagents and writes a plan to memory; the plan survives even if the window truncates later.[^1]
+
+**Step two, delegate.** The lead spawns subagents in parallel, one per vendor, plus one for market-consolidation news. Each subagent gets the four-part contract: a single objective, an output format, the tools to use, and a boundary on when it is done.[^1] The vendor agents and the news agent search simultaneously, each in a clean context window, so they do not fight over one window's capacity.
+
+**Step three, iterate.** Each vendor subagent searches, reads, and uses interleaved thinking to decide the next search: a page confirms pricing, which raises the question of which tier, which sends it chasing the pricing page, and so on.[^1] Finding consolidation news in one article makes the agent hunt for the acquisition terms. The lead checks in, sees a gap on pgvector's extension model, and spawns one more targeted subagent rather than re-running everything.
+
+**Step four, compress.** Each subagent writes its findings to a file with the sources it read, and returns only a concise summary plus a pointer back to the lead. The lead never holds the full raw stack of every page. It holds summaries pointing at durable artifacts, which keeps the game of telephone from starting.[^1]
+
+**Step five, synthesize.** The lead drafts the brief at the research analyst level, comparing the five options, flagging the pricing signals, and noting the consolidation events. Its job is argument and structure, not source recall.
+
+**Step six, verify.** A separate CitationAgent reads the stored documents alongside the draft and labels each factual claim with the specific location that supports it.[^1] A claim about Pinecone's pricing only survives if the storing source actually says it. The analyst receives a brief where every load-bearing number resolves to a page she can open.
+
+Runtime, this is thirty to forty minutes of wall clock and a token bill an order of magnitude above a chat. The analyst's decision was worth it. A twenty-page brief with verifyable sources beat a three-paragraph confident summary built from memory, and that is precisely the trade the architecture is designed to make.
+
+## Pitfalls that will burn your budget
+
+The lessons Anthropic extracted, plus the ones this path has already taught, reduce to a short list.
+
+**One agent browsing everything in one context window.** You replicate the single-agent failure that scored 90.2% lower on Anthropic's eval.[^1] Without parallel subagents, you run out of room before the breadth is covered, or you truncate the very sources you need for citations.
+
+**No effort scaling.** Without explicit bands for simple versus complex queries, the model spends a research budget on a lookup, or under-invests in the case that needed ten sources.[^1] Encode the effort rule in the prompt.
+
+**Vague delegation.** A subagent without a clear objective and output format either duplicates another agent's work or leaves a gap, like the two subagents both researching 2025 supply chains while the actual lead went unpulled.[^1] Write the four-part task contract every time.
+
+**Letting the drafting model also source itself.** Reconstructing citations from a condensed history is the game of telephone, and it produces fluent, confidently wrong attributions.[^5][^1] Put a verifier agent on the raw documents, the way lesson 21's eval discipline should have taught you to check every claim.
+
+**Ignoring the token bill until the invoice.** A 15x multiplier over chat is not a rounding error.[^1] Budget per query, trace per subagent, and cut the cheap answers before they reach the orchestrator, the lesson 5 and lesson 27 discipline applied at the system level.
+
+**Confusing research with RAG.** Static retrieval over an owned corpus answers "what does my content say". Dynamic search answers "what is true out there right now". Building the second with a vector store and no web loop gives you a confidently stale answer.[^1][^4]
+
+## Try it
+
+1. **Write the delegation contract.** Pick a question with three independent branches and write the four-part task spec for each subagent: objective, output format, tools, boundary. Two of them should be impossible to duplicate by construction.[^1]
+2. **Run one search with interleaved thinking and one without.** Give two agents the same question, let one stop and think after each result while the other plans once up front. Compare the coverage of the second gap in each. That gap is what interleaved thinking buys.[^1]
+3. **Break the game of telephone on purpose.** Have one agent summarize a page into a summary, then a second summarize the summary, then ask a third to write a citation from the second summary. Compare what it cites to the original page. This is the failure the CitationAgent exists to prevent.[^1][^5]
+4. **Budget a query by hand.** Estimate the token cost of one research question as five subagents at fifteen calls each. Convert that to model tokens and then to your provider's price. Decide in advance whether the analytic value clears that bar, before the orchestrator does.[^1][^4]
+
+## Summary
+
+A research agent is built in the reverse shape of a support agent. Support was a routing problem with a retrieval step in the middle; research is a decomposition problem with a synthesis step at the end. You parallelize the gathering across subagents with independent context windows, because breadth is the bottleneck and parallel subagents spend the tokens a single window cannot hold.[^1] You make search dynamic and iterative, adjusting the next query to what the last result revealed, rather than retrieving once and writing.[^1][^3] You make synthesis a writing job and sourcing a separate verifier job, so a fluent report cannot outrun the documents it claims to quote.[^1] You put the plan in memory so a long run does not forget why it is searching, and you accept that the whole thing costs about 15x what a chat costs, which means you route cheap answers away from it and spend the multiplier only where it pays.[^1]
+
+The skill to carry forward is judgment about token depth. A research agent magnifies capability in exchange for tokens, and when the question is small, that is a bad trade. When the question is large and the answer gets acted on, it is the best description of the current state of the art, open-ended, self-correcting, and traceable, that you can build from the patterns in this path.
+
+## What's next
+
+This lesson showed you the open-ended extreme of the agent spectrum, where the model gathers across sources before it writes. Lesson 42 continues the case study format with the opposite end: case study of workflow automation agents, systems that stop researching and start doing, driving a browser, clicking buttons, and typing. Where research agents read broadly and report, workflow automation agents act on the world directly, and the design problems shift from how to spend tokens to how to bound real-world side effects. You will apply the tool boundary, containment, and observability patterns from this path to agents whose output is not a brief but an action.
+
+## Sources
+
+[^1]: Anthropic. [How we built our multi-agent research system](https://www.anthropic.com/engineering/multi-agent-research-system)
+[^2]: Anthropic. [Building effective agents](https://www.anthropic.com/engineering/building-effective-agents)
+[^3]: arXiv. [From Web Search towards Agentic Deep Research: Incentivizing Search with Reasoning Agents](https://arxiv.org/abs/2506.18959)
+[^4]: OpenAI. [Introducing deep research](https://openai.com/index/introducing-deep-research/)
+[^5]: The AI Engineer. [How Anthropic built multi-agent deep research](https://theaiengineer.substack.com/p/how-anthropic-built-multi-agent-deep)
