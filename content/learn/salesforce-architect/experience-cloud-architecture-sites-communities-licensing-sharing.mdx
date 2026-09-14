@@ -1,0 +1,116 @@
+---
+title: "Lesson 41: Experience Cloud Architecture: Sites, Communities, Licensing, and Sharing"
+slug: experience-cloud-architecture-sites-communities-licensing-sharing
+series: "salesforce-architect"
+lesson: 41
+excerpt: "Experience Cloud as architecture: what a site actually is, why the framework you build it on (LWR versus Aura) changes your whole subsystem design, how licensing attaches to users rather than pages, and the external sharing architecture that keeps an outsider's window exactly the right size."
+date: "September 14, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Salesforce, Architecture, Experience Cloud]
+---
+
+# Lesson 41: Experience Cloud Architecture: Sites, Communities, Licensing, and Sharing
+
+Lesson 40 closed the general-systems thread with agents and state. This lesson leaves that thread and lands on a concrete Salesforce product that carries much of the same stateful-agent surface we just studied. Experience Cloud is where external people reach your org: customers logging in for self-service, partners working a shared pipeline, guests reading a public knowledge base. The product has its own vocabulary and its own architecture mechanics, and three decisions shape everything that follows. The first is the framework your site runs on. The second is licensing, which is where orgs burn money and leak access. The third is the sharing architecture that decides exactly which records an outsider sees. Get the three in the right order and a portal is clean. Get them backwards and you rebuild it later, usually after someone saw data they should not have.
+
+## Define the terms
+
+The vocabulary drifted when Salesforce renamed the product, so pin the words down first. [^1]
+
+- **Experience Cloud**: the digital experience platform itself, formerly called Community Cloud. Salesforce changed the name to reflect the many types of digital experiences you can create, of which a "community" was only one. [^1]
+- **Site**: an online space for connecting with customers, promoting collaboration, and streamlining business processes. The site is the deployable unit, the thing you build, version, and publish. [^1]
+- **Community**: the old term for what is now an Experience Cloud site. You will still hear it constantly, and legacy contracts may still use it, but the platform concept is the site. [^1]
+- **Framework**: the codebase or technical platform your site is built on. There are three: Lightning Web Runtime (LWR), Aura, and Visualforce. [^1]
+- **Experience Builder**: the design tool you customize LWR and Aura sites in, using preconfigured templates and standard or custom components. [^1]
+- **External user**: anyone logging in to a site with an Experience Cloud license or an Identity license. [^1]
+- **Guest user**: anyone accessing a site without logging in. Guest users are always unauthenticated. [^1]
+
+Keep one structural fact in front of you: a site is not a separate application bolted onto your org. It is an extension of the org. Users interact with selected data and functionality through the site, and their exact access is governed by the license they hold and by the org's sharing model. [^2]
+
+## Decision one: the framework
+
+The framework is the first architectural fork because it decides how page rendering, performance, security, and your development workflow all work. Salesforce describes two families of Experience Builder sites, plus Visualforce sites for legacy work. [^1]
+
+LWR sites run on the Lightning Web Runtime, which is the current target for a new site. Aura sites run on the original templates such as Customer Service, Partner Central, and Customer Account Portal. From Winter '23, new LWR sites are hosted on the enhanced sites and content platform and are called enhanced LWR sites, which is the platform where you should assume any new LWR build lands. [^1]
+
+The difference that matters most to an architect is when the page is assembled. An Aura site renders components dynamically at runtime, per request. An LWR site pre-compiles and caches static content during the publish process, so the framework, components, and UI layer are compiled into immutable, cacheable resources served from a CDN. That is why LWR buys sub-second page loads and why Aura does not. [^3]
+
+Here is the trade that comes with the speed, and it is a genuine one. Because LWR snapshots the site at publish time, any change to a component requires you to republish before the change shows up. Aura applies component changes immediately. LWR also has no generic record detail page the way Aura templates did: record-specific components like Record Detail are only usable on object-specific pages, so if you want a "My Account" page you create an Account-specific object page rather than dropping a generic record component anywhere. LWR replaces Aura's audience targeting with visibility rules that are more limited, and it has no page variations. [^3]
+
+The decision rule is not "LWR is better." It is a match between the framework and the site's shape. For a new site, or a site you control from day one, LWR is Salesforce's strategic direction and the performance is real. For a mature Aura site with heavy audience targeting, deep custom page variations, or many record-display pages built on generic components, an Aura-to-LWR migration is its own project with its own cost, and sometimes the honest architecture is to keep Aura while it still releases features, or to migrate deliberately rather than because the marketing says so. Salesforce still ships releases for both runtimes, which is the practical signal that Aura is not going to vanish overnight. [^3]
+
+## Decision two: licensing
+
+The architect's first licensing instinct is usually wrong. People assume the decision is about pages or bandwidth, when the decision is about users. Community licenses attach to a user, not to a site. A user holding one can access multiple sites in your org, and you can move users between sites and reassign unused licenses across any site. [^2]
+
+The external user licenses are Customer Community, Customer Community Plus, Partner Community, External Apps, External Identity, and Channel Account. For architects the ones that carry most decisions are the three community licenses. [^2]
+
+- **Customer Community**: the business-to-consumer workhorse. It suits high-volume B2C experiences where large numbers of external users need access to case records or knowledge. It can be used with person accounts. [^2]
+- **Customer Community Plus**: adds what plain Customer Community does not have. Users get reports and dashboards and access to standard sharing, which includes roles and sharing rules. It is the tier to reach for when an external user needs a role and full sharing behavior rather than just record-level access from a sharing set. It also works with person accounts. [^2]
+- **Partner Community**: the business-to-business tier for partner relationship management. Partners get access to sales data such as opportunities and leads. Unlike the customer tiers, it cannot be used with person accounts, and it carries the broadest CRM object access among the three. [^2]
+
+Two further distinctions matter.
+
+First, the licenses differ in how they are billed. Member-based licenses are a flat fee per provisioned user who can log in as many times as they want. Login-based licenses charge on usage, which suits a large audience of occasional visitors. Both exist for Customer Community, Customer Community Plus, and Partner Community. [^2]
+
+Second, guest users cost nothing per user. A public knowledge base that unauthenticated visitors read does not consume external licenses, because there is no licensed user behind the session. This is the legitimate place guests belong. The moment someone needs to log in and see their own records, you buy a license for them. [^6]
+
+Salesforce is pointed about the anti-pattern here, the same warning Lesson 13 carried: internal licenses are not suited to secure an external-facing portal, and the strong recommendation is to not use them for external use cases. An internal license grants far more capability than an outsider should hold, so putting community users on internal licenses is how a portal leaks. External licenses are the only ones sized to a portal's needs. [^2]
+
+## Decision three: the sharing architecture
+
+Experience Cloud does not invent a second sharing engine. It reuses the org's sharing platform, the same one you studied in Lessons 11 and 36, and adds an external-facing layer. The design goal is a controlled window: an external user sees their own account's records and nothing else. The tools you reach for are sharing sets, external roles, sharing rules, and the guest user profile. [^4] [^5]
+
+**Sharing sets** are the primary mechanism for giving external users access through the account or contact relationship. A sharing set grants a site user access to any record associated with an account or contact that matches the user's own account or contact. You attach profiles to the set, choose the objects, and use access mapping to define each object's access level. A sharing set applies across all sites a user is a member of, and you can have one sharing set per profile. The critical limit: a sharing set does not roll up through the role hierarchy, so access granted by a sharing set is not extended to a user's superiors. [^4] [^5]
+
+**External roles** are where role-based sharing enters. The plain Customer Community license has no roles. Customer Community Plus allows a single role per user. Partner Community allows up to three, in a hierarchy of Partner User, Partner Manager, and Partner Executive, which Salesforce generates automatically when you enable the first external user on a partner account. Once external users have roles, records can be shared by role and through role-based sharing rules the way internal roles work. [^4] [^5]
+
+The pattern that emerges is a capability ladder that mirrors the license ladder. Every external license supports sharing sets. Customer Community Plus and Partner Community add roles, sharing rules, external account hierarchies, and the rest of the standard sharing model. If an external user only needs to see their own cases and orders, sharing sets on a Customer Community license do the job. If they need to see records across an account and be ranked against others, you need the role-based tools that come with Plus or Partner. [^4] [^5]
+
+The guest user profile is the last piece, and it is the easiest to get wrong. A guest user is unauthenticated, so everything you grant it is available to anyone on the public internet who can reach the site. Lock the guest profile down to the minimum. Guests get no access by default, and every object permission, every sharing set, every public record you expose to guests must be a deliberate choice. This is not a convenience surface. It is a public door. [^5] [^6]
+
+## A worked example: a partner portal and a customer service site
+
+A manufacturer needs two external surfaces. Sales partners log in to see their deal pipeline and register opportunities. End customers log in to track cases and read knowledge. Here is how the three decisions land.
+
+1. **Pick the frameworks.** The partner portal is new, read-mostly, and we control it. Build it on LWR for the load speed and the strategic direction, and accept the republish cadence and the object-specific record pages. The customer service site can use the Customer Service Aura template if we need its prebuilt case and knowledge pages fast. For a brand-new build we stay on LWR and build the case and knowledge pages as object-specific pages. [^1] [^3]
+2. **Size the licenses by user behavior.** Partners are active daily and need deals and leads, so give them Partner Community, member-based, because their flat fee beats per-login pricing and they need the sales object access. End customers mostly log in a few times a year for self-service; those fit a login-based Customer Community model, or a plain Customer Community license if the volumes justify it. [^2] [^7]
+3. **Design sharing by role and by relationship.** Partner community users get their external roles (Partner User, Manager, Executive) so a channel manager can see the accounts under them. Customer users get sharing sets keyed to their account or contact, so a customer sees their own cases and orders and nothing else. [^4] [^5]
+4. **Lock the guest surface separately.** The public knowledge base is readable by guests, so we grant the guest profile read on knowledge with publish status published, and nothing on cases or any record containing PII. Everything else stays buried by default. [^5] [^6]
+5. **Resist internal licenses.** Someone proposes reusing a few leftover full Salesforce licenses for partners to avoid buying Partner Community seats. Reject it. Those licenses carry capabilities outsiders should never hold and are not suited to an external-facing portal. [^2]
+
+The result is two portals, built on the frameworks that fit, licensed by user behavior, and shared so that a partner sees the channel and a customer sees only their own account.
+
+## The pattern: a decision sequence
+
+Pull it together into the sequence an architect runs for any Experience Cloud build.
+
+1. Ask who is connecting. Machines use APIs (Lesson 13). External people use sites. Guests use the public surface. [^2]
+2. Choose the framework by resetting the build. New build or a controlled migration: LWR. Mature Aura site with heavy audiences and page variations: evaluate migration honestly rather than flip to LWR on the strength of the speed claims. [^1] [^3]
+3. Size licensing by user behavior, not by page count. Member-based for active users, login-based or guest access for occasional visitors, and never internal licenses for external people. [^2]
+4. Map sharing to the license. Sharing sets for account and contact relationship access on any tier. Add roles and sharing rules when you need role-based visibility, which means Customer Community Plus or Partner. [^4] [^5]
+5. Subject the guest profile to its own review. It is unauthenticated and public, so grant it only the objects and records that must be readable to the world. [^5] [^6]
+
+## Try it
+
+A regional bank wants a customer portal where account holders log in to submit cases and view their service history, plus a public page that lets anyone read FAQ articles without logging in.
+
+1. Which framework do you choose for the customer portal, and what two LWR constraints do you design around?
+2. Which external license fits account holders who log in a few times a year to open a case, and which billing model fits a large occasional audience? Would there be a scenario where you'd move these users to Customer Community Plus?
+3. Map the sharing: how do you make a customer see their own cases, and how do you make sure the public FAQ page does not expose a logged-in customer's data?
+4. The bank suggests giving customer accounts the spare internal licenses to save money. What does Salesforce recommend, and why is it the wrong call?
+
+A reasonable answer: for a new build use LWR, and design around the republish cadence and object-specific record pages. Occasional self-service customers fit Customer Community, and if the volume is large with light activity, login-based billing or plain guest access for the public page. You would move someone to Customer Community Plus if they need to see reports or get role-based visibility across an account. Sharing: a sharing set keyed to the account or contact gives each customer their own cases, and the guest profile gets read-only knowledge with the data controls that keep it from touching any logged-in record. Internal licenses are the anti-pattern Salesforce explicitly discourages, because they carry far more access than an external portal should expose.
+
+## What's next
+
+You can now take Experience Cloud apart into the framework decision, the user-based licensing call, and the external sharing architecture, and reassemble any portal from those three. The next lesson stays on the same product surface and goes a level deeper into the code that powers these sites. Lesson 42 covers Lightning Web Components architecture: component composition, the wire service, and data services. Understanding how LWR sites are built from composed Lightning Web Components, and how wire and data services feed them records, is the natural next step from the framework you just chose.
+
+[^1]: help.salesforce.com. [Experience Cloud Glossary](https://help.salesforce.com/s/articleView?id=experience.exp_cloud_basics_glossary.htm&language=en_US&type=5)
+[^2]: help.salesforce.com. [Experience Cloud User Licenses](https://help.salesforce.com/s/articleView?id=platform.users_license_types_communities.htm&language=en_US&type=5)
+[^3]: developer.salesforce.com. [Lightning Web Runtime developer documentation](https://developer.salesforce.com/docs/atlas.en-us.exp_cloud_lwr.meta/exp_cloud_lwr/intro_overview.htm)
+[^4]: learncommunitycloud.com. [Uncovering the best sharing option for your external use cases](https://www.learnexperiencecloud.com/article/Sharing-in-Communities-Uncovering-the-best-sharing-option-for-your-external-use-cases)
+[^5]: help.salesforce.com. [Create a Sharing Set for Experience Cloud Site Users](https://help.salesforce.com/s/articleView?id=sf.networks_setting_light_users.htm&type=5&language=en_US)
+[^6]: salesforceben.com. [Salesforce Experience Cloud Sharing Model: A Deep Dive for Admins](https://www.salesforceben.com/salesforce-experience-cloud-sharing-model-a-deep-dive-for-admins/)
+[^7]: redresscompliance.com. [Salesforce Community Licensing: The external user math](https://redresscompliance.com/salesforce-community-licensing)
