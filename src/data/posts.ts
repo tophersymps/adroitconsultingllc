@@ -26,6 +26,28 @@ export const posts: BlogPost[] = [
     "status": "published"
   },
   {
+    "slug": "backup-restore-validation-2026",
+    "title": "Prove the Restore Before You Call It a Backup",
+    "excerpt": "Completing a backup and proving you can restore are different things, and the 2026 data shows most teams are far more confident about the first than the second.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "September 14, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "10 min read",
+    "featured": false,
+    "tags": [
+      "DevOps",
+      "Disaster Recovery",
+      "Backup",
+      "Kubernetes",
+      "Platform Engineering"
+    ],
+    "bannerImage": "/banners/backup-restore-validation-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "realtime-subscription-lifecycle-supabase-2026",
     "title": "Real-Time Apps Break at the Subscription Layer",
     "excerpt": "A real-time demo works and production falls over. Connection limits, leaked channels, and stale presence are the walls most Supabase apps hit first.",
