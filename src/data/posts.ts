@@ -2,6 +2,30 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "agent-eval-infrastructure-2026",
+    "title": "Most Teams Can See Their Agents. Few Can Judge Them.",
+    "excerpt": "89% of agent teams can trace their agent, yet only 52% run offline evals and 37% online ones. The eval layer is the skipped infrastructure.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "September 14, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "11 min read",
+    "featured": false,
+    "tags": [
+      "AI Agents",
+      "AI Infrastructure",
+      "Evaluation",
+      "LLMs",
+      "Multi-Agent Pipelines",
+      "Testing",
+      "CI/CD"
+    ],
+    "bannerImage": "/banners/agent-eval-infrastructure-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "realtime-subscription-lifecycle-supabase-2026",
     "title": "Real-Time Apps Break at the Subscription Layer",
     "excerpt": "A real-time demo works and production falls over. Connection limits, leaked channels, and stale presence are the walls most Supabase apps hit first.",
