@@ -2,6 +2,30 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "utilization-trap-capacity-planning-2026",
+    "title": "Booked Solid: Why 100% Utilization Guarantees Late Delivery",
+    "excerpt": "Billable utilization hit a record low in 2026. The reflex is to push it back up, and past 80 percent that reflex is what makes delivery dates slip.",
+    "category": "Project Management",
+    "categoryColor": "pm",
+    "categoryGradient": "from-teal to-teal-dark",
+    "date": "September 15, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "Project Management",
+      "Capacity Planning",
+      "Utilization",
+      "Consulting Delivery",
+      "Queuing Theory",
+      "WIP Limits",
+      "Delivery"
+    ],
+    "bannerImage": "/banners/utilization-trap-capacity-planning-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "agent-eval-infrastructure-2026",
     "title": "Most Teams Can See Their Agents. Few Can Judge Them.",
     "excerpt": "89% of agent teams can trace their agent, yet only 52% run offline evals and 37% online ones. The eval layer is the skipped infrastructure.",
