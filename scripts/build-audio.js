@@ -16,6 +16,11 @@
  * Fails loudly on any missing dependency (no silent SKIP, no fabricated
  * upload): a missing engine, missing env, or failed upload aborts the run.
  *
+ * INVARIANT: every run (incremental or not) MERGES. src/data/audio.ts is read
+ * first and the union keyed by `slug`+`voice` is re-emitted, so an invocation
+ * without --incremental/--backfill can never drop an existing entry or its
+ * timingsStoragePath. Regenerating only updates the entries it re-synthesized.
+ *
  * Usage:
  *   node scripts/build-audio.js --recent 5 --voice af_heart
  *   node scripts/build-audio.js --slug agent-eval-infrastructure-2026 --voice af_heart
@@ -211,10 +216,38 @@ async function main() {
   if (recentN) slugs = sortByDateDesc(slugs, fmCache).slice(0, parseInt(recentN, 10));
   if (backfill && !slugOnly) slugs = allSlugs(); // --backfill alone targets every blog article
 
-  let entries = incremental ? readExistingEntries() : [];
-  const existingKey = new Set(entries.map((e) => `${e.slug}/${e.voice}`));
+  /*
+   * NEVER lose state. The union is seeded from whatever src/data/audio.ts
+   * already holds on EVERY path — not just the incremental ones. A run without
+   * --incremental/--backfill (the documented `--recent N` / `--slug X` usage)
+   * used to start from `[]` and re-emit the module from scratch, silently
+   * dropping every entry it did not re-synthesize — including their
+   * timingsStoragePath — and the audio-backfill cron committed that loss
+   * straight to main (2 clobbers + a ~1.5h broken-main build outage,
+   * 2026-09-15). Entries are merged keyed by `slug`/`voice`; emit format is
+   * unchanged.
+   */
+  const entries = readExistingEntries();
+  const byKey = new Map(entries.map((e) => [`${e.slug}/${e.voice}`, e]));
+  const existingKey = new Set(byKey.keys());
   const limitN = limit ? parseInt(limit, 10) : null;
   let synthesized = 0;
+
+  /*
+   * Merge one entry into the union (never replace wholesale). A field already
+   * on disk is only overwritten when this run actually produced a replacement,
+   * so a run that does not regenerate the timing manifest (e.g. --metadata-only)
+   * can never downgrade an entry by dropping its timingsStoragePath.
+   */
+  function putEntry(entry) {
+    const key = `${entry.slug}/${entry.voice}`;
+    const prev = byKey.get(key);
+    const merged = { ...prev, ...entry };
+    if (!merged.timingsStoragePath && prev && prev.timingsStoragePath) {
+      merged.timingsStoragePath = prev.timingsStoragePath;
+    }
+    byKey.set(key, merged);
+  }
 
   for (const slug of slugs) {
     if (incremental && !force && existingKey.has(`${slug}/${voice}`)) {
@@ -233,7 +266,7 @@ async function main() {
       process.exit(1);
     }
     if (metadataOnly) {
-      entries.push({ slug, voice, storagePath });
+      putEntry({ slug, voice, storagePath });
       continue;
     }
 
@@ -289,12 +322,11 @@ async function main() {
     await uploadJson(env, timingStoragePath, timingsBuf);
     console.log(`OK ${slug} timings ${timingsBuf.length} bytes -> ${timingStoragePath}`);
 
-    entries = entries.filter((e) => !(e.slug === slug && e.voice === voice));
-    entries.push({ slug, voice, storagePath, timingsStoragePath: timingStoragePath });
+    putEntry({ slug, voice, storagePath, timingsStoragePath: timingStoragePath });
     synthesized++;
   }
 
-  emit(entries);
+  emit([...byKey.values()]);
 }
 
 main().catch((e) => {
