@@ -54,8 +54,12 @@ The private bucket must hold the whole article backfill inside the Supabase
 
 - Override the bitrate per run with `--bitrate 64k`, or globally with the
   `AUDIO_BITRATE` env var. `build-audio.js` passes it straight to the engine
-  (`--bitrate`), whose default is also `48k`. **Do not raise the default for a
-  backfill** without re-checking the bucket budget.
+  (`--bitrate`) as a single **argv element** on the shell-free `execFileSync`
+  call — no shell string is ever built — and both `build-audio.js` and
+  `reencode-audio-lean.cjs` allowlist the value (`/^\d{2,3}k$/`, e.g. `48k`)
+  before it reaches the engine/ffmpeg. The engine's default is also `48k`.
+  **Do not raise the default for a backfill** without re-checking the bucket
+  budget.
 - To shrink audio that is ALREADY in the bucket (no TTS re-run):
 
   ```bash

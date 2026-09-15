@@ -43,6 +43,20 @@ function opt(name, dflt) {
 }
 const dryRun = argv.includes("--dry-run");
 const bitrate = opt("--bitrate", process.env.AUDIO_BITRATE || "48k");
+/*
+ * ffmpeg -b:a contract — the same allowlist build-audio.js applies before it
+ * hands --bitrate to the engine. This tool already spawns ffmpeg via
+ * execFileSync with an argv array (no shell), so this is defence in depth, not
+ * the primary control: a value from --bitrate / AUDIO_BITRATE must never reach
+ * ffmpeg as anything but a bitrate.
+ */
+const BITRATE_RE = /^\d{2,3}k$/;
+if (!BITRATE_RE.test(bitrate)) {
+  console.error(
+    `FATAL: invalid bitrate ${JSON.stringify(bitrate)} rejected: must match ${BITRATE_RE} (e.g. "48k")`,
+  );
+  process.exit(2);
+}
 const jsonOut = opt("--json", null);
 const limit = opt("--limit", null) ? parseInt(opt("--limit", null), 10) : null;
 const SR = "24000";

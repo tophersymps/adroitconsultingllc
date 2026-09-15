@@ -192,3 +192,156 @@ describe("build-audio.js rejects hostile slugs/voices (CWE-78 command injection)
     expect(src).toContain("assertSafeVoice");
   });
 });
+
+/*
+ * Card t_78e28287 — the `--bitrate` value (from `--bitrate`/AUDIO_BITRATE) is a
+ * THIRD untrusted input alongside slug/voice. Pre-rebase commit 0163e60 added it
+ * UNQUOTED to the old execSync /bin/sh string, reproducing CWE-78 (`48k; touch
+ * MARKER #` executed — val-el's PoC). It now travels as an argv element on the
+ * shell-free execFileSync call AND is allowlisted by assertSafeBitrate; these
+ * tests lock both halves down.
+ */
+describe("build-audio.js --bitrate is allowlisted + argv-only (CWE-78, t_78e28287)", () => {
+  const EVIL_BITRATE = `48k; touch ${MARKER} #`;
+  const BITRATE_RE = /^\d{2,3}k$/;
+  /** The engine's argv, NUL-separated, written by the stand-in interpreter. */
+  const ARGV_FILE = "engine-argv.bin";
+
+  /**
+   * Sandbox whose `scripts/tts/.venv/bin/python` is a stand-in that records the
+   * argv it was handed (NUL-separated) and exits 1 — so the REAL emitter runs
+   * all the way to the engine invocation without TTS, network or Supabase.
+   */
+  function makeEngineRecorderSandbox(): string {
+    const dir = makeSandbox();
+    const binDir = path.join(dir, "scripts", "tts", ".venv", "bin");
+    fs.mkdirSync(binDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(binDir, "python"),
+      "#!/bin/sh\nprintf '%s\\0' \"$@\" > \"$RECORD_ARGV_TO\"\nexit 1\n",
+      { mode: 0o755 },
+    );
+    return dir;
+  }
+
+  function runEmitterWithEnv(dir: string, args: string[], env: Record<string, string> = {}) {
+    const res = spawnSync(process.execPath, ["scripts/build-audio.js", ...args], {
+      cwd: dir,
+      encoding: "utf-8",
+      timeout: 60_000,
+      env: { ...process.env, ...env },
+    });
+    return { status: res.status, stdout: res.stdout ?? "", stderr: res.stderr ?? "" };
+  }
+
+  it("no shell string is built from --bitrate (structural)", () => {
+    const src = fs.readFileSync(EMITTER, "utf-8");
+    expect(src).toContain('assertSafeBitrate');
+    expect(src).toContain('const BITRATE_RE = /^\\d{2,3}k$/;');
+    /* it must be an argv ELEMENT on the execFileSync call … */
+    expect(src).toContain('"--voice", voice, "--bitrate", bitrate, "--out", out');
+    /* … and never interpolated into a command string */
+    expect(src).not.toMatch(/--bitrate\s*\$\{/);
+    expect(src).not.toMatch(/\bexecSync\s*\(/);
+  });
+
+  it("a hostile --bitrate flag cannot execute a command", () => {
+    const dir = makeSandbox();
+    try {
+      const res = runEmitterWithEnv(dir, ["--recent", "1", "--voice", "af_heart", "--bitrate", EVIL_BITRATE]);
+      expect(res.stderr).toMatch(/invalid bitrate/i);
+      expect(res.status).not.toBe(0);
+      expect(fs.existsSync(path.join(dir, MARKER))).toBe(false);
+      expect(res.stdout).not.toContain("OK ");
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  it("a hostile AUDIO_BITRATE env var cannot execute a command either", () => {
+    const dir = makeSandbox();
+    try {
+      const res = runEmitterWithEnv(
+        dir,
+        ["--recent", "1", "--voice", "af_heart"],
+        { AUDIO_BITRATE: EVIL_BITRATE },
+      );
+      expect(res.stderr).toMatch(/invalid bitrate/i);
+      expect(res.status).not.toBe(0);
+      expect(fs.existsSync(path.join(dir, MARKER))).toBe(false);
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  it("rejects malformed bitrates and accepts the real ones (allowlist shape)", () => {
+    const dir = makeSandbox();
+    try {
+      for (const bad of ["48", "48kb", "k48", "48k ", "--bitrate", "4800k"]) {
+        const res = runEmitterWithEnv(dir, ["--metadata-only", "--recent", "1", "--voice", "af_heart", "--bitrate", bad]);
+        expect(res.status, `--bitrate ${JSON.stringify(bad)} must be rejected`).not.toBe(0);
+      }
+      for (const good of ["48k", "64k", "128k"]) {
+        const res = runEmitterWithEnv(dir, ["--metadata-only", "--recent", "1", "--voice", "af_heart", "--bitrate", good]);
+        expect(res.status, `--bitrate ${good} must be accepted`).toBe(0);
+      }
+      /* mirror of BITRATE_RE — the guard's contract must match the leanness budget */
+      expect(BITRATE_RE.test("48k")).toBe(true);
+      expect(BITRATE_RE.test("128k")).toBe(true);
+      expect(BITRATE_RE.test(EVIL_BITRATE)).toBe(false);
+      expect(BITRATE_RE.test("48")).toBe(false);
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  it("hands --bitrate to the engine as ONE argv element (no re-splitting)", () => {
+    const dir = makeEngineRecorderSandbox();
+    try {
+      const argvFile = path.join(dir, ARGV_FILE);
+      const res = runEmitterWithEnv(
+        dir,
+        ["--recent", "1", "--voice", "af_heart", "--bitrate", "96k"],
+        { RECORD_ARGV_TO: argvFile },
+      );
+      /* the stand-in engine exits 1, so the emitter aborts after the call */
+      expect(res.status).not.toBe(0);
+      expect(res.stderr).toMatch(/TTS failed/i);
+      const argv = fs.readFileSync(argvFile, "utf-8").split("\0").filter((a) => a.length > 0);
+      expect(argv[argv.indexOf("--bitrate") + 1]).toBe("96k");
+      expect(argv).toContain("--voice");
+      expect(argv[argv.indexOf("--voice") + 1]).toBe("af_heart");
+      expect(argv.some((a) => a.includes("--timing"))).toBe(true);
+      /* nothing was shell-split: no argument is a bare metacharacter fragment */
+      expect(argv.some((a) => /^touch$|^#$|^;$/.test(a))).toBe(false);
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  it("the lean default reaches the engine when no --bitrate is given", () => {
+    const dir = makeEngineRecorderSandbox();
+    try {
+      const argvFile = path.join(dir, ARGV_FILE);
+      const res = runEmitterWithEnv(dir, ["--recent", "1", "--voice", "af_heart"], { RECORD_ARGV_TO: argvFile });
+      expect(res.status).not.toBe(0);
+      const argv = fs.readFileSync(argvFile, "utf-8").split("\0").filter((a) => a.length > 0);
+      /* the lean storage profile is the contract: cron runs get 48k by default */
+      expect(argv[argv.indexOf("--bitrate") + 1]).toBe("48k");
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  it("reencode-audio-lean.cjs rejects a hostile --bitrate before touching the bucket", () => {
+    const tool = path.join(REPO_ROOT, "scripts", "reencode-audio-lean.cjs");
+    const res = spawnSync(process.execPath, [tool, "--bitrate", EVIL_BITRATE], {
+      cwd: os.tmpdir(),
+      encoding: "utf-8",
+      timeout: 30_000,
+    });
+    expect(res.stderr).toMatch(/invalid bitrate/i);
+    expect(res.status).toBe(2);
+    expect(fs.existsSync(path.join(os.tmpdir(), MARKER))).toBe(false);
+  });
+});
