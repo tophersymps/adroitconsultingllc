@@ -16,6 +16,11 @@
  * Fails loudly on any missing dependency (no silent SKIP, no fabricated
  * upload): a missing engine, missing env, or failed upload aborts the run.
  *
+ * SECURITY: no shell is ever spawned. Subprocesses use execFileSync with an
+ * argv array, and `slug` (a content/blog FILENAME) / `voice` (CLI) are checked
+ * against strict allowlists before they reach a path, a bucket key or an
+ * argument — see assertSafeSlug/assertSafeVoice.
+ *
  * INVARIANT: every run (incremental or not) MERGES. src/data/audio.ts is read
  * first and the union keyed by `slug`+`voice` is re-emitted, so an invocation
  * without --incremental/--backfill can never drop an existing entry or its
@@ -34,7 +39,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BLOG_DIR = path.join(ROOT, "content", "blog");
@@ -42,6 +47,33 @@ const OUT_PATH = path.join(ROOT, "src", "data", "audio.ts");
 const ENV_PATH = path.join(ROOT, ".env.local");
 const DEFAULT_VOICE = process.env.AUDIO_VOICE || "af_heart";
 const BUCKET = "audio";
+
+/*
+ * Input validation (CWE-78 shell injection + path traversal).
+ *
+ * `slug` is a FILENAME from content/blog/*.mdx and `voice` comes from the CLI;
+ * both are interpolated into filesystem paths, storage keys and a subprocess
+ * argv. Neither is trusted: each must match a strict allowlist before it is
+ * used anywhere. Without this, a file named `evil$(touch PWNED)x.mdx` reached
+ * the TTS command (previously built as a shell string and run through
+ * execSync, where "$(touch PWNED)" executed), and `../` in a slug escaped
+ * content/blog/ or .audio-out/. Anything that does not match aborts the run —
+ * a bad name is either an attack or a mistake that must not be executed.
+ */
+const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/; // matches every real blog slug (kebab-case)
+const VOICE_RE = /^[a-z0-9][a-z0-9_-]*$/; // af_heart / bm_george use "_"
+function assertSafeSlug(slug) {
+  if (typeof slug !== "string" || !SLUG_RE.test(slug)) {
+    throw new Error(
+      `invalid slug ${JSON.stringify(slug)} rejected: must match ${SLUG_RE} (content/blog filename)`
+    );
+  }
+}
+function assertSafeVoice(v) {
+  if (typeof v !== "string" || !VOICE_RE.test(v)) {
+    throw new Error(`invalid voice ${JSON.stringify(v)} rejected: must match ${VOICE_RE}`);
+  }
+}
 
 /* --- minimal .env.local loader (avoids a dep) --- */
 function loadEnv() {
@@ -202,6 +234,8 @@ async function uploadJson(env, storagePath, jsonBuf) {
 }
 
 async function main() {
+  /* voice comes from --voice/AUDIO_VOICE and lands in storage keys + argv. */
+  assertSafeVoice(voice);
   const env = loadEnv();
   const mdxToNarration = await loadNarration();
 
@@ -250,6 +284,10 @@ async function main() {
   }
 
   for (const slug of slugs) {
+    /* Reject a hostile/malformed slug BEFORE it reaches path.join, a storage
+     * key, or a subprocess argv: this is the boundary that closes both the
+     * shell-injection and the `../` path-traversal variants. */
+    assertSafeSlug(slug);
     if (incremental && !force && existingKey.has(`${slug}/${voice}`)) {
       console.log(`SKIP ${slug}: ${voice} already in audio.ts`);
       continue;
@@ -271,20 +309,25 @@ async function main() {
     }
 
     // synthesize via the TTS engine CLI.
-    // Write narration to a temp file and pass it via "$(cat ...)" command
-    // substitution so REAL newlines reach the engine. (Historical bug: this
-    // used JSON.stringify(narration), which turned real newlines into literal
-    // backslash-n chars that Kokoro read aloud as "backslash n".)
+    // NO SHELL: execFileSync + an argv array keeps every value a single
+    // argument, so a path can never be re-interpreted as shell syntax
+    // ($(...), backticks, ${...}, ;). Narration is passed as one argv element,
+    // which preserves REAL newlines natively — the old `"$(cat <file>)"`
+    // substitution only existed to get real newlines through a shell string
+    // (the even older JSON.stringify(narration) turned them into literal
+    // backslash-n chars Kokoro read aloud as "backslash n"). The temp
+    // .narration.txt file is therefore gone as well.
     const out = path.join(ROOT, ".audio-out", `${slug}.mp3`);
     const timingPath = path.join(ROOT, ".audio-out", `${slug}.timing.json`);
     fs.mkdirSync(path.dirname(out), { recursive: true });
-    const textFile = path.join(ROOT, ".audio-out", `${slug}.narration.txt`);
-    fs.writeFileSync(textFile, narration, "utf-8");
     const engine = path.join(ROOT, "scripts", "tts", "engines", "engine_kokoro.py");
     const venvPython = path.join(ROOT, "scripts", "tts", ".venv", "bin", "python");
-    const synthCmd = `${venvPython} ${engine} --text "$(cat ${JSON.stringify(textFile)})" --voice ${voice} --out ${JSON.stringify(out)} --timing ${JSON.stringify(timingPath)}`;
     try {
-      execSync(synthCmd, { timeout: 120000, encoding: "utf-8" });
+      execFileSync(
+        venvPython,
+        [engine, "--text", narration, "--voice", voice, "--out", out, "--timing", timingPath],
+        { timeout: 120000, encoding: "utf-8" }
+      );
     } catch (e) {
       console.error(`ERROR ${slug}: TTS failed (${String(e.message).slice(0, 400)})`);
       process.exit(1);
@@ -292,7 +335,7 @@ async function main() {
     // verify the file is real audio (marshal via `file`)
     let finfo = "";
     try {
-      finfo = execSync(`file -b ${JSON.stringify(out)}`, { encoding: "utf-8" }).trim();
+      finfo = execFileSync("file", ["-b", out], { encoding: "utf-8" }).trim();
     } catch {
       finfo = "";
     }
