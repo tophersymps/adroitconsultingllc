@@ -127,6 +127,36 @@ supabase db push  # Pushes any pending migrations
 supabase db pull  # Pulls remote schema to local (requires Docker)
 ```
 
+## Test Users and Auth Emails — never cause a bounce
+
+**Rule: never create a test/QA/verification auth user through the public signup endpoint on this
+project.** `POST /auth/v1/signup` always sends a confirmation email while
+`enable_confirmations = true`; if the address has no mailbox the send is a hard bounce, and because
+this project's total email volume is in the single digits a couple of bounces is a double-digit
+bounce rate — which is exactly what produced Supabase's "we may restrict your email sending
+privileges" warning on 2026-09-15.
+
+Use the Admin API, which creates the account already confirmed and **sends nothing**:
+
+```bash
+cd <repo>
+node scripts/qa-create-test-user.cjs <label>            # create a confirmed test user
+node scripts/qa-create-test-user.cjs <label> --delete   # remove it when the check is done
+```
+
+The helper plus-addresses a real inbox (`kelex1812+qa-<label>@gmail.com`, override with
+`QA_TEST_EMAIL_BASE`) and prints `{ email, password, id, emails_sent: 0 }` for the browser pass.
+Never hand-write a plausible address at `adroit.io` unless that mailbox actually exists — the
+`qa.admin@ / qa.member@ / qa.granted@adroit.io` accounts look "confirmed" only because the Admin API
+set `email_confirm`; nobody ever received mail at them.
+
+The only three things in this app that can send email at all are Supabase Auth:
+signup confirmation (`/api/auth/login`), resend confirmation (`/api/auth/resend-confirmation`) and
+password reset (`/api/auth/reset-password/request`). `/api/contact` goes to Salesforce Web-to-Lead
+and sends no email. There is no custom SMTP configured, so sends come from the shared
+`noreply@mail.app.supabase.io` sender at a **2 emails/hour** cap — which will starve real user
+confirmations once signups grow.
+
 ## How to Push Auth Config Changes
 
 When the anon key is verified complete:
