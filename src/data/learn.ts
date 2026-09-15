@@ -338,6 +338,336 @@ export const learnSeries: LearningSeries[] = [
     "curriculumLessons": 30
   },
   {
+    "slug": "hermes-consultant-intermediate",
+    "name": "Hermes Agent Consultant · Intermediate",
+    "description": "Level 2 of the Hermes Consultant track: Applied Delivery. For the working practitioner — running full engagements, complex client environments, multi-week estimation, team delivery, incident discipline, pricing, and case studies. Builds on Level 1.",
+    "gradient": "from-teal to-emerald-600",
+    "lessons": [
+      {
+        "slug": "running-a-full-engagement",
+        "title": "Lesson 1: Running a Full Engagement",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 1,
+        "excerpt": "Turning the five-phase lifecycle into a week-by-week plan: mapping discover, design, implement, handover, and support onto a real calendar, with gates, buffers, and the scheduling realities that kill engagements.",
+        "date": "August 27, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "requirement-capture-as-built-discipline",
+        "title": "Lesson 2: Requirement Capture as an As-Built Discipline",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 2,
+        "excerpt": "Moving from a problem statement you agree on to a requirement set that survives handover: capturing the enacted process, not the stated one, and writing requirements the next team can run and change without you.",
+        "date": "August 28, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "production-routing-evals-guardrails",
+        "title": "Lesson 3: Advanced Hermes Configuration: Model Routing, Evals, and Guardrails in Production",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 3,
+        "excerpt": "When the agent leaves the sandbox and runs at real volume in front of a client, three decisions decide whether it holds up: which model runs which task, how you prove the output is still correct, and how you keep the guardrails you documented actually enforced. This lesson teaches all three.",
+        "date": "August 29, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "reusable-delivery-toolkit-skill-packaging",
+        "title": "Lesson 4: Building a Reusable Delivery Toolkit: Skill Packaging Done Right",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 4,
+        "excerpt": "The difference between a consultant who solves one client's problem and one who compounds every engagement into the next: turning the working capture discipline, eval suite, and guardrail set from Lessons 2 and 3 into packaged, loadable skills another consultant can run without relearning them.",
+        "date": "August 30, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "complex-client-environments-existing-stacks-sandboxed-deploys",
+        "title": "Lesson 5: Complex Client Environments: Existing Stacks, Enterprise Constraints, and Sandboxed Deploys",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 5,
+        "excerpt": "The clean single-client world where you chose the stack is the exception, not the rule. This lesson teaches you to land a packaged agent delivery inside a company that already has infrastructure, security rules, and processes you did not choose, and to keep the toolkit working when the environment fights back.",
+        "date": "August 31, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "estimating-multi-week-engagements",
+        "title": "Lesson 6: Estimating Multi-Week Engagements: Beyond the 30-45 Minute Task",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 6,
+        "excerpt": "The 30-45 minute task is the unit of execution, not the unit of estimation. This lesson teaches you to size a real multi-week delivery: how to break a large engagement into estimable pieces, why you estimate the critical path and not the total, how to put the constraints and reviews from Lesson 5 into the number, and how to keep an estimate honest when the environment reveals surprises.",
+        "date": "September 1, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "team-delivery-splitting-work-across-consultants",
+        "title": "Lesson 7: Team Delivery: When It's More Than One Consultant, How the Work Splits",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 7,
+        "excerpt": "Single-consultant delivery has a ceiling. This lesson teaches the working practitioner when that ceiling hits, how to split work so more than one owner can hold it without the pieces drifting apart, and the seams, contracts, and dependency rules that hold a delivery team together. Hermes Agent's multi-agent board is the concrete example.",
+        "date": "September 2, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "internal-pilot-converting-to-paid-engagement",
+        "title": "Lesson 8: Running an Internal Pilot That Converts Into a Paid Engagement",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 8,
+        "excerpt": "The hardest sale in consulting is the one where the client has not yet decided you are worth paying. This lesson teaches the working practitioner to run an internal pilot that converts: how you scope a real slice of a prospect's problem, deliver it as a bounded proof, and turn the measured result into a signed engagement instead of a free spec.",
+        "date": "September 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "quality-at-scale-golden-sets-eval-gates-regression",
+        "title": "Lesson 9: Quality at Scale: Golden Sets, Eval Gates, and Regression Discipline",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 9,
+        "excerpt": "A single agent that works under review is not the hard problem. An estate that keeps producing correct output at volume, after the rules, the data, and the models keep changing, is. This lesson teaches the practitioner who runs real multi-week delivery how to keep quality true at scale: a golden set that lives and grows without rotting, eval gates that block the wrong change before it ships, and the regression discipline that triages a failing gate instead of burying it.",
+        "date": "September 4, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "cost-and-reliability-engineering-running-agent-estate",
+        "title": "Lesson 10: Cost and Reliability Engineering for a Running Agent Estate",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 10,
+        "excerpt": "The build is one project. The running estate is a subscription to a recurring bill and a standing reliability obligation, and a consultant who hands over a system without engineering both is handing over a liability. This lesson teaches the practitioner operating a real delivery how to model and contain the recurring spend of a fleet of scheduled agents, how to make that fleet dependable when models and providers and infrastructure keep changing underneath it, and how to engineer for the failure of any single part without taking the whole delivery down.",
+        "date": "September 5, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "incident-discipline-troubleshooting-broken-agent",
+        "title": "Lesson 11: Incident Discipline: Troubleshooting a Broken Agent Under Client Pressure",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 11,
+        "excerpt": "An agent that produces a wrong answer is a bug. An agent that stops while a client watches is an incident. This lesson teaches the discipline that separates a calm professional from a panicked one when delivery goes wrong live: why you diagnose before you patch, how to establish ground truth under pressure, what communication the client hears first, and the difference between a fix that works and a fix you only claim works.",
+        "date": "September 6, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "change-management-as-a-deliverable",
+        "title": "Lesson 12: Change Management as a Deliverable, Not an Afterthought",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 12,
+        "excerpt": "The agent you delivered is running, the client depends on it, and now it needs to change: a new model, a tightened rule, a reconfigured schedule. This lesson teaches the consultant to treat change as its own deliverable with scope, a plan, a test, a rollback, and a record, instead of as a drive-by edit that quietly erodes a working delivery.",
+        "date": "September 7, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "self-sufficient-handover-operating-docs-runbooks",
+        "title": "Lesson 13: Handover That Makes the Client Self-Sufficient: Operating Docs and Runbooks",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 13,
+        "excerpt": "The real test of a delivery is not whether it works while you are in the room. It is what happens the first time the client runs it without you and something goes wrong. This lesson teaches the handover that makes the client self-sufficient: the operating doc that captures how the agent is configured and the runbook that tells a calm stranger what to do when it breaks, finished with a dry run and a support taper that make your absence the point.",
+        "date": "September 8, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "21 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "managing-a-small-portfolio-of-clients",
+        "title": "Lesson 14: Managing a Small Portfolio of Clients: Scope, Expectations, and Time",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 14,
+        "excerpt": "The moment you hold more than one engagement, every lesson before this one stops being about a single client and starts being about the space between them. This lesson teaches the working practitioner how a small portfolio survives: how scope bleeds between engagements and how to stop it, how to set expectations you can actually hold when no client gets your full attention, and how to budget time across several active deliveries so that adding a client does not quietly sacrifice the ones you already have. Hermes Agent's isolation model is the concrete vehicle.",
+        "date": "September 9, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "21 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "vendor-agnostic-translation-adapting-the-playbook-to-other-agent-tools",
+        "title": "Lesson 15: Vendor-Agnostic Translation: Adapting the Playbook to Other Agent Tools",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 15,
+        "excerpt": "The Hermes playbook you have built is real value, and it is also tool-specific by default. This lesson is the discipline of separating the transferable layer from the mechanical one, so you can deliver the same consulting standard on whatever agent tool a client already runs, without rebuilding your approach from scratch and without forcing Hermes-shaped ideas onto tools that have no equivalent.",
+        "date": "September 10, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "security-review-threat-model-secrets-compliance",
+        "title": "Lesson 16: Security Review for a Client Engagement: Threat Model, Secrets, and Compliance",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 16,
+        "excerpt": "A security review is not a checklist you run at the end of an engagement; it is a discipline you practice from the first scoping call. This lesson teaches the intermediate consultant how to build a client-facing threat model, hunt down secrets before the client's security team does, and present compliance evidence instead of assurances. Hermes Agent's defense-in-depth model is the concrete example: user authorization, dangerous-command approval, file write safety, container isolation, MCP credential filtering, cross-session isolation.",
+        "date": "September 11, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "working-with-it-compliance-legal-on-agent-rollouts",
+        "title": "Lesson 17: Working with IT, Compliance, and Legal on Agent Rollouts",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 17,
+        "excerpt": "The last lesson taught you to survive a security review. This one teaches you to carry the rollout through the three teams that actually control momentum: IT, compliance, and legal. Each speaks a different language, each holds a different gate, and each will stall the engagement if you treat them like a single obstacle. This lesson teaches the intermediate consultant to triage these stakeholders in early, translate technical decisions into the language each one needs, and turn procurement, sign-off, and ongoing governance into parts of the delivery you plan for instead of surprises you absorb.",
+        "date": "September 12, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "pricing-engagements-fixed-fee-tm",
+        "title": "Lesson 18: Pricing Individual Engagements: Fixed-Fee vs Time-and-Materials in Practice",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 18,
+        "excerpt": "The price on an engagement is not a number you pick, it is a risk allocation you choose. This lesson teaches the working practitioner to decide between fixed-fee and time-and-materials, price the engagement from a real unit economy, and build change control that keeps either model honest when scope moves.",
+        "date": "September 13, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "writing-proposals-and-sows",
+        "title": "Lesson 19: Writing Proposals and Statements of Work That Protect Both Sides",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 19,
+        "excerpt": "You priced the engagement in Lesson 18, and now the price has to survive on paper. This lesson teaches the practitioner to write the proposal and statement of work as risk documents, not sales documents: a scope boundary specific enough to enforce, acceptance criteria the client can actually test against, assumptions and exclusions written down so neither side is surprised, and change control that keeps a signed SOW honest when the work shifts.",
+        "date": "September 14, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "managing-scope-creep-and-difficult-clients",
+        "title": "Lesson 20: Managing Scope Creep and Difficult Clients",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 20,
+        "excerpt": "Scope creep and difficult clients feel like two separate curses, but they are one problem wearing two costumes: the engagement drifting away from the baseline it was supposed to hold. This lesson teaches the intermediate consultant that both are settled by the same three artifacts, a written scope, a named acceptance bar, and a change process, and shows you how to use them to turn five repeatable 'difficult client' patterns into tractable negotiations instead of silent battles you lose one email at a time. The worked example is a Hermes Agent engagement, and the discipline transfers to any tool you run.",
+        "date": "September 15, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "18 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "Client Management"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 20,
+    "curriculumLessons": 25
+  },
+  {
     "slug": "omni-studio-cert",
     "name": "OmniStudio Developer Certification",
     "description": "A deep dive for the Salesforce Certified OmniStudio Developer exam. One official exam-guide requirement per day, with config walkthroughs, exam traps, and practice questions.",
@@ -2406,320 +2736,6 @@ export const learnSeries: LearningSeries[] = [
     "curriculumLessons": 20
   },
   {
-    "slug": "hermes-consultant-intermediate",
-    "name": "Hermes Agent Consultant · Intermediate",
-    "description": "Level 2 of the Hermes Consultant track: Applied Delivery. For the working practitioner — running full engagements, complex client environments, multi-week estimation, team delivery, incident discipline, pricing, and case studies. Builds on Level 1.",
-    "gradient": "from-teal to-emerald-600",
-    "lessons": [
-      {
-        "slug": "running-a-full-engagement",
-        "title": "Lesson 1: Running a Full Engagement",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 1,
-        "excerpt": "Turning the five-phase lifecycle into a week-by-week plan: mapping discover, design, implement, handover, and support onto a real calendar, with gates, buffers, and the scheduling realities that kill engagements.",
-        "date": "August 27, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "requirement-capture-as-built-discipline",
-        "title": "Lesson 2: Requirement Capture as an As-Built Discipline",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 2,
-        "excerpt": "Moving from a problem statement you agree on to a requirement set that survives handover: capturing the enacted process, not the stated one, and writing requirements the next team can run and change without you.",
-        "date": "August 28, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "production-routing-evals-guardrails",
-        "title": "Lesson 3: Advanced Hermes Configuration: Model Routing, Evals, and Guardrails in Production",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 3,
-        "excerpt": "When the agent leaves the sandbox and runs at real volume in front of a client, three decisions decide whether it holds up: which model runs which task, how you prove the output is still correct, and how you keep the guardrails you documented actually enforced. This lesson teaches all three.",
-        "date": "August 29, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "reusable-delivery-toolkit-skill-packaging",
-        "title": "Lesson 4: Building a Reusable Delivery Toolkit: Skill Packaging Done Right",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 4,
-        "excerpt": "The difference between a consultant who solves one client's problem and one who compounds every engagement into the next: turning the working capture discipline, eval suite, and guardrail set from Lessons 2 and 3 into packaged, loadable skills another consultant can run without relearning them.",
-        "date": "August 30, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "complex-client-environments-existing-stacks-sandboxed-deploys",
-        "title": "Lesson 5: Complex Client Environments: Existing Stacks, Enterprise Constraints, and Sandboxed Deploys",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 5,
-        "excerpt": "The clean single-client world where you chose the stack is the exception, not the rule. This lesson teaches you to land a packaged agent delivery inside a company that already has infrastructure, security rules, and processes you did not choose, and to keep the toolkit working when the environment fights back.",
-        "date": "August 31, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "estimating-multi-week-engagements",
-        "title": "Lesson 6: Estimating Multi-Week Engagements: Beyond the 30-45 Minute Task",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 6,
-        "excerpt": "The 30-45 minute task is the unit of execution, not the unit of estimation. This lesson teaches you to size a real multi-week delivery: how to break a large engagement into estimable pieces, why you estimate the critical path and not the total, how to put the constraints and reviews from Lesson 5 into the number, and how to keep an estimate honest when the environment reveals surprises.",
-        "date": "September 1, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "team-delivery-splitting-work-across-consultants",
-        "title": "Lesson 7: Team Delivery: When It's More Than One Consultant, How the Work Splits",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 7,
-        "excerpt": "Single-consultant delivery has a ceiling. This lesson teaches the working practitioner when that ceiling hits, how to split work so more than one owner can hold it without the pieces drifting apart, and the seams, contracts, and dependency rules that hold a delivery team together. Hermes Agent's multi-agent board is the concrete example.",
-        "date": "September 2, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "internal-pilot-converting-to-paid-engagement",
-        "title": "Lesson 8: Running an Internal Pilot That Converts Into a Paid Engagement",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 8,
-        "excerpt": "The hardest sale in consulting is the one where the client has not yet decided you are worth paying. This lesson teaches the working practitioner to run an internal pilot that converts: how you scope a real slice of a prospect's problem, deliver it as a bounded proof, and turn the measured result into a signed engagement instead of a free spec.",
-        "date": "September 3, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "quality-at-scale-golden-sets-eval-gates-regression",
-        "title": "Lesson 9: Quality at Scale: Golden Sets, Eval Gates, and Regression Discipline",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 9,
-        "excerpt": "A single agent that works under review is not the hard problem. An estate that keeps producing correct output at volume, after the rules, the data, and the models keep changing, is. This lesson teaches the practitioner who runs real multi-week delivery how to keep quality true at scale: a golden set that lives and grows without rotting, eval gates that block the wrong change before it ships, and the regression discipline that triages a failing gate instead of burying it.",
-        "date": "September 4, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "cost-and-reliability-engineering-running-agent-estate",
-        "title": "Lesson 10: Cost and Reliability Engineering for a Running Agent Estate",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 10,
-        "excerpt": "The build is one project. The running estate is a subscription to a recurring bill and a standing reliability obligation, and a consultant who hands over a system without engineering both is handing over a liability. This lesson teaches the practitioner operating a real delivery how to model and contain the recurring spend of a fleet of scheduled agents, how to make that fleet dependable when models and providers and infrastructure keep changing underneath it, and how to engineer for the failure of any single part without taking the whole delivery down.",
-        "date": "September 5, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "incident-discipline-troubleshooting-broken-agent",
-        "title": "Lesson 11: Incident Discipline: Troubleshooting a Broken Agent Under Client Pressure",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 11,
-        "excerpt": "An agent that produces a wrong answer is a bug. An agent that stops while a client watches is an incident. This lesson teaches the discipline that separates a calm professional from a panicked one when delivery goes wrong live: why you diagnose before you patch, how to establish ground truth under pressure, what communication the client hears first, and the difference between a fix that works and a fix you only claim works.",
-        "date": "September 6, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "change-management-as-a-deliverable",
-        "title": "Lesson 12: Change Management as a Deliverable, Not an Afterthought",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 12,
-        "excerpt": "The agent you delivered is running, the client depends on it, and now it needs to change: a new model, a tightened rule, a reconfigured schedule. This lesson teaches the consultant to treat change as its own deliverable with scope, a plan, a test, a rollback, and a record, instead of as a drive-by edit that quietly erodes a working delivery.",
-        "date": "September 7, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "self-sufficient-handover-operating-docs-runbooks",
-        "title": "Lesson 13: Handover That Makes the Client Self-Sufficient: Operating Docs and Runbooks",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 13,
-        "excerpt": "The real test of a delivery is not whether it works while you are in the room. It is what happens the first time the client runs it without you and something goes wrong. This lesson teaches the handover that makes the client self-sufficient: the operating doc that captures how the agent is configured and the runbook that tells a calm stranger what to do when it breaks, finished with a dry run and a support taper that make your absence the point.",
-        "date": "September 8, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "21 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "managing-a-small-portfolio-of-clients",
-        "title": "Lesson 14: Managing a Small Portfolio of Clients: Scope, Expectations, and Time",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 14,
-        "excerpt": "The moment you hold more than one engagement, every lesson before this one stops being about a single client and starts being about the space between them. This lesson teaches the working practitioner how a small portfolio survives: how scope bleeds between engagements and how to stop it, how to set expectations you can actually hold when no client gets your full attention, and how to budget time across several active deliveries so that adding a client does not quietly sacrifice the ones you already have. Hermes Agent's isolation model is the concrete vehicle.",
-        "date": "September 9, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "21 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "vendor-agnostic-translation-adapting-the-playbook-to-other-agent-tools",
-        "title": "Lesson 15: Vendor-Agnostic Translation: Adapting the Playbook to Other Agent Tools",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 15,
-        "excerpt": "The Hermes playbook you have built is real value, and it is also tool-specific by default. This lesson is the discipline of separating the transferable layer from the mechanical one, so you can deliver the same consulting standard on whatever agent tool a client already runs, without rebuilding your approach from scratch and without forcing Hermes-shaped ideas onto tools that have no equivalent.",
-        "date": "September 10, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "security-review-threat-model-secrets-compliance",
-        "title": "Lesson 16: Security Review for a Client Engagement: Threat Model, Secrets, and Compliance",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 16,
-        "excerpt": "A security review is not a checklist you run at the end of an engagement; it is a discipline you practice from the first scoping call. This lesson teaches the intermediate consultant how to build a client-facing threat model, hunt down secrets before the client's security team does, and present compliance evidence instead of assurances. Hermes Agent's defense-in-depth model is the concrete example: user authorization, dangerous-command approval, file write safety, container isolation, MCP credential filtering, cross-session isolation.",
-        "date": "September 11, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "17 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "Security"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "working-with-it-compliance-legal-on-agent-rollouts",
-        "title": "Lesson 17: Working with IT, Compliance, and Legal on Agent Rollouts",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 17,
-        "excerpt": "The last lesson taught you to survive a security review. This one teaches you to carry the rollout through the three teams that actually control momentum: IT, compliance, and legal. Each speaks a different language, each holds a different gate, and each will stall the engagement if you treat them like a single obstacle. This lesson teaches the intermediate consultant to triage these stakeholders in early, translate technical decisions into the language each one needs, and turn procurement, sign-off, and ongoing governance into parts of the delivery you plan for instead of surprises you absorb.",
-        "date": "September 12, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "17 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "Security"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "pricing-engagements-fixed-fee-tm",
-        "title": "Lesson 18: Pricing Individual Engagements: Fixed-Fee vs Time-and-Materials in Practice",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 18,
-        "excerpt": "The price on an engagement is not a number you pick, it is a risk allocation you choose. This lesson teaches the working practitioner to decide between fixed-fee and time-and-materials, price the engagement from a real unit economy, and build change control that keeps either model honest when scope moves.",
-        "date": "September 13, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "writing-proposals-and-sows",
-        "title": "Lesson 19: Writing Proposals and Statements of Work That Protect Both Sides",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 19,
-        "excerpt": "You priced the engagement in Lesson 18, and now the price has to survive on paper. This lesson teaches the practitioner to write the proposal and statement of work as risk documents, not sales documents: a scope boundary specific enough to enforce, acceptance criteria the client can actually test against, assumptions and exclusions written down so neither side is surprised, and change control that keeps a signed SOW honest when the work shifts.",
-        "date": "September 14, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      }
-    ],
-    "totalLessons": 19,
-    "curriculumLessons": 25
-  },
-  {
     "slug": "agentic-ai",
     "name": "Agentic AI Implementation Path",
     "description": "From single-agent prototypes to multi-agent orchestration, a practitioner's curriculum for shipping agentic systems.",
@@ -3410,6 +3426,22 @@ export const learnLessons: LearnLesson[] = [
       "AI Agents",
       "Consulting",
       "LLMs"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "managing-scope-creep-and-difficult-clients",
+    "title": "Lesson 20: Managing Scope Creep and Difficult Clients",
+    "series": "hermes-consultant-intermediate",
+    "lesson": 20,
+    "excerpt": "Scope creep and difficult clients feel like two separate curses, but they are one problem wearing two costumes: the engagement drifting away from the baseline it was supposed to hold. This lesson teaches the intermediate consultant that both are settled by the same three artifacts, a written scope, a named acceptance bar, and a change process, and shows you how to use them to turn five repeatable 'difficult client' patterns into tractable negotiations instead of silent battles you lose one email at a time. The worked example is a Hermes Agent engagement, and the discipline transfers to any tool you run.",
+    "date": "September 15, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "18 min read",
+    "tags": [
+      "AI Agents",
+      "Consulting",
+      "Client Management"
     ],
     "status": "published"
   },
