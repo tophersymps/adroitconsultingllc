@@ -161,15 +161,18 @@ export default async function BlogPostPage({ params }: Props) {
             narration (avoids duplicating the Header's /api/auth/session call).
             Tier C FLOAT: the player is pinned sticky at the top of the article
             viewport, docked just BELOW the site header. The Header is
-            `sticky top-0 z-50`; this wrapper uses z-40 (header_z - 10) so the
-            player slides under the header, not over it. It stays NESTED inside
-            the max-w-[920px] width wrapper (width fix, t_f9646deb) — the width
-            card is NOT replaced or duplicated. */}
+            `sticky top-0 z-50` (h-16 / 64px). This max-w-[920px] width wrapper
+            itself is the sticky element: it is a DIRECT child of <main>, whose
+            box spans the full article, so the wrapper's sticky range covers the
+            whole article scroll (a nested sticky inside a short 119px wrapper
+            would scroll away with it — verified live). It docks at top-16
+            (64px, immediately below the header) at z-40 (header_z - 10) so it
+            never covers the header. The max-w-[920px] width-fix constraint is
+            preserved on this same element — the width card is not duplicated
+            or replaced, and the player stays nested inside it. */}
         {audio && (
-          <div className="max-w-[920px] mx-auto px-6 my-6">
-            <div className="sticky top-0 z-40 my-0">
-              <AudioPlayerLazy slug={post.slug} hasAudio />
-            </div>
+          <div className="sticky top-16 z-40 max-w-[920px] mx-auto px-6 my-6">
+            <AudioPlayerLazy slug={post.slug} hasAudio />
           </div>
         )}
 
