@@ -70,7 +70,8 @@ rather than a restore.
 ### Write path and the rollback story
 
 `scripts/build-audio.js` writes with the **same** `src/lib/r2/client.ts`
-helpers the routes read with (`putR2Object` / `headR2Object`), so there is one
+helpers the routes read with (`getR2ObjectStream` / `getR2ObjectRange` /
+`getR2Object` / `putR2Object` / `headR2Object`), so there is one
 implementation of the endpoint, the credentials and the "verify the PUT by
 re-reading R2" rule:
 
@@ -131,6 +132,24 @@ re-reading R2" rule:
   duration (truncation guard), and verifies the stored size after upload.
   The timing manifests are NOT touched: a re-encode preserves duration, so the
   existing `blog/<slug>/af_heart.timing.json` offsets stay valid.
+
+### Read path: streamed, and R2 is asked for only the bytes the client wants
+
+`GET /api/audio/[slug]` never buffers the MP3. The route resolves the requested
+byte span (a `HeadObject` for the total size — response headers only, no body
+over the wire — then the same range math it always used), passes that span to
+`GetObject` as an HTTP `Range`, and pipes R2's body straight into the response.
+So an `<audio>` metadata probe (`Range: bytes=0-99`) or a seek transfers
+exactly that span from R2 instead of re-downloading the whole 5 MB file, and
+peak server memory is a stream chunk rather than the whole object. The
+200 / 206 / 416 / If-Range / malformed-range semantics and every header
+(`private, max-age=3600`, `audio/mpeg`, `Accept-Ranges: bytes`,
+`Content-Range`, `Content-Length`) are unchanged; a request with no Range still
+issues exactly one `GetObject`.
+
+`GET /api/audio/[slug]/timings` keeps reading its few-hundred-byte manifest
+buffered (`getR2Object`) — it parses the JSON immediately, so streaming would
+buy nothing.
 
 ## Diagram-description behaviour (the narration contract)
 
