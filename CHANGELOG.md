@@ -4,6 +4,8 @@ All notable changes to the Adroit Consulting Blog project will be documented in 
 
 ## [Unreleased]
 
+### Security fix: verify-content-paths.js no longer runs a shell — CWE-78 via interpolated git-diff filename (t_37234d98)
+
 ### Security fix: build-audio.js no longer runs a shell — CWE-78 command injection via content/blog filename (t_38e981ba)
 
 **What** - `scripts/build-audio.js` built the TTS command as a SHELL STRING and ran it through `execSync` (`execSync(\`${venvPython} ${engine} --text "$(cat ${JSON.stringify(textFile)})" --voice ${voice} --out ${JSON.stringify(out)} --timing ...\`)`), and probed the result with a second shell string (`execSync(\`file -b ${JSON.stringify(out)}\`)`). `slug` is a FILENAME taken from `content/blog/*.mdx` and was interpolated straight into those strings; `JSON.stringify()` only quotes a path and does NOT stop command substitution inside double quotes. Both calls now use `execFileSync` with an argv ARRAY (no shell, so no re-interpretation of `$()`, backticks, `${}` or `;`), which also removes the temp `.audio-out/<slug>.narration.txt` file — `narration` is passed as one argv element, which preserves real newlines natively (the `"$(cat …)"` trick only existed to get newlines through a shell). Defence in depth: new `assertSafeSlug` / `assertSafeVoice` allowlists (`/^[a-z0-9][a-z0-9-]*$/` and, because `af_heart`/`bm_george` use underscores, `/^[a-z0-9][a-z0-9_-]*$/`) run at the top of the worklist loop and at the start of `main()`, before any slug/voice reaches `path.join`, a storage key or a subprocess. A slug that fails validation aborts the run (`FATAL: invalid slug "…" rejected: …`, exit 1) instead of being executed.

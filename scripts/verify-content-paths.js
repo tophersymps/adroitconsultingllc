@@ -2,7 +2,7 @@
 // changed content file and compare against the working tree. If every file
 // matches byte-for-byte, the entire content change is exactly the path rewrite
 // and nothing else (no content/meaning edits, no em-dashes introduced).
-const { execSync } = require("child_process");
+const { execSync, execFileSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
@@ -26,8 +26,16 @@ const changed = execSync(
 ).toString().trim().split("\n").filter(Boolean);
 
 let checked = 0, mismatched = 0;
+// Allowlist: content/ + safe path chars, rejecting ".." path segments and any
+// shell metacharacters. Prevents an injected filename from ever reaching a
+// shell (CWE-78) — execFileSync passes argv without /bin/sh.
+const relRe = /^content\/[A-Za-z0-9][A-Za-z0-9._/-]*$/;
 for (const rel of changed) {
-  const headText = execSync(`git show HEAD:${rel}`).toString();
+  if (!relRe.test(rel) || rel.includes("..")) {
+    console.log("SKIP (non-allowlisted path): " + rel);
+    continue;
+  }
+  const headText = execFileSync("git", ["show", `HEAD:${rel}`]).toString();
   const workingText = fs.readFileSync(path.join(__dirname, "..", rel), "utf8");
   checked++;
   if (rewrite(headText) !== workingText) {
