@@ -2,9 +2,10 @@
  * GET /api/audio/[slug] — authenticated private stream (plan Phase 5A).
  *
  * Serves a narrated article MP3 ONLY to signed-in users, streaming the blob
- * from the PRIVATE Supabase 'audio' bucket. Never emits a public URL — the
- * object is fetched server-side with the service-role client and returned as
- * fixed `audio/mpeg` bytes.
+ * from the PRIVATE Cloudflare R2 bucket ('adroit-audio') over its S3 API.
+ * Never emits a public or signed URL — the object is fetched server-side with
+ * the bucket-scoped R2 keys (src/lib/r2/client.ts) and returned as fixed
+ * `audio/mpeg` bytes.
  *
  *  200  audio/mpeg, "Cache-Control: private, max-age=3600"  (full body)
  *  206  Partial Content when an HTTP Range header is honored (single byte
@@ -25,9 +26,9 @@
  */
 import { NextRequest } from "next/server";
 import { articleAudio } from "@/data/audio";
-import { AUDIO_BUCKET, type AudioRouteContext } from "@/lib/audio/contracts";
+import { type AudioRouteContext } from "@/lib/audio/contracts";
+import { getR2Object } from "@/lib/r2/client";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
 
@@ -52,14 +53,14 @@ export async function GET(req: NextRequest, context: AudioRouteContext) {
     const entry = articleAudio.find((a) => a.slug === slug);
     if (!entry) return new Response(null, { status: 404 });
 
-    // 3. Private read via service-role client (server can read private blobs).
-    const { data, error } = await getSupabaseServiceClient()
-      .storage.from(AUDIO_BUCKET)
-      .download(entry.storagePath);
+    // 3. Private read via the bucket-scoped R2 credentials. The object stays
+    //    server-side; the key is never returned to the client and no URL
+    //    (public or signed) is ever minted.
+    const object = await getR2Object(entry.storagePath);
+    if (!object) return new Response(null, { status: 404 });
 
-    if (error || !data) return new Response(null, { status: 404 });
-
-    const totalSize = data.size;
+    const body = object.bytes;
+    const totalSize = object.size;
     const rangeHeader = req.headers.get("range");
     const ifRange = req.headers.get("if-range");
 
@@ -68,8 +69,7 @@ export async function GET(req: NextRequest, context: AudioRouteContext) {
     // Last-Modified, so per RFC 7233 the Range must be ignored -> full 200).
     // This is the cheap, correct If-Range fallback for a streamed resource.
     if (!rangeHeader || ifRange) {
-      const bytes = await data.arrayBuffer();
-      return new Response(new Uint8Array(bytes), {
+      return new Response(new Uint8Array(body), {
         status: 200,
         headers: { ...BASE_HEADERS, "Content-Length": String(totalSize) },
       });
@@ -79,8 +79,7 @@ export async function GET(req: NextRequest, context: AudioRouteContext) {
     const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader.trim());
     if (!match) {
       // Malformed / multi-range (unsupported) -> degrade to full 200.
-      const bytes = await data.arrayBuffer();
-      return new Response(new Uint8Array(bytes), {
+      return new Response(new Uint8Array(body), {
         status: 200,
         headers: { ...BASE_HEADERS, "Content-Length": String(totalSize) },
       });
@@ -109,7 +108,7 @@ export async function GET(req: NextRequest, context: AudioRouteContext) {
       });
     }
 
-    const partial = await data.slice(start, end + 1).arrayBuffer();
+    const partial = body.subarray(start, end + 1);
     return new Response(new Uint8Array(partial), {
       status: 206,
       headers: {
