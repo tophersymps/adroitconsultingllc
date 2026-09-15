@@ -25,10 +25,14 @@ the 10 quoted by this card's own `CHANGELOG.md` entry. The classification below 
 no verdict, and are excluded from the 206 figure on purpose.
 
 This document is the one file in the repo that quotes the string by necessity (it is the
-classification), so it is excluded from all of the counts above. To reproduce them:
-`grep -ril adroit-blog --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.next .`
-then drop `docs/legacy-adroit-blog-classification.md` from the file list; on the base commit
-that yields 251 occurrences in 130 files, on this commit 216 in 111.
+classification), so it is excluded from all of the counts above. To reproduce the file
+counts: `grep -ril adroit-blog --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.next .`
+then drop `docs/legacy-adroit-blog-classification.md` from the list (it yields 130 files at
+the base commit and 111 at this one). For the occurrence totals, add `-o` and count lines:
+`grep -roi adroit-blog --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.next . | wc -l`
+with the same one-file exclusion — 251 occurrences before this card, 216 at this commit.
+`git grep -I -i -o -e adroit-blog <rev>` against the two recorded revisions gives the same
+totals.
 
 Every one of the 251 occurrences that predate this card is accounted for: 45 removed by this
 card plus 206 kept (31 code identifiers, 137 historical records, 38 dead artifacts), and the
