@@ -11,4 +11,6 @@ export const articleAudio: ArticleAudio[] = [
   { slug: "prompt-caching-ai-infrastructure-2026", voice: "af_heart", storagePath: "blog/prompt-caching-ai-infrastructure-2026/af_heart.mp3" },
   { slug: "realtime-subscription-lifecycle-supabase-2026", voice: "af_heart", storagePath: "blog/realtime-subscription-lifecycle-supabase-2026/af_heart.mp3" },
   { slug: "salesforce-release-discipline-2026", voice: "af_heart", storagePath: "blog/salesforce-release-discipline-2026/af_heart.mp3" },
+  { slug: "salesforce-summer-26-three-things", voice: "af_heart", storagePath: "blog/salesforce-summer-26-three-things/af_heart.mp3" },
+  { slug: "sse-vs-websockets-2026", voice: "af_heart", storagePath: "blog/sse-vs-websockets-2026/af_heart.mp3" },
 ];
