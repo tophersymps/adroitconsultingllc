@@ -16,7 +16,8 @@ Architecture + locked decisions: `docs/arch-audio-player.md` and
 Run the batch generator for that one slug:
 
 ```bash
-# Requires .env.local with NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
+# Requires .env.local with the R2_* vars (+ the Supabase vars while the
+# dual-write transition flag is on — see the write-path section below)
 node scripts/build-audio.js --slug <slug> --voice af_heart
 ```
 
@@ -27,20 +28,20 @@ This:
 3. synthesizes the MP3 with the Kokoro TTS engine
    (`scripts/tts/engines/engine_kokoro.py`, venv at `scripts/tts/.venv`),
    always as **mono / 24000 Hz / 48 kbps** (the lean storage profile, below),
-4. uploads it to the PRIVATE `audio` bucket at
-   `audio/blog/<slug>/af_heart.mp3` (service-role key, REST upload),
-5. rewrites `src/data/audio.ts` to include the entry.
+4. uploads it to the PRIVATE Cloudflare R2 bucket `adroit-audio` at
+   `blog/<slug>/af_heart.mp3` through `src/lib/r2/client.ts` (`putR2Object` —
+   the same helper the migration tool uses; it re-reads R2 and fails the run if
+   the stored size does not match), and — while the dual-write flag below is on
+   — also to the private Supabase `audio` bucket,
+5. uploads the timing manifest `blog/<slug>/af_heart.timing.json` to the same
+   two stores, in the same order, with `application/json`,
+6. rewrites `src/data/audio.ts` to include the entry.
 
-> **Write path vs read path (migration in progress).** The reader
-> (`src/app/api/audio/[slug]/route.ts` and the `/timings` route) now serves
-> objects from Cloudflare R2. The generator above still UPLOADS to Supabase
-> Storage, so a freshly generated article is not readable until it is mirrored
-> to R2. Mirror after each backfill run until the generator writes to R2
-> directly:
->
-> ```bash
-> node --env-file=.env.local scripts/migrate-audio-to-r2.cjs   # idempotent
-> ```
+> **Write path == read path.** `blog/<slug>/af_heart.mp3` and
+> `blog/<slug>/af_heart.timing.json` are written straight to the bucket the
+> routes read from, so a freshly generated article is playable immediately.
+> The `scripts/migrate-audio-to-r2.cjs` mirror is no longer part of the
+> generation flow — keep it for reconciliation/audits (it is idempotent).
 
 To pilot the N newest articles:
 
@@ -66,8 +67,29 @@ Supabase Storage's Free tier bills storage AND egress (1 GB / 5 GB, roughly
 still holds every object so a rollback is a config revert (re-point the reader)
 rather than a restore.
 
-- Copy/mirror + verify (idempotent, re-run after every audio backfill pass
-  until the generator uploads to R2 directly):
+### Write path and the rollback story
+
+`scripts/build-audio.js` writes with the **same** `src/lib/r2/client.ts`
+helpers the routes read with (`putR2Object` / `headR2Object`), so there is one
+implementation of the endpoint, the credentials and the "verify the PUT by
+re-reading R2" rule:
+
+- **R2 is primary and always written.** A failed or short R2 write aborts the
+  run — no entry is emitted for audio that is not in the bucket.
+- **Supabase Storage is a dual write while the transition window is open.**
+  `AUDIO_DUAL_WRITE_SUPABASE` in `.env.local` controls it: unset (the default
+  today) = write both stores; `false` / `0` / `no` / `off` = R2 only. Rolling
+  the reader back to Supabase is therefore a config change, not a code change.
+- **Nothing is ever deleted from either bucket.** If dual write is switched
+  off, the two stores diverge (Supabase keeps the older bytes for any
+  regenerated article) — that is the intended state; R2 is authoritative.
+- Gotcha when reading Supabase Storage over HTTP (i.e. after a reader
+  rollback): object GETs go through a CDN (`cf-cache-status: HIT`), so a
+  just-overwritten object can serve the previous bytes until the cache expires.
+  The R2 read path is unaffected (server-side `GetObject` in the route).
+
+- Reconcile / audit the two stores (idempotent — also the way to re-mirror
+  anything written while dual write was off):
 
   ```bash
   node --env-file=.env.local scripts/migrate-audio-to-r2.cjs --dry-run      # report only
@@ -75,11 +97,12 @@ rather than a restore.
   node --env-file=.env.local scripts/migrate-audio-to-r2.cjs --verify-only  # list both stores and compare
   ```
 
-  It copies every object it does not already find in R2 at the same byte size,
-  re-reads R2 (ListObjectsV2, which the provisioned keys ARE allowed; a
-  HeadObject sweep is the fallback if ListBucket is ever denied), and exits
-  non-zero unless the two listings match on key set and per-object size. Keys
-  are the same as the Supabase layout, so `src/data/audio.ts` is unchanged.
+  It copies every object it does not already find in R2 at the same byte size
+  through the shared `putR2Object` helper, re-reads R2 (ListObjectsV2, which
+  the provisioned keys ARE allowed; a HeadObject sweep is the fallback if
+  ListBucket is ever denied), and exits non-zero unless the two listings match
+  on key set and per-object size. Keys are the same as the Supabase layout, so
+  `src/data/audio.ts` is unchanged.
 - R2 env vars live in `.env.local` only (never a `NEXT_PUBLIC_*` var, never a
   tracked file): `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`,
   `R2_SECRET_ACCESS_KEY`. The keys are **bucket-scoped** (Object Read & Write
