@@ -7,10 +7,15 @@ import type { ArticleAudio } from "@/lib/audio/contracts";
 
 export const articleAudio: ArticleAudio[] = [
   { slug: "agent-eval-infrastructure-2026", voice: "af_heart", storagePath: "blog/agent-eval-infrastructure-2026/af_heart.mp3" },
+  { slug: "ai-agent-observability-opentelemetry-2026", voice: "af_heart", storagePath: "blog/ai-agent-observability-opentelemetry-2026/af_heart.mp3", timingsStoragePath: "blog/ai-agent-observability-opentelemetry-2026/af_heart.timing.json" },
   { slug: "backup-restore-validation-2026", voice: "af_heart", storagePath: "blog/backup-restore-validation-2026/af_heart.mp3" },
+  { slug: "ebpf-kubernetes-observability-security-2026", voice: "af_heart", storagePath: "blog/ebpf-kubernetes-observability-security-2026/af_heart.mp3", timingsStoragePath: "blog/ebpf-kubernetes-observability-security-2026/af_heart.timing.json" },
+  { slug: "estimation-after-ai-2026", voice: "af_heart", storagePath: "blog/estimation-after-ai-2026/af_heart.mp3", timingsStoragePath: "blog/estimation-after-ai-2026/af_heart.timing.json" },
   { slug: "multi-agent-failure-structural-2026", voice: "af_heart", storagePath: "blog/multi-agent-failure-structural-2026/af_heart.mp3" },
+  { slug: "multi-agent-orchestration-production-lessons", voice: "af_heart", storagePath: "blog/multi-agent-orchestration-production-lessons/af_heart.mp3", timingsStoragePath: "blog/multi-agent-orchestration-production-lessons/af_heart.timing.json" },
   { slug: "prompt-caching-ai-infrastructure-2026", voice: "af_heart", storagePath: "blog/prompt-caching-ai-infrastructure-2026/af_heart.mp3" },
   { slug: "realtime-subscription-lifecycle-supabase-2026", voice: "af_heart", storagePath: "blog/realtime-subscription-lifecycle-supabase-2026/af_heart.mp3" },
+  { slug: "retrospective-follow-through-2026", voice: "af_heart", storagePath: "blog/retrospective-follow-through-2026/af_heart.mp3", timingsStoragePath: "blog/retrospective-follow-through-2026/af_heart.timing.json" },
   { slug: "salesforce-release-discipline-2026", voice: "af_heart", storagePath: "blog/salesforce-release-discipline-2026/af_heart.mp3" },
   { slug: "salesforce-summer-26-three-things", voice: "af_heart", storagePath: "blog/salesforce-summer-26-three-things/af_heart.mp3" },
   { slug: "sse-vs-websockets-2026", voice: "af_heart", storagePath: "blog/sse-vs-websockets-2026/af_heart.mp3" },
