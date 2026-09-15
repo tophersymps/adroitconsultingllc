@@ -9,7 +9,7 @@
  * `description::` override honored.
  */
 import { describe, it, expect } from "vitest";
-import { mdxToNarration, stripFrontmatter } from "./audio-narration";
+import { mdxToNarration, stripFrontmatter, flattenLine } from "./audio-narration";
 
 describe("stripFrontmatter", () => {
   it("strips a leading YAML frontmatter block", () => {
@@ -93,5 +93,44 @@ Most teams can trace their agent.
       "Diagram: A bar chart showing 52% run offline evals and 37% online ones.");
     // raw diagram path never leaks into narration
     expect(narration).not.toContain("</diagrams/");
+  });
+});
+
+describe("flattenLine — clean-text narration (no \\n / html / bullet artifacts)", () => {
+  it("drops bare code-fence lines (``` / ~~~ / with language tag)", () => {
+    expect(flattenLine("```")).toBe("");
+    expect(flattenLine("~~~")).toBe("");
+    expect(flattenLine("```json")).toBe("");
+    expect(flattenLine("```js")).toBe("");
+  });
+
+  it("strips leading bullet markers (- / * / +)", () => {
+    expect(flattenLine("- team: alpha")).toBe("team: alpha");
+    expect(flattenLine("* point one")).toBe("point one");
+    expect(flattenLine("+ plus item")).toBe("plus item");
+  });
+
+  it("strips numbered-list and blockquote markers", () => {
+    expect(flattenLine("1. first step")).toBe("first step");
+    expect(flattenLine("12) step twelve")).toBe("step twelve");
+    expect(flattenLine("> a quoted line")).toBe("a quoted line");
+  });
+
+  it("strips raw HTML tags and bare autolink URLs", () => {
+    // tags removed, wrapped prose kept; bare <br>/autolink leave no text
+    expect(flattenLine("Keep <strong>bold</strong> prose")).toBe("Keep bold prose");
+    expect(flattenLine("a <br> break")).toBe("a break");
+    expect(flattenLine("see <https://example.com> for details")).toBe("see for details");
+  });
+
+  it("preserves inline-code literal contents, even angle-bracketed tokens", () => {
+    expect(flattenLine("call `getUser(<id>)` now")).toBe("call getUser(<id>) now");
+    expect(flattenLine("max `retries = 3`")).toBe("max retries = 3");
+  });
+
+  it("collapses a mixed messy line to plain prose with no markup", () => {
+    const out = flattenLine("- <br> agents run `evals` daily");
+    expect(out).not.toMatch(/\\n|```|- |<[^>]+>/);
+    expect(out).toBe("agents run evals daily");
   });
 });

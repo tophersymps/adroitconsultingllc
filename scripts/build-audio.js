@@ -20,6 +20,11 @@
  *   node scripts/build-audio.js --recent 5 --voice af_heart
  *   node scripts/build-audio.js --slug agent-eval-infrastructure-2026 --voice af_heart
  *   node scripts/build-audio.js --metadata-only --recent 5   # emit audio.ts without synth/upload
+ *   node scripts/build-audio.js --backfill --voice af_heart  # idempotent: synth+upload ALL blog
+ *                           # slugs missing from src/data/audio.ts and MERGE the result in
+ *                           # (skips slugs already present with the target voice; use with
+ *                           # --force to regenerate everything, --limit N to cap new synths).
+ *                           # Used by the publish-time hook + nightly sweep automation.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -71,8 +76,11 @@ const slugOnly = flag("--slug");
 const voice = flag("--voice") || DEFAULT_VOICE;
 const metadataOnly = args.includes("--metadata-only");
 const force = args.includes("--force");
+const backfill = args.includes("--backfill");
+const incremental = args.includes("--incremental") || backfill;
+const limit = flag("--limit"); // cap new synths during a backfill run
 
-if (metadataOnly && !recentN && !slugOnly) {
+if (metadataOnly && !recentN && !slugOnly && !backfill) {
   console.error("--metadata-only requires --recent N or --slug.");
   process.exit(2);
 }
@@ -116,11 +124,28 @@ function emit(entries) {
     "export const articleAudio: ArticleAudio[] = [",
   ];
   for (const e of entries) {
-    lines.push(`  { slug: ${JSON.stringify(e.slug)}, voice: ${JSON.stringify(e.voice)}, storagePath: ${JSON.stringify(e.storagePath)} },`);
+    lines.push(`  { slug: ${JSON.stringify(e.slug)}, voice: ${JSON.stringify(e.voice)}, storagePath: ${JSON.stringify(e.storagePath)}${e.timingsStoragePath ? `, timingsStoragePath: ${JSON.stringify(e.timingsStoragePath)}` : ""} },`);
   }
   lines.push("];", "");
   fs.writeFileSync(OUT_PATH, lines.join("\n"));
   console.log(`Wrote ${OUT_PATH}: ${entries.length} entries`);
+}
+
+/* Parse an existing src/data/audio.ts into {slug,voice,storagePath[,timingsStoragePath]}.
+ * Used by --backfill/--incremental to MERGE rather than replace, so previously
+ * generated articles (incl. any Tier C timingsStoragePath field) are preserved. */
+function readExistingEntries() {
+  if (!fs.existsSync(OUT_PATH)) return [];
+  const raw = fs.readFileSync(OUT_PATH, "utf-8");
+  const out = [];
+  const re = /\{\s*slug:\s*"([^"]+)",\s*voice:\s*"([^"]+)",\s*storagePath:\s*"([^"]+)"(?:,\s*timingsStoragePath:\s*"([^"]+)")?\s*\}/g;
+  let m;
+  while ((m = re.exec(raw))) {
+    const e = { slug: m[1], voice: m[2], storagePath: m[3] };
+    if (m[4]) e.timingsStoragePath = m[4];
+    out.push(e);
+  }
+  return out;
 }
 
 /* --- Supabase private-bucket upload (REST, service-role) --- */
@@ -158,11 +183,24 @@ async function main() {
     const [fm] = parseFrontmatter(raw);
     fmCache[s] = fm || {};
   }
-  if (slugOnly) slugs = [slugOnly];
+  if (slugOnly) slugs = slugOnly.split(",").map((s) => s.trim());
   if (recentN) slugs = sortByDateDesc(slugs, fmCache).slice(0, parseInt(recentN, 10));
+  if (backfill && !slugOnly) slugs = allSlugs(); // --backfill alone targets every blog article
 
-  const entries = [];
+  let entries = incremental ? readExistingEntries() : [];
+  const existingKey = new Set(entries.map((e) => `${e.slug}/${e.voice}`));
+  const limitN = limit ? parseInt(limit, 10) : null;
+  let synthesized = 0;
+
   for (const slug of slugs) {
+    if (incremental && !force && existingKey.has(`${slug}/${voice}`)) {
+      console.log(`SKIP ${slug}: ${voice} already in audio.ts`);
+      continue;
+    }
+    if (limitN !== null && synthesized >= limitN) {
+      console.log(`STOP ${slug}: reached --limit ${limitN}`);
+      break;
+    }
     const raw = fs.readFileSync(path.join(BLOG_DIR, `${slug}.mdx`), "utf-8");
     const narration = mdxToNarration(raw);
     const storagePath = `blog/${slug}/${voice}.mp3`;
@@ -175,12 +213,18 @@ async function main() {
       continue;
     }
 
-    // synthesize via the TTS engine CLI
+    // synthesize via the TTS engine CLI.
+    // Write narration to a temp file and pass it via "$(cat ...)" command
+    // substitution so REAL newlines reach the engine. (Historical bug: this
+    // used JSON.stringify(narration), which turned real newlines into literal
+    // backslash-n chars that Kokoro read aloud as "backslash n".)
     const out = path.join(ROOT, ".audio-out", `${slug}.mp3`);
     fs.mkdirSync(path.dirname(out), { recursive: true });
+    const textFile = path.join(ROOT, ".audio-out", `${slug}.narration.txt`);
+    fs.writeFileSync(textFile, narration, "utf-8");
     const engine = path.join(ROOT, "scripts", "tts", "engines", "engine_kokoro.py");
     const venvPython = path.join(ROOT, "scripts", "tts", ".venv", "bin", "python");
-    const synthCmd = `${venvPython} ${engine} --text ${JSON.stringify(narration)} --voice ${voice} --out ${out}`;
+    const synthCmd = `${venvPython} ${engine} --text "$(cat ${JSON.stringify(textFile)})" --voice ${voice} --out ${JSON.stringify(out)}`;
     try {
       execSync(synthCmd, { timeout: 120000, encoding: "utf-8" });
     } catch (e) {
@@ -203,7 +247,9 @@ async function main() {
     await uploadMp3(env, storagePath, mp3Buf);
     const size = fs.statSync(out).size;
     console.log(`OK ${slug} ${voice} ${size} bytes -> ${storagePath}`);
+    entries = entries.filter((e) => !(e.slug === slug && e.voice === voice));
     entries.push({ slug, voice, storagePath });
+    synthesized++;
   }
 
   emit(entries);

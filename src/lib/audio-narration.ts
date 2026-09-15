@@ -49,20 +49,49 @@ export function stripFrontmatter(raw: string): string {
 }
 
 /** Collapse a single markdown line into plain spoken prose. */
-function flattenLine(line: string): string {
+export function flattenLine(line: string): string {
   let s = line;
+
+  // Code-fence delimiters carry no prose — drop a line that opens/closes a
+  // fence. Handles bare ```, a language-tagged opener ```json, and ~~~.
+  if (/^\s*(```|~~~)/.test(s)) {
+    const after = s.replace(/^\s*(```|~~~)/, "").trim();
+    const residue = after.replace(/[`~]/g, "").trim();
+    // Only a short info-string (```json) or delimiters → no prose; drop.
+    if (residue.length === 0 || (after.length <= 16 && !/\s/.test(residue))) return "";
+  }
+
+  // Protect inline-code spans: tokenize their literal contents so the HTML
+  // strip below can't eat an angle-bracketed token (e.g. `` `<Item>` ``).
+  const codeTokens: string[] = [];
+  s = s.replace(/`([^`]+)`/g, (_, body) => {
+    codeTokens.push(body);
+    return `\u0000${codeTokens.length - 1}\u0000`;
+  });
+
   // links: keep the label, drop the URL — `[label](url)` -> `label`
   s = s.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
-  // references/bare URLs: keep as written but de-bracket
-  s = s.replace(/<([^>]+)>/g, "$1");
-  // inline code spans: keep literal contents
-  s = s.replace(/`([^`]+)`/g, "$1");
-  // emphasis / strikethrough / blockquote / heading markers -> space
+
+  // raw HTML tags / bare autolink URLs: strip tags but keep wrapped prose
+  // (`<strong>bold</strong>` -> `bold`; `<br>` -> nothing) so no markup text
+  // is ever spoken, yet real sentence content survives
+  s = s.replace(/<[^>]+>/g, "");
+  // stray backtick fence markers that survived -> space
+  s = s.replace(/`+/g, " ");
+  // emphasis / strikethrough / blockquote / heading / pipe markers -> space
   s = s.replace(/[*_~#>|]+/g, " ");
   // footnote markers [^n]
   s = s.replace(/\[\^\d+\]/g, "");
+  // strip leading list / bullet / numeric / blockquote markers
+  // (`- x`, `* x`, `+ x`, `1. x`, `1) x`, `> x`, `## x`)
+  s = s.replace(/^\s*(?:(?:[-*+]\s+)|(?:\d+[.)]\s+)|(?:>\s*)|(?:[#]+\s+))+/i, "");
+  // horizontal-rule only lines (`---`, `***`) -> nothing
+  if (/^[\s]*[-*_]{3,}[\s]*$/.test(s)) return "";
   // collapse whitespace
   s = s.replace(/\s+/g, " ").trim();
+  // restore protected inline-code literals (after ALL stripping so `>` /
+  // `=` / leading-space tokens inside backticks survive verbatim)
+  s = s.replace(/\u0000(\d+)\u0000/g, (_, i) => codeTokens[Number(i)]);
   return s;
 }
 

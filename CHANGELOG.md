@@ -4,6 +4,22 @@ All notable changes to the Adroit Consulting Blog project will be documented in 
 
 ## [Unreleased]
 
+### Fix: AudioPlayer width matches hero + clean-text narration, 5 pilots regenerated (t_f9646deb)
+
+**What** - Two user-visible fixes to the shipped article-audio feature, plus a regeneration so listeners hear clean audio immediately.
+
+- **Fix 1 (player width):** the auth-gated `<AudioPlayerLazy>` on `/field-notes/[slug]` previously rendered inside `<main class="flex-1">` with no width wrapper, so it stretched the full viewport (wider than the 920px hero). It is now wrapped in `<div className="max-w-[920px] mx-auto px-6 my-6">` — the exact hero container — so the player card aligns to the banner image above it. (AC-1)
+- **Fix 2 (clean narration text):** two leaks in the text pipeline are closed:
+  - `scripts/build-audio.js` no longer passes narration through `JSON.stringify(...)`, which had turned real newlines into literal backslash-n chars that Kokoro read aloud as "backslash n". Narration is now written to a temp file (`.audio-out/<slug>.narration.txt`) and handed to the engine via `"$(cat <file>)"` command substitution, so REAL newlines survive to the TTS engine.
+  - `src/lib/audio-narration.ts` `flattenLine()` now strips all markup that previously reached the TTS: bare code-fence lines (``` / ~~~, incl. language-tagged openers like ```json), leading bullet/numbered/blockquote markers (`- x`, `* x`, `+ x`, `1. x`, `1) x`, `> x`, `## x`), raw HTML tags (tags removed, wrapped prose kept), and horizontal rules (`---`, `***`). Inline-code literal contents are still preserved verbatim, even angle-bracketed tokens, via a tokenization pass that restores them after all stripping. `flattenLine` is now exported for direct unit tests. (AC-2)
+- **Fix 3 (regen):** reran `node scripts/build-audio.js --recent 5 --voice af_heart` (pilot scope only — the 5 slugs already in `src/data/audio.ts`), synthesizing from the cleaned narration and re-uploading to the private Supabase `audio` bucket. `src/data/audio.ts` metadata re-emitted with the fresh regen. The other ~86 articles were NOT regenerated (non-goal).
+
+**Why** - Two shipped regressions: the audio player visually overhung the article (wider than the banner it sits under), and the narration fed to TTS contained residue (`\n`, code fences, bullet prefixes, HTML tags) that Kokoro spoke verbatim — "backslash n" and raw markup text. Both degraded the listened experience the feature was built to provide.
+
+**Verified** - `npm test` 92 files / 710 pass (was 704; +6 flattenLine clean-text cases: fence/bullet/HTML/numbered/blockquote/inline-code + mixed). `npm run lint` clean on all changed files (`scripts/build-audio.js` is eslint-ignored by project config); `tsc --noEmit` exit 0. Flat-narration probe on all 5 pilot articles reports CLEAN (no literal backslash-n, no ```, no leading bullets, no HTML tags). `npm run build` exit 0. Regen externally verified: pilot MP3s re-uploaded to Supabase and read back as audio (DoD-8).
+
+**Known Issues** - None. `flattenLine` is now exported (was private). The 5 pilot regenerated MP3s are the only audio affected; the other ~86 articles retain their original narration/audio until a later full run.
+
 ### Perf: AudioPlayer F1-F3 — lazy import, Range/206 streaming, preload=none (t_c4c2da46)
 
 **What** - Closed sato's three MEDIUM performance findings (t_c829cab6) on the live article-audio feature. Audio behavior is unchanged; this is a delivery/streaming pass.
