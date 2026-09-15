@@ -25,6 +25,7 @@ This:
    `mdxToNarration` (`src/lib/audio-narration.ts`),
 3. synthesizes the MP3 with the Kokoro TTS engine
    (`scripts/tts/engines/engine_kokoro.py`, venv at `scripts/tts/.venv`),
+   always as **mono / 24000 Hz / 48 kbps** (the lean storage profile, below),
 4. uploads it to the PRIVATE `audio` bucket at
    `audio/blog/<slug>/af_heart.mp3` (service-role key, REST upload),
 5. rewrites `src/data/audio.ts` to include the entry.
@@ -43,6 +44,30 @@ node scripts/build-audio.js --metadata-only --recent 5 --voice af_heart
 ```
 
 Any failure aborts the run (fails loudly, no silent SKIP, no fabricated mp3).
+
+## Storage budget: the lean encoding profile
+
+The private bucket must hold the whole article backfill inside the Supabase
+**Free** 1 GB storage tier, so every generated MP3 is **mono / 24000 Hz /
+48 kbps** (~5 MB per 15-minute article). The retired 128 kbps profile measured
+~13.3 MB per article, i.e. ~1.19 GB for 91 articles, which does not fit.
+
+- Override the bitrate per run with `--bitrate 64k`, or globally with the
+  `AUDIO_BITRATE` env var. `build-audio.js` passes it straight to the engine
+  (`--bitrate`), whose default is also `48k`. **Do not raise the default for a
+  backfill** without re-checking the bucket budget.
+- To shrink audio that is ALREADY in the bucket (no TTS re-run):
+
+  ```bash
+  node scripts/reencode-audio-lean.cjs --dry-run   # report only
+  node scripts/reencode-audio-lean.cjs             # re-encode mono/24k/48k in place
+  ```
+
+  It re-encodes only the MP3s referenced by `src/data/audio.ts`, skips files
+  that are already mono/24k at <= 64 kbps, aborts if a transcode changes the
+  duration (truncation guard), and verifies the stored size after upload.
+  The timing manifests are NOT touched: a re-encode preserves duration, so the
+  existing `blog/<slug>/af_heart.timing.json` offsets stay valid.
 
 ## Diagram-description behaviour (the narration contract)
 
@@ -84,5 +109,6 @@ No visitor selector. Other shortlist voices exist for future choice:
   client and returned as fixed `audio/mpeg` bytes.
 - The TTS venv (`scripts/tts/.venv`) and all `*.mp3` / `*.wav` files are
   git-ignored (project norm: blobs stay in Supabase, not the repo).
-- The engine falls back to `ffmpeg` (Homebrew) when `pydub` is unavailable;
-  ensure `ffmpeg` is installed to get MP3 output.
+- The engine prefers the `ffmpeg` CLI (Homebrew) so mono / sample rate /
+  bitrate are pinned explicitly, and falls back to `pydub`; ensure `ffmpeg` is
+  installed to get MP3 output. Without any converter it keeps a `.wav`.

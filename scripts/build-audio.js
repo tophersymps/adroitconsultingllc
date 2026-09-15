@@ -6,7 +6,11 @@
  *   1. reads content/blog/<slug>.mdx and computes the narration via the same
  *      pure function the tests use (src/lib/audio-narration.ts, imported
  *      through a small transpile shim — see _import.mjs).
- *   2. calls the configured TTS engine CLI to synthesize an mp3.
+ *   2. calls the configured TTS engine CLI to synthesize an mp3. The emitted
+ *      MP3 is ALWAYS mono / 24000 Hz / 48kbps (the lean storage profile, see
+ *      --bitrate): the private bucket must hold a 91-article backfill inside
+ *      the Supabase Free 1 GB storage tier (~5 MB/article at 48k vs ~13.3 MB
+ *      at the old 128k, which measured ~1.19 GB for 91 and did not fit).
  *   3. uploads it to the PRIVATE Supabase 'audio' bucket at
  *      audio/blog/<slug>/<voice>.mp3 using the service-role key.
  *   4. emits src/data/audio.ts (slug / voice / storagePath) — the static
@@ -30,6 +34,10 @@
  *                           # (skips slugs already present with the target voice; use with
  *                           # --force to regenerate everything, --limit N to cap new synths).
  *                           # Used by the publish-time hook + nightly sweep automation.
+ *
+ * Encoding: every generated MP3 is mono / 24000 Hz / 48kbps. --bitrate (or the
+ * AUDIO_BITRATE env var) overrides the bitrate; do not raise the DEFAULT for a
+ * backfill — 91 articles at 128k do not fit the Supabase Free 1 GB tier.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -41,6 +49,8 @@ const BLOG_DIR = path.join(ROOT, "content", "blog");
 const OUT_PATH = path.join(ROOT, "src", "data", "audio.ts");
 const ENV_PATH = path.join(ROOT, ".env.local");
 const DEFAULT_VOICE = process.env.AUDIO_VOICE || "af_heart";
+/* Lean storage profile — see the header note. Passed through to the engine. */
+const BITRATE = process.env.AUDIO_BITRATE || "48k";
 const BUCKET = "audio";
 
 /* --- minimal .env.local loader (avoids a dep) --- */
@@ -79,6 +89,7 @@ function flag(name) {
 const recentN = flag("--recent");
 const slugOnly = flag("--slug");
 const voice = flag("--voice") || DEFAULT_VOICE;
+const bitrate = flag("--bitrate") || BITRATE;
 const metadataOnly = args.includes("--metadata-only");
 const force = args.includes("--force");
 const backfill = args.includes("--backfill");
@@ -282,7 +293,7 @@ async function main() {
     fs.writeFileSync(textFile, narration, "utf-8");
     const engine = path.join(ROOT, "scripts", "tts", "engines", "engine_kokoro.py");
     const venvPython = path.join(ROOT, "scripts", "tts", ".venv", "bin", "python");
-    const synthCmd = `${venvPython} ${engine} --text "$(cat ${JSON.stringify(textFile)})" --voice ${voice} --out ${JSON.stringify(out)} --timing ${JSON.stringify(timingPath)}`;
+    const synthCmd = `${venvPython} ${engine} --text "$(cat ${JSON.stringify(textFile)})" --voice ${voice} --bitrate ${bitrate} --out ${JSON.stringify(out)} --timing ${JSON.stringify(timingPath)}`;
     try {
       execSync(synthCmd, { timeout: 120000, encoding: "utf-8" });
     } catch (e) {
@@ -304,7 +315,7 @@ async function main() {
 
     await uploadMp3(env, storagePath, mp3Buf);
     const size = fs.statSync(out).size;
-    console.log(`OK ${slug} ${voice} ${size} bytes -> ${storagePath}`);
+    console.log(`OK ${slug} ${voice} ${bitrate} ${size} bytes -> ${storagePath}`);
 
     // Tier C exact paragraph scroll-sync: upload the per-segment timing
     // manifest (emitted by engine_kokoro.py --timing) to the private bucket
