@@ -95,7 +95,7 @@ export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
       </div>
       <audio
         controls
-        preload="metadata"
+        preload="none"
         className="w-full"
         aria-label="Article audio player"
         src={`/api/audio/${slug}`}

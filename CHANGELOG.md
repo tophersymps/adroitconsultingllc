@@ -4,6 +4,20 @@ All notable changes to the Adroit Consulting Blog project will be documented in 
 
 ## [Unreleased]
 
+### Perf: AudioPlayer F1-F3 — lazy import, Range/206 streaming, preload=none (t_c4c2da46)
+
+**What** - Closed sato's three MEDIUM performance findings (t_c829cab6) on the live article-audio feature. Audio behavior is unchanged; this is a delivery/streaming pass.
+
+- **F1 (bundle regression):** `/field-notes/[slug]` no longer does a static `import AudioPlayer`. A new client wrapper `src/components/BlogPost/AudioPlayerLazy.tsx` holds the `next/dynamic(() => import(...), { ssr: false })` lazy loader (the ssr:false dynamic MUST live in a client component, mirroring HubbleFieldLabClient). The page renders `{audio && <AudioPlayerLazy .../>}` — same server-side gate, but now the ~6KB audio client body is a separate chunk that is absent from the built HTML of every article page: verified 0/92 static field-notes pages reference the audio body chunk, and it is only fetched at runtime (its loader maps to `Promise.all([...3moxaqnzbru9-.js])`) on the 5 pilot articles where the component actually mounts. Non-audio pages now ship only the tiny lazy-stub, not the audio-bound chunk.
+- **F2 (streaming/206):** `src/app/api/audio/[slug]/route.ts` now honors HTTP `Range` — a single `bytes=start-end | start- | -suffix` request returns `206 Partial Content` with `Content-Range: bytes a-b/len`, `Accept-Ranges: bytes`, and the sliced body; no Range returns the full `200`; an unsatisfiable start returns `416` with `Content-Range: bytes */len`; a malformed/multi-range or a request carrying `If-Range` (we emit no validator, so per RFC 7233 the Range must be ignored) degrades to the full `200`. The 401 unauthenticated gate and 404 paths are untouched and still fail closed.
+- **F3 (preload):** `src/components/BlogPost/AudioPlayer.tsx` sets `preload="none"` on the native `<audio>` (was `preload="metadata"`). Combined with the new Range/206 server, no audio bytes cross the wire until the signed-in reader presses Play.
+
+**Why** - F1 shipped a ~6KB audio chunk on all 91 article pages (mostly narration-less); F2 buffered the whole 1-3MB MP3 with no partial-content support so `<audio>` could never seek or fetch metadata efficiently; F3 let a preload="metadata" + non-Range server pull the full MP3 on page load. All three failed their performance ACs.
+
+**Verified** - `npm test` 92 files / 704 tests pass (was 698; +6: route now covers Range/206/Content-Range/suffix/open-ended/416/If-Range/malformed, AudioPlayer asserts `preload="none"`); `npm run lint` exit 0; `tsc --noEmit` clean; `npm run build` exit 0. **F1 prod-build evidence:** the audio body chunk is referenced by 0 of 92 static field-notes HTML pages and only reachable via the runtime lazy loader on audio pages; the no-audio page's dev server fetches only the 627 B lazy-stub, the audio page fetches the 12.5 KB body chunk. **Range/206:** unit-level bytes-exact (0-4→"fake-", bytes=-4→"ytes", open-ended 10-→"ytes") against the real `GET` handler; live HTTP on the dev server: `/api/audio/<pilot>` → 401 unauthenticated with and without a Range header, article pages both SSR 200. **Browser (audio pilot, 375px, dark):** locked "Sign up to listen" card renders after lazy hydration for the logged-out visitor, zero horizontal overflow, and no `<audio>` element (no audio fetch for anon).
+
+**Known Issues** - None. The `next/dynamic` lazy wrapper means the locked sign-up card mounts on the client after hydration (was server-rendered before), so a no-JS visitor sees nothing in the audio slot — acceptable regression risk for an auth-gated perk, and the signed-in player + locked card both render correctly in JS-enabled browsers.
+
 ### Security: stop leaking private audio storagePath into client HTML (t_3305e6ae)
 
 **What** - `AudioPlayer` no longer receives the full `ArticleAudio` object

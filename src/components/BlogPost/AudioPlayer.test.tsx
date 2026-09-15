@@ -61,6 +61,8 @@ describe("AudioPlayer", () => {
     expect(audio).not.toBeNull();
     expect(audio!.getAttribute("src")).toBe(`/api/audio/${SLUG}`);
     expect(audio!).toHaveAttribute("aria-label", "Article audio player");
+    // No audio bytes may be fetched until play is pressed (preload="none").
+    expect(audio!).toHaveAttribute("preload", "none");
   });
 
   it("exposes a speed control for the signed-in player", () => {

@@ -15,7 +15,7 @@ import { buildMetadata } from "@/lib/seo";
 import MarkAsRead from "@/components/Progress/MarkAsRead";
 import PostReadProgress from "@/components/Progress/PostReadProgress";
 import MDXArticle from "@/components/MDX/MDXArticle";
-import AudioPlayer from "@/components/BlogPost/AudioPlayer";
+import { AudioPlayerLazy } from "@/components/BlogPost/AudioPlayerLazy";
 import { articleAudio } from "@/data/audio";
 
 interface Props {
@@ -159,7 +159,7 @@ export default async function BlogPostPage({ params }: Props) {
             Gated on `audio` so the AudioPlayer client JS chunk + its useAuth()
             session fetch are NOT shipped/run on the 86/91 articles without a
             narration (avoids duplicating the Header's /api/auth/session call). */}
-        {audio && <AudioPlayer slug={post.slug} hasAudio />}
+        {audio && <AudioPlayerLazy slug={post.slug} hasAudio />}
 
         {/* Article Body — rendered from MDX content */}
         <article className="article-body max-w-[720px] mx-auto px-6 pb-16">

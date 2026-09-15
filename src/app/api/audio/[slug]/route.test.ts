@@ -52,9 +52,10 @@ vi.mock("@/lib/supabase/service", () => ({
   getSupabaseServiceClient: () => serviceClient,
 }));
 
-function makeGet(slug: string): NextRequest {
+function makeGet(slug: string, headers?: Record<string, string>): NextRequest {
   return new NextRequest(`http://localhost:3000/api/audio/${slug}`, {
     method: "GET",
+    headers,
   });
 }
 
@@ -95,6 +96,74 @@ describe("GET /api/audio/[slug]", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toBe("audio/mpeg");
     expect(res.headers.get("Cache-Control")).toBe("private, max-age=3600");
+    const body = await res.arrayBuffer();
+    expect(Buffer.from(body).toString()).toBe("fake-mp3-bytes");
+  });
+
+  it("returns 206 + Content-Range for a single byte-range request", async () => {
+    const res = await GET(makeGet(pilot.slug, { range: "bytes=0-4" }), {
+      params: Promise.resolve({ slug: pilot.slug }),
+    });
+    expect(res.status).toBe(206);
+    expect(res.headers.get("Content-Type")).toBe("audio/mpeg");
+    expect(res.headers.get("Accept-Ranges")).toBe("bytes");
+    expect(res.headers.get("Content-Range")).toBe(
+      `bytes 0-4/${fakeBytes.length}`,
+    );
+    expect(res.headers.get("Content-Length")).toBe("5");
+    const body = await res.arrayBuffer();
+    // "fake-mp3-bytes" -> bytes 0..4 == "fake-"
+    expect(Buffer.from(body).toString()).toBe("fake-");
+  });
+
+  it("honors a suffix range bytes=-4 (last N bytes)", async () => {
+    const res = await GET(makeGet(pilot.slug, { range: "bytes=-4" }), {
+      params: Promise.resolve({ slug: pilot.slug }),
+    });
+    expect(res.status).toBe(206);
+    expect(res.headers.get("Content-Range")).toBe(
+      `bytes ${fakeBytes.length - 4}-${fakeBytes.length - 1}/${fakeBytes.length}`,
+    );
+    const body = await res.arrayBuffer();
+    expect(Buffer.from(body).toString()).toBe("ytes");
+  });
+
+  it("clamps an open-ended range to the file length", async () => {
+    const res = await GET(makeGet(pilot.slug, { range: "bytes=10-" }), {
+      params: Promise.resolve({ slug: pilot.slug }),
+    });
+    expect(res.status).toBe(206);
+    expect(res.headers.get("Content-Range")).toBe(
+      `bytes 10-${fakeBytes.length - 1}/${fakeBytes.length}`,
+    );
+  });
+
+  it("returns 416 with Content-Range hint when the requested start exceeds the file", async () => {
+    const res = await GET(makeGet(pilot.slug, { range: "bytes=1000-" }), {
+      params: Promise.resolve({ slug: pilot.slug }),
+    });
+    expect(res.status).toBe(416);
+    expect(res.headers.get("Content-Range")).toBe(`bytes */${fakeBytes.length}`);
+  });
+
+  it("ignores a Range when If-Range is present (degrades to full 200)", async () => {
+    // We emit no ETag/Last-Modified, so an If-Range validator never matches
+    // -> per RFC 7233 the Range must be ignored and the full body served.
+    const res = await GET(
+      makeGet(pilot.slug, { range: "bytes=0-3", "if-range": "\"abc\"" }),
+      { params: Promise.resolve({ slug: pilot.slug }) },
+    );
+    expect(res.status).toBe(200);
+    const body = await res.arrayBuffer();
+    expect(Buffer.from(body).toString()).toBe("fake-mp3-bytes");
+    expect(res.headers.get("Content-Length")).toBe(String(fakeBytes.length));
+  });
+
+  it("degrades a malformed Range to a full 200", async () => {
+    const res = await GET(makeGet(pilot.slug, { range: "items=0-3" }), {
+      params: Promise.resolve({ slug: pilot.slug }),
+    });
+    expect(res.status).toBe(200);
     const body = await res.arrayBuffer();
     expect(Buffer.from(body).toString()).toBe("fake-mp3-bytes");
   });
