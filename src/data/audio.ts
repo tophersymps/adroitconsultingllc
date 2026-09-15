@@ -8,7 +8,10 @@ import type { ArticleAudio } from "@/lib/audio/contracts";
 export const articleAudio: ArticleAudio[] = [
   { slug: "agent-eval-infrastructure-2026", voice: "af_heart", storagePath: "blog/agent-eval-infrastructure-2026/af_heart.mp3" },
   { slug: "agent-framework-decision-2026", voice: "af_heart", storagePath: "blog/agent-framework-decision-2026/af_heart.mp3", timingsStoragePath: "blog/agent-framework-decision-2026/af_heart.timing.json" },
+  { slug: "agent-memory-context-engineering-2026", voice: "af_heart", storagePath: "blog/agent-memory-context-engineering-2026/af_heart.mp3", timingsStoragePath: "blog/agent-memory-context-engineering-2026/af_heart.timing.json" },
   { slug: "ai-agent-observability-opentelemetry-2026", voice: "af_heart", storagePath: "blog/ai-agent-observability-opentelemetry-2026/af_heart.mp3", timingsStoragePath: "blog/ai-agent-observability-opentelemetry-2026/af_heart.timing.json" },
+  { slug: "ai-agents-salesforce", voice: "af_heart", storagePath: "blog/ai-agents-salesforce/af_heart.mp3", timingsStoragePath: "blog/ai-agents-salesforce/af_heart.timing.json" },
+  { slug: "ai-requirements-bottleneck-2026", voice: "af_heart", storagePath: "blog/ai-requirements-bottleneck-2026/af_heart.mp3", timingsStoragePath: "blog/ai-requirements-bottleneck-2026/af_heart.timing.json" },
   { slug: "backup-restore-validation-2026", voice: "af_heart", storagePath: "blog/backup-restore-validation-2026/af_heart.mp3" },
   { slug: "definition-of-done-ai-agents-2026", voice: "af_heart", storagePath: "blog/definition-of-done-ai-agents-2026/af_heart.mp3", timingsStoragePath: "blog/definition-of-done-ai-agents-2026/af_heart.timing.json" },
   { slug: "design-system-release-discipline-2026", voice: "af_heart", storagePath: "blog/design-system-release-discipline-2026/af_heart.mp3", timingsStoragePath: "blog/design-system-release-discipline-2026/af_heart.timing.json" },
@@ -24,5 +27,7 @@ export const articleAudio: ArticleAudio[] = [
   { slug: "salesforce-release-discipline-2026", voice: "af_heart", storagePath: "blog/salesforce-release-discipline-2026/af_heart.mp3" },
   { slug: "salesforce-summer-26-three-things", voice: "af_heart", storagePath: "blog/salesforce-summer-26-three-things/af_heart.mp3" },
   { slug: "sse-vs-websockets-2026", voice: "af_heart", storagePath: "blog/sse-vs-websockets-2026/af_heart.mp3" },
+  { slug: "stakeholder-management-delivery-bottleneck-2026", voice: "af_heart", storagePath: "blog/stakeholder-management-delivery-bottleneck-2026/af_heart.mp3", timingsStoragePath: "blog/stakeholder-management-delivery-bottleneck-2026/af_heart.timing.json" },
   { slug: "state-of-the-stack-september-2026", voice: "af_heart", storagePath: "blog/state-of-the-stack-september-2026/af_heart.mp3" },
+  { slug: "supabase-pipelines-cdc-bigquery", voice: "af_heart", storagePath: "blog/supabase-pipelines-cdc-bigquery/af_heart.mp3", timingsStoragePath: "blog/supabase-pipelines-cdc-bigquery/af_heart.timing.json" },
 ];
