@@ -1,0 +1,140 @@
+---
+title: "Lesson 12: Vector Databases: Pinecone, pgvector, Milvus, Weaviate, and Choosing for Your Workload"
+slug: vector-databases-pinecone-pgvector-milvus-weaviate
+series: "agentic-ai"
+lesson: 12
+excerpt: "What a vector database actually does, why you need one instead of scanning vectors in memory, the approximate nearest neighbor tradeoff you are making, and how to choose between Pinecone, pgvector, Milvus, and Weaviate for your workload and your team."
+date: "August 15, 2026"
+author: "Adroit Consulting"
+readTime: "10 min read"
+tags: [LLMs, AI Agents, RAG]
+---
+
+# Lesson 12: Vector Databases: Pinecone, pgvector, Milvus, Weaviate, and Choosing for Your Workload
+
+Lesson 11 ended by moving up the stack from the embedding model to the thing that stores and searches the vectors. This is that lesson. Once you have embedded your chunks, you need somewhere to put them and a way to find the nearest ones fast. That job belongs to the vector database. This lesson covers what a vector database does under the hood, the accuracy tradeoff baked into every fast search, the four systems you will actually choose between, and a decision framework that keeps you from over-engineering the choice in week one.
+
+## What a vector database is for
+
+A vector database stores high-dimensional vectors and retrieves them by similarity instead of by exact match. Where a relational database answers "give me the rows where this column equals that value," a vector database answers "give me the vectors closest to this one." [^1]
+
+The input is an embedding, an array of a few hundred to a few thousand floats produced by an embedding model. The output of a query is the top-K stored vectors ranked by distance from your query vector. You saw the retrieval math in lessons 10 and 11. The database is what makes that math practical at scale.
+
+That last part is the whole reason this lesson exists. Doing the math is easy. Doing it fast across millions of vectors is the engineering problem. Weaviate's example from lesson 10 made the cost concrete: comparing a query vector against 10 million vectors means billions of computations if you check every one. [^2] Nobody ships that. The vector database exists to avoid it.
+
+## The core job: index, then search fast
+
+A vector database has two phases, and both matter. Indexing turns the collection of vectors into a structure that supports fast lookup. Searching runs a query against that structure. The two are connected by a knobs-and-tradeoff relationship you should understand before you pick a system.
+
+The naive baseline is k-nearest neighbors, kNN: compare the query against every vector and take the top K. It returns perfect results and scales linearly, which is exactly the problem. Linear means a million vectors is a million comparisons per query.
+
+Production systems use approximate nearest neighbor, ANN, which trades a little accuracy for a huge speedup. ANN maintains roughly polylogarithmic search time on very large datasets. [^2] The common families are trees (ANNOY), clustering (FAISS), hashing (LSH), and proximity graphs (HNSW). Most modern vector databases default to HNSW, the graph-based approach that organizes vectors into a hierarchical multi-layer graph and navigates from coarse to fine. [^2]
+
+Here is the tradeoff you are actually making. ANN does not guarantee the true nearest neighbor. It guarantees a good one, fast. The quality of that guarantee is measured as recall, the fraction of true nearest neighbors the search actually returns. You trade recall against latency, memory, and build time, and every vector database hands you the knobs for that trade.
+
+## The knobs on an HNSW index
+
+If you are going to run a vector database, you will meet three parameters constantly, and they are the same three across every system that uses HNSW.
+
+- **M**, the maximum number of connections each node keeps to its neighbors in the graph. Higher M means a denser graph, better recall, and more memory.
+- **efConstruction**, the number of candidate neighbors considered while building the index. Higher values make a better graph at the cost of longer build time.
+- **ef** (or ef_search), the number of candidates examined during a search. Higher values mean better recall and slower queries.
+
+Milvus's documentation shows these as plain index parameters: build the index with M and efConstruction, then search with an ef value per query. [^3] The practical lesson is that recall is not a fixed property of a database. It is a dial you set per query, and you trade milliseconds for it. When someone reports "99% recall," ask what latency and memory that cost.
+
+## The four systems
+
+You will spend most of your time choosing between four: Pinecone, pgvector, Milvus, and Weaviate. They sort into two dimensions. One dimension is managed versus self-hosted. The other is dedicated vector database versus extension on a database you already run.
+
+**Pinecone is the managed option.** It is a fully managed, closed-source vector database built for zero operations. You do not provision capacity, tune indexes, or run backups. The serverless tier auto-scales and you pay for what you use. [^1] It handles billions of vectors, supports metadata filtering, and offers hybrid search over dense and sparse vectors. [^4] The tradeoffs are vendor lock-in and cost that climbs with scale. You choose Pinecone when time to market matters more than cost optimization and you do not want to run infrastructure. [^4]
+
+**pgvector is the extension.** It adds a vector type and similarity search to PostgreSQL, so your vectors live next to your relational data and you query both with SQL in the same transaction. [^5] If you already run Postgres, this is often the least work: one extension, your existing backups, monitoring, and replication, no second system to learn. [^4] The performance story used to be the weak point. It improved sharply with the companion pgvectorscale extension, which adds a DiskANN-style index; benchmarks report it competitive with specialized databases at 50 million vectors while staying far cheaper to run. [^6] The limit is scale. Beyond roughly 100 million vectors, Postgres's relational storage model hits walls that purpose-built systems avoid. [^4]
+
+**Milvus is the open-source scale play.** It is an open-source vector database hosted at the LF AI & Data foundation, built for billions of vectors with horizontal scaling and strong consistency. [^4] It supports multiple index types, including HNSW, IVF, DiskANN, and GPU-accelerated indexes, and it keeps performance as you add nodes. [^7] The cost is operational complexity. You manage a distributed system, tune index parameters, and debug it when it breaks. Teams without data engineering experience struggle with it. [^4] You choose Milvus when vector search is the whole job and you have the team to run it at scale.
+
+**Weaviate is the hybrid search specialist.** It is open source, and it treats hybrid search as a first-class feature rather than an add-on. A single query combines vector similarity with BM25 keyword matching and metadata filters, which is exactly the pattern lessons 10 and 11 argued for when pure vector search misses exact terms. [^4] Its modular design lets you plug in different embedding models and rerankers without rewriting the retrieval pipeline. [^8] The tradeoff is that it has more knobs to tune than pgvector or Pinecone, so it rewards engineering attention. [^8]
+
+## How to choose, in order
+
+The most common mistake is picking a purpose-built vector database before you know what the workload looks like. Deploying Pinecone for a 100K-vector RAG system is overkill, and standing up Milvus for a prototype is operational suicide. The pattern that works is to start with the least infrastructure that proves your idea, hit a real bottleneck, then migrate. Migration is rarely as expensive as people fear. [^8]
+
+Ask these questions in order.
+
+**Do you already run PostgreSQL?** If yes, start with pgvector. You get vector search in days, next to your relational data, with your existing tooling. It is the default for new RAG projects unless there is a specific reason to choose otherwise. [^8]
+
+**Do you need hybrid search?** If your queries mix semantic meaning with exact terms, product codes, or names, Weaviate handles that natively in one query. That is its clearest reason to exist. [^4]
+
+**Is time to market more important than cost?** If you have no database team and want production vector search with zero operations, Pinecone is the path of least resistance. Accept the lock-in and the bill. [^4]
+
+**Is this billions of vectors, the whole job, or a compliance constraint?** For billion-scale standalone vector search, Milvus. For regulated environments where data must not leave your control, self-hosted pgvector or Milvus keeps the data in the building, which can rule out a managed cloud service entirely. [^9]
+
+## Worked example: standing up pgvector and tuning recall
+
+Because pgvector is the lowest-friction starting point, it is the best system to learn the mechanics on. The example below walks the full path on a Postgres instance with the pgvector extension enabled. It assumes you have Postgres running and can `CREATE EXTENSION`.
+
+First, create a table with a vector column and add an HNSW index. The vector length must match your embedding model's output. Lesson 11 used all-MiniLM-L6-v2 at 384 dimensions, so that is the length here.
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+
+CREATE TABLE chunks (
+  id bigserial PRIMARY KEY,
+  doc_id text NOT NULL,
+  body text NOT NULL,
+  embedding vector(384)
+);
+
+CREATE INDEX ON chunks USING hnsw (embedding vector_cosine_ops);
+```
+
+The `vector_cosine_ops` operator class tells Postgres to use cosine similarity, matching the metric you trained your embedding model with, per the rule from lesson 10. Inserting is ordinary SQL, which is the point of pgvector: your relational and vector data live in one place.
+
+```sql
+INSERT INTO chunks (doc_id, body, embedding)
+VALUES ('d-001', 'The refund policy applies to purchases within 30 days.',
+        '[0.01, -0.04, ...]');
+```
+
+Now the search. The `<=>` operator is cosine distance in pgvector. A rough cut: a limit of 5 with no other qualifiers.
+
+```sql
+SELECT doc_id, body, 1 - (embedding <=> '[0.02, -0.03, ...]') AS score
+FROM chunks
+ORDER BY embedding <=> '[0.02, -0.03, ...]'
+LIMIT 5;
+```
+
+This is where the knobs appear. HNSW search in pgvector respects `hnsw.ef_search`, the per-query search breadth. Raise it for better recall, lower it for speed. [^5]
+
+```sql
+SET hnsw.ef_search = 200;
+```
+
+The lesson in one setting: ef_search is your recall dial. The value you need depends on how much accuracy your application can trade for milliseconds, and you measure it on your own retrieval set, not on a vendor benchmark. Tune it with a handful of known-good queries, raise ef until recall stops improving meaningfully, then hold it there.
+
+The decision worked example is just as important as the SQL. Take two scenarios. Scenario A: a 200,000-chunk support knowledge base for a company that already runs Postgres, where chunks need to sit next to ticket metadata in the same query. The answer is pgvector, because it adds zero systems and the scale is trivial. Scenario B: a recommendation engine embedding millions of images with no relational data and a team of data engineers. The answer is Milvus, because the whole job is vector search at scale and the team can run it. Same underlying HNSW index, completely different systems, and the deciding factor in both cases was the workload and the team, not the index algorithm.
+
+## The pitfall to avoid
+
+Do not treat the vector database as the source of retrieval quality. The database decides how fast you find near-neighbors, not whether the right chunks are findable. That is decided by your chunking, your embedding model, and your retrieval strategy, all of which you already control and all of which matter more than the choice of store. [^10] A perfect HNSW index returns the wrong chunks quickly if the embeddings are bad. Conversely, a modest pgvector setup with clean chunking and hybrid search will beat a billion-scale cluster that ingested garbage. Pick the simplest database that meets your scale and latency, then spend your effort where it actually moves the answer quality: the data.
+
+## Try it
+
+1. **Run the pgvector path.** If you have Postgres, enable pgvector and build the table and HNSW index above. Insert ten chunks of your own text, embed them with a local model, and run the cosine search. Watch how changing `hnsw.ef_search` changes results and latency.
+2. **Tune the knobs on real data.** Take a small retrieval set you care about, fix a set of known-good queries, and sweep M, efConstruction, and ef. Record recall against the brute-force kNN answer. You will see the tradeoff curve with your own numbers instead of trusting a marketing claim.
+3. **Run the decision framework.** For a RAG system you are building or have built, answer the four questions in order and justify your current database choice against them. If you picked a dedicated database for a workload that fits pgvector, note what would have to change before the extra infrastructure paid for itself.
+
+## What's next
+
+You can now store and search embeddings, and you know the tradeoff at every turn. Lesson 13 closes out the retrieval stack with RAG quality: reranking, which scores the retrieved chunks a second time before the model sees them, hybrid search, which keeps exact keyword matches from getting buried, plus metadata filtering and freshness. This is where a good RAG system stops being merely good enough and gets tuned.
+
+[^1]: datacamp.com. [datacamp.com](https://www.datacamp.com/blog/the-top-5-vector-databases)
+[^2]: weaviate.io. [weaviate.io](https://weaviate.io/blog/vector-search-explained)
+[^3]: milvus.io. [milvus.io](https://milvus.io/docs/hnsw.md)
+[^4]: firecrawl.dev. [firecrawl.dev](https://www.firecrawl.dev/blog/best-vector-databases)
+[^5]: github.com. [github.com](https://github.com/pgvector/pgvector)
+[^6]: tigerdata.com. [tigerdata.com](https://www.tigerdata.com/blog/pgvector-vs-pinecone)
+[^7]: cloudian.com. [cloudian.com](https://cloudian.com/guides/ai-infrastructure/milvus-vector-database-uses-architecture-quick-tutorial/)
+[^8]: medium.com. [medium.com](https://medium.com/@pratik-rupareliya/top-15-vector-databases-in-2026-a-production-decision-guide-from-100-enterprise-deployments-dd58a04f51a5)
+[^9]: instaclustr.com. [instaclustr.com](https://www.instaclustr.com/education/vector-database/pgvector-vs-milvus-5-key-differences-and-how-to-choose/)
+[^10]: olostep.com. [olostep.com](https://www.olostep.com/blog/best-vector-database)

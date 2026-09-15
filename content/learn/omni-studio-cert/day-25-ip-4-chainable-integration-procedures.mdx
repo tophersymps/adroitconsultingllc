@@ -1,0 +1,133 @@
+---
+title: "OmniStudio IP-4: Chainable Integration Procedures"
+slug: day-25-ip-4-chainable-integration-procedures
+series: omni-studio-cert
+lesson: 25
+excerpt: "Split long-running Integration Procedures into multiple transactions with chaining. Learn why one synchronous transaction blows governor limits, how the Chainable, Queueable Chainable, and Chain On Step settings decide when a step continues in a fresh transaction, and why every link in a chain needs its own error handling because rollback does not carry across transactions. This is requirement IP-4 in the Integration Procedures domain."
+date: "September 3, 2026"
+author: "Adroit Consulting"
+readTime: "13 min read"
+tags: [OmniStudio, Integration]
+---
+
+Every Integration Procedure runs inside a transaction, and a transaction is a box with a lid. Salesforce puts hard caps on what one transaction can do: a maximum number of SOQL queries, a maximum number of DML statements, a maximum number of rows it can touch, a limit on CPU time, a limit on heap. These are governor limits, and they exist so no single request can hog the platform's shared resources. [^1] Most IPs you build never get near the lid. A quick lookup that extracts one record and returns it finishes in a handful of queries. But the moment your procedure has to process thousands of records, call out to three external systems, or loop through a long batch of work, the lid starts to press down. Hit a limit and Salesforce ends the transaction. Your Integration Procedure fails, often after doing a lot of the work. [^2]
+
+Requirement IP-4 is the answer to that failure mode. It asks you to implement chainable Integration Procedures to split long-running processes into multiple transactions. [^2] That one sentence is the entire shape of this lesson: chaining is the mechanism that turns one oversized transaction into several small ones, each with its own fresh budget of governor limits. The in-lesson quiz tests exactly this understanding, and the three questions map to three claims you need to be able to defend. First, when a long-running process exceeds synchronous transaction limits, the right pattern is chainable IPs that split the work into multiple transactions, not one giant synchronous IP, not a FlexCard, not Platform Cache alone. Second, what distinguishes a chainable IP's execution model is that each link runs asynchronously in its own transaction, not synchronously with everything else. Third, the scenario that best suits chaining is long-running multi-step processing that exceeds synchronous limits. Every section below teaches toward those three claims, because they are the exam's way of checking whether you actually understand the model and not just the button you click.
+
+## Deep Dive
+
+### The problem: one transaction, one budget
+
+Start with how an Integration Procedure executes by default. When a caller invokes an IP, all of its actions run in a single Apex transaction. [^2] A transaction is an all-or-nothing unit of work on the platform. Every SOQL query, every DML statement, every callout inside that unit draws from the same governor budget. Salesforce publishes the exact caps: 100 SOQL queries per transaction, 150 DML statements, 10,000 total DML rows, 50,000 query rows, 60 seconds of CPU for synchronous Apex, and a heap limit of 6 MB, among others. [^1] Those numbers are for standard Apex transactions, and an IP running synchronously shares the same budget.
+
+The consequences are practical and painful. Say your procedure takes a batch of ten thousand account records, runs a Data Mapper Transform on each, and posts them to an external system. A loop that processes records one by one is a loop that fires a DML statement per record, and ten thousand records means ten thousand DML rows, exactly at the cap, before you even count the callout. Or consider a procedure that calls three external systems in sequence: the first callout succeeds, the second succeeds, and the third times out. In a single transaction, that third failure can roll back the work the first two did, or the accumulated CPU time across all three calls can push you past the 60-second synchronous cap. [^1] The procedure either fails outright or limps to the limit and dies. Users see an error, and the partial work is lost or duplicated.
+
+This is the moment a developer reaches for chaining. The insight is that you do not have to do everything in one transaction. You can split the work into a sequence of transactions, where each transaction gets its own governor budget, its own chance to succeed, and its own failure handling. That split is exactly what a chainable Integration Procedure does.
+
+### What chaining actually is
+
+A chainable Integration Procedure is one that is allowed to break its execution across multiple Salesforce transactions. [^2] Instead of all actions running in one unit, the procedure runs a chunk of steps, saves its interim results, and then continues with the next chunk in a fresh transaction. [^2][^3] Each of those chunks is commonly called a link in the chain, and each link executes independently. The full procedure is a pipeline of server-side steps, but no single transaction carries the whole pipeline.
+
+Three settings implement this in OmniStudio, and you need to know all three for the exam.
+
+**Chainable.** This is the master switch. You enable it on the Integration Procedure Action in the Omniscript or parent IP that calls the procedure, or by setting the `chainable` option to `true` when you call an IP from a REST API. [^3] With chaining enabled, the IP watches its own resource use. When a step crosses one of the configured limits, the IP saves what it has so far and continues the step in a separate transaction. [^2] The step runs in its own transaction, so it stops competing with the other steps for the same governor budget.
+
+**Queueable Chainable.** This is chaining for the heaviest work. When enabled, a chainable step can start a queueable job, which runs as an asynchronous Apex job. [^2] Async Apex gets a different governor budget: 200 SOQL queries instead of 100, 60 seconds of CPU instead of 10 seconds of CPU per transaction, 12 MB of heap instead of 6. [^1][^2] Queueable Chainable settings override their Chainable equivalents when both are set, and the Queueable Chainable Queries Limit defaults to 200. [^2] The tradeoff is performance: starting a queueable job and processing asynchronously is slower than staying synchronous, but it lets a procedure chew through work that would never fit in one synchronous transaction. [^2]
+
+**Chain On Step.** This is a per-action setting. Any action in an IP has a Chain On Step property that allows that action to run in its own Salesforce transaction. [^4] Where Chainable is a whole-procedure policy, Chain On Step is a per-step switch. When the IP is called with chaining enabled and a limit is reached, a step with Chain On Step checked runs in its own transaction. [^3] You also use it to solve a specific Salesforce rule: you cannot do DML before an HTTP callout in the same transaction. If your IP has a Data Mapper Post action followed by an HTTP action, enable Chain On Step on the Post action so the write commits before the callout runs, and you avoid the "You have uncommitted work pending" error. [^2][^3]
+
+Here is the piece the quiz leans on. Chainable and Queueable Chainable decide *when* a new transaction starts: when the procedure hits a configured limit. Chain On Step decides *where*: at a specific action that you know is heavy. In both cases the execution model is the same. Each link of a chainable IP runs asynchronously, in its own transaction, with its own fresh governor budget, and each link has its own success or failure. That is the sentence that answers quiz question 2.
+
+### Why chaining beats a bigger transaction
+
+The natural reaction to a governor limit is to ask for a bigger budget. Chaining does not do that. It restructures the work so that no single transaction needs a big budget. [^2] Consider the Trailhead example of an insurance quoting procedure. A Calculation Action in the procedure ran about 70 SOQL queries. Enable Chainable on the calling action, set the Chainable Queries Limit to 70, and the procedure runs the next action in a new transaction whenever the query count reaches that threshold. A calculation action that makes 71 queries crosses the line, so the IP saves interim results and starts a second action in a fresh transaction. That second action makes 73 queries, crosses again, and chains again. The rest of the procedure stays under the limit and never chains. [^2] The work got done in three transactions instead of one, and no transaction ever asked the platform for more than its share.
+
+The same logic applies to every governor dimension. The settings table in Procedure Configuration lets you set thresholds for queries, query rows, DML statements, DML rows, SOSL queries, heap size, CPU, and even actual elapsed time. [^3] Each threshold is a tripwire: cross it, and the next chunk of work moves to a fresh transaction. Leave a threshold blank and limit checking is disabled for that dimension, which means a step that exceeds the Salesforce cap will simply fail. [^3]
+
+### A worked example: batch order import
+
+Put the model together with a concrete procedure. You are importing an order with 5,000 line items into Salesforce and then posting a confirmation to a warehouse system.
+
+A synchronous version of this IP does the following: extract the order payload, run a Data Mapper Transform to shape the line items, loop through the items and insert each one, then make an HTTP callout to the warehouse. In one transaction that is 5,000 DML statements or 5,000 DML rows, which blows past the 150-statement and 10,000-row caps, and the HTTP callout after DML triggers the uncommitted-work error on top of it. [^1] The synchronous design fails on multiple fronts at once.
+
+The chainable design splits it. Enable Chainable on the IP action that calls the procedure, and set thresholds that match the work. The loop that inserts line items is the heavy part, so set a Chainable DML Statements Limit that the loop trips every few hundred records, say 100. When the loop crosses 100 statements, the IP saves its interim results and the next iteration continues in a fresh transaction, with a fresh 100-statement budget. [^2] The 5,000 inserts now run across fifty transactions instead of one. No transaction exceeds the platform caps.
+
+Then handle the callout problem. The warehouse post must happen after the inserts are committed, and Salesforce forbids DML followed by a callout in the same transaction. Check Chain On Step on the Data Mapper Post action that writes the final order status, so that step runs in its own transaction, commits, and hands control to the HTTP action in the next transaction. [^2][^3] The error disappears because the DML is committed before the callout transaction begins.
+
+Notice what the caller experiences. When you invoke a chainable IP over REST, the response comes back with partial results and a continuation value, in the response body, that you pass back in the next request to resume the procedure. [^5] Each round trip is one transaction, and the caller is effectively driving the chain forward link by link. Omniscripts and parent IPs handle that continuation automatically, which is why you mostly configure chaining and let the framework do the driving. [^3]
+
+### Use cases that fit chaining
+
+The exam likes scenario questions, so keep a mental list of what chaining is for.
+
+**Bulk data processing.** Large imports, mass record updates, batch migrations. Any job that would cross DML statement or DML row limits in one pass.
+
+**Multi-system reconciliation.** A procedure that pulls records from one system, compares them against another, and posts differences. Multiple callouts plus DML in one transaction is a governor double whammy, and chaining separates the phases.
+
+**Long document workflows.** Generating or processing long documents, such as a contract assembly that runs many transforms and writes many related records.
+
+**Webhook-style continuations.** A caller sends a request, the IP does a first chunk of work, returns a partial response, and the caller resubmits the continuation to advance the process. That is literally how a chainable IP behaves over REST. [^5]
+
+The common thread is length. If a procedure can finish comfortably inside one transaction, chaining it is complexity you do not need. The exam trap below covers that exact mistake.
+
+### The design tradeoff: no shared rollback
+
+Chaining is not free, and the cost is the one you must carry into every design. In a synchronous IP, all actions share one transaction, which means they share one fate: if any step fails, the whole transaction rolls back. [^2] When you split work across transactions, you lose that guarantee. Each link commits independently. A failure in link three does not roll back link one. Work that already committed stays committed. [^2][^3]
+
+That changes how you design every chainable procedure. Since you cannot rely on a shared rollback, each link must be able to handle its own failure, and the procedure must be able to continue or fail gracefully at that point. This is why the exam's related requirements point forward to Day 27 and Try/Catch: per-link error handling is not optional polish, it is the compensation for losing the single-transaction guarantee. Design each link so that a failure is contained, logged, and either retried or reported, and design each link to be idempotent where possible, so that re-running it does not duplicate work. A chain without per-link handling is a chain that silently stops mid-way the first time one of its links fails.
+
+## Configuration Walkthrough
+
+Configuring a chainable IP is a short sequence. Use the batch order import as the running example.
+
+1. **Mark the IP as chainable in configuration.** In the Omniscript (or parent IP) that calls the procedure, open the Integration Procedure Action properties and check **Chainable**. For a REST API call, set the `chainable` option to `true` instead. [^2][^3] For the heaviest loads, also check **Queueable** so the chainable step can start a queueable job with the larger async governor budget. [^2]
+
+2. **Set the trigger limits in the IP itself.** Open the IP in the Integration Procedure Designer and select **Procedure Configuration** in the structure panel. Expand the Chainable Configuration section and set the thresholds that match your work: Chainable Queries Limit, Chainable DML Statements Limit, Chainable DML Rows Limit, Chainable CPU Limit, and the rest. [^3] For the order import, set a DML Statements Limit around 100 so the insert loop trips it and chains every few hundred records. Leave a threshold blank only when you want to disable checking for that dimension, and remember that a blank threshold means a step that exceeds the Salesforce cap fails. [^3]
+
+3. **Chain On Step the actions you know are heavy or order-sensitive.** Check **Chain On Step** on any action you want to run in its own transaction even before a limit trip, and on any Data Mapper Post action that is followed by an HTTP callout, to avoid the uncommitted-work error. [^2][^3][^4] In the order import, that is the Post action that writes the final order status before the warehouse callout.
+
+4. **Pass context (IDs, payloads) to the next link.** The interim results an IP saves when it chains become the input the next transaction works from. [^2] Make sure the data your later links need, such as the order Id, the batch offset, or the accumulated results, is in the JSON before the chain point. The caller carries the continuation value for REST invocations, so the next link resumes with the state the previous link saved. [^5]
+
+5. **Design each link to be independently idempotent where possible.** Because each link commits separately, re-running a link can duplicate work. Structure links so a repeated run produces the same result: check for existing records before inserting, key updates on stable external IDs, and carry a batch token that makes the next run a no-op if the work is already done.
+
+6. **Add per-link error handling and logging.** Give each link its own failure path, either with a Try/Catch block or with Failure Conditional Formulas and Failure Responses on the actions. [^4] Log failures so a mid-chain failure is visible, and decide per link whether a failure stops the chain or is recorded and skipped. A chain with per-link handling fails in a known place with a known record; a chain without it just stops.
+
+7. **Test with limits low enough to force chaining.** In the IP Preview, expand the Options pane and set `chainable` (or `queueableChainable`) to `true`. [^3] To actually watch links split, temporarily lower a limit, such as the Chainable Query Rows Limit, so the procedure crosses it with your test data, then confirm each transaction produces its own partial response and the final response holds the complete result. [^5] Then restore the production thresholds and re-test.
+
+## Exam Traps
+
+- **Chaining when a synchronous IP fits.** Chaining is a solution to a specific problem: work that exceeds the limits of one transaction. If your procedure completes comfortably inside a single transaction, chaining adds complexity, and the docs are explicit that breaking execution into chunks and saving interim results can reduce performance. [^2][^3] The exam presents chaining as the right answer only for long-running, multi-step processing. A single quick lookup, a card display, a simple formula: none of those need chaining, and quiz question 3 exists to check that you do not reach for it there.
+
+- **Assuming chainable links share one transaction or one rollback.** This is the trap behind quiz question 2. In a synchronous IP, all actions share a transaction and a rollback. In a chainable IP, each link runs asynchronously in its own transaction, with its own success and failure. [^2][^3] If link three fails, links one and two stay committed. Design for that reality: per-link error handling, idempotent links, and explicit decisions about what a failed link means for the rest of the chain.
+
+- **No error handling per link.** A mid-chain failure stops the pipeline, and without per-link handling there is no record of where or why. Every link needs its own failure handling and logging, which is why the exam pairs this requirement with Try/Catch. A chain is only as reliable as its weakest link, and the weakest link is usually the one with no failure path.
+
+- **Ignoring the caller context requirement.** A chainable IP must be invoked from a context that can act as a client, such as a REST API or an Omniscript that handles the continuation automatically. [^3][^5] If you hand a chainable IP to a caller that expects one synchronous response, the partial responses and the continuation flow will surprise it. Know who is calling before you make the procedure chainable.
+
+## Exam Tip
+
+Limits and timeouts mean chain. When you see a long-running process, batch processing, multiple callouts, or a procedure that risks exceeding governor limits, think chaining. Remember the model sentence: each link is its own transaction, so design for per-link failure. And keep the three settings straight by their scope: Chainable enables the policy for the whole procedure, Queueable Chainable raises the budget by running links as asynchronous queueable jobs, and Chain On Step forces a specific action into its own transaction. [^2][^3] If a question asks why a chainable link that failed did not undo earlier work, the answer is transaction isolation: there is no shared rollback across links.
+
+## Try It
+
+Open the Integration Procedure Designer in a sandbox and build a small chainable IP. Give it an input that lists a few hundred records, add a Data Mapper Extract action and a loop that writes the records, and add an HTTP action after a Data Mapper Post action so the uncommitted-work rule is in play. Enable Chainable on the calling action, set a deliberately low Chainable DML Statements Limit, and check Chain On Step on the Post action. Run the IP from the Preview with `chainable` set to `true` and watch where the transactions split. Then remove Chain On Step from the Post action and run again: you should hit the uncommitted-work error, which proves the setting was doing real work. Finally, lower the limit so chaining happens mid-loop and confirm the final response still contains the complete result. That exercise turns the three settings from reading into muscle memory, and it shows you the failure mode each one prevents.
+
+## What's Next
+
+Chaining solved the transaction-size problem by giving each link a fresh budget, but every link still does its own queries and callouts, and repeated work across a chain is expensive. Lesson 26, Caching in Integration Procedures (IP-5), is the next requirement in the Integration Procedures domain, and it teaches how to store and reuse results so a procedure does not re-fetch data it already has. Where chaining manages transaction size, caching manages repeat work, and the two together are how long-running procedures stay fast.
+
+## Related Requirements
+
+- IP Design: Server-Side Orchestration (earlier lesson)
+- IP Action Types: Groups, Data Mapper, HTTP, Remote, Sub-IP (earlier lesson)
+- Caching in Integration Procedures, lesson 26 of 46 (IP-5)
+- Try/Catch Blocks, a later lesson in this series
+- IP Error Handling, a later lesson in this series
+
+## References
+
+[^1]: [Execution Governors and Limits, Salesforce Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_gov_limits.htm)
+[^2]: [Manage Long-Running Integration Procedures, Trailhead](https://trailhead.salesforce.com/content/learn/modules/advanced-features-of-omnistudio-integration-procedures/manage-long-running-integration-procedures)
+[^3]: [Settings for Long-Running Integration Procedures, Salesforce Help](https://help.salesforce.com/s/articleView?id=sf.os_settings_for_long_running_integration_procedures.htm&type=5)
+[^4]: [Common Integration Procedure Action Properties, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_common_integration_procedure_action_properties.htm&language=en_US&type=5)
+[^5]: [Invoke a Chainable Integration Procedure with REST Calls, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_invoke_a_chainable_integration_procedure_with_rest_calls.htm&language=en_US&type=5)

@@ -1,0 +1,106 @@
+---
+title: "Lesson 5: Tokens, Context Windows, and Cost Engineering for Agent Workloads"
+slug: tokens-context-cost-engineering-agents
+series: "agentic-ai"
+lesson: 5
+excerpt: "Agents don't just use tokens; they burn them: roughly 4x a chat conversation, 15x for multi-agent. The four levers that control the bill (budgeting, compression, caching, and model routing), with the math worked out on a real 10-agent pipeline."
+date: "August 08, 2026"
+author: "Adroit Consulting"
+readTime: "9 min read"
+tags: [LLMs, AI Agents, Performance]
+---
+
+# Lesson 5: Tokens, Context Windows, and Cost Engineering for Agent Workloads
+
+Lesson 2 taught you what tokens and context windows are; Lesson 3 showed you the loop that spends them. This lesson is about the *economics*, because agents don't just use tokens; they burn them. Anthropic's production data: agents typically use about **4x more tokens than chat interactions**, and multi-agent systems about **15x more**. [^1] Anthropic's blunt framing from *Building Effective Agents*: "Agentic systems often trade latency and cost for better task performance." [^2]
+
+So cost engineering is not a finance exercise bolted on at the end. It is the discipline that decides whether your agent is economically viable at all, and it sits in the same place every other reliability discipline does: the context window.
+
+## Where the cost actually comes from
+
+Recall the loop from Lesson 3: each iteration is an LLM call, and each call carries the system prompt, tool definitions, conversation history, and the outputs of every tool call so far. **Context accumulates across every call.** A 50-step workflow at 20K tokens per call is 1M tokens total, and tool outputs "can be massive and add up faster than anything else." [^3]
+
+Two bills, priced separately:
+
+- **Input tokens** are everything you send. This is the bill that grows as your agent loops.
+- **Output tokens** are what the model generates. Almost always the more expensive per-token rate.
+
+On Claude Sonnet 4.6, for example, input is $3 per million tokens and output is $15, a 5x spread. [^4] Output is the one you can't cache and barely compress; input is the one you can engineer.
+
+One more compounding factor: structured output costs more tokens than prose; Lesson 2 measured JSON at 12 tokens vs 6 for the same information. Agents are structured-output machines (tool calls, JSON schemas), so they pay the markup on every act stage.
+
+## Lever 1: Budget before you build
+
+You wouldn't ship a web service without monitoring memory. Don't ship an agent without a token budget. Comet's guidance is to account for every source of context up front: system prompts (typically 500–2,000 tokens), user input sized at worst case, tool outputs, conversation history, and retrieved documents. [^3]
+
+The metrics that matter:
+
+- **Tokens per workflow step**, not just per request. Which step accumulates context? Which tool dumps the most tokens? [^3]
+- **Distance to the window limit.** "If you're regularly hitting 80%+ of your context window, you're one edge case away from failures." [^3]
+- **Cost per workflow execution**, broken down by workflow type: your five common workflows can be cheap while one edge-case workflow burns 10x the tokens. [^3]
+
+The upside of spending is real: in Anthropic's analysis, token usage alone explained 80% of the performance variance on the BrowseComp browsing-agent evaluation; spending tokens *is* how agents buy capability. [^1] The job is spending them where they buy the most.
+
+## Lever 2: Compress to find the smallest set of high-signal tokens
+
+Anthropic's core principle: good context engineering means finding "the smallest possible set of high-signal tokens that maximize the likelihood of some desired outcome." [^5]
+
+The named technique for long-running loops is **compaction**: when a conversation nears the window limit, summarize its contents and reinitiate a new context window with the summary. Users get continuity without the window filling. [^5]
+
+Compression priorities, from Comet's production guidance:
+
+- **Always keep original user intent:** the north star, no matter how long the run.
+- **Keep the last 2-3 tool results in full detail:** they drive the next decision.
+- **Summarize or drop older tool results:** compress step-20's detail to key facts.
+- **Always compress intermediate reasoning:** chain-of-thought from step 5 is just a conclusion by step 25. [^3]
+
+Sub-agent architectures are compression too: each subagent explores with tens of thousands of tokens inside its own clean window and returns only a condensed summary; Anthropic's Research system distills subagent work to roughly 1,000–2,000 tokens back to the lead. [^5]
+
+## Lever 3: Cache (the cheapest tokens are the ones you've already paid for)
+
+Every agent call re-sends the same static prefix: system prompt, tool definitions, few-shot examples. **Prompt caching** reuses that prefix across calls instead of reprocessing it.
+
+- **Anthropic**: cache reads are billed at **0.1x the base input price** (a 90% discount). The default cache lifetime is 5 minutes and refreshes for free on each hit; writes cost 1.25x (5-minute TTL) or 2x (1-hour TTL). On Sonnet 4.6 that's $0.30/MTok for cache reads vs $3/MTok uncached. [^4]
+- **OpenAI**: caching is automatic for eligible requests with prompts of 1024+ tokens; no code change required. Structure prompts with static content first and variable content last so the prefix stays identical. [^6]
+- Redis's 2026 guidance summarizes the effect: prompt caching can reduce input-token costs by up to 75% on cached tokens for eligible models. [^7]
+
+The structural rule is the same from both providers: **static-first, variable-last.** If your user-specific data sits before your system prompt, it breaks the shared prefix and kills cache hits. [^6]
+
+## Lever 4: Route to the right model for the right step
+
+Model choice is a first-class cost lever. Anthropic's routing workflow is explicit: route easy, common questions to a small cheap model and hard, unusual ones to a more capable model. [^2] And the multi-agent research post found model choice matters more than raw budget: upgrading to Claude Sonnet 4 was "a larger performance gain than doubling the token budget" on the previous generation. [^1]
+
+## Worked example: the Fortress 10-agent pipeline
+
+The Fortress runs a real 10-stage delivery pipeline (BA → Architect → DevOps → Designer → Developer → Accessibility → Security → Performance → QA → Deploy), where an orchestrator routes each task to a specialist agent and every stage hands a structured deliverable to the next. [Source: Fortress of Solitude kanban roster, internal] Let's put a price on one task, using Claude Sonnet 4.6 pricing from the docs above ($3/MTok input, $15/MTok output, $0.30/MTok cache read). [^4]
+
+Assume each stage makes one LLM call with a 30K-token input: a 20K static prefix (system prompt, tool schemas, handoff standards) plus 10K of task-specific context, and 4K tokens of output.
+
+**Without caching:** 10 stages × 30K input = 300K tokens → $0.90 input. 10 × 4K output = 40K → $0.60. **$1.50 per task.**
+
+**With caching** (the 20K static prefix is a cache hit within its TTL): 10 stages × (10K uncached × $3 + 20K cached × $0.30) = 10 × ($0.03 + $0.006) = **$0.36 input**. Output unchanged. **$0.96 per task.**
+
+That's a 36% cut: $0.54 per task. At 200 tasks a month, **$300 → $192, about $108 saved on this one pipeline**, before any compression or routing. Note two honest caveats: this assumes steady traffic that keeps cache entries alive (the 5-minute TTL refreshes free on hits, but a cold start pays a 1.25x write), and real usage is messier than one-call-per-stage. The Fortress already routes models deliberately: local inference for routine stages, cloud models for creative and implementation work, and a two-task split (cheap discovery, premium execution) that holds the expensive step near $0.60, with every agent carrying a token budget and a model tier. [Source: Fortress of Solitude kanban roster, internal]
+
+## The pitfall to avoid
+
+**Optimizing cost blind, or not at all, because context failures are silent.** Agents don't error out when context degrades; they "happily continue working with partial context and produce confident but incorrect results." [^3] Cascading failures compound: when early tool results drop out, later steps make decisions without them, and each mistake builds on the last. [^3] So observability comes first: track tokens per step, distance to the limit, and cost per workflow execution, *then* optimize. And resist the reflex to just buy a bigger window: "context engineering beats context maximization," and long-context models show sharp performance drops past ~32K tokens in Redis's testing. [^7]
+
+## Try it
+
+1. **Audit one real agent request.** Count tokens with `tiktoken` (OpenAI's tokenizer, `o200k_base`): system prompt + tool schemas + retrieved context + user message. What fraction is static overhead vs. task content? Over half is your first optimization target. [^8]
+2. **Price your loop.** Take a 10-step workflow, look up your provider's current input/output/cache-read prices, and run the worked-example math above with your real token counts. You now have a per-execution number to defend in any architecture review.
+3. **Enable caching and measure.** Add `cache_control` (Anthropic) or rely on automatic caching with a `prompt_cache_key` (OpenAI), then log cached vs. uncached tokens over 20 runs. Verify the discount you actually got; don't trust the marketing.
+
+## What's next
+
+You now know what tokens cost and how to control the bill. Lesson 6 is where you spend that budget: choosing models and providers, mapping capability tiers so you reach for a small cheap model when a big one is overkill, and building routing and fallbacks so the agent keeps working when a provider stumbles. Cost engineering decides how much you spend; this lesson decides what you spend it on.
+
+[^1]: anthropic.com. [anthropic.com](https://www.anthropic.com/engineering/built-multi-agent-research-system)
+[^2]: anthropic.com. [anthropic.com](https://www.anthropic.com/engineering/building-effective-agents)
+[^3]: comet.com. [comet.com](https://www.comet.com/site/blog/context-window/)
+[^4]: docs.anthropic.com. [docs.anthropic.com](https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching)
+[^5]: anthropic.com. [anthropic.com](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
+[^6]: platform.openai.com. [platform.openai.com](https://platform.openai.com/docs/guides/prompt-caching)
+[^7]: redis.io. [redis.io](https://redis.io/blog/llm-context-windows/)
+[^8]: github.com. [github.com](https://github.com/openai/tiktoken)

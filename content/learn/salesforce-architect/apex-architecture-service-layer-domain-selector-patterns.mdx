@@ -1,0 +1,123 @@
+---
+title: "Lesson 31: Apex Architecture: Service Layer, Domain, and Selector Patterns"
+slug: apex-architecture-service-layer-domain-selector-patterns
+series: "salesforce-architect"
+lesson: 31
+excerpt: "Apex triggers and classes are where business logic actually lives, and how you organize that code decides whether a solution stays maintainable for five years or turns into spaghetti the first time a requirement changes. This lesson covers the three enterprise patterns that keep Apex code organized: the service layer for orchestrating processes, the domain layer for object behavior, and the selector layer for all your SOQL. It covers why they matter, how they fit together, and a worked example of all three in action."
+date: "September 4, 2026"
+author: "Adroit Consulting"
+readTime: "13 min read"
+tags: [Architecture, Apex, Patterns]
+---
+
+# Lesson 31: Apex Architecture: Service Layer, Domain, and Selector Patterns
+
+Lesson 30 covered testing, mocking, and sandboxes, which is how you prove the Apex code you already wrote behaves. This lesson steps back and asks a harder question that comes first: where does that Apex code even live? On Salesforce you have a handful of places to put code, and the decision about which code goes where is an architectural one. Get it right and a requirement change touches one class. Get it wrong and the same change reaches into a trigger, a controller, a batch class, and an API endpoint, in four slightly different ways.
+
+Apex is not like writing a standalone application where you choose your own structure. The platform hands you triggers that fire on record events and classes that you expose in various ways. A trigger has no class hierarchy and no inheritance, so it is a poor place for any nontrivial logic.[^1] The way to keep a real application maintainable is to impose a structure on top of the raw capabilities: a service layer, a domain layer, and a selector layer. This is the Apex Enterprise Patterns approach, and it is the closest thing Salesforce has to an official answer for large, process-centric code bases.[^2]
+
+## Define the terms
+
+- **Service layer**: the entry point for business processes. A service class exposes one method per operation, such as `applyDiscounts`, and orchestrates the steps across multiple objects. It is what controllers, batch classes, and APIs call, so business logic is not scattered across those entry points.[^2]
+- **Domain layer**: the behavior of a single object, co-located in one class per object. Validation, defaulting, and calculation for Opportunity live in an `Opportunities` class, not in the trigger and not in the controller. Triggers route to the domain class, which is what keeps a trigger to a few lines.[^1]
+- **Selector layer**: the code that queries the database. A selector class per object, like `OpportunitiesSelector`, owns every SOQL query against that object and returns records with a predictable set of fields.[^3]
+- **Separation of concerns**: partitioning an application so each layer has one responsibility. Salesforce maps cleanly onto it: presentation, business logic, data access, and database are separate layers, and each can be declarative, Apex, or both.[^4]
+- **Bulkified code**: code written to handle more than one record at a time. Triggers are bulk triggers by default and can process many records at once, so code that works on one record fails under a data load.[^5]
+- **Unit of work**: a pattern that groups the DML operations of a process and commits them together, so the service layer can perform related inserts, updates, and deletes as one consistent transaction.[^2]
+- **Mapper pattern**: Martin Fowler's pattern for moving data between objects and a database while keeping them independent. The Salesforce selector pattern is a version of it, renamed because its primary job is selecting SObjects, not mapping them to a separate data model.[^3]
+
+## Why a trigger is the wrong home for logic
+
+Start with the constraint that forces the whole architecture. A trigger is Apex code that runs before or after record changes, and it is the most natural-looking place to put "when an account is updated, do X." But a trigger is not a class. It cannot inherit, it cannot factor logic through other methods the way a class can, and the platform invokes it in bulk, for a whole set of records at once, not one record at a time.[^5]
+
+The consequence is practical. Logic that lives directly in a trigger becomes code you cannot reuse, because a Visualforce controller, a batch class, and a REST API have no way to call into the trigger. Each of those entry points ends up with its own copy of the same rule, and the copies drift. The moment a business rule changes, you are hunting the same change in four places. That is the failure the service and domain layers exist to prevent.
+
+Salesforce has a rule of thumb for when you even need this structure. If your app is heavily data-centric and you can deliver most of it declaratively, with flows, validation rules, and formula fields, you may not need Apex at all.[^4] The moment you are process-centric, with complex calculations, validations, or a richer UI, and you have more than one way into your functionality, a batch job, a UI, and an API, the structure pays for itself. That is exactly the situation the exam and real architect work keep pointing at: multiple entry points, shared logic, and requirements that evolve.
+
+## The service layer: one method per business process
+
+The service layer is the front door to your business logic. Its job is to expose a consistent, meaningful operation, one method per process, that anything outside can call: a Lightning component controller, a Visualforce controller, a batch class, a REST endpoint. Everything that needs to run a business process goes through a service method, so the logic lives in exactly one place.[^2]
+
+Here is the shape. A service class is `public with sharing`, exposes `public static` methods, and keeps those methods at a high level of abstraction. A method validates its parameters, does its work, and commits. Here is a discount operation from the canonical example:
+
+```apex
+public class OpportunitiesService {
+    public static void applyDiscounts(Set<Id> opportunityIds, Decimal discountPercentage) {
+        // Unit of Work
+        // ...
+        // Validate parameters
+        // ...
+        // Construct Opportunities domain class
+        Opportunities opportunities = new Opportunities([
+            select Id, Amount, (select UnitPrice from OpportunityLineItems)
+            from Opportunity where Id in :opportunityIds
+        ]);
+        // Apply discount via domain class behavior
+        opportunities.applyDiscount(discountPercentage, uow);
+        // Commit updates to opportunities
+        uow.commitWork();
+    }
+}
+```
+
+Notice what the method does not do. It does not contain the discount math; that belongs to the domain class. It does not contain the SOQL query; that belongs to the selector layer. The service orchestrates: it gathers the records, delegates the behavior, and commits. That is the whole point. The service is thin by design, and everything below it is where the substance lives.[^1]
+
+The `fflib` implementation of this pattern goes further and uses a Unit of Work, which tracks all the changes a process wants to make and commits them as one. That is how a service that updates opportunities and their line items stays consistent. The unit of work is part of the service layer module's toolkit, worth knowing because it keeps multi-object processes atomic.[^2]
+
+## The domain layer: object behavior in one place
+
+Where the service layer orchestrates a process across objects, the domain layer holds the behavior of a single object. Think of it as the home for everything an Opportunity does: its complex validation, its defaults, its calculations. Instead of that behavior being spread across triggers, controllers, and batch classes, it all lives in one `Opportunities` class, and every entry point delegates to it.[^1]
+
+The domain layer is where Apex stops being procedural and starts being object-oriented. The domain is defined through the custom objects you create, and the domain class gives each object a model that combines behavior and data. The benefit is reuse in both directions. A trigger can call it, and a service method can call it, and both get the same result, because there is one source of truth for that object's rules.[^1]
+
+Two consumption paths matter on the platform. A trigger routes to the domain class through a handler that reads the trigger context variables. A service method constructs the domain class with the records it selected and calls the domain behavior directly. Both paths exist so that whether a record changes because a user edited it in the UI or because a service ran a bulk process, the same object logic runs. The trigger itself stays to a few lines:
+
+```apex
+trigger OpportunitiesTrigger on Opportunity (
+    after delete, after insert, after update, after undelete,
+    before delete, before insert, before update) {
+    fflib_SObjectDomain.triggerHandler(Opportunities.class);
+}
+```
+
+That is the pattern in its cleanest form. The trigger reads the platform's context variables through the handler base class and delegates every event to the domain class. A trigger this thin contains no business rules, so there is nothing to duplicate and nothing to drift.[^1]
+
+## The selector layer: every query in one place
+
+The third layer answers a simpler-sounding problem: where do the SOQL queries go? The answer the pattern gives is a selector class per object, and it matters more than it first appears. If queries live inline wherever they are needed, three bad things happen. Queries get copied and pasted until they drift, with criteria lost along the way. Callers receive records without knowing which fields were queried, which produces the runtime error `System.SObjectException: SObject row was retrieved via SOQL without querying the requested field`. And security checks get applied inconsistently, which is hard to test for. The selector layer centralizes all three concerns.[^3]
+
+A selector class has a clear contract. Its method names say what they return, so `selectByIdWithProducts` returns opportunities with their line items, predictably. It uses compile-time field references so the platform blocks deletion of fields the code depends on. It lets the caller opt in or out of sharing and permission checks, so the selector can run in a system context when needed but enforce the running user's security by default. And it prefers set-based criteria, which encourages the caller to stay bulkified. The result is that a query is a piece of logic, defined once and reused, exactly the way any other piece of logic should be.[^3]
+
+Put all three layers together and a real flow looks like this. A user edits an opportunity in the UI. A controller calls `OpportunitiesService.applyDiscounts`. The service validates and, behind the boundary, uses `OpportunitiesSelector.selectByIdWithProducts` to fetch the records, constructs the `Opportunities` domain class, and calls its behavior. The discount math runs in the domain class, and the unit of work commits. When the same change arrives through a trigger, the thin trigger handler routes to the same domain class, so the two paths cannot disagree. Every SOQL statement lives in the selector, every business rule in the domain, and every process in the service. That separation is what keeps the application maintainable as it grows.[^3]
+
+## The pitfalls to avoid
+
+**Business logic in triggers.** The most common mistake, and the one the patterns exist to prevent. Logic in a trigger cannot be reused by controllers, batch, or APIs, so it gets copied, and the copies drift. Keep triggers to a routing call and nothing more.[^1]
+
+**A service that does everything.** A service method that contains the query, the math, and the DML all inline defeats the purpose. The service should orchestrate. Push the query down to the selector and the behavior down to the domain, and the service stays readable and the pieces stay reusable.[^1]
+
+**Queries scattered across the code base.** When every class queries what it needs, two callers can query the same object differently, and a change to the data model ripples through every copy. Centralize them in the selector so a schema change touches one class.[^3]
+
+**Writing single-record code.** Every trigger and batch is bulk by default, so a method that only handles one record breaks the first time a data load hits. Write every layer against collections, and use set-based criteria in the selector to keep callers bulkified.[^5]
+
+**Applying the patterns where they are not needed.** For a small data-centric app you can deliver declaratively, a full service, domain, and selector stack is overhead. Match the structure to the complexity. When there are multiple entry points and evolving requirements, the patterns earn their weight. When there is one small finite trigger, they do not.[^4]
+
+## Try it
+
+A lending org needs a service operation that runs a credit check on a set of accounts and updates their risk score.
+
+1. You are told the operation must be callable from a Lightning component, a batch job, and a REST endpoint. Which layer should own the `runCreditChecks` method, and why? *(The service layer, because it exposes one process method that every external entry point can call, keeping the business logic out of the controllers and batch classes.)* [^2]
+2. The credit check logic involves complex scoring for the Account object. Where does that calculation belong? *(In an `Accounts` domain class, so the trigger and the service share the same object behavior.)* [^1]
+3. The process queries accounts and needs their related agreements. Where does the query belong, and what should the method be named? *(In an `AccountsSelector`, named something like `selectByIdWithAgreements`, so the caller knows exactly what fields and relationships it gets.)* [^3]
+4. A data import inserts 10,000 accounts through the Bulk API, and each one fires the trigger. Your domain logic does one query per account. What breaks, and how does the pattern fix it? *(The trigger is bulk, so per-record work blows past governor limits; the selector uses set-based criteria so the domain logic processes the whole collection at once.)* [^5]
+5. The business rule for scoring changes. How many places do you touch if the architecture is done right? *(One. The scoring rule lives in the `Accounts` domain class, so a change to the rule changes that single class and both the trigger and the service pick it up.)* [^1]
+
+## What's next
+
+You can now separate Apex into a service layer that orchestrates processes, a domain layer that owns object behavior, and a selector layer that owns every query, and you know how the three fit together behind a thin trigger. The next lesson turns to the other side of the same coin: Flow architecture. It builds the decision framework for Flow versus Apex versus external automation, so you can choose the right tool for a given process instead of reaching for one by habit.
+
+[^1]: trailhead.salesforce.com. [Apex Enterprise Patterns: Domain and Selector Layers](https://trailhead.salesforce.com/content/learn/modules/apex_patterns_dsl)
+[^2]: trailhead.salesforce.com. [Apex Enterprise Patterns: Service Layer](https://trailhead.salesforce.com/content/learn/modules/apex_patterns_sl)
+[^3]: trailhead.salesforce.com. [Learn Selector Layer Principles in Apex | Apex Enterprise Patterns: Domain and Selector Layers](https://trailhead.salesforce.com/content/learn/modules/apex_patterns_dsl/apex_patterns_dsl_learn_selector_l_principles)
+[^4]: trailhead.salesforce.com. [Understand Separation of Concerns | Apex Enterprise Patterns: Service Layer](https://trailhead.salesforce.com/content/learn/modules/apex_patterns_sl/apex_patterns_sl_soc)
+[^5]: developer.salesforce.com. [Bulk Triggers | Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_triggers_bulk.htm)

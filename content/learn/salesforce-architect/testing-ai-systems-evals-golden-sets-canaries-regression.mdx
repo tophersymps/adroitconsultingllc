@@ -1,0 +1,121 @@
+---
+title: "Lesson 30: General Systems Architecture: Testing AI Systems: Evals, Golden Sets, Canaries, and Regression"
+slug: testing-ai-systems-evals-golden-sets-canaries-regression
+series: "salesforce-architect"
+lesson: 30
+excerpt: "A model is not a method you can pin to a single expected output. This lesson covers the testing discipline that replaces the unit test for AI systems: evals as structured tests, golden sets as the regression anchor, and canary deployments as the production safety net, with the Salesforce tools that already ship this discipline."
+date: "September 03, 2026"
+author: "Adroit Consulting"
+readTime: "11 min read"
+tags: [Architecture, AI Infrastructure, Testing, AI Agents]
+---
+
+# Lesson 30: General Systems Architecture: Testing AI Systems: Evals, Golden Sets, Canaries, and Regression
+
+Lesson 29 taught you to test the code you control: mocking callouts, choosing sandboxes, assembling integration suites that prove the seams hold. This lesson moves to the system that sits on the other side of those seams. Your pipelines increasingly call AI systems, and those systems do not behave like Apex. Same input, different output, different quality, different failure modes. The testing discipline that catches a null pointer does not catch a hallucinated URL. This lesson gives you the vocabulary and the practice for testing AI systems: evals, golden sets, canaries, and regression testing. That is how you gain confidence in a model's output, not just in the code that surrounds it.
+
+## Define the terms first
+
+- **Eval (evaluation)**: a structured test for an AI system. You give the system an input, then apply grading logic to its output to measure success. [^1] OpenAI's guidance is blunter: generative AI is variable, so traditional software testing is insufficient, and evals are the way to test your AI system despite that variability. [^2]
+- **Task**: a single test case with defined inputs and success criteria. It is the eval equivalent of one unit test. [^1]
+- **Trial**: one attempt at a task. Because model outputs vary between runs, you run multiple trials to get consistent results. [^1]
+- **Grader**: the logic that scores an agent's performance on a task. A task can have multiple graders, and each grader can contain several assertions. [^1]
+- **Transcript**: the complete record of a trial, including outputs, tool calls, reasoning, and intermediate results. The outcome is the final state in the environment, which is what actually matters. [^1]
+- **Golden set**: a curated set of input-output pairs with known-good expected results, used as the anchor for offline evaluation. It is the reference your regression runs compare against. [^2]
+- **Capability eval**: a test that asks "what can this agent do well?" It should start at a low pass rate and give the team a hill to climb. [^1]
+- **Regression eval**: a test that asks "does the agent still handle all the tasks it used to?" It should have a nearly 100% pass rate, because a decline signals something broke. [^1]
+- **Canary deployment**: a progressive rollout where a new model version receives a small slice of live production traffic while the stable version serves the rest, and you monitor both concurrently so an automated rollback can reroute traffic if the new version degrades. [^3]
+- **LLM-as-a-judge**: a model-based grader that scores outputs against a rubric, useful for open-ended answers but nondeterministic and in need of calibration against human graders. [^1]
+- **Evaluation gate**: a release checkpoint that scores a model or agent against a reference set and blocks the release if the score drops below a threshold. Lesson 20 called it the gate in the ML promotion path; the mechanics are the eval-plus-threshold pattern from this lesson. [^2]
+
+## Why AI testing is different from Apex testing
+
+Traditional tests assert that code, given an input, produces an expected output. That works because the code is deterministic. An AI system is not. The same prompt can produce different responses across runs, and a response can be wrong in ways that do not crash anything. No exception is thrown when an agent hallucinates a URL. It just answers confidently and incorrectly.
+
+The Anthropic engineering team frames the problem around the properties that make agents useful: autonomy, intelligence, and flexibility. Those same properties make agents hard to evaluate. [^1] Mistakes propagate across turns, because an agent that misreads an intermediate result builds the rest of its work on it. A model can also solve a task in a way the eval author never imagined, which is how Claude Opus 4.5 solved a flight-booking benchmark by discovering a loophole in the policy: it "failed" the eval as written while actually producing a better answer for the user. [^1]
+
+That last point matters for architects. The eval is not the customer. The eval is a proxy for the customer. When the two disagree, the proxy is wrong, and you fix the eval, not the model.
+
+## Evals: the unit test for AI
+
+An eval is the basic unit of AI testing: an input, grading logic, and a pass-fail or scored result. For simple cases the grading is code. For a coding agent, you run the generated code against a test suite and check that the failing tests now pass without breaking the others. SWE-bench Verified works exactly this way, grading solutions by running the repository's tests, and it is one reason deterministic graders are natural for coding agents. [^1]
+
+For open-ended output, code cannot grade well. You reach for an LLM-as-a-judge: a rubric-based grader that scores the answer for the properties you care about. Model-based graders capture nuance and scale cheaply, but they are nondeterministic, cost more than code, and require calibration with human graders for accuracy. [^1] The OpenAI guidance says the same thing from the other side: use human feedback to calibrate automated scoring, and never let a vibe-based "it seems like it's working" take the place of an eval. [^2]
+
+The design loop OpenAI recommends has five steps: define the eval objective, collect the dataset, define the metrics, run and compare evals, then continuously evaluate. [^2] The dataset step is where architects earn their keep. Your golden set should mix production data, human-curated examples, and edge cases, and it should include typical cases, edge cases, and adversarial cases. [^2] Two anti-patterns to avoid: biased eval design that does not reproduce production traffic patterns, and relying solely on academic metrics like perplexity or BLEU score, which measure fluency more than task success. [^2]
+
+## Capability evals vs. regression evals
+
+Anthropic splits evals into two jobs that pull in opposite directions. [^1]
+
+A capability eval asks "what can this agent do well?" You deliberately aim it at tasks the agent struggles with, and you expect a low pass rate. The suite is a hill to climb. As the agent improves, the pass rate rises.
+
+A regression eval asks the reverse: "does the agent still handle everything it used to?" The expected pass rate is nearly 100%, because any decline means something broke. Regression evals are the safety net that lets you change the prompt, swap the model, or add a tool without wondering whether you traded away a behavior you already had.
+
+The two jobs connect over time. Once a capability eval graduates to a high pass rate, it stops measuring "can we do this at all?" and becomes a regression case measuring "can we still do this reliably?" Anthropic recommends running both suites continuously as the agent scales. [^1] This is the AI analog of the test pyramid from Lesson 29: a small set of hard capability problems for development, and a wide regression net that runs on every change.
+
+## The golden set is the anchor
+
+Everything in this lesson depends on the golden set: a curated collection of inputs with known-good outputs, usually reviewed by humans. It is the anchor for offline evaluation, the reference your regression runs compare against. [^2]
+
+Two properties make a golden set trustworthy. First, it must look like production: real traffic patterns, real user phrasing, real edge cases. OpenAI's anti-pattern list is explicit that an eval dataset that does not faithfully reproduce production traffic patterns is a biased design. [^2] Second, it must be maintained. Production changes, so the set changes. OpenAI recommends growing the eval set over time, mining your logs for good eval cases as you develop. [^2]
+
+Salesforce's Digital Success team runs this discipline in production. They built their answer quality framework on synthetic utterances: realistic but fake customer questions drawn from actual support data, including case logs, web searches, and feedback channels, regularly updated to reflect current issues. [^4] That is a golden set in the wild, and it is the backbone of their evaluations framework.
+
+## Canaries: testing in production, on purpose
+
+Offline evals run against a static set. Production traffic is not static, and staging cannot replicate the full distribution of real user prompts. Canary deployment closes that gap. [^3]
+
+The mechanics are familiar from Lesson 20's deployment patterns. A new model version receives a small slice of live traffic, the stable version keeps serving the rest, and both run concurrently so you compare them against each other rather than against a historical baseline. A typical rollout moves through stages like 1%, 5%, 25%, 50%, and 100% of traffic, with explicit metric gates at each step. If the canary crosses a rollback threshold, routing reverts to the stable version without redeploying anything. [^3]
+
+AI canaries differ from software canaries in one crucial way: the signals. Error rate and latency are not enough. A new model can be technically flawless and still produce subtly worse reasoning or a shift in tone. MLflow's guidance is to track hallucination rate, coherence, toxicity, LLM-as-a-judge results, and business-level signals like task completion rate alongside the infrastructure metrics, from the very first canary stage. [^3]
+
+Two constraints make AI canaries harder. Outputs are nondeterministic, so you need more samples to distinguish a real regression from natural variance, which means longer soak times at each stage. And for conversational agents, routing must be consistent: hash by user or session ID so a user mid-conversation does not hit the stable model on one turn and the canary on the next, producing incoherent dialogue. [^3]
+
+## Worked example: the Salesforce Help agent
+
+Salesforce runs an Agentforce agent on its own help site, and it has published exactly the discipline this lesson describes. The numbers are concrete. [^4]
+
+1. **Define quality in one sentence.** Salesforce's Digital Success team defines answer quality as the percentage of answers that meet acceptance criteria after an individual question, a pass-fail check on a single turn. Their definition of a quality answer is deliberately simple: relevant, correct, and complete. [^4]
+
+2. **Build the golden set from production.** They created synthetic utterances, realistic but fake customer questions based on actual support data: case logs, web searches, feedback channels. The list represents their top customer issues and is updated regularly. [^4]
+
+3. **Grade with AI, calibrate with people.** Their framework is "agents testing agents": AI evaluates Agentforce responses against the acceptance criteria. They also created a dedicated evaluation manager role to run tests, analyze results, and explain the numbers to both engineers and executives. [^4]
+
+4. **Set a regression baseline and a target.** In October 2025 their answer quality benchmark was 60%, with a goal of 75% by the end of the year. They treated 60% as the floor to protect, and the target as the hill to climb. [^4]
+
+5. **Run it continuously and publish the result.** They run synthetic tests on a schedule, and the discipline paid off: they hit 76% in their most recent test by strengthening the framework, improving content and strategy, and leaning on RAG, embeddings, and metadata. [^4]
+
+The pattern transfers to any org. The baseline is your regression floor, the target is your capability hill, and the golden set is what makes both measurable.
+
+## The pitfalls to avoid
+
+**Vibe-based evals.** "It seems like it's working" is not an evaluation strategy. OpenAI lists it as an anti-pattern, along with waiting until after you ship to implement evals. [^2] If you cannot state the success criteria for your agent, you cannot test it.
+
+**A golden set that does not look like production.** A dataset of hand-written happy paths will score beautifully offline and fail on the first real user message. The set has to mirror production traffic patterns, including the awkward inputs. [^2]
+
+**Capability evals used as regression evals.** If your eval suite is a set of hard problems the agent still fails half the time, a score drop means nothing and a score rise means progress. You cannot use that suite to answer "did we break something?" The regression question needs its own suite with a near-100% pass rate. [^1]
+
+**Canary without quality signals.** Rolling a model out at 1% and watching only error rate and latency is a software canary wearing an AI costume. Add hallucination rate, coherence, and business signals from the first stage, because a model that looks healthy on the infrastructure dashboards can still be producing worse output. [^3]
+
+**Testing in production when the platform gives you a sandbox.** Salesforce's Agentforce Testing Center is built for this: it generates custom test scenarios and evaluates response accuracy, conversation quality, subagent recognition, action execution, and knowledge retrieval. Running tests consumes requests and credits, and testing agents can modify CRM data, so the guidance is to use it in a sandbox. [^5]
+
+## Try it
+
+You are designing the test strategy for a payment-disputes Agentforce agent that reads case records, drafts dispute responses, and calls an external payment API.
+
+1. Write the success criteria for one dispute response in one sentence, the way Salesforce did. *(Mine: "the response is relevant to the dispute reason, correct against the payment data, and complete enough to act on.")* [^4]
+2. Where does your golden set come from, and what three sources feed it? *(Real case logs for phrasing, human-reviewed expected responses for ground truth, and synthetic edge cases for coverage.)* [^2]
+3. Which of your evals are capability evals and which are regression evals, and what pass rate do you expect from each? *(Capability evals target hard dispute scenarios and start low; regression evals cover everything the agent used to handle and should stay near 100%.)* [^1]
+4. A new model version arrives with better dispute reasoning but a higher hallucination rate on knowledge lookups. What gates decide whether it ships? *(The regression suite catches the hallucination regression; a canary at 1% of traffic with quality signals, including LLM-as-a-judge scores on live answers, decides whether to progress to 100%.)* [^1] [^3]
+5. Where in the Salesforce toolchain does the offline part of this run, and why not in production? *(Agentforce Testing Center in a sandbox, because running tests consumes requests and credits and testing agents can modify CRM data.)* [^5]
+
+## What's next
+
+You can now build the testing discipline AI systems demand: evals as the unit test, a golden set as the regression anchor, and canaries as the production safety net. The next lesson turns from testing the system to structuring the code that lives inside Salesforce. It covers Apex architecture: the service layer, the domain layer, and selector patterns, and why that separation matters when the codebase grows past the point where one class can hold everything.
+
+[^1]: anthropic.com. [Demystifying evals for AI agents](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents)
+[^2]: developers.openai.com. [Evaluation best practices | OpenAI API](https://developers.openai.com/api/docs/guides/evaluation-best-practices)
+[^3]: mlflow.org. [Canary Deployment for AI Models: A 2026 Guide](https://mlflow.org/articles/what-is-canary-deployment-ai/)
+[^4]: salesforce.com. [How Salesforce Measures Agentforce Answer Quality](https://www.salesforce.com/agentforce/use-cases/customer-zero/how-salesforce-measures-answer-quality/)
+[^5]: help.salesforce.com. [Agentforce Testing Center | Salesforce Help](https://help.salesforce.com/s/articleView?id=ai.agent_testing_center.htm&language=en_US&type=5)

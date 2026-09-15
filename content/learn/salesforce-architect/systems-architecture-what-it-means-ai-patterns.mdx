@@ -1,0 +1,132 @@
+---
+title: "Lesson 5: General Systems Architecture: What 'Architecture' Means and Why AI Systems Reuse the Same Patterns"
+slug: systems-architecture-what-it-means-ai-patterns
+series: "salesforce-architect"
+lesson: 5
+excerpt: "The foundational concepts of systems architecture (components, interfaces, and design principles) and why every AI agent pattern (sequential, parallel, hierarchical) is a remix of patterns engineers have known for decades."
+date: "August 08, 2026"
+author: "Adroit Consulting"
+readTime: "9 min read"
+tags: [Architecture, AI at Work]
+---
+
+# Lesson 5: General Systems Architecture: What "Architecture" Means and Why AI Systems Reuse the Same Patterns
+
+This is the first **general systems architecture** lesson in the track, a deliberate break from Salesforce-specific content to build the cross-platform architecture thinking that every architect needs, especially one learning AI systems.
+
+Here's the thesis: **architecture is about making decisions under constraints.** Every system, whether it runs on Salesforce, AWS, a Kubernetes cluster, or an LLM agent loop, has the same fundamental concerns: components, their relationships, the rules that govern change, and the tradeoffs you accept when you pick one design over another. The patterns change names every decade, but the underlying mechanics are remarkably stable.
+
+## What "architecture" actually means
+
+The ISO/IEC/IEEE 42010 standard defines architecture as "the fundamental concepts or properties of a system in its environment embodied in its elements, relationships, and in the principles of its design and evolution." [^1]
+
+The Systems Engineering Body of Knowledge (SEBoK) distills it further: architecture comprises the fundamental organization of a system, embodied in its **components**, their **relationships** to each other and to the environment, and the **principles** governing its design and evolution. [^2]
+
+Three words do the work:
+
+- **Components**: what the system is made of. In Salesforce: objects, flows, Apex classes, integrations. In an AI system: agents, LLM calls, vector stores, tool functions.
+- **Relationships**: how components connect and communicate. In Salesforce: lookup relationships, REST callouts, platform events. In AI systems: orchestrator-to-agent routing, shared memory, tool-call invocations.
+- **Principles**: the rules that keep the system coherent as it changes. In Salesforce: "no hard-deletes in transactional data," "trigger recursion guards." In AI systems: "every agent call has a timeout," "tool results must be validated before the next reasoning step."
+
+An architect's job is to define these three things explicitly, then defend them through delivery. The difference between a senior developer and an architect is that the architect writes down the principles and enforces them even when they slow things down.
+
+## The same six patterns, every time
+
+Here's the insight that connects 1980s Unix to 2026 AI agents: **the coordination patterns don't change; only the processing units do.**
+
+### 1. Sequential chain (Pipes and Filters)
+
+Unix pipes (`ls | grep foo | wc -l`) are the classic example. Data flows through a linear sequence of transformations. Each stage has a well-defined input, a pure transformation, and an output that becomes the next stage's input.
+
+AI agents call this **prompt chaining** or **sequential orchestration**. A contractor intake agent classifies a request, passes it to a clause-customization agent, which passes it to a compliance checker. Same topology, different processing units: LLM calls instead of shell commands.
+
+Azure's Architecture Center explicitly notes that sequential orchestration "resembles the Pipes and Filters cloud design pattern, but it uses AI agents instead of custom-coded processing components." [^3]
+
+**Tradeoff:** simple to debug (breakpoints at each stage), but latency adds up linearly, and errors cascade forward: an early mistake propagates through every subsequent stage.
+
+### 2. Fan-out / fan-in (MapReduce)
+
+Google's MapReduce paper (2004) formalized an idea that had existed in distributed computing for years: split a problem into independent pieces, process them in parallel, then merge results.
+
+AI agents call this **parallel orchestration** or **ensemble voting**. Multiple agents research a legal question from different angles, then a synthesizer agent merges the findings. Patrick Koss draws the line directly: "Concurrent agents voting on results? Welcome to MapReduce." [^4]
+
+**Tradeoff:** lower wall-clock latency, but cost spikes (multiple LLM calls at once), and aggregation is harder than splitting: conflicting results need tie-breaking rules, not just union.
+
+### 3. Central controller (Mediator / Orchestrator)
+
+The Gang of Four's Mediator pattern (1994) centralizes communication between components so they don't talk to each other directly; they talk through the mediator. This reduces coupling but creates a single point of complexity.
+
+AI agents call this **supervisor orchestration** or **hierarchical agent architecture**. A supervisor agent decomposes a goal, assigns sub-tasks to specialist workers, collects results, and decides whether to iterate or finalize. StackAI's guide describes it as "what you reach for when the problem is too complex for a single agent loop." [^5]
+
+**Tradeoff:** the supervisor becomes the bottleneck and the most complex component to test. It's the right choice when different parts of the process need different permissions or models, but overused, it's a governance tax on every interaction.
+
+### 4. Blackboard (Shared state / Memory)
+
+The old-school Blackboard pattern has independent specialists read and write to a shared workspace, solving a problem collaboratively without direct communication. It dates to the 1970s in speech-recognition research.
+
+AI agents call this **shared memory** or **context store**. A centralized state (vector database, Redis store, or just a growing conversation context) holds intermediate artifacts, evidence pointers, and decisions. Every agent reads what it needs and writes what it produces. [^6]
+
+**Tradeoff:** state management becomes the hardest problem in the system. Atomic writes, optimistic locking, and context-window budgeting matter far more than any individual agent's reasoning quality.
+
+### 5. Router (Gateway / Classifier)
+
+Every microservices architecture has a gateway that routes requests to the right service based on the request content. In a message queue system, a router reads a message header and sends it to the correct handler.
+
+AI agents call this **agent routing** or **triage-first design**. An input arrives, a router agent classifies it ("this is a billing question, not a technical support question"), and dispatches it to the specialist agent. [^3]
+
+**Tradeoff:** the router must be highly accurate: a misclassification means the wrong agent gets the work, wasting cost and time. Rule-based routing is predictable but brittle; LLM-based routing is flexible but hallucinates.
+
+### 6. Circuit breaker (Guardrails / Escalation)
+
+Michael Nygard's "Release It!" (2007) popularized the circuit breaker pattern: when a dependency fails repeatedly, stop calling it to prevent cascading failure. The system defaults to degraded mode until the dependency recovers.
+
+AI agents call this **guardrails** or **human-in-the-loop escalation**. When an agent confidence score drops below a threshold, when a tool call fails three times, or when the proposed action involves a write operation to a production system, the agent circuit-breaks to a human. [^7]
+
+**Tradeoff:** circuit breakers that are too sensitive destroy workflow velocity; ones that are too forgiving let bad outputs reach users. Getting the threshold right requires production data, not guesswork.
+
+## A worked example: Document triage system
+
+Let's make this concrete with a single scenario mapped across different architecture choices.
+
+**Scenario:** An enterprise receives 10,000 PDF documents per week (contracts, invoices, compliance filings). Each must be classified, extracted, validated, and routed to the correct department.
+
+**Sequential approach:** Classifier agent → Extractor agent → Validator agent → Router agent. Simple to build and debug, but takes ~90s per document end-to-end and a classification error contaminates every downstream step.
+
+**Parallel approach:** Fan out to five extractor agents simultaneously, each handling 20 pages. A synthesizer agent merges results. Faster (45s per document), but costs 5x the tokens for extraction, and merging structured data from five parallel agents is harder than running one sequential chain.
+
+**Hierarchical approach:** A supervisor agent receives the document, spins up a classification specialist, then dispatches extraction to the correct specialist (invoice extractor vs. contract extractor), with a human escalation path for documents below a confidence threshold. Better accuracy, but the supervisor's reasoning loop adds 5-10s per document before any work starts.
+
+All three are valid. The architect's job is to pick the right one for the constraints. If the client needs high throughput and has a tolerant error budget, parallel wins. If the client is a regulated financial institution where auditability trumps speed, sequential with checkpoints is the better call.
+
+## Pitfall: Thinking the pattern IS the architecture
+
+The most common mistake I see in new architects, whether on Salesforce or in AI, is confusing a pattern with a complete architecture. "We use the supervisor pattern" is not an architecture. It doesn't answer:
+
+- What happens when the supervisor crashes mid-workflow?
+- How does state survive if the orchestrator restarts?
+- What is the failure mode when an agent hallucinates a tool call?
+- How do you test an individual agent without running the full chain?
+
+A pattern is a starting point. Architecture is what you add (error handling, observability, state persistence, security boundaries, retry logic) to make the pattern survive in production.
+
+## Try it
+
+Pick a system you know well: a Salesforce org, an app you deployed, or the Hermes agent stack running this lesson. Map it in exactly three layers:
+
+1. **List the components.** (At least 5. Be specific: "the routing flow" not "the system.")
+2. **Draw the relationships.** Which ones are synchronous calls? Which are async messages? Which share data through a store?
+3. **Write down the principles.** Two lines each, imperative. Examples: "Every API callout must have a 30-second timeout." "No agent can write to production without human approval." "All tool results must be schema-validated before the next model call."
+
+You have just written an architecture description, possibly the first explicit one that system has ever had. That's the entire job.
+
+## What's next
+
+You now know what architecture means, and you have seen why AI systems reuse the same patterns the platform does. The next lesson comes back to Salesforce and makes it concrete: integration patterns. It covers request-reply, fire-and-forget, and batch, for both inbound and outbound traffic, and when each pattern is the honest choice for moving data across a boundary.
+
+[^1]: iso.org. [iso.org](https://www.iso.org/standard/74393.html)
+[^2]: sebokwiki.org. [sebokwiki.org](https://sebokwiki.org/wiki/Architecture_(glossary))
+[^3]: learn.microsoft.com. [learn.microsoft.com](https://learn.microsoft.com/en-us/azure/architecture/ai-ml/guide/ai-agent-design-patterns)
+[^4]: medium.com. [medium.com](https://medium.com/@patrickkoss/ai-agents-software-engineering-new-patterns-or-old-tricks-122fc9ab2eee)
+[^5]: stackai.com. [stackai.com](https://www.stackai.com/insights/ai-agent-architecture-patterns-sequential-parallel-and-hierarchical-workflows)
+[^6]: jetbrains.com. [jetbrains.com](https://www.jetbrains.com/pages/ai-agents/architecture/ai-agent-orchestration/)
+[^7]: dataiku.com. [dataiku.com](https://www.dataiku.com/blog/agent-orchestration-explained)

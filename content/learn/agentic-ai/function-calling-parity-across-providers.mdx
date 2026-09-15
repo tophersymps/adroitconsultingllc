@@ -1,0 +1,121 @@
+---
+title: "Lesson 9: Function-Calling Parity Across OpenAI, Azure, Anthropic, Gemini, and Local Models"
+slug: function-calling-parity-across-providers
+series: "agentic-ai"
+lesson: 9
+excerpt: "Every frontier provider exposes function calling, but none uses the same wire format. This lesson maps the request and response shapes across OpenAI, Azure, Anthropic, and Gemini, then shows why local models (llama.cpp) are the parity wildcard and how one internal schema plus thin per-provider adapters keeps an agent portable."
+date: "August 12, 2026"
+author: "Adroit Consulting"
+readTime: "9 min read"
+tags: [LLMs, AI Agents]
+---
+
+# Lesson 9: Function-Calling Parity Across OpenAI, Azure, Anthropic, Gemini, and Local Models
+
+Lessons 7 and 8 built one correct tool schema and made it fail well. This lesson answers the question that hits every team the moment they stop pointing an agent at a single provider: *does my tool-calling code still work when I switch from OpenAI to Anthropic, or from Azure to a local model?*
+
+The short answer is no, not by default. Every major provider supports function calling, but each invented its own wire format, and the differences sit exactly where your code touches the API. Function-calling parity means understanding those differences well enough to build one internal contract that survives provider swaps. [^1]
+
+The one idea to take from this lesson: **treat your canonical tool schema as the source of truth, and treat each provider's wire format as a dialect your adapter layer translates to and from.** Schemas are portable. Wire formats are not. [^2]
+
+## Terminology is the first trap
+
+The providers do not even agree on what to call the feature, and that naming difference is a warning sign about how far apart the implementations drifted. [^1]
+
+- OpenAI and Azure call it **function calling** (also **tool calling**).
+- Anthropic calls it **tool use**, and the docs are explicit that this is a design philosophy, not a cosmetic rename.
+- Google Gemini calls it **function calling**.
+
+When a teammate says "the model called the function," pin down which provider and which wire shape they mean. The words are loose; the JSON is not.
+
+## The wire-format map
+
+The practical differences show up in four places: how you declare a tool in the request, what schema dialect you use, how the model signals a call in the response, and how the arguments come back. Here is the map. [^1]
+
+| Dimension | OpenAI / Azure | Anthropic | Google Gemini |
+|---|---|---|---|
+| Feature name | Function calling | Tool use | Function calling |
+| Request field | `tools` array | `tools` array | `function_declarations` |
+| Tool wrapper | `{type:"function", function:{...}}` | `{name, input_schema}` | `functionDeclarations:[...]` |
+| Schema field | `parameters` (JSON Schema) | `input_schema` (JSON Schema) | `parameters` (OpenAPI-style) |
+| Response field | `tool_calls` | `tool_use` content block | `function_call` part |
+| Arguments format | JSON string | native dictionary | native dictionary |
+
+The response-arguments row is where most portability bugs hide. OpenAI returns the arguments as a JSON *string* that you must parse with `json.loads` (Python) or `JSON.parse` (JavaScript). Anthropic and Gemini hand you a native dictionary or object that is already the right type in your language. Code that writes `tool_call.function.arguments` and treats it as an object works on Anthropic-shaped data but throws on OpenAI-shaped data. [^1] [^2]
+
+## The four providers, read one by one
+
+### OpenAI
+
+OpenAI sends tools as an array of objects wrapped in `{"type":"function","function":{...}}`, declares the schema under `parameters`, and returns calls in `response.choices[0].message.tool_calls`. Each call has an `id`, a `function.name`, and `function.arguments` as a JSON string. You append a `{"role":"tool","tool_call_id":...}` message with the result to continue the turn. OpenAI's docs show the full five-step loop: define tools, prompt, execute, return results, prompt again. [^3]
+
+The `tool_choice` parameter gives explicit control: `auto`, `none`, or `required`. `required` forces a tool call even when the query could be answered from training data, which adds latency and invites incorrect calls; reserve it for flows that genuinely require tool execution. [^1]
+
+### Azure OpenAI
+
+Azure is the easy case for parity because it runs the same model family and speaks the same chat-completions wire format as OpenAI. The differences are deployment plumbing, not schema. You point the OpenAI client at `https://YOUR-RESOURCE.openai.azure.com/openai/v1/`, pass a *deployment name* where you would pass a model name, and call `chat.completions.create` with the identical `tools` and `tool_choice` structure. [^4]
+
+Two Azure-specific constraints matter. First, the API is versioned, and some capabilities (parallel function calling, strict structured outputs) require specific API versions; parallel function calling landed in `2023-12-01-preview` and structured outputs require `2024-08-01-preview` or later. Second, Azure currently limits tool or function descriptions to 1,024 characters, so a long description that fits on OpenAI may need trimming. [^4]
+
+### Anthropic
+
+Anthropic declares tools as an array of `{name, description, input_schema}` and uses `input_schema` where OpenAI uses `parameters`. The semantics are the same JSON Schema, but the field name differs. Responses embed a `tool_use` block in the `content` array with `name` and `input`; the arguments arrive as a native dictionary, not a JSON string. [^2] [^5]
+
+Anthropic also has a Tool Search feature for large registries: instead of sending every tool on every request, it searches for the relevant subset, cutting token overhead when you register hundreds of tools at the cost of a little extra latency on the first request. [^1]
+
+### Google Gemini
+
+Gemini declares functions under `function_declarations` (or `functionDeclarations` in the client SDK) and, critically, uses an OpenAPI-style schema rather than strict JSON Schema. Some schema constructs that are valid JSON Schema are not valid here, so you cannot assume a tool that validated on OpenAI will validate unchanged on Gemini. The model returns a `function_call` part with `name` and `args` as a native object, and you hand results back in a `functionResponse` part. Gemini handles parallel calls well. [^6] [^1]
+
+## Local models are the parity wildcard
+
+Local serving is where parity gets interesting, because the wire format can match but the behavior cannot be assumed. llama.cpp's `llama-server` exposes an OpenAI-compatible `/v1/chat/completions` endpoint, so a client written for OpenAI can often point at a local model with little or no change. [^7]
+
+But that compatibility has two conditions. First, start `llama-server` with the `--jinja` flag to enable OpenAI-style function calling, and make sure the model uses a tool-aware Jinja chat template. llama.cpp ships native tool-call format handlers for many families (Llama 3.x, Hermes 2 and 3, Qwen 2.5, Mistral Nemo, Firefunction v2, and others) and falls back to a generic handler otherwise, which consumes more tokens and is less reliable. Second, parallel tool calling is disabled by default and must be enabled by passing `parallel_tool_calls: true` in the payload. The docs also warn that aggressive KV-cache quantization can substantially degrade tool-calling performance. [^7]
+
+In short, a local model can speak the OpenAI dialect, but whether it actually produces valid, parseable tool calls depends on the model, the template, and the quantization. Wire-format parity and behavioral reliability are different things. [^7]
+
+## The adapter pattern: one schema, many dialects
+
+The reason this lesson exists is that you should never write five copies of your agent logic. The durable pattern is a thin adapter layer. [^1]
+
+1. **Define one canonical tool schema** in your codebase: name, description, and JSON Schema parameters. This is Lesson 7's schema, owned once.
+2. **Write a serializer per provider.** Convert your canonical schema to OpenAI's `{"type":"function","function":{...}, "parameters":...}`, to Anthropic's `{name, input_schema}`, and to Gemini's `function_declarations` with an OpenAPI-compatible dialect. Because the field names and wrappers differ, this conversion is mechanical but not optional.
+3. **Write a parser per provider.** Normalize each response shape back to one internal result: unwrap Anthropic's `tool_use` content block, parse OpenAI's arguments string, copy Gemini's native `args`. Your agent loop then sees identical output regardless of provider.
+4. **Route and fail over across providers** using Lesson 6's patterns, safe in the knowledge that a provider swap is a config change plus the same adapter, not a rewrite.
+
+Managed gateways and the Model Context Protocol automate much of this normalization. MCP is the emerging standard for tool discovery and execution: a client talks to an MCP server once, and schema translation plus response parsing happens inside the client, so your application works against OpenAI, Anthropic, or Gemini without per-provider modification. [^1] [^2]
+
+## Worked example: the Fortress hybrid stack
+
+This is not hypothetical at Adroit. The Fortress runs a hybrid inference stack: cloud frontier models for kanban agent workers, and a local llama.cpp server (Qwen 35B-A3B MoE, Q4_K_M, port 8080) for free-text background subsystems such as context compression and triage. [^8]
+
+That split exists precisely because of a parity failure. The local Qwen model began emitting empty `{}` objects for nested tool-call arguments, silently breaking the kanban completion gate. Free-text reasoning stayed correct; structured tool-call JSON did not. The lesson that fell out matches this lesson exactly: wire-format parity (the local server spoke OpenAI-shaped tool calls) did not mean behavioral parity (the arguments were unreliable). The rule the Fortress adopted: keep structured-output-gated work on the tier you have verified, and put a validation layer in front of anything that routes elsewhere. [^8]
+
+On the cloud side, the Fortress's Hermes agents define their tools (`web_search`, `write_file`, `patch`, `terminal`) as JSON schemas in a built-in registry organized into toolsets. That registry is the canonical schema layer; when an adapter is added for a new provider, the tool definitions themselves do not change. [^9]
+
+## The pitfall to avoid
+
+Assuming that because two providers both support function calling, the same code and schema behave the same on both. Parity failures come in three flavors. Wire-format drift: OpenAI's arguments string vs Anthropic's dictionary, which crashes a parser that assumes one shape. Schema-dialect drift: a strict-JSON-Schema tool that Gemini rejects because it uses OpenAPI-style declarations. And behavioral drift: a provider that accepts your tools but returns malformed or incomplete arguments, which a fallback router cannot detect because the call returned successfully. [^1] [^7]
+
+Treat "it works on OpenAI" as a claim to verify per provider, not a property that transfers. Test each adapter against its own provider, and validate every parsed argument before you execute a tool.
+
+## Try it
+
+1. **Build a two-provider adapter.** Define one canonical tool (say, `lookup_customer`) and write a serializer that emits both OpenAI's `parameters` shape and Anthropic's `input_schema` shape. Send the same request to both providers and diff the response structures. [^2]
+2. **Parse the arguments safely.** Given a raw response from each provider, normalize it to one internal object. Confirm your OpenAI path runs `json.loads` on the arguments string and your Anthropic path does not, then wire both into a single dispatch function. [^1]
+3. **Point a client at a local model.** Start `llama-server --jinja` with a tool-aware model, then send an OpenAI-style request over `/v1/chat/completions`. Enable `parallel_tool_calls: true` and compare reliability against a cloud provider for the same tool. [^7]
+
+## What's next
+
+You can now call tools on any provider. Lesson 10 takes the agent out of its own head: RAG fundamentals, why retrieval is the first enterprise pattern you reach for. Chunking decides what the model can find, embeddings decide what counts as similar, and retrieval decides what actually reaches the prompt. Tool calling gave the agent hands; retrieval gives it a memory of your data.
+
+[^1]: qveris.ai. [qveris.ai](https://qveris.ai/guides/function-calling/)
+[^2]: prefect.io. [prefect.io](https://www.prefect.io/resources/mcp-vs-function-calling)
+[^3]: developers.openai.com. [developers.openai.com](https://developers.openai.com/api/docs/guides/function-calling)
+[^4]: learn.microsoft.com. [learn.microsoft.com](https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/function-calling)
+[^5]: platform.claude.com. [platform.claude.com](https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools)
+[^6]: docs.cloud.google.com. [docs.cloud.google.com](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/tools/function-calling)
+[^7]: github.com. [github.com](https://github.com/ggml-org/llama.cpp/blob/master/docs/function-calling.md)
+[^8]: github.com. [github.com](https://github.com/kelex1812/adroit-blog/blob/main/content/blog/local-llm-infrastructure-2026.mdx)
+[^9]: hermes-agent.nousresearch.com. [hermes-agent.nousresearch.com](https://hermes-agent.nousresearch.com/docs/user-guide/features/tools)

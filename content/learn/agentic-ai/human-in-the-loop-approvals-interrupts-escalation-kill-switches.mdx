@@ -1,0 +1,123 @@
+---
+title: "Lesson 25: Human-in-the-Loop, Approvals, Interrupts, Escalation, and Kill Switches"
+slug: human-in-the-loop-approvals-interrupts-escalation-kill-switches
+series: "agentic-ai"
+lesson: 25
+excerpt: "An agent that can act on its own against a system that matters needs a person in the loop. This lesson builds the control layer: approvals that gate a single risky action, interrupts that pause the whole run and resume it later, escalation that hands an unsafe decision to a human, and a kill switch that stops a runaway system before it does damage."
+date: "August 28, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [LLMs, AI Agents, Security]
+---
+
+# Lesson 25: Human-in-the-Loop, Approvals, Interrupts, Escalation, and Kill Switches
+
+Lessons 17 and 18 built guardrails that sit at the boundary. They check what enters the agent and what leaves it, and they fail the agent closed on structured output. That is the static half of safety. This lesson is the dynamic half: what happens while the agent is running, mid-loop, against a system where a wrong action costs real money. A guardrail tells you an action was bad after the fact, or blocks it by pattern. A human-in-the-loop control layer decides, in the moment, whether a person needs to be the one making a call.
+
+Here is the one idea to carry out of this lesson: **human-in-the-loop is not a checkbox. It is a designed contract with four control primitives, approvals that gate one action before it runs, interrupts that pause the entire loop at a chosen point and resume it later, escalation that hands a decision off to a person, and a kill switch that stops a runaway system before it does damage.** Each one needs a trigger that decides when it fires, a way to hold state while it is in effect, and a designed behavior when the human does not respond. Miss any of those three and the control does not protect you.
+
+The terms, defined up front:
+
+- **Human-in-the-loop** (HITL) is the practice of putting a human decision point inside the agent's execution loop, so some actions or some steps do not complete without a person. It is the opposite of a fully autonomous agent, and it is not optional the moment an agent can mutate real state.
+- **Approval** is a gate on one action. The agent proposes a tool call, the system decides whether that call needs a person to confirm it, and execution pauses until the person approves or rejects it. [^5]
+- **Interrupt** is a pause on the whole run, not just one call. The system saves the agent's state, stops, and waits, and a later call resumes it from the checkpoint with new input. [^3]
+- **Escalation** is a designed handoff. When the agent reaches a condition it should not decide alone, it stops trying to solve it and routes the decision, with supporting context, to a person or a higher authority.
+- **Kill switch** is a deterministic stop that halts the run entirely when it exceeds a safety budget, independent of whether the agent wants to keep going.
+- **Checkpointer** is the storage layer that saves the agent's state at a point so an interrupt can be resumed after an arbitrary delay. It is what turns a pause into a durable, resumable stop. [^3]
+
+## Why control is a separate problem from guardrails
+
+A guardrail is a filter. It inspects a value that already exists, an input message or an output string, and admits or blocks it. A control is a decision about process. It sits in the loop and asks whether the agent is even allowed to continue to a certain point, and it does that while the loop is live. The distinction matters because the two fail in different ways. A guardrail that misses a bad value lets one bad output through. A control layer that fails, or that was never built, lets an agent keep acting, repeatedly, until an entire system is changed and nobody stopped it in time.
+
+The failure mode that motivates all of this is the runaway loop. An agent's whole behavior is a loop: perceive, reason, act, observe, and repeat. [^3] That loop is the source of the agent's usefulness and its danger at the same time. If the loop has no external stop, the agent can keep calling tools, keep spawning subagents, and keep spending tokens long after the task is done or long after it has gone in a direction nobody intended. Anthropic's research team building a multi-agent system reports that they had to explicitly prevent their agents from spiraling out of control, setting guardrails and loop budgets so an agent could not search the web forever or spawn fifty subagents for a simple query. [^7] That spiral is the direct threat the control layer exists to contain.
+
+The controls are ranked by scope, and that ranking is the mental model for the whole lesson. An approval gates the smallest unit, one action. An interrupt gates a point in the run, which can be one action or a region of work. Escalation hands off a decision. A kill switch gates the whole run. You reach for the narrowest control that is safe, and you escalate to the wider one when the situation demands it. Gating everything with the widest control, a kill switch with no approvals underneath, gives you a system that can only run or stop, with no middle ground where a person can steer it.
+
+## Approvals: gating one action
+
+The most common control is the approval. When the model proposes a tool call, the runtime checks whether that call is in a class that requires a person before it executes. The check belongs in the runtime, not in a system prompt. A prompt that says "ask before you delete things" is a preference the model may follow. An approval flag on the tool is a mechanism the runtime enforces. That is the same distinction this track has drawn all the way through: model-level guidance shifts, deterministic gates hold. [^5]
+
+The granularity of an approval matters more than people expect. Approving every action gives you safety but a stilted tool. Approving nothing gives you a fast tool with no safety. The design question is which actions earn the gate. Two rules of thumb cover most cases. First, separate reads from writes: reading a file or querying a read-only endpoint almost never needs a human, but deleting a record, sending an email, or mutating a database almost always does. Second, make the gate proportional to the blast radius: the wider the action's reach, the stricter the gate. OpenAI's Agents SDK encodes this on the tool itself. You decorate a tool with `needs_approval=True` to require approval on every call, or you pass a boolean function that decides dynamically, `needs_approval=cancels_a_known_order`, so most calls run and only the risky class pauses. [^5]
+
+The same shape shows up across every serious agent runtime, which is a strong signal that it is the right abstraction. The Vercel AI SDK has a `needsApproval` property on tools, and it supports a dynamic predicate, so a payment tool can require approval only when the amount is large. [^6] Claude Code implements it as permission modes: `default` asks for permission, `plan` refuses to write without approval, `bypassPermissions` skips the prompt entirely, and `dontAsk` never prompts and denies instead. [^2] And Claude Code's hooks let you make these decisions deterministically: a `PreToolUse` hook receives the proposed tool call as JSON before execution, and it can allow it, block it, or defer to the normal permission flow. When several hooks disagree, the most restrictive decision wins. A hook can deny a destructive bash command even in a mode that normally skips prompts, because the hook fires before the permission check. [^1] That precedence, restrictive wins, is the same idea as default deny from the guardrail lessons, applied to tool calls instead of text.
+
+## Interrupts: pausing the whole run
+
+An approval gates one action. An interrupt gates the run at a point. When the agent reaches an interrupt it calls from inside a node, the system saves the current graph state to a checkpointer and stops, waiting indefinitely for a human to resume it. The resume is not a restart. The agent picks up from the exact checkpoint with the human's response injected, and the run continues as if it had paused for a breath. [^3]
+
+The term for this in the frameworks is an interrupt, and LangGraph exposes it as a function you call inside a graph node: `interrupt("Do you approve this action?")`. When that call runs, LangGraph persists the graph state and halts. Executing the graph again with a `Command(resume="your answer")`, under the same thread ID, resumes the run, and the human's answer becomes the return value of the `interrupt()` call inside the node. [^3] [^9]
+
+Two properties make this useful in production. The first is that an interrupt is dynamic, not a static breakpoint. A static breakpoint pauses before or after a specific node every time. An interrupt is code, so it can be conditional: fire it only when a condition holds, like a write landing outside the expected workspace or a SQL statement that is not a read-only SELECT. [^4] That means you do not build a separate "approval version" of your graph. The same graph has the pause points built in, and they only engage when the risky condition is true.
+
+The second property is persistence. Because the state is held in a checkpointer, an interrupted thread can be resumed later on a different machine, even months later, without losing what the agent had decided up to that point. [^4] The checkpoint does not hold the run in memory. It holds it on disk, so an interrupted agent costs nothing while it waits beyond a little storage, and the operator can come back to it on their own schedule. [^3] This is the mechanism that makes a human-in-the-loop design work at company scale: the agent does not hold a server hostage while it waits for a person to approve something. It parks itself and releases the resources.
+
+## Escalation: handing the decision off
+
+An approval and an interrupt both assume a person is watching and will respond. Escalation handles the harder case: the agent has reached something it should not decide at all, so the correct action is not to pause and wait, but to route the whole decision to a person with the context they need to make it. The difference is subtle and worth stating plainly. An interrupt asks "may I continue?" and expects a yes or no, or a small edit. An escalation asks "this is outside what I should decide, here is what I found, you take it from here." [^4]
+
+The design that makes escalation safe is the same one that makes every other control safe: it is bounded and it carries context. Escalation is not the agent giving up and emitting a vague "I could not figure this out." It is a designed handoff, with the trace of what the agent already tried, the state of its work, and a clear statement of the decision a human now owns. The human needs the what and the why from lesson 20's observability layer to act, and the escalation payload is exactly where that captured trace earns its keep. Without the context, an escalation is just a ticket that says "something went wrong," and the human has to redo the investigation the agent already did. [^4] With it, the human opens the state, sees the branch, and makes one decision.
+
+Escalation and interrupt are the two points where this track's earlier lessons pay off. The escalation hands off to a person, and the person is the supervisor that multi-agent lesson 24 described, except the supervisor is human. The interrupt needs the persistence of a thread ID from lesson 16, because you cannot resume a run you cannot address back to a session. Control, coordination, and state are not separate subjects. They are the same system viewed from different angles.
+
+## Kill switches: stopping the runaway
+
+None of the first three controls helps if the agent is already out of control in a way that no single action could fix. That is the job of the kill switch: a deterministic stop that fires independently of the agent's judgment. It is not a tool the agent chooses to call. It is a cap the system enforces.
+
+The most robust kill switch is a loop budget. The agent loop, by design, can iterate without a natural end, so you give it an explicit one in the form of a hard limit on how many times it may loop, how many tool calls it may make, or how much it may spend, and when the limit is reached, the run stops. This is what makes runaway agents impossible rather than unlikely. The Anthropic research engineers describe the process of keeping their agents from spiraling out of control in exactly these terms: bounding how many research loops each subagent may run before it stops and hands control back to the lead agent. [^7] A bounded loop is a kill switch that is also a design rule. It does not just stop the agent at a cliff. It forces the agent to be a good citizen within the budget, because the budget is the contract.
+
+A kill switch can be larger than a loop budget. It can be a human-invoked stop, a button or command that halts all active runs of an agent fleet. It can be a resource tripwire, like a threshold on memory, CPU, or spend that kills the run when crossed. It can be a blast-radius limit, where the number of affected records or the scope of tool access revokes automatically. Whatever the specific mechanism, the test is the same and it is brutal: can you stop every active instance of this agent, right now, without the agent's cooperation? If the answer is no, you do not have a kill switch. You have a wish. [^8]
+
+The reason the kill switch must be deterministic is the same reason approvals must be mechanisms rather than prompts. A review step that the model itself would have to search for has a deeper kind of hole. An agent that is already looping badly is an agent that is the least reliable judge of whether it should keep looping. So the control that stops the whole run cannot be rendered by the model. It has to be a number, a threshold, a tripwire that a process enforces. This is the discipline from lessons 22 and 23 about stopping conditions, now applied at the outer layer. A single agent needs a stopping condition. A fleet of agents, and the system that runs them, needs the same condition enforced from outside. [^8]
+
+## Worked example: a support agent that touches production state
+
+Let me put all four controls in one concrete system. You are building a support agent that reads a customer's account, and it can take one risky action: it can issue a refund, cancel an order, or send an email to the customer. Those actions reach production. Everything else it does is read-only.
+
+**Approval.** You mark the three write tools with approval requirements. `cancel_order` gets `needs_approval=True`, so every cancellation pauses. `send_email` gets a dynamic predicate, so it only pauses when the subject suggests something risky, like a refund or billing query, and sails through for benign subjects. Reads, checking the account, reading the order history, run without any gate. The queue of pending approvals is the human operator's inbox. [^5]
+
+**Interrupt.** Some work is long and ambiguous, not just a single risky call. When the agent wants to execute a multi-step refund that spans several tools, you put an `interrupt()` in the refund workflow. The graph pauses at that point, saves its state, and the operator sees the whole proposed action, every step and every argument, before anything runs. Because the interrupt is dynamic, normal single-step actions never reach it. Only the multi-step, high-impact refund does. [^3]
+
+**Escalation.** When the agent reads an account and finds something it should not adjudicate, a disputed charge with a note from legal, a customer who wants a refund beyond the policy, it does not guess. It stops, packages the trace, the account state, and the request, and escalates to the human supervisor who owns the account. The agent's instruction set is explicit that this class is not its call to make. The escalation carries everything the supervisor needs, so the supervisor makes one decision instead of doing a fresh investigation. [^4]
+
+**Kill switch.** The loop budget caps the agent at a reasonable number of tool calls per ticket. If it ever exceeds that, if it starts looping on a retry, the run stops and hands the ticket to a human with the trace attached. There is also a fleet-level stop: a command the operations team can run to halt every active agent instance at once. That is rarely used, but it exists, and its existence is what makes the rest of the autonomy acceptable. [^7] [^8]
+
+Notice what the four controls do together. The approvals make the single dangerous actions safe. The interrupt makes the long ambiguous work steerable. The escalation keeps the truly gray decisions with a person. The kill switch guarantees that, no matter how wrong the first three go, the system cannot run away. Each one is a mechanism, not a prompt, and each one fails in a designed way when a human does not show up. If no operator responds to an approval, the action stays blocked. That failing-closed behavior is the whole point.
+
+## The Fortress angle: this already runs here
+
+This is not hypothetical at Adroit, because the Fortress runs an agent, Kelex, that does exactly this kind of control on its own infrastructure, and the local infra writeup documents the mechanics. [^10]
+
+The approvals map to the write-safe guard. A cron session running Kelex runs with a restricted write-safe root. Writing to a path outside that root with a file tool is denied by the runtime, not by the model, a deterministic deny that mirrors a `PreToolUse` approval gate. Where a script genuinely needs to reach outside the root, the pattern is to write a staging copy inside the root and then copy it to the target with a terminal command, which is an approval cranked by hand instead of by policy. That is a human-in-the-loop decision made once, up front, and then enforced every run. [^10]
+
+The escalation maps to how the Fortress routes hard problems. Kelex is documented as the single point of escalation for the whole system. When a profile is stuck, a pipeline fails, or a daily run hits a blocker, the work escalates to Kelex to figure out why and fix it, instead of an agent guessing at an answer. It is a designed handoff with context, not a random "I gave up." And the verification gate is a deterministic kill switch on bad output: `verify-lessons.py` hard-fails a lesson that contains an em dash or a banned AI-slop phrase, and a lesson with a hard issue must not be committed. That is a loop budget on the content loop, enforcing a standard externally rather than trusting the writer to self-police. Control layers are not an abstraction this track is teaching. They are the pattern the Fortress already runs on. [^10]
+
+## The pitfall to avoid
+
+The most common mistake is designing control for the happy path and forgetting the three states a control has to handle: what happens when the human approves, what happens when the human rejects, and what happens when the human does not respond. Most teams nail the first and hand-wave the rest. But the reject case is where a denial strategy matters, and the no-response case is where a designed timeout or a fail-closed default keeps the system from hanging forever. A `needs_approval=True` tool with no handling for a silent operator is a tool that can pause a production queue and hold it hostage. Design the timeout and the default before you ship the gate.
+
+The second mistake is approval fatigue. When every single action requires confirmation, the human starts clicking approve without reading, and the control becomes decorative. [^8] The fix is to be honest about granularity: reads run free, benign writes run free, and only the genuinely risky class pauses. The operator who approves ten things a day reads each one. The operator who approves a hundred stops reading. The whole system is only as safe as the human is attentive, so do not burn that attention on actions that do not need it.
+
+The third mistake is treating "we have a human review" as a substitute for the kill switch. A review gate that pauses and waits is not a stop. If the agent that is waiting is the same agent that would keep going given a chance, and if there is no external budget that ends the run on its own, you still have no protection against the runaway. Approvals and interrupts give you steering. A kill switch gives you the guarantee. You need both, and you cannot pretend one is the other. [^7] [^8]
+
+## Try it
+
+1. **Gate one tool.** Take an agent you have built that can mutate state, and add an approval requirement to the tool that writes or deletes. In the OpenAI Agents SDK, that is `needs_approval=True` on the tool. [^5] Run it and confirm the run pauses for approval before the write, and confirm that rejecting the action leaves the system unchanged.
+
+2. **Build an interrupt and resume it.** In LangGraph, add an `interrupt()` call inside one node of a graph, enable a checkpointer, and run the graph until it pauses. [^3] Resume it under the same thread ID with a `Command(resume=...)` and confirm the run picks up from the checkpoint instead of restarting. Then answer this: what would break if you resumed it under a different thread ID? It would start from a different conversation and lose the paused state, which is why the thread ID is the address of the resumable run. [^3] [^9]
+
+3. **Design a loop budget.** Take the longest-running agent you have and add a hard cap on how many tool calls or loop iterations it may make before it stops and returns what it has, plus its trace. [^7] Run it on a task that previously looped and confirm it now stops at the budget. That cap is your kill switch. Answer: where should it live so that a model cannot talk its way past it? It has to live outside the model, in the runtime that enforces the loop, which is exactly the point of a deterministic kill switch. [^8]
+
+## What's next
+
+You can now keep a single agent, or a fleet of them, under human control while they act. Lesson 26 moves from control to capacity: enterprise deployment. You learn how to serve a model at scale, how to design the API your agents expose, how to enforce rate limits so a burst of traffic cannot overwhelm the system, and how to apply quotas so that cost and usage stay inside what you budgeted. The control layer tells you what the agent is allowed to do. Deployment tells you how to run it for many users without it collapsing or blowing the bill. Staying in control and running at scale are the two halves of putting an agent into production. [^7]
+
+[^1]: code.claude.com. [Automate actions with hooks, including PreToolUse, Claude Code docs](https://code.claude.com/docs/en/hooks-guide)
+[^2]: code.claude.com. [Choose a permission mode, Claude Code docs](https://code.claude.com/docs/en/permission-modes)
+[^3]: docs.langchain.com. [LangGraph Interrupts: pausing and resuming execution](https://docs.langchain.com/oss/python/langgraph/interrupts)
+[^4]: docs.langchain.com. [Human-in-the-loop with LangChain agents and interrupts](https://docs.langchain.com/oss/python/langchain/human-in-the-loop)
+[^5]: openai.github.io. [Human-in-the-loop, OpenAI Agents SDK](https://openai.github.io/openai-agents-python/human_in_the_loop/)
+[^6]: ai-sdk.dev. [Human-in-the-Loop with Next.js, Vercel AI SDK](https://ai-sdk.dev/cookbook/next/human-in-the-loop)
+[^7]: anthropic.com. [How we built our multi-agent research system](https://www.anthropic.com/engineering/multi-agent-research-system)
+[^8]: developers.openai.com. [Agents SDK, the runner and the tool loop](https://developers.openai.com/api/docs/guides/agents)
+[^9]: reference.langchain.com. [interrupt, langgraph reference](https://reference.langchain.com/python/langgraph/types/interrupt)
+[^10]: github.com. [Local LLM infrastructure 2026, Adroit blog](https://github.com/kelex1812/adroit-blog/blob/main/content/blog/local-llm-infrastructure-2026.mdx)

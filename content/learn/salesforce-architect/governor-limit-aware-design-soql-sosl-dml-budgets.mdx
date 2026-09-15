@@ -1,0 +1,245 @@
+---
+title: "Lesson 38: Governor-Limit-Aware Design: SOQL, SOSL, and DML Budgets"
+slug: governor-limit-aware-design-soql-sosl-dml-budgets
+series: "salesforce-architect"
+lesson: 38
+excerpt: "A transaction does not get a budget per trigger or per class. It gets 100 SOQL queries, 150 DML statements, 50,000 returned query rows, and 10,000 DML rows as one pool, and every trigger, record-triggered Flow, and uncertified package in that transaction spends from it. Designing limits-aware means knowing which calls consume a statement, which consume a row, and why the two meters fail at different batch sizes. This lesson covers the SQL and DML meters, where SOSL fits in the same budget, and the review habits that catch a limit exception before a data load does."
+date: "September 11, 2026"
+author: "Adroit Consulting"
+readTime: "15 min read"
+tags: [Salesforce, Architecture, Apex, Limits, SOQL]
+---
+
+# Lesson 38: Governor-Limit-Aware Design: SOQL, SOSL, and DML Budgets
+
+Lesson 33 introduced the ceiling and Lesson 37 showed how to move work into a different transaction when the work genuinely does not fit. This lesson is about the meters themselves. Not the strategy of staying under them, which is bulkification, but the arithmetic: how a query is counted, how a DML call is counted, why a 150-statement budget and a 10,000-row budget fail at completely different batch sizes, and how SOSL draws from the same pool.
+
+Get the arithmetic right and limit exceptions stop being surprises. They become a number you can write into a design document before anyone writes the code.
+
+## Define the terms
+
+- **Transaction**: one unit of execution, reset with its own budget. A user save, an API call, and each batch `execute()` chunk are separate transactions. Limits are counted per transaction, not per class, per trigger, or per method.[^1]
+- **SOQL statement budget**: 100 queries in synchronous Apex, 200 in asynchronous Apex.[^1]
+- **Query row budget**: 50,000 rows returned by SOQL across the transaction, synchronous or asynchronous.[^1]
+- **DML statement budget**: 150 DML statements in a transaction, synchronous or asynchronous.[^1]
+- **DML row budget**: 10,000 records processed by DML, `Approval.process`, or `Database.emptyRecycleBin` in a transaction.[^1]
+- **SOSL budget**: 20 SOSL queries per transaction, 2,000 records retrieved per query.[^1]
+- **Aggregate query limit**: parent-child relationship subqueries inside a SOQL query each count as an extra query, subject to a separate ceiling of three times the top-level query limit. `Limits.getLimitAggregateQueries()` returns it.[^1]
+- **`Database.getQueryLocator` row limit**: 10,000 rows per transaction in normal Apex. The 50 million figure belongs to Batch Apex `start()` methods, not to a synchronous transaction.[^1]
+- **Certified managed package pool**: security-reviewed AppExchange packages get their own per-namespace limits, with a cumulative cross-namespace ceiling of 11 times the per-namespace number. Uncertified packages share your org's pool.[^1]
+- **`Limits` class**: Apex methods such as `getQueries()` and `getLimitQueries()` that report consumption and ceiling at runtime, which is how you measure a transaction instead of guessing at it.[^1]
+- **Headroom**: the share of the transaction budget you deliberately leave unspent for automation you did not write.
+
+Two sources worth bookmarking: the Developer Limits and Allocations Quick Reference for the current numbers,[^1] and Execution Governors and Limits for the rules behind them.[^2]
+
+## Two meters, not one
+
+The beginner's mental model is "150 operations." The real model has two independent counters, and they fail at different points.
+
+A single `update` of 10,000 records costs one DML statement and 10,000 DML rows. It passes on both meters. A loop that updates one record at a time costs 150 DML statements on the 150th record, while the row meter has barely moved. Same total work, completely different budget profile. That asymmetry is the entire economic case for bulkifying: batching buys statement headroom, and statement headroom is the scarce resource in a synchronous save.[^1]
+
+Queries work the same way, with a twist that catches people. The 50,000 row meter is charged by rows returned, not rows scanned. A non-selective query that scans a million rows but returns 40 costs 40 rows and one query statement, so it looks cheap on both meters while still being an operations problem: the SOQL statement character limit and query complexity rules exist because the platform pays for scanning even when your budget does not. Lesson 24 covers selectivity and indexing; this lesson treats query quality as a separate axis from query quantity.
+
+## What counts as a query
+
+Every inline SOQL statement counts as one query. The methods that also count, which you should assume will trip reviewers who have not read the fine print:[^1]
+
+- `Database.query` and `Database.queryWithBinds`
+- `Database.countQuery` and `Database.countQueryWithBinds`
+- `Database.getQueryLocator` and `Database.getQueryLocatorWithBinds`
+
+A parent-child relationship query is the subtle one. The pattern `SELECT Id, (SELECT Id FROM Contacts) FROM Account` is one top-level SOQL statement, and each parent-child relationship in it counts as an extra query against the aggregate query ceiling, which is three times the top-level limit. The rows returned by that subquery also count toward the 50,000 row meter. A query that returns 200 accounts with 20 contacts each may consume one SOQL statement and 4,200 rows.[^1]
+
+Custom metadata types are the documented exception: in a single Apex transaction, custom metadata records can have unlimited SOQL queries.[^1] That is why configuration values that automation reads on every record belong in custom metadata rather than a custom setting or a query against a custom object. It is a budget decision as much as a caching decision.
+
+If you want a practical shortcut: the cost of a query is one statement plus the rows it returns. Count both when you review code, and you will catch the parent-child trap before it reaches production.
+
+Before a query is wired into a trigger, check its plan. The Query Plan tool in the Developer Console shows each candidate plan and its cost relative to the selectivity threshold: a cost above 1 means the filter is not selective and the platform will use a full table scan.[^5] That check is about speed, not budget, but the two failures surface in the same incident.
+
+## What counts as a DML statement
+
+The list is longer than most developers think, and two entries on it cause real damage.[^1]
+
+Counting toward the 150:
+
+- `insert`, `update`, `upsert`, `delete`, `undelete`, `merge`, and their `Database.*` equivalents
+- `Database.convertLead` and `Approval.process`
+- `Database.emptyRecycleBin`
+- `Database.setSavePoint` and `Database.rollback`
+- `System.runAs`
+- `EventBus.publish` for platform events published after commit
+
+`Database.setSavePoint` and `Database.rollback` are the ones to notice. A defensive pattern that wraps each record in a savepoint, tries an update, and rolls back on failure costs three DML statements and buys fault isolation for one record. It is a legitimate pattern for a small, risky operation and a budget disaster inside a loop. `System.runAs` is the other quiet consumer: test and impersonation code that switches users repeatedly is spending the same 150 statements as production logic.
+
+Partial-success DML is still one statement. `Database.insert(records, false)` gives you `SaveResult` objects per record so you can log failures and continue, and it costs a single DML statement plus one row per record processed. There is no budget discount for `allOrNone = false`, and no budget penalty either. The choice is about error handling, not resource cost.
+
+## The budget belongs to the transaction, not to you
+
+This is where most production limit exceptions originate. Your trigger is not allocated 100 queries. The transaction is, and everything that fires on that save shares it.[^1]
+
+The limits reference states that CPU time is calculated for the executing Apex code and for any processes called from it, such as package code and workflows.[^1] The same shared-pool reading applies to the query and DML meters. In one user save you can have before and after triggers on the object, a record-triggered Flow, rollup summary recalculation, and an installed package that is not certified and therefore has no pool of its own. Each one looks reasonable in isolation. Together they can exhaust a budget none of them individually approached.
+
+Two implications for design reviews. First, ask who else touches this object in the same transaction, not just who owns the code you are changing. Second, leave headroom. A handler that spends 90 queries on its own is not "under the limit," it is a handler that has spent the org's margin, and the next feature that needs two more queries will be the one that breaks in production.
+
+Certified managed packages are the exception that helps: a security-reviewed AppExchange package gets its own per-namespace pool of 100 synchronous SOQL queries and 150 DML statements, in addition to your org's. The cumulative cross-namespace ceiling is 11 times the per-namespace limit, so a transaction can reach 1,100 SOQL queries across certified namespaces.[^1] Note the word certified. A package without that review shares your pool, and a code review that assumes otherwise is how orgs lose a Friday evening.
+
+## Asynchronous, scheduled, and Bulk: which limits apply
+
+The higher async numbers are real, and they do not apply everywhere a developer assumes.[^1]
+
+- Asynchronous Apex gets 200 SOQL queries, 12 MB of heap, and 60,000 milliseconds of CPU. It does not get more rows: DML stays at 150 statements and 10,000 rows, SOQL stays at 50,000 rows, and SOSL stays at 20 queries per transaction.
+- Scheduled Apex runs asynchronously in feature terms but is governed by synchronous limits: 100 queries, 6 MB of heap, 10,000 milliseconds of CPU.[^1] That is the technical reason Lesson 37 insists a schedulable only starts a batch job or enqueues a queueable and exits.
+- Bulk API and Bulk API 2.0 transactions use the higher of the synchronous and asynchronous limits for each metric.[^1] A Bulk API load is genuinely a different budget from a UI save.
+- Batch Apex resets the limits for each execution of a batch chunk, and a `start()` method returning a `QueryLocator` can scope up to 50 million records.[^1] The rows that matter for the chunk budget are the ones the `execute()` method touches, not the size of the locator.
+
+The practical rule: moving to async roughly doubles the query and CPU budget, and does nothing for DML. If a transaction is failing on DML rows, async will not save it. If it is failing on query count, async very well might.
+
+## SOSL draws from the same pool
+
+SOSL is the full-text search language, and the difference from SOQL is structural rather than syntactic. A single SOSL query can span many objects, it matches on words rather than exact field values, and behind it is a separate search index rather than the database query path.[^3][^4]
+
+```apex
+List<List<SObject>> found = [
+    FIND 'Acme*' IN ALL FIELDS
+    RETURNING Account(Id, Name, Industry), Contact(Id, FirstName, LastName)
+];
+List<Account> accounts = (List<Account>) found[0];
+List<Contact> contacts = (List<Contact>) found[1];
+```
+
+Four properties shape how you budget it.
+
+The result is a list of lists, one inner list per object in the `RETURNING` clause, in the order you declared them. That is the part that breaks cast-heavy code when someone reorders the `RETURNING` clause during a refactor.
+
+Matching is on words rather than exact values. Searching for `Digital` returns `Digital` and `The Digital Company`, where SOQL would return only the exact value. Wildcards work at the middle or end of a term, and searches are case-insensitive.[^3]
+
+The counts are small and fixed: 20 SOSL queries per transaction, 2,000 records per query.[^1] SOSL is not a replacement for a selective SOQL query over a large set. It is the right tool when the user does not know which object or field holds the text they are looking for.[^3]
+
+The index has its own timeline. Search works against a search index, so a record must be indexed before it can be found, and the result set is capped before permissions and filters are applied.[^4] A newly inserted record is not always searchable the instant the transaction commits. If a workflow requires "create then find," a SOQL query on an indexed field is the reliable path.
+
+One number to verify rather than trust: the current limits reference puts a single SOSL query at 2,000 records,[^1] while Salesforce's own large data volumes module says a single SOSL search in a transaction can return up to 40,000 records, with multiple searches capped at 2,000 each.[^4] Treat the documented per-query figure as your planning number and check the current release notes if you are sizing a design around the larger one. Numbers in this area move between versions, which is why the habit worth teaching is where to look, not what to memorize.
+
+## Worked example: a case-closure transaction with a budget sheet
+
+A support org closes cases with an automated close date. Four things happen on one case update, and all four share one transaction:
+
+1. A record-triggered Flow queries the parent Account (for a service tier field) and updates a counter on it.
+2. An Apex trigger on `Case` runs a selector that queries the related `Asset` and the related `Entitlement` for the closed cases in the batch.
+3. The same trigger updates the `Asset` records and inserts follow-up `Task` records for high-priority cases.
+4. An installed rollup package that is not certified queries two related objects and updates a summary record.
+
+The budget sheet, written before the code, for a batch of 50 cases:[^1]
+
+| Consumer | SOQL | DML stmts | Query rows | DML rows |
+|---|---|---|---|---|
+| Record-triggered Flow | 1 | 1 | ~50 | ~50 |
+| Trigger selector queries | 2 | 0 | ~150 | 0 |
+| Trigger DML (assets, tasks) | 0 | 2 | 0 | ~80 |
+| Rollup package (uncertified) | 2 | 1 | ~100 | ~50 |
+| **Transaction total** | **5** | **4** | **~300** | **~180** |
+
+Against a synchronous budget of 100 queries, 150 DML statements, 50,000 rows, and 10,000 DML rows, this transaction is comfortable. The value of the sheet is not the total; it is the columns. A reviewer can see that the trigger's selector issues two queries for the whole batch rather than two per case, and that the added package brings the query count to five instead of the two the trigger author tested with.
+
+Now the code that keeps the selector side honest, using a single query per object and a `Map` for lookup:
+
+```apex
+public with sharing class CaseClosureSelector {
+    public static Map<Id, Asset> assetsByAccount(Set<Id> accountIds) {
+        Map<Id, Asset> byAccount = new Map<Id, Asset>();
+        for (Asset a : [
+            SELECT Id, AccountId, Status__c
+            FROM Asset
+            WHERE AccountId IN :accountIds
+              AND Status__c = 'Active'
+        ]) {
+            byAccount.put(a.AccountId, a);
+        }
+        return byAccount;
+    }
+}
+```
+
+Two habits in that snippet are doing the budget work, and both follow Salesforce's bulkified Apex guidance to query once for a collection rather than per record.[^6] The method takes a `Set<Id>` so it queries once for the whole batch, and it returns a `Map` so the caller never needs a second query to find the matching record. Add a second call for the same key set and you should get the cached map rather than a new query, which is what a caching layer above this class is for.
+
+The trigger that consumes it stays boring:
+
+```apex
+public with sharing class CaseClosureHandler {
+    public static void afterUpdate(List<Case> newCases) {
+        Set<Id> accountIds = new Set<Id>();
+        Set<Id> caseIds = new Set<Id>();
+        for (Case c : newCases) {
+            accountIds.add(c.AccountId);
+            caseIds.add(c.Id);
+        }
+
+        Map<Id, Asset> assets = CaseClosureSelector.assetsByAccount(accountIds);
+
+        List<Asset> assetsToUpdate = new List<Asset>();
+        List<Task> tasksToInsert = new List<Task>();
+        for (Case c : newCases) {
+            Asset related = assets.get(c.AccountId);
+            if (related != null) {
+                related.Status__c = 'In Service';
+                assetsToUpdate.add(related);
+            }
+            if (c.Priority == 'High') {
+                tasksToInsert.add(new Task(
+                    Subject = 'Follow up on closed case',
+                    WhatId = c.Id,
+                    OwnerId = c.OwnerId
+                ));
+            }
+        }
+
+        if (!assetsToUpdate.isEmpty()) {
+            update assetsToUpdate;
+        }
+        if (!tasksToInsert.isEmpty()) {
+            insert tasksToInsert;
+        }
+    }
+}
+```
+
+Fifty closed cases, four DML statements in Apex, two queries, and the same cost as one closed case. That is the property to design for: consumption that grows with the number of distinct objects touched, not with the number of records.
+
+Finally, measure instead of arguing. The `Limits` class returns both consumption and ceiling at runtime, so a debug log or a diagnostic path can print the real numbers during a test load:[^1]
+
+```apex
+System.debug('SOQL: ' + Limits.getQueries() + '/' + Limits.getLimitQueries()
+    + ' rows: ' + Limits.getQueryRows() + '/' + Limits.getLimitQueryRows()
+    + ' DML: ' + Limits.getDmlStatements() + '/' + Limits.getLimitDmlStatements()
+    + ' DML rows: ' + Limits.getDmlRows() + '/' + Limits.getLimitDmlRows());
+```
+
+Run that in a test that closes 200 cases and read the output once. You will know your actual budget consumption, and an assertion such as `System.assert(Limits.getQueries() < 20)` turns a future regression into a failing test instead of a production incident. Keep those calls in diagnostics and tests, not in production control flow: branching on remaining budget inside a service class makes behavior depend on who else ran first in the transaction.
+
+## Try it
+
+1. A loop updates one record per iteration and fails at the 151st record. Which meter fired, and what does the other meter show? *(The DML statement meter, at 150. The row meter is still near zero. Batching the same work into one `update` on a list fixes it and costs one statement.)*[^1]
+
+2. A trigger query returns 300 accounts with a parent-child subquery for contacts, 12 contacts each. How many SOQL statements and how many query rows does a reviewer count? *(One top-level statement, plus one extra query for the parent-child relationship against the aggregate query limit, and roughly 3,900 rows against the 50,000 row meter, since relationship rows contribute to the row count.)*[^1]
+
+3. An architect proposes a savepoint, update, rollback pattern inside a loop over 200 records. What is the cost, and when is the pattern defensible? *(Three DML statements per iteration, roughly 600 for the batch, against a 150 ceiling. Defensible only for a small number of records where per-record fault isolation is worth the statement cost, or when the loop moves to a batch chunk of a few records.)*[^1]
+
+4. A scheduled job needs 120 SOQL queries and reports them as fine because "async gets 200." What is wrong? *(Scheduled Apex is governed by synchronous limits: 100 queries, 6 MB heap, 10,000 ms CPU. The higher async numbers apply to future, queueable, and batch execution.)*[^1]
+
+5. An integration queries 60,000 rows in a single transaction and fails on the row meter. Which change fixes it: async, Bulk API, or Batch Apex? *(Async alone does not raise the 50,000 row ceiling. Bulk API uses the higher of the two limits per metric, and Batch Apex with a `QueryLocator` scopes far larger sets by resetting the budget per chunk. Picking between them depends on whether the result must return to the caller in one response.)*[^1]
+
+6. A COO-facing search box needs to find a phrase across Accounts, Contacts, and Cases. Why is SOSL the right answer, and what limit do you budget? *(SOSL searches across multiple objects in one query with word matching. Budget 20 queries per transaction and 2,000 records per query, and design for index lag so a record created seconds ago may not be findable yet.)*[^1][^3][^4]
+
+7. An uncertified AppExchange package is installed and a sensitive save starts failing on query limits. What is the design question, and what would have caught it? *(The package shares the org's per-transaction pool, so the question is what the package queries in the same transaction. A budget sheet that lists every consumer on the object, not just your own code, catches it during review.)*[^1]
+
+8. A custom object holds configuration values that three triggers read on every record. What moves the query cost to zero, and what is the tradeoff? *(Custom metadata types do not count against the SOQL query limit in a transaction. The tradeoff is deployability: metadata records are deployed as metadata, with the same change-set and release process as the rest of your configuration.)*[^1]
+
+## What's next
+
+You can now size a transaction instead of hoping: separate statement and row meters, the calls that count, the aggregate query ceiling that parent-child subqueries draw on, and the shared pool that every consumer of the save spends from. The next lesson moves underneath those meters entirely. Lesson 39 is Transaction lifecycle: state, save order, and the four trigger contexts in one transaction, which walks a single record save from the moment it arrives to the moment it commits: what is in the database and what is in memory at each phase, why before-save logic sees different data than after-save logic, what order the automation on an object actually runs in, and why a rollback in the wrong phase leaves records in a state you did not design for.
+
+[^1]: resources.docs.salesforce.com. [Salesforce Developer Limits and Allocations Quick Reference (PDF, updated August 7, 2026)](https://resources.docs.salesforce.com/latest/latest/en-us/sfdc/pdf/salesforce_app_limits_cheatsheet.pdf)
+[^2]: developer.salesforce.com. [Execution Governors and Limits | Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_gov_limits.htm)
+[^3]: trailhead.salesforce.com. [Optimize SOSL Queries in Apex | Trailhead](https://trailhead.salesforce.com/content/learn/modules/apex_database/apex_database_sosl)
+[^4]: trailhead.salesforce.com. [Conduct Data Queries and Searches | Large Data Volumes | Trailhead](https://trailhead.salesforce.com/content/learn/modules/large-data-volumes/conduct-data-queries-and-searches)
+[^5]: help.salesforce.com. [Developer Console Query Plan Tool FAQ](https://help.salesforce.com/s/articleView?id=000386864&language=en_US&type=1)
+[^6]: developer.salesforce.com. [Apex Design Best Practices | Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_best_practices.htm)

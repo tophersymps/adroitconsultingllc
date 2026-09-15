@@ -1,0 +1,172 @@
+---
+title: "Lesson 36: Testing Agents: Unit Tests for Tools, Integration Tests, and Regression Evals"
+slug: testing-agents-unit-integration-regression-evals
+series: "agentic-ai"
+lesson: 36
+excerpt: "You would not ship an API endpoint that you tested by curling it five times and nodding. Most agent teams do exactly that with the whole system: a playground, a few prompt experiments, a deployment. This lesson builds the three layers that replace the vibe check: unit tests that treat the deterministic machinery around the model, the prompt strings, the tool dispatch, the schemas, as ordinary software, integration tests that exercise the full agent loop against controlled tool side effects, and regression evals that score real model output against a frozen golden set. Together they turn a system that never gives the same answer twice into one you can gate a release on."
+date: "September 8, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [LLMs, AI Agents, Testing, CI/CD]
+---
+
+# Lesson 36: Testing Agents: Unit Tests for Tools, Integration Tests, and Regression Evals
+
+Lesson 35 kept your RAG index honest. This lesson makes the code that reads it honest. It is the lesson where an agent stops being a demo you feel good about and becomes a system you will let touch production data, and the difference between those two states is a test suite.
+
+Traditional testing rests on one assumption: same input, same output. Ask a deterministic function to parse a date and it parses the same way every time, so you assert an exact value and ship. An agent shreds that assumption. Ask it to summarize a document twice and you get two different summaries, both defensible. There is no single exact string to assert against, so exact-match assertions fail on day one, and teams respond by throwing up their hands and switching to manual poking. That is the wrong lesson to take. The output is stochastic, but the machinery around it, the prompt strings, the tool selection, the argument formatting, the permission checks, the compression logic, is deterministic, and that is where unit tests still bite. [^1]
+
+The one idea to carry out of this lesson: **test the properties of outputs, not the exact outputs, and test the deterministic layers the way you would test ordinary software.** The model is a moving target, so you wrap it in checks you can pin down: the tools it picked, the arguments it formed, the schema it produced. Then you add a layer that scores the fuzzy end with an evaluator instead of an assertion, and you keep that evaluator honest with a frozen baseline. Do that and "is it ready to ship" becomes a number with a threshold, not a mood.
+
+## Define the terms
+
+**A unit test** for an agent verifies one component in isolation, with the model and the outside world stubbed out. The units are the deterministic pieces: a prompt string, a tool dispatcher, an argument formatter, a schema validator, a compression rule. Because the model is replaced by a scripted fake, the test is fast, cheap, and deterministic. [^2]
+
+**An integration test** runs the whole agent loop against controlled tool side effects. The model is real or scripted, but the tools are mocks that return fixed data, so the test asserts on the sequence and the outcome: the right tool was called, with the right arguments, in the right order, and the agent did not do something destructive. [^3]
+
+**A regression eval** scores a real model's output against a fixed reference set, using an LLM-as-judge or a similarity metric instead of an exact match. Where a unit test answers "does this JSON parse," an eval answers "is this answer good enough, grounded enough, and on-brand enough to ship." It is the layer that catches quality drift before users do. [^4]
+
+**LLM-as-judge** is the pattern where one model scores another model's output against a stated criterion, relevancy, faithfulness, format, tone, task completion, a score with a reason behind it. It sits between human review, which is careful but does not scale, and exact match, which is fast but useless on open-ended text. [^4]
+
+## The three layers, cheapest first
+
+The mistake that sinks most testing attempts is leading with the expensive part. Teams buy an eval platform, wire up LLM judges, and run them on every commit, then watch the bill and the run time climb and quietly stop. The better structure is a pyramid, costed so the layers run at the right cadence. [^5]
+
+![The three test layers as a pyramid: cheap code-based assertions form the wide base and run on every pull request, model-based evaluation sits above on a nightly or pre-release cadence, and live experiments cap the pyramid, run only after the lower layers pass](</diagrams/testing-agents-unit-integration-regression-evals/1-testing-pyramid.png>)
+
+### Layer one: assertions
+
+Deterministic, code-based checks on output shape and tool behavior: output parses as valid JSON and matches a schema, the tool call carries required parameters, the response stays under a token limit, no PII leaks, a classification lands in one of the expected buckets. These take seconds and cost nothing, so they belong on every pull request, and they catch a shockingly large share of production bugs. A huge fraction of agent incidents boil down to "the output was malformed JSON" or "it called the wrong function name," and a plain assertion catches both without an LLM sitting in the loop. [^5]
+
+### Layer two: model-based evaluation
+
+LLM-as-judge scoring on subjective dimensions: helpfulness, correctness, tone, safety, grounding. Slower and more expensive, so it runs on a cadence, nightly or before release, and after any prompt or model change. Its job is the quality that no assertion can see: an answer can be technically well-formed and still be confident nonsense. [^5]
+
+### Layer three: live experiments
+
+Production traffic comparing two agent versions against real users. This is the final and most expensive layer, and it is only meaningful when the first two pass first. A/B testing an untested agent is shipping bugs to half your users and calling it statistical rigor. [^5]
+
+The discipline across all three is the same: do not use a three-cent model call to check what a free string match could verify. If the evaluator is judging whether a field exists, you have built a very expensive `assert field is not None`. [^5]
+
+## Unit tests for tools: the machinery around the model
+
+The parts of an agent that are deterministic do not stop being testable because they happen to serve an LLM. A prompt builder, a tool dispatcher, a context compressor, an injection scanner: each of these is a pure function of its inputs, and each can be tested the way you would test any function. The model consumes them, but it does not own them. [^1]
+
+The reference-quality example of this discipline lives in the open source agents themselves. The Hermes agent, the framework this lesson itself is written inside, tests its prompt strings as function contracts. One test asserts that the memory guidance constants still contain the sentences that encode its behavioral rules, so if an edit weakens the instruction the suite fails. Another test mocks an OpenAI client that returns HTTP 413, a request too large, and asserts the agent compresses and retries rather than aborting. The whole test runs in milliseconds, but it locks in an invariant that future refactors cannot quietly break. [^1]
+
+The same discipline sharpens on a specific point: name the regression after the production failure. When a bug ships, you fix it, then you write a test named after the issue and keep it pinned. The Hermes test directory reads like a bug tracker, `test_413_compression.py`, `test_860_dedup.py`, each file one diagnosed production incident made into a permanent guard. [^1] The suite becomes a map of every failure your system has ever had and promised not to repeat. Do this and your test list is not a chore, it is an incident log that runs itself.
+
+For agent tools specifically, the highest-value unit tests are the two that the field calls out by name: **tool correctness**, did the agent pick the right tool, and **argument correctness**, did it pass the right parameters. They are distinct failures. Calling the right tool with wrong arguments is just as bad as calling the wrong tool entirely. [^6] Attribute the failure correctly: a bad SQL query might mean the model reasoned badly, or it might mean it called the right tool with the wrong schema, and those need different fixes. [^6]
+
+Tools have side effects, which is what makes their tests more than a formality. A wrong tool call is not a quality issue, it is a bug with a credit card attached: booking a non-refundable flight when the user asked whether one was available. [^3] So the unit tests around tools mix positive and negative. The agent should call `restaurant_booking` with `party_size: 2` and `time: "19:00"` when asked to book, and it must not call a booking tool at all when the user asks for the cancellation policy. Both assertions, the right call and the absent call, cost nothing and prevent the expensive kind of bug. [^3]
+
+## Worked example: unit-testing a support agent's tools
+
+Let me put the pattern on a concrete system. You are building a support agent with two tools. `lookup_article` returns a knowledge-base page by topic, and `refund_status` looks up a customer's refund by order ID. The model picks a tool and forms arguments, and your job is to prove it picks the right tool with the right arguments before anything real happens.
+
+Because the model calls a function, you stub the model with a controlled fake and capture what it asks for. The unit test asserts on the captured tool call, not on any prose. That is the whole trick: you never assert on the model's words, you assert on the structured decision it encoded.
+
+```python
+from unittest.mock import MagicMock
+
+class Agent:
+    def __init__(self, model):
+        self.model = model
+        self.tools = {"lookup_article": self._lookup, "refund_status": self._refund}
+
+    def _lookup(self, topic): return f"article about {topic}"
+    def _refund(self, order_id): return f"refund for {order_id}"
+
+    def run(self, message):
+        # The model returns a structured tool call: {"name": ..., "arguments": {...}}.
+        call = self.model.call(message, self.tools)
+        fn = self.tools[call["name"]]
+        return fn(**call["arguments"])
+
+
+def fake_model(record):
+    def call(message, tools):
+        # Scripted decision: always book a ticket for a booking request.
+        record.append({"name": "lookup_article", "arguments": {"topic": "returns"}})
+        return record[-1]
+    return MagicMock(call=call)
+
+
+# Positive: a returns question routes to the article tool with the right topic.
+def test_returns_question_routes_to_lookup():
+    calls = []
+    agent = Agent(fake_model(calls))
+    agent.run("How do I return a damaged item?")
+    assert calls == [{"name": "lookup_article",
+                      "arguments": {"topic": "returns"}}]
+
+
+# Negative: a refund status question must NOT call the lookup tool.
+def test_refund_status_does_not_call_lookup():
+    calls = []
+    agent = Agent(fake_model(calls))
+    agent.run("Where is my refund for order 88421?")
+    assert calls[0]["name"] == "refund_status"
+    assert "order" in calls[0]["arguments"]
+```
+
+Run those and you have pinned the tool routing the moment the model emits the call, before a single side effect executes. Notice what you did not assert: the wording of the answer. That is property testing applied to an agent. You test the structure, the routing, the arguments, the absence of an unwanted side effect, and you leave the fuzzy prose to the eval layer. [^5]
+
+![Unit tests pin the tool call, not the words: a returns question is asserted to route to the lookup_article tool with the topic returns, while a refund question is asserted to call refund_status with the order id and must never fire a booking or article side effect](</diagrams/testing-agents-unit-integration-regression-evals/2-tool-call-routing.png>)
+
+## Integration tests: the whole loop, controlled world
+
+Unit tests prove each tool behaves. Integration tests prove the loop behaves: that the model sees the tool result, that it uses it in the next step, that the sequence of calls makes sense, that the agent does not loop, and that nothing destructive happened along the way. The distinction from an eval is important: an integration test runs the real orchestration against mocked external effects, so it is still deterministic and still cheap, and it catches wiring bugs that no unit test can, because a unit test never chains the steps together. [^7]
+
+The framing the field uses is blunt and correct: integration-test the layer where the failure modes get creative. An agent can retrieve the right context, call the right tools, and still fail the user because it drew the wrong conclusion, or it can succeed on the outcome while taking a plan-breaking, wasteful path to get there. [^6] An integration test on the first case mocks the tools to return data that should force a correct conclusion, then asserts the agent reaches it. A trajectory check on the second case inspects the ordered trace of tool calls and flags a sequence that takes six steps to do what should take two. [^4]
+
+Because agents are non-deterministic, integration tests inherit the statistical problem. A single passing run proves little; run it again and it may fail. The practical answer is to state a floor, not a point estimate. Run the critical integration tests a handful of times and gate on the rate: the agent must reach a correct outcome on, say, 90% of executions, not on all of them, because a flaky 10% is a different bug class from a deterministic failure. [^2] And pin what you reasonably can, the model version and a temperature of zero, to shrink the variance you are measuring against. [^2]
+
+## Regression evals: the frozen baseline and the number that gates release
+
+Unit and integration tests catch the deterministic failures. Regression evals catch the quality ones: the answer that is well-formed but wrong, the tone that shifted, the hallucination that crept in after a prompt edit. These require scoring real model output, which is what LLM-as-judge exists for, and they require a baseline to score against, which is where the discipline gets its teeth.
+
+The load-bearing practice is the **frozen golden set**. You curate a small set of hand-annotated cases with known-correct outcomes, you keep it immutable, and you score every candidate release against it. The reason the set must stay frozen is subtle and it is the reason most test suites rot. If you keep refreshing your golden set from production data, and production data reflects what your current model returns, you eventually train the evaluator to rate your model's own style as correct instead of rating actual correctness. That is eval contamination: the baseline quietly starts agreeing with whatever the model already does. [^8] The fix is structural. Keep a small, frozen, hand-curated core as your regression baseline that nobody touches, and feed new discoveries, failures pulled from production traces, into a separate, growing set that is for finding new failure modes, not for defending the old ones. [^8]
+
+The final piece is a threshold gate. Decide on a bound, a scorer must not degrade more than a set amount against the frozen core, and make the pipeline fail, and page a human, when it does. Then the manual check, the human who runs a few questions and says "this feels off," has a concrete baseline to judge against instead of a vague sense. [^8] The system makes the vibes check smaller and more honest over time.
+
+Two metrics from Anthropic's guide to agent evals deserve a permanent place in your vocabulary, because they answer two different questions that teams routinely conflate. `pass@k` asks "can the agent do this at all," at least one of k attempts succeeds, which is the right question for capability. `pass^k` asks "is this reliable enough to trust," all k attempts succeed, which is the right question for production. They diverge fast. A task with a 70% per-trial success rate gives you a `pass@3` of 97%, the agent almost certainly succeeds if you give it three tries, but a `pass^3` of 34%, it fails all three about a third of the time. [^8] Whether that matters depends on whether your product gives users a retry button or treats the first answer as final. For a support assistant, the first answer is the product. Choose your metric to match that.
+
+![The same 70 percent per-trial success agent scores about 97 percent on pass@3 but only about 34 percent on pass^3, so the metric you gate on must match whether your product gives the user a retry](</diagrams/testing-agents-unit-integration-regression-evals/3-passk-vs-passall.png>)
+
+Then there is the cost problem, and it is real. Running end-to-end evals means making real model calls with the same token budget the task consumes in production, and a suite of fifty cases at several calls apiece burns thousands of tokens per run. Run that on every commit and the bill climbs before you ship anything. [^8] The answer the field has landed on is the same one traditional software uses for slow integration tests: do not run everything everywhere. The fast layers run on every commit, in every environment. The expensive evals trigger only on PRs that touch the agent's code surface, the system prompt, the tool definitions, the context management, the retrieval logic, and a change to the UI does not burn tokens on a full eval run. Map files to test surfaces and gate accordingly. [^8]
+
+## The Fortress angle: the gate this lesson passes through
+
+None of this is abstract theater in this organization. The Fortress writes agent systems and tests them exactly on this pyramid, and the smallest layer is running right now. This lesson, before it can be committed, must pass a verification script that hard-fails on the em-dashes and AI-slop phrases the writing standards forbid. That is a layer-one assertion applied to content: cheap, fast, runs on every publish, and it stopped real problems before anyone shipped.
+
+The same spirit runs in the actual agent code. The Hermes framework's own test suite is the textbook case: prompt strings asserted as contracts, production failures renamed and pinned as issue-tagged regression tests, mocks replacing the model so the deterministic layers run in milliseconds. [^1] That is the discipline this lesson preaches, already in production on the very tooling that hosts it. When you adopt the three-layer stack, you are not inventing a new workflow, you are copying the one the mature systems already run.
+
+## The pitfalls to avoid
+
+The first pitfall is testing the model instead of the system. Teams run the live agent against a few hand-chosen prompts, watch it answer well, and call it testing. That is a vibe check with a dashboard. It does not measure the deterministic layers where most bugs actually live, the routing, the formatting, the wire format, and it gives you no threshold and no regression baseline. [^3]
+
+The second is the mirror image: over-mocking until you are testing a stub. If you stub the model so completely that it returns whatever you script, and stub the tools so completely that nothing real runs, your integration test proves the plumbing is connected and nothing else. The mock exists to control the side effects, not to delete the behavior. Keep enough reality that the loop actually exercises its own logic. [^1]
+
+The third is the golden-set trap. If you refresh your regression baseline from production output, you contaminate it, and the evaluator starts blessing whatever the model already does. A golden set must be frozen and hand-curated, or it is not a baseline, it is a mirror. [^8]
+
+And the last, the one that undoes teams more slowly: none of this helps if the suite never runs. Evaluations that live outside CI are run with the same frequency that architecture decision records are reread. The value is not the tests, it is the gate. If the gate is not wired to block a merge, you are back to vibes. [^5]
+
+## Try it
+
+1. Unit-test one tool for its routing. Take an agent you have built, or the support agent from this lesson, and stub the model so it returns a fixed tool call. Assert the agent picks the right tool and forms the right arguments. Then add the negative: a query type that must not trigger a given tool, and assert it does not. [^3]
+2. Nail down your golden set. Write five to ten hand-curated cases with known-correct outcomes for your agent's most critical task, and a scorer that can check them. Decide a threshold that blocks a release. Then write the rule that keeps that set frozen, and add new cases from production traces to a separate set instead. [^8]
+3. Pick your pass metric. For your agent, decide whether the product gives users a retry. If it does not, your regression gate is `pass^k`, all attempts must succeed, not `pass@k`. State the threshold as the rate that must hold, and measure it over several eval runs, not one point estimate. [^8]
+
+## What's next
+
+You can now prove your agent behaves before it ships. Lesson 37 turns the proof into a pipeline: CI/CD for agents, meaning prompt versioning so a prompt change is a traced, reversible change, a model registry so you know exactly which model produced which output, and canary releases so a new prompt or model lands on a sliver of traffic, gets measured against the evals you now know how to build, and only then rolls out. Testing told you whether it is good; lesson 37 automates proving it is still good every time it changes.
+
+[^1]: substack.com (adlrocha, Beyond The Code). [The Eval Problem: How to Test AI Agents When They Never Give the Same Answer Twice](https://adlrocha.substack.com/p/adlrocha-the-eval-problem-how-to)
+[^2]: guild.ai. [Unit Testing (AI Agents): deterministic vs. probabilistic assertions](https://www.guild.ai/glossary/unit-testing-ai-agents)
+[^3]: medium.com (Mitesh Shah). [How to Test AI Agents: tool call verification and negative assertions](https://medium.com/@mitesh_shah/how-to-test-ai-agents-40c79f3ddba9)
+[^4]: deepeval.com. [LLM-as-a-Judge in 2026: techniques, trajectory evaluation, and best practices](https://deepeval.com/blog/llm-as-a-judge)
+[^5]: medium.com (Mitesh Shah). [How to Test AI Agents: the three levels of evaluation](https://medium.com/@mitesh_shah/how-to-test-ai-agents-40c79f3ddba9)
+[^6]: deepeval.com. [AI Agent Evaluation Metrics: tool correctness vs. argument correctness](https://deepeval.com/guides/guides-ai-agent-evaluation-metrics)
+[^7]: adlrocha.substack.com. [The Eval Problem: integration tests and the two-layer model](https://adlrocha.substack.com/p/adlrocha-the-eval-problem-how-to)
+[^8]: adlrocha.substack.com. [The Eval Problem: the frozen golden set and pass@k vs. pass^k](https://adlrocha.substack.com/p/adlrocha-the-eval-problem-how-to)

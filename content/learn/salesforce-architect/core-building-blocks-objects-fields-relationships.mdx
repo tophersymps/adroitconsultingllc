@@ -1,0 +1,125 @@
+---
+title: "Lesson 3: Core Building Blocks: Objects, Fields, Relationships, Record Types, and Formula vs Roll-Up"
+slug: core-building-blocks-objects-fields-relationships
+series: "salesforce-architect"
+lesson: 3
+excerpt: "The architect's canvas: standard and custom objects, field types, lookup vs master-detail relationships, record types for process variation, and when to compute with a formula field vs a roll-up summary."
+date: "August 06, 2026"
+author: "Adroit Consulting"
+readTime: "8 min read"
+tags: [Salesforce, Architecture, Data]
+---
+
+# Lesson 3: Core Building Blocks: Objects, Fields, Relationships, Record Types, and Formula vs Roll-Up
+
+Every architecture decision on Salesforce eventually lands on the data model. Sharing rules protect records, Flows act on records, reports aggregate records, integrations move records. But before any of that, you answer the question the whole platform is built around: **what are the records, what do they contain, and how do they relate?** Lesson 2 showed that your customizations are metadata (descriptions the platform materializes at runtime). This lesson is the vocabulary of those descriptions: objects, fields, relationships, record types, and the two declarative computation tools every architect reaches for first: formula and roll-up summary fields.
+
+## Objects: standard and custom
+
+An **object** is the platform's word for a table, a container for one type of record. Trailhead's Data Modeling module sums up the craft in one line: "Give your data structure with objects, fields, and relationships." [^1]
+
+Salesforce ships with **standard objects** covering the core CRM vocabulary: Account, Contact, Opportunity, Case, Lead, and hundreds more. When your business has data that doesn't fit a standard object, you create a **custom object**, which is where org-specific modeling happens. The design question the architect owns: does this concept *extend* a standard object, or is it a genuinely new entity? "Commission rate per account" is a field on Account; "project engagement" is an object.
+
+## Fields: the attributes
+
+Fields are the columns, and when you create a custom field you pick its type, the platform's type system: address, auto number, checkbox, currency, date, date/time, email, formula, number, percent, phone, picklist, text, text area, URL, plus relationship fields (lookup, master-detail, external lookup). [^2] Details matter at the margins: an auto number field is capped at 30 characters, 20 of which can be prefix/suffix text. [^2]
+
+Two facts about fields that matter to architects:
+
+- **Formula is a field type**: it computes its value rather than storing it.
+- **Field-level security applies per field**, and here's the trap: a roll-up summary still calculates values from detail fields a user can't see. [^3]
+
+## Relationships: lookup, master-detail, and many-to-many
+
+Relationships are the edges of the graph. There are two primary types plus a composite pattern. [^4]
+
+**Lookup.** Links two objects together. Lookups are similar to master-detail relationships "except they don't support sharing or roll-up summary fields." When the looked-up record is deleted you choose the behavior: clear the field value (the default), don't allow deletion of the lookup record, or delete this record too (custom objects only). [^4]
+
+**Master-detail.** "Closely links objects together such that the master record controls certain behaviors of the detail and subdetail record." Concretely: deleting a master also deletes related detail records; the detail's Owner field isn't available (ownership is inherited from the master); and detail records inherit the master's security and permissions, so you can't set permissions on the detail independently. [^4]
+
+**Many-to-many.** Modeled with a junction object connected by two master-detail relationships. [^4]
+
+The architect's relationship checklist, straight from the Help doc:
+
+- Best practice: don't exceed **10,000 child records** per master-detail relationship.
+- Each custom object can have up to **two master-detail relationships and 40 total relationships**.
+- The "Related To" object can't be changed after you save the relationship, and once you create a roll-up summary field, you can't convert that master-detail into a lookup.
+
+[^4] [^3]
+
+The decision: choose **lookup** when the child has an independent lifecycle and its own security; choose **master-detail** when the child is owned by (and inherits security from) the parent, and when you need roll-ups.
+
+## Record types: process variation on one object
+
+"Record types let you offer different business processes, picklist values, and page layouts to different users." [^5] One object, several ways of working with it: a "Fixed-Fee Engagement" and a "Time & Materials Engagement" record type on the same custom object, each with its own picklist values and layout. For Opportunity, Case, Lead, and Solution, record types can also carry a **business process**, a different picklist-driven lifecycle such as different sales stages. [^6]
+
+Operational facts worth memorizing for the exam:
+
+- Record types are available in **Enterprise, Performance, Unlimited, and Developer** editions, and in Professional only with the Record Types add-on license. [^6]
+- Access is assigned through **profiles or permission sets**, but the **default record type is specified in the profile only**; you can't set a default in a permission set. [^7]
+- Record type assignment does **not** control whether a user can *view* a record with that record type; it only controls which record type they can use when creating or editing a record. [^7]
+
+The architectural judgment: record types are for process variation within a single data shape. All record types on an object share the same fields and the same sharing model. When business units need genuinely different fields or different visibility, that's a sign for a separate object, not another record type.
+
+## Formula vs roll-up: the computation decision
+
+Every architect answers this weekly: "I need this value derived: formula or roll-up?" The official split:
+
+> While formula fields calculate values using fields within a single record, roll-up summary fields calculate values from a set of related records.
+> [^8]
+
+**Formula fields** compute in real time when the record is accessed; the value is not stored in the database, so it always reflects current data across detail pages, list views, reports, and related lists. [^9] A formula can reference the record's own fields and, via cross-object references, fields on records related through a lookup or master-detail relationship. [^10] Limits: up to **3,900 characters** (1,300 displayed), with a 15,000-byte save and compile cap. [^10]
+
+**Roll-up summary fields** aggregate values from child records onto the master record (**COUNT, SUM, MIN, or MAX**) and they require a master-detail relationship. SUM works on number, currency, and percent fields; MIN/MAX add date and date/time. Calculation is asynchronous: "Calculating roll-up summary field values can take up to 30 minutes, depending on the number of records affected." [^3]
+
+| | Formula field | Roll-up summary |
+|---|---|---|
+| Scope | One record (+ parents via cross-object) | Many child records → master |
+| Relationship needed | None (lookup or master-detail for cross-object) | Master-detail only |
+| Timing | Real-time on record access | Asynchronous (up to 30 min) |
+| Operations | Any expression | COUNT, SUM, MIN, MAX |
+| Value stored | No | Yes (recalculated) |
+| Use when | Derive or display from the record or its parent | Summarize a related list |
+
+[^8] [^3]
+
+## Worked example: an engagement tracker
+
+A professional services firm needs to track engagements per account. The modeling decisions, in order:
+
+1. **Object.** Create a custom object `Engagement__c` as a **master-detail** from Account. Engagements are owned by the account, inherit its security, and the account page must summarize them.
+2. **Record types.** `Fixed Fee` and `Time & Materials`, each with its own picklist values and page layout; set a default per profile so sales reps aren't prompted on every create.
+3. **Formula.** `Days_Remaining__c` = End Date − TODAY(). It must always be current, so a formula is right: it recalculates every time the record is accessed, no storage, no batch. [^9]
+4. **Roll-up.** `Total_Engagement_Value__c` (SUM of Amount) on Account. Why a roll-up and not a formula? A formula can't summarize many children, and the Help doc is explicit: you can't reference aggregate fields on parent objects in formulas. "Consider using Roll-Up Summary fields to aggregate values from child records." [^10] And SUM is valid because Amount is a currency field. [^3]
+
+## The pitfall to avoid
+
+**Choosing the relationship type for today's demo instead of the data's true shape.** The classic trap is a lookup relationship where the business actually needs master-detail semantics, then discovering you need a roll-up summary or ownership inheritance and having to migrate. The migration is one-way and expensive: the "Related To" object is locked at creation, and after a roll-up summary field exists you can't convert the master-detail into a lookup. [^4] [^3] Read the data's lifecycle before you click: who owns the child? Can the child's security ever diverge from the parent's? If the answer is "never," master-detail is usually right, and it keeps roll-ups available later.
+
+A second pitfall: **using record types to fake separate objects.** When the two "record types" need different fields, different required-ness, or different visibility, record types will fight you; they share one field set and one sharing model, and assignment doesn't gate visibility anyway. [^7] The exam and the org both reward the same instinct: reach for record types only when the process differs but the data shape doesn't.
+
+## Try it
+
+A manufacturer needs a model: distributors place orders, each order has line items, each line item references a product, and order status differs between "Domestic" and "Export" (different picklist stages and layouts).
+
+1. Order → Line Item: lookup or master-detail, and why?
+2. Line Item → Product: lookup or master-detail, and why?
+3. "Domestic" vs "Export": record types or separate objects, and why?
+4. The distributor's Account page must show total value of its orders. Where does that value live, and what does it require?
+
+**Answers:** (1) Master-detail: line items are owned by the order and inherit its security; you'll likely want roll-ups on the order. (2) Lookup: the product outlives any single line item and is shared across orders; nothing about the product should cascade from a line item. (3) Record types: the data shape is identical (order fields and amounts); only the process and layout differ. (4) A roll-up summary on Account, but only if Order → Account is a master-detail relationship, because roll-ups can't cross a lookup. If you modeled that edge as a lookup, you've hit today's pitfall: same data, wrong relationship type, migration required. That's the test.
+
+## What's next
+
+You now have the vocabulary to model data: objects, fields, relationships, record types, and the difference between a formula and a rollup. The next lesson moves to the other foundation block a System Architect works with daily: integration fundamentals. It covers the REST, SOAP, and Bulk APIs, the limits that govern them, and when each is the right call for getting data in and out of the platform.
+
+[^1]: trailhead.salesforce.com. [trailhead.salesforce.com](https://trailhead.salesforce.com/content/learn/modules/data_modeling)
+[^2]: help.salesforce.com. [help.salesforce.com](https://help.salesforce.com/articleView?id=custom_field_types.htm)
+[^3]: help.salesforce.com. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.fields_about_roll_up_summary_fields.htm&type=5)
+[^4]: help.salesforce.com. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.overview_of_custom_object_relationships.htm&type=5)
+[^5]: help.salesforce.com. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.customize_recordtype.htm&language=en_US&type=5)
+[^6]: help.salesforce.com. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.creating_record_types.htm&type=5)
+[^7]: help.salesforce.com. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.permissions_record_type_access.htm&type=5)
+[^8]: trailhead.salesforce.com. [trailhead.salesforce.com](https://trailhead.salesforce.com/content/learn/modules/point_click_business_logic/roll_up_summary_fields)
+[^9]: help.salesforce.com. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=001814331&language=en_US&type=1)
+[^10]: help.salesforce.com. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.formula_field_limits.htm&language=en_US&type=5)

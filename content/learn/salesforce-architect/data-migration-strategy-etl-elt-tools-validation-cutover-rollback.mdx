@@ -1,0 +1,120 @@
+---
+title: "Lesson 16: Data Migration Strategy: ETL vs ELT, Tools, Validation, Cutover, and Rollback"
+slug: data-migration-strategy-etl-elt-tools-validation-cutover-rollback
+series: "salesforce-architect"
+lesson: 16
+excerpt: "The full migration lifecycle: ETL vs ELT, the Salesforce tool options (Data Import Wizard vs Data Loader vs enterprise ETL), dependency-ordered loading with external IDs, validation by record count and spot check, and the cutover and rollback plan that keeps a bad load from becoming a disaster."
+date: "August 19, 2026"
+author: "Adroit Consulting"
+readTime: "9 min read"
+tags: [Salesforce, Architecture, Data]
+---
+
+# Lesson 16: Data Migration Strategy: ETL vs ELT, Tools, Validation, Cutover, and Rollback
+
+Lessons 14 and 15 covered how to model data and where it lives. This lesson is the moment the model becomes real: moving the actual records into a Salesforce org. A migration is the riskiest data operation a system architect runs, because it touches everything at once. A schema mistake is invisible until a user opens the org. A load mistake is visible immediately, to everyone, with no good undo button.
+
+This lesson walks the full lifecycle: the ETL and ELT approaches, the Salesforce tool options, dependency-ordered loading with external IDs, validation, and the cutover and rollback plan that keeps a bad load from becoming a data disaster.
+
+## Define the terms first
+
+- **Data migration**: moving data from a source system into Salesforce (or between orgs), as a one-time, project-scoped event. It is distinct from ongoing data integration, which is a continuous, operational sync. [^1]
+- **ETL (Extract, Transform, Load)**: pull data from the source, transform and clean it on a separate processing step, then load the cleaned result into the target. Transformation happens before the data reaches Salesforce. [^7] [^8]
+- **ELT (Extract, Load, Transform)**: pull data, load it raw into the target, then transform it in place. Salesforce has no staging warehouse to run transformations in, so pure ELT normally means landing raw data somewhere like a data lake or warehouse first, then pushing transformed rows into Salesforce. [^7] [^8]
+- **External ID**: a custom field, marked in Setup, that stores a unique identifier from the source system. Data Loader (and other tools) can match on it for upsert and can use it to build relationships between records. [^5] [^6]
+- **Upsert**: insert a record if it does not exist, update it if it does, matched on the External ID. This is how you load data repeatedly without creating duplicates. [^5]
+- **Cutover**: the defined point where the org stops relying on the source system and goes live on the new one. It usually includes a freeze on new source changes. [^5]
+- **Rollback**: the plan to return the org to a known-good state if the migration fails validation. In practice this means restoring from a backup taken before the load.
+
+## ETL versus ELT: pick the shape before you pick the tool
+
+The difference is the order of the middle step. ETL transforms data on its own processing step before loading. ELT loads the raw data first and transforms it inside the target. [^8] The reason the choice matters is scale and rework.
+
+ETL suits smaller data sets that need complex, compute-heavy transformation before they can be trusted, and situations where you must scrub data (for example removing PII) before it leaves the source environment. The cost is that ETL is slower to scale: the transform step becomes the bottleneck as volume grows, and because raw data is discarded, you cannot re-query it later for a different transformation. [^7] [^8]
+
+ELT suits large volumes and cloud warehouses, because the target does the heavy lifting in parallel and raw data stays available for repeated, iterated transforms. The tradeoff is that you need a target with the compute to transform, and you need extra discipline around privacy, since raw data sits in the target before it is cleaned. [^8]
+
+For a Salesforce migration specifically, the ELT framing is usually a pipeline: land source data in a staging store, clean and map it, then push the result into Salesforce with a load tool or the Bulk API. Salesforce's own architects treat the heavy lifting (transformation, governance, reuse) as the job of an enterprise ETL or ESB layer when one already exists, rather than reinventing it inside a one-off script. [^1]
+
+## The tools Salesforce gives you
+
+Salesforce offers several ways to get records in. The right one depends on volume, object coverage, and whether the load is one-time or recurring. [^2]
+
+| Tool | Where it runs | Volume | Objects | Notes |
+|---|---|---|---|---|
+| **Basic Data Import** | In-browser | Up to 50,000 | Contacts and leads only | Simplified, for non-admins in Enterprise and Performance |
+| **Data Import Wizard** | In-browser | Up to 50,000 per import | Accounts, contacts, leads, solutions, campaign members, person accounts, custom objects | Cannot import assets, cases, campaigns, contracts, documents, opportunities, or products |
+| **Data Loader** | Desktop client | 5,000 up to 5 million per run; up to 150 million with Bulk API 2.0 | All objects, including custom | Insert, update, upsert, delete, and export; Enterprise, Unlimited, Performance, Developer editions |
+| **dataloader.io** | Cloud | Varies by plan | All objects | MuleSoft-powered cloud tool for import, export, delete |
+
+The limits are a hard architectural input. The Data Import Wizard caps every object type at 50,000 records at a time, your import file at 100 MB, and each record at 400 KB (about 4,000 characters), with up to 90 fields per record. [^3] Assets, cases, campaigns, contracts, documents, opportunities, and products cannot be imported through any wizard at all, so those objects force you onto Data Loader or an API. [^3]
+
+Data Loader is a client application for the bulk import or export of data. You use it to insert, update, delete, or export records, with a wizard interface for interactive use and detailed success and error logs in CSV form. Its real capacity comes from the Bulk API: support for large files with up to 150 million records when used with Bulk API 2.0. [^4]
+
+Here is the architect-level nuance from the Salesforce decision guide: Data Import Wizard and Data Loader are fine for synchronizing, importing, and migrating data, but neither is a recommended base for a data integration strategy. The guide puts them in the "other tools" tier and says to use them to complement your data stewardship and maintenance work, not to build a recurring pipeline on them. [^1] For a one-time migration they are exactly right. For a system that syncs daily, you want an enterprise ETL tool (MuleSoft, Boomi, or a pipeline into Data 360) as the durable layer. [^1]
+
+## The migration method
+
+The Salesforce guidance on planning, executing, and validating a load breaks down into a dependable sequence. [^5]
+
+1. **Inventory the scope.** Decide exactly which objects and fields move. Partial scope is a decision, not an accident: are you moving all Account data or only the Contacts under each Account? [^5]
+2. **Build a template per object.** Use Data Loader's Export to generate a template whose structure matches the target object's schema, then fill it from the source. [^5]
+3. **Load in dependency order.** Some objects have mandatory relationships, so order matters. The rule is to migrate parents before children: Users, then Accounts, then Opportunities, and so on. [^5]
+4. **Carry the legacy keys.** Create a custom field on each target object to hold the source system's ID, and mark it as an External ID. This preserves relationships across objects and supports upsert so you avoid duplicates. [^5] [^6]
+5. **Test with one record, then scale.** Load a single record, verify it in Salesforce, then load the rest. This catches mapping errors before they multiply across a full load. [^5]
+6. **Validate.** Compare record counts, spot-check samples, and review exception reports for rows that failed. [^5]
+7. **Plan cutover and rollback before the load, not after.** Back up the target before you touch it. [^6]
+
+External IDs deserve their own paragraph, because relationships are where most migrations fail. When you load an Account and its Contacts in separate files, the Contact rows need to point at the Account they belong to. If you loaded the Accounts and kept their Salesforce IDs, you could use those, but it is far more robust to put the source Account ID in an External ID field on both objects and let the loader resolve the relationship from it. Data Loader lets you map a related record's External ID in place of the Salesforce record ID during an upsert. [^6] One caveat: not every reference field can be mapped to an External ID. Polymorphic fields, such as the Activity object's Related To and Name fields, do not allow it. [^6]
+
+## Worked example: a 1.2 million record migration
+
+A mid-market manufacturer runs on a 15-year-old CRM and is moving to a greenfield Salesforce org. The source holds roughly 250,000 Accounts, 800,000 Contacts, and 150,000 Opportunities, plus a custom object for service contracts. The team needs to decide the tools, order, and safety net.
+
+1. **Approach.** The team picks a staging-first pipeline: export the source to a clean set of CSV files, run the mapping and cleanup in a small ETL job, then load into Salesforce with Data Loader. That is an ELT-flavored shape, because the transformation happens in the staging step and the raw export is retained for re-runs. [^8]
+2. **Tool.** Opportunities and the custom contract object rule out the Data Import Wizard, which cannot import Opportunities at all. [^3] The team uses Data Loader with Bulk API 2.0, which handles the volume: the source fits comfortably under the 150 million record ceiling, and the load runs as an async bulk job instead of tying up a desktop session. [^4]
+3. **Order and keys.** They add an External ID custom field to Account, Contact, Opportunity, and the contract object, each populated with the legacy primary key. They load Accounts first, then Contacts (matching Owner and parent Account by External ID), then Opportunities, then contracts. [^5] [^6]
+4. **Test load.** Before the full run, they load one Account and one Contact and verify both in the UI. Then they load a 5,000-row slice of each object and reconcile counts before scaling up. [^5]
+5. **Validation.** After each object, they build a report that counts records and compare it to the source count. They spot-check a sample against the old system and pull the Data Loader error log to fix and re-run any failed rows. [^5]
+6. **Cutover and rollback.** The team exports a full backup of the empty target org first. They schedule a single weekend freeze on the source, run the load, validate, and only then open the org to users. If validation fails, they restore from the backup and re-run, because a restore beats trying to unpick 800,000 partially loaded Contacts by hand. [^6]
+
+## Cutover planning
+
+Cutover is a window, not a moment. The realistic shape is a freeze on source changes, a load window sized for the largest object, and a validation pass before anyone else gets in. The Salesforce best-practice sequence makes the freeze explicit: you cannot produce a consistent set of records if the source keeps changing under you, and you cannot validate a load you never finished. [^5]
+
+Two things make cutover predictable. First, rehearsal: run the entire sequence in a sandbox, end to end, and time it. Second, an incremental delta pass: because the freeze ends, a large migration often loads the bulk, reopens the source briefly, then loads only the rows that changed during the freeze. That last pass is where upsert on External ID earns its keep, because it can only touch the changed rows and will not duplicate the ones already loaded. [^5] [^6]
+
+## Rollback
+
+Rollback is not a tool, it is a discipline you decide before you load. The external ID guidance from Salesforce is blunt: always back up your data before performing any Data Loader operation. [^6] That backup is your rollback. The source system should stay the system of record until validation passes, so the migration is reversible in two directions: re-load from the source if the target is wrong, or restore the target from the backup if you loaded garbage and want a clean slate.
+
+The realistic answer is that most bad loads are not full restore events. They are a failed batch of rows, an object that came in short, or a mapping that flipped two columns. Those get fixed by reading the error log and re-running the affected records. Full rollback is the escape hatch for the load that corrupted relationships at scale, and having the backup on hand is what makes it a decision instead of a panic. [^5] [^6]
+
+## The pitfall to avoid
+
+**Loading everything in the wrong order with no external IDs, then declaring victory on record count.** Two classic failures hide behind a passing count. The first is parent-child order: load Contacts before Accounts, and the relationship field has nothing to point at. The second is skipping external IDs, which means relationships resolve to nothing and the source's identity is gone. The count can look perfect while every Account shows zero Contacts. [^5]
+
+The other failure is tool misjudgment. Reaching for an enterprise ETL platform for a one-time 50,000 row load burns budget and setup time for a job the Data Import Wizard finishes in an afternoon, while building a recurring daily sync on Data Loader scripts ignores the decision guide's warning that neither wizard nor loader is a sound base for a data integration strategy. [^1] Match the tool to the job, and match the safety net to the risk.
+
+## Try it
+
+You are migrating 60,000 records across Accounts, Contacts, and Cases into a fresh org. Answer before reading on.
+
+1. Which tool can handle all three objects, and why can the Data Import Wizard not? *(Data Loader: the Data Import Wizard cannot import Cases at all, and 60,000 Accounts exceeds its 50,000 per import limit.)*
+2. What order do you load, and why? *(Accounts, then Contacts, then Cases: parents before children, because Contacts and Cases hold required lookups to Account.)*
+3. How do you preserve the Account to Contact relationship across separate files? *(Put the source Account ID in an External ID field on both objects and map the Contact's parent lookup to it.)*
+4. What is your validation pass after each object? *(Count records against source, spot-check a sample, review the loader error log and re-run failures.)*
+5. What is your rollback? *(Full export backup of the target before loading, source kept as system of record until validation passes.)*
+
+## What's next
+
+You can now plan a migration end to end: the approach, the tool, the load order, validation, cutover, and the rollback. The next lessons turn to what happens after the data is in, how that data performs at scale and how you keep it consistent, which are the large-data-volume and ongoing-operations problems that a migration hands you.
+
+[^1]: architect.salesforce.com. [Data Integration with Salesforce | Integration Decision Guides](https://architect.salesforce.com/docs/architect/decision-guides/guide/data-integration.html)
+[^2]: help.salesforce.com. [Choosing a Method for Importing Data](https://help.salesforce.com/s/articleView?language=en_US&id=sf.import_which_data_import_tool.htm&type=5)
+[^3]: help.salesforce.com. [Import Limits](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.import_limits.htm&type=5)
+[^4]: developer.salesforce.com. [Data Loader Guide](https://developer.salesforce.com/docs/atlas.en-us.dataLoader.meta/dataLoader/intro_loader.htm)
+[^5]: help.salesforce.com. [Salesforce Data Migration Best Practices: How to Plan, Execute, and Validate a Data Import or Update](https://help.salesforce.com/s/articleView?id=Best-Practices-for-Loading-Data&language=en_US&type=1)
+[^6]: help.salesforce.com. [Import Related Records with an External ID in Salesforce Data Loader](https://help.salesforce.com/s/articleView?id=000383207&language=en_US&type=1)
+[^7]: ibm.com. [What is ETL (Extract, Transform, Load)?](https://www.ibm.com/think/topics/etl)
+[^8]: aws.amazon.com. [ETL vs ELT: Difference Between Data-Processing Approaches](https://aws.amazon.com/compare/the-difference-between-etl-and-elt/)

@@ -1,0 +1,104 @@
+---
+title: "Lesson 35: Domain Modeling: Entities, Aggregates, and Bounded Contexts Applied to Agent Design"
+slug: domain-modeling-entities-aggregates-bounded-contexts-agent-design
+series: "salesforce-architect"
+lesson: 35
+excerpt: "The strategic and tactical tools of domain modeling (entities, aggregates, bounded contexts, ubiquitous language) and how the same discipline that keeps a data model coherent also keeps a multi-agent system from collapsing into a tangle of overlapping prompts."
+date: "September 08, 2026"
+author: "Adroit Consulting"
+readTime: "11 min read"
+tags: [Architecture, AI at Work]
+---
+
+# Lesson 35: Domain Modeling: Entities, Aggregates, and Bounded Contexts Applied to Agent Design
+
+Lesson 34 gave you the tools for bending a data model around irregular records. This lesson steps sideways, out of Salesforce objects and into the older and more general discipline that sits underneath them: domain modeling. The term "domain" just means the problem space you are building for, and domain modeling is the work of deciding what the important things in that space are, what rules they obey, and where one part of the space ends and another begins.
+
+Here is the thesis that ties this to your agent work: **agents are software, and they fail for the same reasons other software fails when nobody defined the domain.** An agent system with no explicit domain model does not look chaotic at first. It looks fine, because every agent can understand a little of everything. Then the prompts start to drift, two agents claim the same responsibility, and a term that means one thing to one agent means something else to another. Those are the symptoms of a missing domain model, and domain-driven design (DDD) has a vocabulary for each one.
+
+## Three tools and one language
+
+Domain modeling gives you three structural tools and one shared language.
+
+**An entity is a thing with identity and a lifecycle.** A task stays the same task after its description changes. An account stays the same account after its status field is updated. Identity, not values, is what makes an entity an entity. [^1]
+
+**A value object is the opposite: a thing defined entirely by its values.** An email address, a money amount, a date range. Two email addresses with the same characters are the same email address. You replace a value object rather than tracking its identity, because it has none.
+
+**An aggregate is a consistency boundary.** Eric Evans defines it as a cluster of associated objects that you treat as a unit for the purpose of data changes, with one member, the aggregate root, that external code is allowed to hold a reference to. [^2] The aggregate protects its invariants: a completed task cannot be completed again, a refund cannot exceed the remaining refundable amount. Everything that must stay consistent together lives inside the aggregate, and everything outside touches it only through the root.
+
+**A bounded context is the boundary around a model.** Martin Fowler calls it the central pattern of DDD's strategic design, the way DDD handles the fact that one unified model of a large organization is neither feasible nor worth building. [^3] The same word can mean different things in different contexts. "Product" is a stock-keeping unit in inventory, a priced line in billing, and a delivery commitment in order management. Each context owns its model and translates at its boundary. [^4]
+
+The shared language is the **ubiquitous language**: the vocabulary that domain experts and developers use inside one bounded context. If the support team says "refund request" and "approval limit", those exact terms belong in the code, the tool contracts, and the tests, not a paraphrased version of them. [^4]
+
+The names matter less than the discipline behind them. The question that runs through all four is: **what belongs together, what stays apart, and who owns the boundary?**
+
+## Why agents need this more than objects do
+
+Here is what changes when the "things" in your domain are agents instead of rows. An object holds data and a few methods, and its shape is pinned down by a schema. An agent holds a system prompt, a set of tools, and a model that is statistical. The model makes the boundary problems worse, because an agent can be convinced to reach past its scope in a way a database row cannot. A record type cannot accidentally behave like another record type. An agent can absolutely start doing work that belongs to a different agent.
+
+The common failure mode of a badly modeled agent system is what happens when you let the prompts define the architecture instead of the domain. You start with one agent that does a little of everything. It works. Then you add a second agent to take on one task, but you never draw a boundary, so the first agent keeps doing that task too. Now you have overlap, and overlap in agent systems is expensive twice: two model calls burn tokens for the same work, and when the two disagree, someone has to resolve the conflict.
+
+The DDD answer is to treat each agent as operating within a bounded context, a clearly defined domain boundary with its own models, knowledge, and language. [^5] Assigning one agent to one bounded context gives it a well-defined scope, a coherent domain model, and a specific set of responsibilities. [^6]
+
+But there is a sharper way to read the warning from Viacheslav Dubrov's guide: **do not equate agents with bounded contexts.** [^4] A bounded context is a conceptual boundary around a model and its rules. An agent is an implementation detail. One context may use several agents internally, and one agent that spans several contexts needs explicit translation and authority for each one. The context map comes before the agent graph. If you draw the agent graph first, it tends to reproduce whatever tools happened to be available rather than the shape of the business.
+
+## A worked example: claims intake
+
+Let me make this concrete with a scenario an insurance architect would recognize, mapped across the tools.
+
+**Scenario:** A carrier takes in 8,000 claims per week. Each claim must be triaged, checked for policy coverage, validated against the policy terms, and either approved for payment or escalated. The team wants agents to do the first three steps.
+
+**Without a domain model.** One big triage agent reads the claim, decides what kind of policy it falls under, checks coverage, validates amounts, and approves or escalates. It works on the happy path. Then a claim comes in where the policy language is unusual, and the single agent, holding all that context in one prompt, makes an edge-case decision that a coverage specialist would have caught. You cannot point at any one part and say "this is where it went wrong", because nothing is separable.
+
+**With bounded contexts.** The architect draws three contexts first:
+
+- **Triage**, owning the vocabulary of intake: claim, claimant, incident, submission.
+- **Coverage**, owning policy language: policy, exclusion, rider, coverage limit, effective date.
+- **Adjudication**, owning the decision: approval, denial, escal, amount, reason.
+
+Each context gets its own agent, and the boundaries are drawn where the language changes. The triage agent says "this looks like a liability claim". The coverage agent says "this policy has a mold exclusion". The adjudication agent says "denied, exclusion applies, reason code 12". The words do not collide because each agent only ever reasons in its own terms. [^6]
+
+**The aggregate inside the coverage context.** The coverage agent needs to check whether an incident is covered. The rule "an incident on a lapsed policy is not covered" requires policy status, coverage dates, and the incident date to be read together and decided as one. That is an aggregate: the policy, with its coverage terms, is the root, and the check happens through the root so that no sub-part can be decided in isolation. If you let the agent read the incident date from one tool and the policy status from another and combine them in free text, the rule lives nowhere it can be tested. Put the invariant in one place and let the agent call it. [^4]
+
+**The ubiquitous language catches the drift.** The claims team says "escal" for a claim that needs a human. If the adjudication prompt says "flag for review", and the tool is named `submitForHumanReview`, and the escalation list is labeled "needs attention", you now have three terms for one concept, and the model will mix them up. The DDD move is to use one term everywhere: the prompt says "escal", the tool is `escalate`, the status is "escalated". [^4]
+
+## The concrete pattern: model output is a proposal, not a decision
+
+Here is the pattern that makes domain modeling practical for agent systems, from Dubrov's guide. [^4] Treat the LLM output as an **untrusted proposal**, and put the authority for the actual state change in deterministic domain code. The flow has four steps:
+
+1. **Constrain and parse.** Require a typed output contract from the model. The model proposes `approve(claimId, amount)`, not free text. A schema rejects missing fields and invalid values.
+2. **Normalize.** Resolve dates, identifiers, and units using trusted context, not the model's guesses. The model says "yesterday"; the application resolves it against a real clock and timezone.
+3. **Authorize.** Decide whether this actor may request this operation. This is policy, and it is deterministic.
+4. **Execute.** Invoke the aggregate method that enforces the invariant. The domain accepts or rejects the change.
+
+The reason this matters is that a schema can reject a missing field, but it cannot decide that the user owns the claim, that the incident date resolves correctly, or that the claim is not already closed. Those are invariants, and invariants belong in the aggregate, not in the prompt. [^4] The model proposes; the domain disposes.
+
+Notice what this buys you. You can swap the model provider without changing a single domain test. A policy change touches one aggregate instead of several prompts. A malformed or unauthorized proposal fails before it touches stored state. DDD does not make the model deterministic, but it makes the authority, the language, and the consistency boundaries explicit enough that the model does not need to be. [^4]
+
+## Where this maps to Salesforce thinking
+
+If you have spent time in the platform, you already know this pattern under a different name. The `with sharing` keyword is a consistency boundary. The save order on a master-detail relationship is an invariant that the platform enforces so your code does not have to. A record type is a bounded context drawn around one object. Your roll-up summary fields are denormalized state maintained by the platform, which is exactly the discipline of deciding what belongs together.
+
+The reason to learn the general vocabulary is that the platform gives you these boundaries for free, so you never had to name them. Agents do not come with boundaries. You have to draw them yourself, on a blank canvas, before anyone else does, because the default of a model is to blur every boundary it can. Hold on to that framing as the track moves forward: the platform hands you invariants, and agent work makes you build them by hand.
+
+## Try it
+
+Take a service you know well: a support ticket flow, an order pipeline, or the Hermes agent stack that produced this lesson. Do the domain modeling exercise on paper:
+
+1. **Name three entities** in it, and for each, say what makes it an entity (what identity it keeps) rather than a value object.
+2. **Draw the bounded contexts.** Where does the language change? The same word should not mean two different things on either side of a line you drew. If it does, the line is in the wrong place.
+3. **Pick one invariant** and decide where it lives. "A closed ticket cannot be reopened by the customer" or "a refund cannot exceed the approved amount". In an agent system, does that rule sit in a prompt, or in deterministic code behind a typed proposal?
+4. **Check the ubiquitous language.** List the terms your system uses for one concept. If three words name one thing, collapse them to one and use it in the prompt, the tool names, and the status values.
+
+**Answers:** (1) An entity keeps its identity across value changes, so a ticket whose description changes is still the same ticket. An email address that changes is a new value. (2) The language changes at a boundary because different parts of an organization use different words for the same thing; the boundary is where the model stops being internally consistent. [^3] (3) Invariants belong in the aggregate and in deterministic code, because a schema validates shape but cannot enforce meaning, and a prompt enforces nothing. [^4] (4) One concept, one term, everywhere. The ubiquitous language is what stops the model from drifting across synonyms. [^4]
+
+## What's next
+
+You now have the domain modeling discipline: entities carry identity, aggregates are consistency boundaries, bounded contexts draw the lines between models, and model output is a proposal the domain must authorize. The next lesson stays inside a single platform concept and takes it as deep as it goes: a sharing architecture deep dive. It covers how Salesforce recalculation works, how implicit sharing flows through the model, and the cases where sharing simply cannot do the job, so you know when the platform's access model is the right tool and when it is not.
+
+[^1]: domainlanguage.com. [DDD Reference: Entities and Value Objects](https://www.domainlanguage.com/ddd/reference/)
+[^2]: domainlanguage.com. [DDD Reference: Aggregates](https://www.domainlanguage.com/ddd/reference/)
+[^3]: martinfowler.com. [Bounded Context](https://martinfowler.com/bliki/BoundedContext.html)
+[^4]: slavadubrov.github.io. [Domain-Driven Design for AI Agents: Contexts and Rules](https://slavadubrov.github.io/blog/2025/10/20/domain-driven-design-ai-agents/)
+[^5]: jamescroft.co.uk. [Applying Domain-Driven Design Principles to Multi-Agent AI Systems](https://www.jamescroft.co.uk/applying-domain-driven-design-principles-to-multi-agent-ai-systems/)
+[^6]: medium.com. [Agent as Bounded Context](https://medium.com/@philippkostyra/agent-as-bounded-context-part-2-e18c0405be60)

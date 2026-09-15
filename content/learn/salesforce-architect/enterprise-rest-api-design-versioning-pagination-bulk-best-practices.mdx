@@ -1,0 +1,95 @@
+---
+title: "Lesson 26: Enterprise REST API Design: Versioning, Pagination, Bulk, and Best Practices"
+slug: enterprise-rest-api-design-versioning-pagination-bulk-best-practices
+series: "salesforce-architect"
+lesson: 26
+excerpt: "The design layer under every REST integration: how Salesforce versions its API, how to page through large result sets without breaking, when bulk writes beat synchronous calls, and the habits that keep an integration alive for years."
+date: "August 30, 2026"
+author: "Adroit Consulting"
+readTime: "10 min read"
+tags: [Salesforce, Architecture, Integration]
+---
+
+# Lesson 26: Enterprise REST API Design: Versioning, Pagination, Bulk, and Best Practices
+
+Lesson 4 taught you which API to pick. This lesson assumes you have already made that call and are now designing the REST integration itself. The difference is the difference between wiring two systems together and building an integration that survives the next three Salesforce releases. Three decisions carry most of the weight: what version you pin, how you page through results, and when you stop using single synchronous calls. Around those sit a set of habits that keep the whole thing honest.
+
+## The version is part of every request
+
+Every REST request you make carries a version number inside the URL. The base pattern is `https://MyDomainName.my.salesforce.com/services/data/vXX.X/`, where `XX.X` is the API version, and the resource you want hangs off the end of that path. A request to create an Account, for example, goes to `/services/data/v67.0/sobjects/Account/`. [^1]
+
+That version in the path is your contract with the platform. Salesforce ships a new API version three times a year with each major release, and Summer '26 is API version 67.0. [^1] You can hit `/services/data/` and get a list of every version currently available for your org, without even authenticating, which is a handy way to confirm what your environment supports. [^1]
+
+The reason the version lives in the URL rather than in some header is that it pins behavior. Salesforce changes how endpoints behave over time, and a request that names version 61.0 gets the behavior that existed when 61.0 shipped, not the behavior that exists today. That is the whole point of versioning: your client is not at the mercy of the next release. Two different consumers of the same org can run on different versions at the same time, and each gets the semantics it was written against. [^1]
+
+There is a catch, and it is a real one. Salesforce eventually retires old API versions under its published end-of-life policy. [^2] A version you pinned does not stay alive forever, so pinning is not a way to avoid maintenance; it is a way to control when the maintenance happens. The working pattern is to pin to a version on purpose, keep the pinned version current enough that you are not sitting on a retired one, and test an upgrade against a sandbox in the same release window rather than discovering a breakage in production. Architects who skip the last step tend to hear about it from a 3 AM page.
+
+## Pagination is how you read more than one page
+
+Query responses do not return an entire result set in one payload. When you run a SOQL query through the REST Query resource, the response gives you four things: `totalSize`, the number of records the query returned overall, `done`, a boolean telling you whether you have seen the last batch, `nextRecordsUrl`, a URL you can call to get the next batch, and `records`, the actual data in this page. [^3] When `done` is `false`, the response includes a `nextRecordsUrl`; you call that URL, get the next page, and repeat until `done` flips to `true`. [^4] That URL points at a resource called Query More Results, which hands you the next batch using a query locator the platform keeps for you. [^4]
+
+The default batch size is 2,000 records per page, and you can adjust it with the `Sforce-Query-Options: batchSize` request header. The valid range runs from 200 to 2,000, and there is a nuance worth remembering: in relationship queries, child objects count toward the batch size, so a parent row with several children consumes more than one slot. [^5]
+
+The `nextRecordsUrl` mechanism is a cursor, not an offset. That distinction matters. An offset approach, where the client says "give me rows 4,001 through 6,000," breaks when records are inserted or deleted between page requests, because the whole set shifts underneath you and you can skip or repeat rows. A cursor does not have that problem. You follow the pointer the server hands you, so the set you walk is stable even if the data changes behind the scenes. When you write a loop that walks a query, you should drive it off `nextRecordsUrl` and treat `done` as the exit condition. That is the pattern that scales past the first page.
+
+## Bulk is not just a different endpoint, it is a different mindset
+
+Single-record REST calls are for interactive, low-volume work. The REST API does have a way to write multiple records in one request: sObject Collections, which execute an operation on several records in a single call, return each record's individual result in one response body, and count the whole request as a single call against your API limits. [^6] This is the right tool for a few dozen records, and it handles up to 200 per request. It also supports an `AllOrNone` header so that a bad record in the middle rolls back the entire batch instead of silently leaving you partially applied. [^6]
+
+Past 2,000 records, and often well before it, you should stop trying to make synchronous REST do the job and switch to Bulk API 2.0, which runs asynchronously and speaks CSV. The threshold is the same sizing rule you met in Lesson 4: any operation above 2,000 records is a candidate for Bulk. The reason it is a mindset difference, not just an endpoint difference, is that you no longer wait for an answer. You submit a job, the platform processes it in the background, and you poll for completion and then fetch the results. That changes your error handling, your retry logic, and your expectations, because nothing about a bulk job is immediate.
+
+The pragmatic rule an architect internalizes is to match the tool to the latency the business actually needs. A user clicking a button needs a synchronous answer. A nightly reconciliation of 80,000 invoices does not, and pretending it does by looping synchronous calls will blow through the org's daily API allocation before lunch and take down every other integration in the building. [^8]
+
+## The habits that separate a working integration from a fragile one
+
+Four habits do the most work, and none of them require clever code.
+
+First, use Composite resources to cut round-trips. Composite and sObject Collections exist so a client can do several things in fewer HTTP calls, and Salesforce explicitly recommends them to reduce the number of round-trips between client and server. [^7] [^6] Fewer round-trips means fewer calls against your limit and lower latency, so when a single user action touches several records, batch the work rather than firing it one call at a time.
+
+Second, watch your request size. The combined length of a REST request's URI and headers is capped at 16,384 bytes, and exceeding it can return a 431 or 414 error. Salesforce recommends holding public-facing URIs to about 2,000 characters and headers to about 8,000 bytes, because browsers and load balancers often impose lower ceilings than Salesforce does. [^8] Long filter lists and oversized headers are the usual culprits, and they fail at runtime, not at design time.
+
+Third, monitor your limit consumption instead of discovering it by surprise. Salesforce balances API load with concurrent request limits, timeout limits, and a total daily allocation per org. [^8] The REST `Sforce-Limit-Info` response header reports how many API calls your org has left in the window, which turns "mysterious throttling at 2 PM" into a number you can graph and act on. [^9] If you build a dashboard against that header, you will see the approach of a ceiling instead of colliding with it.
+
+Fourth, use external IDs and upserts to make writes idempotent. When a middleware retries a failed sync, you do not want the retry to create duplicate records. Upserting by an external ID field means a retry updates the existing record instead of inserting a second copy. This is less a Salesforce-specific trick than a general integration discipline, but it is the one habit that most directly prevents the most common integration failure mode, which is duplicate data after a network blip.
+
+## Worked example: a claims integration
+
+A health insurer runs Salesforce for case management and needs a claims system to sync 40,000 claims a day while a field agent occasionally creates a single case from a tablet. Here is how the design falls out.
+
+The nightly claim sync is a Bulk API 2.0 ingest job. Forty thousand records is far past the 2,000 threshold, the claims system does not need an answer, and CSV is a natural fit for the extract on the source side. The architect submits the job, polls it, and writes a reconciliation report from the results rather than holding a synchronous connection open for the duration.
+
+The interactive case creation from the tablet uses a single synchronous POST. The agent needs the new case ID back immediately to route work, so there is no reason to go async. It is one record, it is fast, and it is exactly the workload synchronous REST is built for.
+
+A status check the field agents run a few times an hour lists the last 30 cases for a given territory. That query returns far more than 30 records across the org, so the client walks it with `nextRecordsUrl`, paging through at a batch size tuned to what the tablet can render comfortably, until `done` is `true`. It never assumes one page holds everything, so the loop keeps working as the org grows.
+
+A nightly pull that updates claim statuses for the 1,500 claims that changed that day is too big for a single synchronous call but well under the bulk threshold. The architect uses sObject Collections in chunks of 200 with the `AllOrNone` header, which keeps the sync within a handful of API calls while preserving rollback if a chunk contains a bad record.
+
+## The pitfall to avoid
+
+The failure that shows up most often on real enterprise integrations is treating pagination as an afterthought. A developer writes a query, reads the first page, sees 2,000 records, and assumes that is the whole answer, because the test data fit on one page. In production, the query returns 14,000 records, the integration silently processes a fraction of them, and nobody notices until a reconciliation report is short by 12,000 records. The fix is boring and mandatory: always check `done`, always follow `nextRecordsUrl` until it flips to `true`, and make the test data large enough to force more than one page. [^3] [^4]
+
+A close second is looping synchronous calls for a bulk job and calling it done. The integration works in a small test, then hits the daily allocation ceiling in production and brings down every other integration that shares the org's limit. [^8] The sizing rule you learned in Lesson 4 is also a design rule: above 2,000 records, go bulk, and design for the async result model from the start.
+
+## Try it
+
+A supply-chain company needs to pull every order line changed in the last 24 hours, then push back the updated ship dates for 3,200 of them. Sketch the design:
+
+1. What API do you use to read the changed order lines, and how do you make sure you get every one of the 40,000-plus rows, not just the first page?
+2. For the 3,200 updates, do you use synchronous REST, sObject Collections, or Bulk API 2.0? Justify the choice.
+3. The sync runs every hour and occasionally fails mid-run. How do you prevent a retry from creating duplicate records?
+
+**Answers:** (1) Bulk API 2.0 query job, or a synchronous REST query if you must, but either way you walk the result set with `nextRecordsUrl` until `done` is `true`; never trust a single page. [^4] (2) Bulk API 2.0, because 3,200 records is past the 2,000 threshold and the operation is scheduled, not interactive. [^6] (3) Upsert by an external ID so a retried batch updates existing rows instead of inserting duplicates. If you wrote "one REST call per record," go back and re-read the pitfall.
+
+## What's next
+
+You now know how to design the REST integration itself: pin a version deliberately, page with cursors, and reach for bulk the moment volume passes the threshold. The next lesson turns from how data flows to how it is protected. It covers integration security, specifically named credentials, JWT, certificates, and IP allowlisting, which is the layer that decides whether an integration is allowed to talk to your org at all.
+
+[^1]: developer.salesforce.com. [REST API Versions resource](https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_versions.htm)
+[^2]: developer.salesforce.com. [API End-of-Life Policy](https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/api_rest_eol.htm)
+[^3]: developer.salesforce.com. [Query resource](https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_query.htm)
+[^4]: developer.salesforce.com. [Query More Results resource](https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_query_more_results.htm)
+[^5]: developer.salesforce.com. [Query Options header](https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/headers_queryoptions.htm)
+[^6]: developer.salesforce.com. [sObject Collections](https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_composite_sobjects_collections.htm)
+[^7]: developer.salesforce.com. [Composite resources](https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_composite.htm)
+[^8]: developer.salesforce.com. [API Request Limits and Allocations](https://developer.salesforce.com/docs/atlas.en-us.salesforce_app_limits_cheatsheet.meta/salesforce_app_limits_cheatsheet/salesforce_app_limits_platform_api.htm)
+[^9]: developer.salesforce.com. [Limit Info header](https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/headers_api_usage.htm)

@@ -1,0 +1,118 @@
+---
+title: "Lesson 22: Architecture Review: Design Reviews, Decision Records, and How to Say No"
+slug: architecture-review-design-reviews-decision-records-saying-no
+series: "salesforce-architect"
+lesson: 22
+excerpt: "The review discipline that keeps architecture coherent as the org grows: design review as a forum, not a gate, the ADR as durable decision memory, and how to decline a bad how without rejecting the person behind it."
+date: "August 25, 2026"
+author: "Adroit Consulting"
+readTime: "10 min read"
+tags: [Salesforce, Architecture, Governance]
+---
+
+# Lesson 22: Architecture Review: Design Reviews, Decision Records, and How to Say No
+
+Every lesson so far handed you a mechanism: data models, integration patterns, event buses, sharing rules. This one is about the human machinery around those mechanisms, the part that decides whether the org still makes sense in two years. A competent architect can build almost anything. A mature one can explain why they built it this way, get the decision reviewed before it hardens, and push back on the wrong ask without burning the relationship. Those three skills, design review, decision records, and the constructive no, are what keep a platform from becoming the undocumented tangle you find on day one of a rescue project.
+
+The core capability Salesforce leans on for all of this is the Well-Architected Framework, organized so solutions stay Trusted, Easy, and Adaptable. [^9] Trusted means secure and compliant and reliable. Easy means maintainable and efficient and helpful. Adaptable means resilient and composable. When a design review has no other rubric, these three words are the rubric. When a stakeholder argues for a faster or cheaper or more fashionable approach, these three words are your anchor.
+
+## Define the terms
+
+- **Design review**: a structured session where a proposed solution is examined before it is built, to catch problems while they are still cheap to fix. Salesforce distinguishes it from other governance: the point is to review changes with cross-team impact, not every line of code. [^6]
+- **Architecture review**: the same idea applied at the level of decisions that shape the whole platform, the data model, the integration strategy, the access model, rather than a single screen.
+- **Architecturally significant requirement (ASR)**: a requirement with a measurable effect on the architecture and quality of the system. Only these justify recording a decision. [^4]
+- **Architectural decision (AD)**: a justified design choice that addresses an architecturally significant requirement. [^4]
+- **Architectural decision record (ADR)**: a document that captures a single decision and its rationale, including the alternatives considered, the trade-offs, and the consequences. [^3] [^4]
+- **Decision log**: the collection of ADRs maintained across a project. [^4]
+- **Design authority**: a shared forum for architectural stewardship, owned by a Lead Platform Architect, that reviews decisions with long-term impact before they become constraints. [^6]
+- **Technical debt**: the cost of decisions made under pressure and never revisited; it becomes unavoidable when decisions stay implicit and ownership is unclear. [^6]
+
+## Design review is a forum, not a gate
+
+The fastest way to make a review process useless is to turn it into an approval bottleneck. Salesforce Ben makes the distinction explicit in its design authority guidance: a Design Authority is not a delivery gate, not a code review board, and not a replacement for solution ownership. [^6] It does not review every line of code or configuration. It reviews changes with enterprise or cross-team impact, guides trade-offs, reinforces shared patterns, and makes decisions visible and revisitable. [^6]
+
+Why does the distinction matter? Because if every change has to pass a heavyweight review, teams route around it. They deploy through a scratch org, or they ship a small change that grows into a large one, and the review only ever sees the parts nobody could hide. The review becomes theater, and the org accrues drift anyway, just with paperwork. Design review only works when it is proportioned to the decision. A picklist addition gets a glance. A new integration path or a change to the sharing model gets a real session.
+
+The deeper point is that most technical debt is not caused by bad engineering. It is caused by reasonable decisions made under pressure and never revisited. [^6] Small compromises accumulate, local optimizations become global constraints, and urgency replaces intent. [^6] The review exists to interrupt that cycle by forcing the decision to be visible and deliberate before it hardens.
+
+## What a review actually checks
+
+A review that just asks "does this meet the requirements?" misses the job. The review is where you check the design against the Well-Architected core capabilities and against the org's established patterns. [^9] Concretely, the checklist looks like this:
+
+1. **Security and compliance (Trusted).** Does the design follow the sharing model and least privilege? Is external access through the right OAuth and connected app path, not a hardcoded credential? These are the questions from the security lessons, reapplied at design time.
+2. **Reliability (Trusted).** What happens when the callout fails, when the queue backs up, when the subscriber is down? Is there a dead-letter path and an owner? This is the reliability lesson, applied before the code exists instead of after the outage.
+3. **Maintainability and efficiency (Easy).** Is this the simplest mechanism that works? Did the team reach for Apex when a Flow would do, or for a custom object when a standard one fits? Salesforce asks architects to gauge where a process can be adjusted to adopt prebuilt solutions, because doing so lowers implementation and maintenance cost. [^2]
+4. **Scalability and resilience (Adaptable).** Does the design hold at projected volume? Is a synchronous call being used where an event-driven or async path is the right call?
+
+The review team also asks the diagnostic questions that surface hidden assumptions. Salesforce's design authority guidance lists the ones that matter for access models: is access driven by role, capability, or context? How will this scale as identities grow? Can someone troubleshoot this six months from now? [^6] Replace the access example with integration or data and the same three questions apply. They are really one question asked three ways: does this decision scale, does it stay understandable, and will it survive contact with the future?
+
+## Decision records: the org's architectural memory
+
+A design review makes a decision in the moment. A decision record makes sure the decision survives the moment. Salesforce calls the ADR the single most useful decision documentation format across project size and industry, and describes its core purpose as documenting the why behind a choice: the business context, the alternatives considered, the trade-offs, and the final decision. [^3] The adr.github.io community defines it the same way, an ADR captures one decision and its rationale so you can understand the reasons, the trade-offs, and the consequences. [^4]
+
+The reason the record matters is architectural amnesia. A new architect joins six months after go-live and asks why Platform Events were chosen over Change Data Capture. Nobody in the room remembers. The original decision makers moved on, the meeting notes are buried, and the debate restarts from scratch. [^7] An ADR answers the questions the future team will ask: what alternatives were considered, what constraints mattered at the time, what risks were knowingly accepted, and under what conditions this decision should be revisited. [^7]
+
+A useful ADR has four sections, the ones Salesforce's guidance lays out: [^3]
+
+- **Context**: the narrative of the problem, the organizational situation, business priorities, and the constraints that shape the choice. [^3]
+- **Considered options**: the alternatives that were evaluated, each with its pros and cons. [^3]
+- **Decision**: a clear, definitive statement of the chosen solution, with the rationale that explains why this option beat the others. [^3]
+- **Consequences**: what becomes easier, what becomes more difficult, and what follow-up the team and architecture now owe. [^3]
+
+Two rules keep the record honest. First, record only architecturally significant decisions, the ones that affect structure, key quality attributes, or are hard to reverse. [^8] If you record every micro-choice, the log becomes noise and nobody reads it. Second, do not edit an accepted record. If the decision changes, write a new record that supersedes the old one and link the two, because that preserves the history of your thinking and shows when and why the direction shifted. [^8]
+
+The most effective starting point is not a retrospective audit. It is a commitment to record the next significant decision as it is made. [^7] Start there, and the log grows into the platform's institutional memory one decision at a time.
+
+## How to say no
+
+Now the part nobody teaches in a diagram. Saying no as an architect is rarely about refusing a need. It is about refusing a premature solution, or a wrong one, while honoring the person who asked.
+
+The Salesforce blog on reading requirements puts the goal precisely: success often depends on whether a stakeholder trusts you enough to hear "here's something better than what you asked for" without feeling dismissed. [^1] Note what that framing does. You are not saying your stakeholder is wrong. You are saying there is a better path to what they actually want, and you have enough credibility that they let you show it.
+
+The technique is to separate the why, the what, and the how. [^1] The why is the stakeholder's real need, the reason they are asking at all. The what is the requirement. The how is a specific implementation, and the how is yours to decide, not theirs. When a requirement says "the solution shall include a new custom data object," that sentence is really a how dressed up as a what. [^1] The requirement only needs to store this data, with these attributes, tied to the vendor. Whether it lives on a custom object, a standard object, or files is the architect's call once the shape of the data is known. [^1]
+
+So the productive no sounds like this: "I hear the goal, and here is the part of what you asked for that I would push back on." You reject the how, propose at least one alternative, and tie both back to the why. [^1] You say no to a bad mechanism, not to the outcome the stakeholder needs.
+
+The listening skills carry the conversation. Salesforce's Talk Like an Architect series makes the case that architects are not encyclopedias, they are detectives, and the job is asking the right questions, not having all the answers. [^2] Responding too quickly risks misunderstanding the need or misrepresenting the solution, and both lead to misaligned outcomes and lost trust. [^2] That is why "It depends" is the architect's honest default: the right answer depends on context you may not have yet. [^2]
+
+Two internal questions keep you honest before you push back. First, which assumptions am I making? Every assumption is a hidden question and a signal to go validate with the stakeholder. [^2] Second, do I actually understand the context and the challenge, or does this make sense only in isolation? [^2] Check your understanding at the micro and macro level before you commit to a no.
+
+There is also the case where you genuinely cannot accommodate the request, where the org or a regulation forces complexity that no pattern avoids. The guidance there is direct: if organizational or regional regulations prevent simplification, the system must adapt to support the required complexity. [^2] You say no to the shortcut, and you say yes to the compliant path, clearly and without drama.
+
+## Worked example: a review that caught a bad integration
+
+A sales operations team proposes an automated notification feature. When a large deal changes stage, a synchronous REST callout should notify the downstream sales analytics system immediately. The team has written a Flow that fires on the stage change and makes a callout. The design review convenes with the Well-Architected capabilities as the frame. [^9]
+
+1. **Clarify the why.** The reviewer asks what the notification actually enables. The answer: the analytics dashboard should reflect the stage change within a few minutes, and it currently lags because of a nightly batch. The real need is freshness, not immediacy, and not a hard real-time requirement. [^1]
+2. **Separate what from how.** The "synchronous callout in a Flow" is a how. The what is "analytics sees the change soon." The reviewer reframes, then compares mechanisms: a direct REST callout, a Platform Event, and Change Data Capture. [^7]
+3. **Check reliability.** A synchronous callout inside the stage-change transaction adds failure to the critical path. If analytics is down, does the deal update fail? The review applies the reliability discipline from earlier in this series: transient errors need a bounded retry, and every failure needs a dead-letter path with an owner. A sync callout in the transaction satisfies neither cleanly.
+4. **Check scale and coupling.** The team plans to add three more downstream consumers next quarter. A sync callout couples the org to each one, and each new consumer means new callout code. An event-based approach decouples them: publish once, subscribe anywhere, and replay on failure. The reviewer flags the coupling cost. [^7]
+5. **Recommend and record.** The review steers the design to a Platform Event published on stage change, with the analytics system subscribing and tracking its replay position, exactly the event-driven pattern from this series. The team writes an ADR: context (freshness need, three future consumers), considered options (sync callout, Platform Event, CDC), decision (Platform Event), and consequences (loose coupling, replay-based recovery, but eventual consistency and a small freshness delay). [^3] The ADR lands in the decision log. [^4]
+
+The review did not reject the feature. It rejected one how, and it produced a mechanism that survives the next three consumers. And because the decision was recorded, when a fourth team asks about stage-change notifications next year, the answer is in the log, not in someone's memory.
+
+## The pitfall to avoid
+
+**Turning review into rubber-stamping and decisions into vibes.** The two failure modes feed each other. A review that approves everything because it is easier than arguing produces a platform shaped by whoever asked last, not by anyone's intent. And decisions that never get recorded mean the next team re-argues them from scratch, or worse, silently reverses them. The fix is the whole lesson: proportion the review to the impact, check against a stable rubric, record the decisions that matter, and decline the bad how with the why intact.
+
+## Try it
+
+1. A requirement says "the solution shall use a new custom object." Is that a what or a how, and what should the architect do with it? *(Answer: it is a how dressed as a what. The requirement should state the data and its attributes; the architect decides whether it lives on a custom object, a standard object, or files.)* [^1]
+2. A stakeholder asks for a synchronous callout so the dashboard is "real time," but probing shows they need freshness within minutes, not seconds. What is the architect's move? *(Answer: confirm the why (freshness, not immediacy), reframe the what, and propose an event-driven option that meets the real need without a synchronous callout on the critical path.)* [^1] [^2]
+3. Six months after go-live, a new architect asks why Platform Events were chosen over CDC, and no one remembers. What process failure does this expose, and what fixes it? *(Answer: decisions were made but not recorded. An ADR in the decision log, with context, options, decision, and consequences, preserves the rationale.)* [^7]
+4. A design review is asked to approve every change including picklist additions, and teams have started routing around it. What went wrong? *(Answer: the review became a gate reviewing everything, not a forum for cross-team impact. It should be proportioned to impact and not review every line of code.)* [^6]
+5. A stakeholder insists on a shortcut that violates a compliance requirement. How does the architect respond? *(Answer: accept that the complexity is required and design for it. If regulations prevent simplification, the system must adapt to support the required complexity, and the architect says no to the shortcut clearly.)* [^2]
+
+## What's next
+
+You now have the review discipline, the decision record, and the constructive no that keep architecture coherent. The next lesson turns to what happens once a design is live: error handling and monitoring. You will learn to read debug logs, use Event Monitoring to trace activity across the org, set up health checks, and build alerts that tell you a problem is coming before the tickets do.
+
+[^1]: salesforce.com. [Read Requirements Like an Architect](https://www.salesforce.com/blog/read-requirements-like-an-architect/)
+[^2]: salesforce.com. [Talk Like an Architect: How to Listen and Respond Intentionally](https://www.salesforce.com/blog/talk-like-an-architect-listen-respond-intentionally/)
+[^3]: salesforce.com. [Architectural Decisions: A Human-Led, AI-Powered Approach](https://www.salesforce.com/blog/architectural-decisions-human-led-ai-powered-approach/)
+[^4]: adr.github.io. [Architectural Decision Records](https://adr.github.io/)
+[^5]: cognitect.com. [Documenting Architecture Decisions](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions.html)
+[^6]: salesforceben.com. [Why Design Authority Is Crucial in Salesforce Architecture](https://www.salesforceben.com/why-design-authority-is-crucial-in-salesforce-architecture/)
+[^7]: salesforceben.com. [How to Make Salesforce Architecture Decisions That Actually Last](https://www.salesforceben.com/how-to-make-salesforce-architecture-decisions-that-actually-last/)
+[^8]: learn.microsoft.com. [Maintain an architecture decision record (ADR)](https://learn.microsoft.com/en-us/azure/well-architected/architect-role/architecture-decision-record)
+[^9]: architect.salesforce.com. [Salesforce Well-Architected: Overview](https://architect.salesforce.com/docs/architect/well-architected/guide/overview.html)

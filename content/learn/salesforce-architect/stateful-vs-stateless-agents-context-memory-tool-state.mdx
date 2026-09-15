@@ -1,0 +1,130 @@
+---
+title: "Lesson 40: Stateful vs Stateless Agents: Context, Memory, and Tool State"
+slug: stateful-vs-stateless-agents-context-memory-tool-state
+series: "salesforce-architect"
+lesson: 40
+excerpt: "Why a language model remembers almost nothing and knows a great deal, what it costs to ship a purely stateless agent, and how context, memory, and tool state become the architecture that decides whether an agent is useful on day one or day thirty."
+date: "September 13, 2026"
+author: "Adroit Consulting"
+readTime: "9 min read"
+tags: [Architecture, AI at Work, LLMs]
+---
+
+# Lesson 40: Stateful vs Stateless Agents: Context, Memory, and Tool State
+
+This lesson stays in the general-systems thread that started with lesson 5 (architecture is components, relationships, principles) and ran through lesson 10 (sync versus async, queues, eventual consistency). Now we take on the question that shapes almost every agent deployment: where does the state live? A language model knows a great deal and remembers almost none of it. The knowledge from training is fixed in its weights, and anything learned during a conversation is lost the moment the request ends. That gap between knowledge and memory is the whole reason stateful and stateless architectures exist.
+
+Here is the thesis. **Every agent you run is stateless by default, and state has to be built deliberately.** A stateless agent treats each request as self-contained and is easy to scale. A stateful agent carries state forward on purpose and is capable of work that spans days. The tradeoff is not about which one is better. It is about matching the architecture to the task: extraction and classification want statelessness, while support, coding, and long-running workflows need state. Getting that call wrong shows up as an agent that asks the same question every time, or as one that scales poorly because every request resends the whole history.
+
+## Define the terms
+
+Start with precise definitions, because the words get conflated constantly.
+
+- **State**: the information an agent carries forward to continue a task. Vectara's engineers define it as messages, tool results, user preferences, workflow status, approvals, or intermediate decisions. [^1]
+- **Memory**: a selective form of state retained across interactions or sessions, the information the system chooses to keep because it may matter later. [^1]
+- **Stateless**: an architecture where the model keeps nothing across requests. Every request carries everything the agent needs in the payload, and nothing survives after the response. [^1]
+- **Context**: the set of tokens included when the model samples a response. Anthropic defines context engineering as optimizing the utility of those tokens against the model's constraints. [^2]
+- **Working memory**: the exact tokens inside the current context window, the reasoning scratchpad an agent can see right now. [^3]
+- **Long-term memory**: durable storage external to the context window, records the agent can retrieve on a later request. [^3]
+
+Keep one distinction front of mind: **context is what is in the window right now; memory is what survives beyond it.** An agent can be stateful at the memory level while still being stateless at the model level, because the model itself forgets everything after each call. The state lives outside the model, in a store.
+
+## First, the constraint: a finite attention budget
+
+Before the architecture debate matters, you need to understand why context is scarce. LLMs are transformer architectures in which every token can attend to every other token across the whole context, which produces n-squared pairwise relationships for n tokens. The attention budget is finite, and every token you add drains it a little. [^2]
+
+Anthropic also documents what happens when you overload that budget. Needle-in-a-haystack benchmarks reveal a phenomenon they call context rot: as the number of tokens in the context window rises, the model's ability to accurately recall information from that context goes down. Longer context does not mean better recall, even on models that advertise huge windows. This degradation is a performance gradient, not a hard cliff, but it is real across all models. [^2]
+
+Treat that as the load-bearing fact for everything that follows. Three practical consequences fall out of it.
+
+First, more context is not free. It costs tokens, it costs latency, and past a point it actively hurts accuracy. [^2]
+
+Second, tool design is context design. A tool that returns a huge blob forces the agent to hold that blob in the window, chewing the budget. Anthropic's guidance is to make tools return token-efficient output and to keep a minimal viable set of tools, because bloated tool sets create ambiguous decision points about which tool to use. [^2]
+
+Third, a strategy for eviction is non-negotiable. Something eventually has to leave the window, and if you do not decide what gets summarized or dropped, the client or the raw transcript decides for you, badly. [^1]
+
+## Statelessness is an intentional design choice
+
+A stateless agent treats every request as self-contained. The model processes the request and generates a response, retaining nothing. Everything the agent needs must arrive in the payload. [^1]
+
+This has a clean scaling story. With no memory pinned to a particular server, a request can go to whichever instance is free, with no sticky sessions, shared caches, or database on the hot path. Vectara names extraction, classification, summarization, and one-shot tool calls as the tasks where statelessness is the right choice. [^1]
+
+The costs appear when a task needs continuity.
+
+The first cost is mechanical. Because the agent remembers nothing, the client resends the entire history on every request. As the payload grows, token spend rises, and the conversation history eventually approaches the context window. At that point someone decides what gets summarized or discarded, and in a purely stateless design that responsibility falls to the client, even though context selection is one of the decisions most likely to affect answer quality. [^1]
+
+The second cost is worse than the token bill. Without a durable state layer, the agent is unaware of anything that happened outside the current payload. It starts over on every contact. A support agent asks the same qualifying questions each time. Corrections do not persist; a subject-matter expert fixes the agent and the fix lasts exactly as long as the context window. Long-term work stalls, because migration, audit, onboarding, or a complex claim spans days, and the system has no record of where it stopped. [^1]
+
+The structural fix is to move state behind the API boundary. The client sends a single message plus a session identifier, the agent loads the relevant state, processes the message, and writes the updated state back. The payload stays flat, the server controls what determines answer quality, and the agent stops starting over. [^1]
+
+## The memory hierarchy, applied
+
+A stateful agent is not one giant record. Production memory architecture splits into layers with different lifetimes and costs. Mem0 and Redis both describe the taxonomy that borrows from cognitive science: episodic, semantic, and procedural. [^3] [^4]
+
+Working memory is the context window, the tokens the agent reasons over right now. It is fast and effective for immediate work, but it is exactly the scarce, expensive resource we covered. [^2]
+
+Episodic memory records time-indexed experiences: specific conversations, tool calls, and events. It answers the question "what happened." [^4]
+
+Semantic memory holds domain facts, policies, and durable knowledge: the account tier, the open ticket, the documented workaround. It answers "what is true." [^3] [^4]
+
+Procedural memory captures skills and routines, often encoded as prompts, policies, or agent code rather than stored data. It answers "how do we do this." [^4]
+
+The coordination between layers follows a read-before-reasoning, write-after-acting loop. Before an agent responds, it retrieves what it needs from long-term memory and injects it into working memory. After it acts, it consolidates what happened back into the durable store. This separates what must be present right now from what must persist over time. [^3] [^4]
+
+Consolidation is the process that keeps the store trustworthy. A reflective process reviews recent sessions, summarizes key facts and decisions, and promotes only the high-value entries to long-term memory. Without it, the store grows without bound and retrieval quality degrades, because searching a pile of raw transcripts is worse than searching a curated index. [^4]
+
+## A worked example: the support agent that started over
+
+Make it concrete. A client runs a B2B support agent. Version one is deliberately stateless. The agent classifies the request, calls a ticket lookup tool, and gives an answer. It works.
+
+Then the failure shows up. The escalation engineer fixes an incorrect policy answer in the middle of a call. The fix lives in the context window, and it vanishes when the call ends. The next customer pulls the same wrong policy. The agent cannot see that this account runs on an enterprise contract with different SLA terms, because that fact is not in any payload it has been sent. It does not know that a fix proposed last quarter failed, or that a policy changed two months ago. All of that exists somewhere in history, but none of it reaches the agent. [^1]
+
+The removal of the agent's blind spot is a state layer with memory. The client now sends an account identifier instead of a full history. On open, the agent loads episodic records (past interactions with this account) and semantic records (the SLA terms, the open ticket, the policy exceptions). A correction the expert makes is written back into state, so it outlives the context window and becomes institutional knowledge. The agent opens with the account tier, the known workaround, the unresolved integration, and the customer stops re-explaining everything. [^1]
+
+There is a real cost to this. The server now has to store state, and that storage must be shared or affinity-managed. If a session is tied to one server and the next request lands on a different one, you get localized amnesia. The fix is a central store such as Redis or Postgres, or session affinity that keeps a user on the same instance. Both add operational complexity that the stateless design never faced. [^1]
+
+## The trust wall: memory without grounding
+
+The subtlest trap comes after you build the state layer. A stateful agent that learns from experience without verification slowly convinces itself of things nobody actually said, and states them with growing confidence because it now holds them as established knowledge. [^1]
+
+Vectara's framing is that memory and grounding are the same problem seen from two angles. Memory turns history into experience; grounding ties stored claims back to trusted sources. Get the first without the second and you build an agent that confidently remembers the wrong thing for months. [^1]
+
+This is why the memory architecture is not finished when you add a store. You also need to know where each stored fact came from, whether the current user is allowed to use it, and how to check it before the agent treats it as fact. A correction that is written back blindly is a new belief, and an unchecked belief is worse than no belief. [^1]
+
+## Tool state deserves its own design
+
+State is not only about conversation memory. It is also about the agent's relationship to its tools. Anthropic's guidance is that tools define the contract between the agent and its information and action space, and that contract should promote efficiency. [^2]
+
+The common failure is a bloated tool set. Tools that overlap, that return token-heavy output, or that leave the model with ambiguous decision points about which to call degrade both behavior and context. If a human engineer cannot say definitively which tool should be used in a given situation, an AI agent cannot be expected to do better. Curate a minimal viable set of tools, and make each one observable and robust to error. [^2]
+
+There is also the question of tool result persistence. A stateless agent gets a tool result, reasons over it in the window, and drops it. A stateful agent can write the result to episodic memory, so a later turn on a different day can retrieve what a tool returned earlier. That persistence is what lets a long-running workflow resume from a record of intermediate work instead of re-running every call. [^4]
+
+## The pattern: a decision sequence
+
+You have the pieces now, so here is the decision sequence an architect actually runs.
+
+1. Does the task produce durable value across interactions, or is each request independent? Extraction, classification, and summarization are independent. Build them stateless. [^1]
+2. If the task is stateful, name the state. What carries this conversation forward: messages, tool results, user preferences, workflow status, approvals? [^1]
+3. Separate context from memory. What must be in the window every turn (system prompt, current task), what is retrieved on demand (semantic and episodic records), and what is consolidated out (summaries over raw transcripts)? [^2] [^3]
+4. Enforce a token budget per call and trim the low-value parts first, so the agent reasons over the smallest set of high-signal tokens. [^2] [^3]
+5. Ground every stored belief. For each fact the agent retains, the system should know its source and how to verify it. [^1]
+6. Design tools for context efficiency and keep the set minimal, so the window stays lean and the model is never uncertain which tool to call. [^2]
+
+## Try it
+
+Take an agent you run or plan to run, and work it through the sequence.
+
+1. Classify it: stateless or stateful? If a second request on the same task has no idea the first happened, it is stateless. Would continuity help or is each request genuinely independent? [^1]
+2. If stateful, list the working, episodic, semantic, and procedural components in your design. Which layer holds each piece of durable knowledge? [^3] [^4]
+3. Trace one tool call. Where does its result go? Does it live only in the window, or does a later turn on a different day retrieve it? [^2]
+4. Pick the kind of long-term work your task needs, and write one line about the failure if the agent has no durable state: it starts over, corrections do not persist, or long-term projects can't track progress. [^1]
+5. Audit one stored belief. Can the system say where it came from and how to check it? If not, that is a belief waiting to become a confidently held wrong fact. [^1]
+
+## What's next
+
+You can now explain why a purely stateless agent is the right call for one-shot classification and the wrong call for a support agent, and where context, memory, and tool state each live. The next lesson leaves the general-systems thread and lands these ideas on a Salesforce product that is, in part, a stateful agent surface: Experience Cloud. It covers sites, communities, licensing, and sharing, and how those fit into the platform architecture you have been assembling.
+
+[^1]: vectara.com. [The agent that forgets: Stateful vs. stateless AI agents](https://www.vectara.com/blog/stateful-vs-stateless-ai-agents)
+[^2]: anthropic.com. [Effective context engineering for AI agents](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
+[^3]: mem0.ai. [Short-Term vs Long-Term AI Memory: Engineer's Guide](https://mem0.ai/blog/short-term-vs-long-term-memory-in-ai)
+[^4]: redis.io. [Long-Term Memory Architectures for AI Agents](https://redis.io/blog/long-term-memory-architectures-ai-agents/)

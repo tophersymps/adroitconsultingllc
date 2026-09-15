@@ -1,0 +1,203 @@
+---
+title: "Lesson 10: RAG Fundamentals: Chunking, Embeddings, Retrieval, and Why RAG Is the First Enterprise Pattern"
+slug: rag-fundamentals-chunking-embeddings-retrieval
+series: "agentic-ai"
+lesson: 10
+excerpt: "The pattern that grounds LLMs in your own knowledge: what RAG is and where it came from, why you chunk documents instead of feeding them whole, what embeddings actually are, how retrieval ranks chunks, and why RAG became the first pattern enterprises shipped."
+date: "August 13, 2026"
+author: "Adroit Consulting"
+readTime: "10 min read"
+tags: [LLMs, AI Agents, RAG]
+---
+
+# Lesson 10: RAG Fundamentals: Chunking, Embeddings, and Retrieval
+
+Lesson 9 ended with a promise: the next building block is the augmented LLM, retrieval that gives agents knowledge beyond their training data. This is that lesson. RAG, retrieval-augmented generation, is the single most deployed pattern in enterprise AI, and it is the first one most teams actually ship. You need to understand it before you can build an agent that answers questions from a company's own documents, and this lesson gives you the working parts: chunking, embeddings, retrieval, and the case for why RAG leads with enterprise adoption.
+
+## What RAG is and where it came from
+
+The term RAG comes from the 2020 paper by Patrick Lewis and colleagues, accepted at NeurIPS 2020. The paper defines the idea precisely: RAG models "combine pre-trained parametric and non-parametric memory for language generation." The parametric memory is the model's weights, the knowledge baked in during training. The non-parametric memory is an external index, in the original paper a dense vector index of Wikipedia accessed by a neural retriever. The authors set state-of-the-art results on three open-domain QA tasks and found the RAG models generated "more specific, diverse and factual language" than a parametric-only baseline. [^1]
+
+That split is the whole trick. Instead of trying to stuff more knowledge into weights, RAG keeps the knowledge outside the model and retrieves it at answer time. AWS's explainer makes the practical case: RAG optimizes LLM output by referencing an authoritative knowledge base outside the training data, without retraining the model. [^2]
+
+McKinsey puts the enterprise value plainly: RAG allows LLMs to access and reference information outside their own training data, such as an organization's specific knowledge base, before generating a response, and crucially with citations included. That capability delivers "some of the benefits of a custom LLM at considerably less expense." [^3]
+
+## Why you need retrieval at all
+
+An LLM's knowledge freezes at the point of training. It cannot see your contracts, your runbooks, your product catalog, or anything that changed after its cutoff. AWS lists the failure modes this produces: presenting false information when the model does not have the answer, presenting out-of-date information when the user expects a current response, creating responses from non-authoritative sources, and confusion when different sources use the same terminology for different things. [^2]
+
+NVIDIA's framing is the memorable one. A judge knows the law generally, but for a specific case they send a clerk to the law library for precedents they can cite. RAG is the court clerk: it fetches specific, relevant source material so the model can answer authoritatively, cite its sources, and reduce the chance of a plausible but wrong answer. [^4]
+
+## The pipeline: indexing and inference
+
+A RAG system runs in two distinct phases. The offline indexing phase prepares the knowledge base: documents are ingested, chunked, embedded, and stored in a vector or hybrid index. The online inference phase answers queries: a user question triggers retrieval, reranking, and generation in sequence. [^5]
+
+The inference flow, step by step:
+
+1. **Prompt and query.** The user submits a natural language query.
+2. **Embedding the query.** The query is converted into a vector using the same embedding model used during indexing, so it can be compared against the index.
+3. **Retrieval.** The retriever runs semantic search, optionally with keyword search or metadata filters, and returns the top-K most relevant chunks. This is where access controls get enforced.
+4. **Reranking and compression.** A reranker scores the retrieved chunks for true relevance and drops noisy results.
+5. **Prompt construction.** The curated context is assembled into a structured prompt with the query and system instructions.
+6. **Generation.** The LLM generates a response conditioned on that context, typically with citations pointing back to source documents. [^5]
+
+The three parts you control are chunking, embeddings, and retrieval. Get those right and the generation step has good material to work with. Get them wrong and no prompt will save you.
+
+## Chunking: split the document without losing the meaning
+
+Chunking is the process of breaking large text into smaller segments before embedding. It exists for two reasons. First, embedding models have context windows: text beyond the limit gets truncated or thrown away before it becomes a vector. Second, chunks must contain information that is useful to search over; a chunk of sentences that need surrounding context to make sense will not surface well for queries. [^6]
+
+Pinecone's rule of thumb is the one worth memorizing: if a chunk of text makes sense without surrounding context to a human, it will make sense to the language model as well. [^6]
+
+The chunking options, from simplest to most elaborate:
+
+1. **Fixed-size chunking.** Pick a token or character count and split on it. Pinecone calls it the most common and straightforward approach, and recommends starting here, iterating only after it proves insufficient. [^6]
+2. **Recursive character splitting.** Split using separators in order: double newline, newline, space, then character. LangChain's RecursiveCharacterTextSplitter is the canonical implementation, and it is a good middle ground between naive splitting and a semantic splitter. [^6]
+3. **Document structure-based chunking.** Respect the structure of the source: Markdown headings, HTML tags, LaTeX sections, PDF headers and tables. [^6]
+4. **Semantic chunking.** Embed groups of sentences and detect where the topic shifts by measuring semantic distance between groups. Chunk boundaries land where meaning changes, not where a token counter runs out. [^6]
+5. **Contextual chunking.** Use an LLM to generate a short contextual description for each chunk, append it, and embed that. Anthropic introduced this as contextual retrieval in 2024 to handle documents where chunks lose context on their own. [^6]
+
+Two more details matter in practice. Overlap: a small overlap between chunks (Weaviate suggests 10% to 20% of chunk size) keeps sentences from being cut in half at boundaries. [^7] And chunk expansion on the way out: when a query retrieves a chunk, you can fetch its neighboring chunks as well, so you get low-latency search without starving the LLM of context. [^6]
+
+## Embeddings: text becomes coordinates
+
+An embedding is an array of numbers produced by a model, usable as coordinates in a high-dimensional space. Embedding models learn to place text with similar meaning near each other in that space. [^8] When you index a chunk, you embed it and store the vector. When a query arrives, you embed the query with the same model and find the stored vectors closest to it. The catch is that the query must use the same embedding model as the index, or the comparison is meaningless.
+
+The standard similarity metric is cosine similarity: the cosine of the angle between two vectors, ranging from -1 to 1, where 1 means the vectors point in the same direction. It ignores magnitude, so it compares direction, which is what you want for meaning. [^9] Pinecone's practical rule: match the similarity metric to the one used to train your embedding model. The sentence-transformer model all-MiniLM-L6-v2, for example, was trained with cosine similarity, so cosine is the metric that produces the most accurate results for it. [^9]
+
+## Retrieval: kNN, ANN, and the vector database
+
+The naive way to find the nearest vectors is k-nearest neighbors: compute the distance from the query to every vector in the index and take the top K. That is O(n), and Weaviate's example makes the cost concrete: comparing a 300-dimensional vector against 10 million vectors means 3 billion computations per query. It does not scale. [^8]
+
+Production systems use approximate nearest neighbor (ANN) algorithms, which trade a little accuracy for a huge gain in speed. ANN maintains sublinear, roughly polylogarithmic, performance on very large datasets. The common families are trees (ANNOY), proximity graphs (HNSW), clustering (FAISS), and hashing (LSH). HNSW, the graph-based approach, is what Weaviate uses, organizing vectors into a hierarchical multi-layer graph that navigates from coarse to fine. [^8]
+
+Two refinements separate a demo retriever from an enterprise one.
+
+**Hybrid search.** Vector search handles meaning but does not prioritize exact matches: names, product codes, and industry jargon can get lost. Hybrid search combines vector similarity with keyword search so you get semantic context and exact-term precision at once. [^8]
+
+**Reranking.** The first retrieval pass returns the top-K by vector similarity. A cross-encoder reranker scores those chunks again for true relevance to the query and drops or demotes the noisy ones. Reranking is the post-retrieval step that most improves answer quality per unit of effort. [^5]
+
+## Worked example: chunking and cosine similarity from scratch
+
+To see the mechanics without a paid API, you can build a miniature RAG in pure Python: chunk a document, build a term-frequency vector for each chunk, and rank chunks by cosine similarity. Real embeddings come from a trained model and capture meaning far better than term counts, but the retrieval math is identical.
+
+```python
+import math
+import re
+
+DOC = (
+    "Retrieval augmented generation grounds an LLM in external knowledge. "
+    "The pipeline splits documents into chunks, embeds each chunk into a vector, "
+    "and stores the vectors in an index. At query time the system embeds the "
+    "question, finds the nearest chunk vectors, and passes those chunks to the "
+    "model as context. "
+    "Chunk size controls the tradeoff between context and precision. "
+    "Small chunks capture fine grained details but may lose surrounding context. "
+    "Large chunks keep more context but dilute the meaning of any single sentence. "
+    "Most teams start with fixed size chunking and add overlap so boundaries do "
+    "not cut a sentence in half. "
+    "Embedding models map text into high dimensional space where similar meaning "
+    "lands close together. Cosine similarity measures the angle between two "
+    "vectors, so a query about refund policy should land near chunks about "
+    "returns and reimbursements. "
+    "A vector database stores the chunk vectors and finds the nearest neighbors "
+    "fast using approximate search. Hybrid search combines vector similarity "
+    "with keyword matching so exact terms like product codes still win. "
+    "Rerankers score the retrieved chunks a second time before the LLM sees them. "
+    "Enterprise RAG adds access control and citations so every answer can be "
+    "traced back to a source document."
+)
+
+CHUNK_SIZE = 40
+OVERLAP = 8
+
+def chunk_fixed(text, size, overlap):
+    words = text.split()
+    chunks, i = [], 0
+    while i < len(words):
+        chunks.append(" ".join(words[i:i + size]))
+        if i + size >= len(words):
+            break
+        i += size - overlap
+    return chunks
+
+def tokens(text):
+    return re.findall(r"[a-z0-9]+", text.lower())
+
+def term_vector(text, vocab):
+    counts = {}
+    for t in tokens(text):
+        counts[t] = counts.get(t, 0) + 1
+    return [counts.get(v, 0) for v in vocab]
+
+def cosine(a, b):
+    dot = sum(x * y for x, y in zip(a, b))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(y * y for y in b))
+    return 0.0 if na == 0 or nb == 0 else dot / (na * nb)
+
+chunks = chunk_fixed(DOC, CHUNK_SIZE, OVERLAP)
+vocab = sorted({t for c in chunks for t in tokens(c)})
+chunk_vecs = [term_vector(c, vocab) for c in chunks]
+
+query = "How does chunk size affect retrieval?"
+qv = term_vector(query, vocab)
+scores = sorted((cosine(qv, cv), i) for i, cv in enumerate(chunk_vecs))
+for score, i in reversed(scores):
+    print(f"{score:.3f}  chunk {i + 1}")
+```
+
+Running this against the document above produces a real ranking:
+
+```text
+0.210  chunk 2
+0.207  chunk 1
+0.085  chunk 3
+0.083  chunk 5
+0.000  chunk 7
+0.000  chunk 6
+0.000  chunk 4
+```
+
+The query mentions chunk size, and chunk 2 ranks top because it contains the sentence about chunk size controlling the tradeoff between context and precision. Chunk 1 is a close second at 0.207: it also uses the word chunk heavily while it describes the pipeline, and the term-frequency model cannot tell that chunk 1 talks about the mechanism while chunk 2 talks about the tuning knob. The vectors are crude, but the shape of the system is exactly what a production RAG does: chunk, embed, compare, rank, and hand the top chunks to the model. Swap the term vectors for a real embedding model, swap the linear scan for HNSW, and you have the production pattern.
+
+## Why RAG is the first enterprise pattern
+
+Every pattern in this course so far, the loop, tools, structured output, is a building block. RAG is the first one that solves an enterprise problem end to end, which is why it is the pattern most organizations shipped first. The reasons stack up.
+
+**Knowledge separates from model weights.** RAG keeps knowledge in an index that you can update, delete from, and govern without retraining. Atlan's list of RAG benefits leads with this: updates to the knowledge base do not require retraining, and because retrieval happens at inference time from a live source, outputs reflect current policies and documentation. [^5] NVIDIA makes the same point with a different emphasis: RAG lets users hot-swap new sources on the fly, and it is faster and less expensive than retraining. [^4]
+
+**Answers carry citations.** Because the model generates from retrieved chunks, you can point at the source document for every claim. That is the trust mechanism McKinsey calls out, citations included, and it is what lets a compliance officer or an engineer verify an answer instead of taking the model's word. [^3]
+
+**Access control happens at retrieval time.** Enterprise RAG is RAG deployed on private data with permission inheritance, evaluation, governance, and observability. Atlan is blunt about the requirement: every piece of content in the RAG corpus needs an access policy, and if a human is not authorized to see it, the AI should not surface it either. [^5]
+
+**The adoption numbers back the ordering.** Google Cloud's 2025 ROI report found that 52% of enterprises using GenAI run AI agents in production, with 88% reporting positive ROI, and RAG is the grounding layer most of those systems sit on. Roots Analysis projects the RAG market growing from $1.96 billion in 2025 to $40.34 billion by 2035, with large enterprises leading adoption. [^10]
+
+Gartner's definition is the one to keep: RAG is a practical way to overcome the limitations of general LLMs by making enterprise data and information available for LLM processing. [^5]
+
+## The pitfall to avoid
+
+The naive version of RAG fails in predictable ways, and Atlan catalogs them. Hallucinations with citations: the model fabricates a conclusion even when it retrieved grounding documents, and the citation makes the error look worse. Context rot: policies change, the index does not, and the system confidently surfaces outdated information. Security bypass: flat vector stores with weak access control expose content to people who should not see it. Lost in the middle: stuff too many chunks into a long context and the model loses track of the relevant one. [^5]
+
+The root cause is the same in every case: RAG is only as good as the knowledge source and the retrieval step, not the model. Atlan's operating rule for enterprise deployments: treat the knowledge source, not the model, as the primary investment. [^5]
+
+## Try it
+
+1. **Chunk a real document.** Take a policy PDF or a long Markdown file from your own work and chunk it three ways: fixed-size with overlap, recursive character splitting, and structure-based splitting on headings. Check each chunk set against Pinecone's rule: does each chunk make sense without its neighbors?
+2. **Run the worked example.** Copy the script above, run it, and change the query to "Where are vectors stored?" and "Can I trace an answer back to a source?" Watch which chunks rank first and why. Then swap in a real embedding model via an API or a local server and compare the ranking.
+3. **Inspect retrieval quality, not just the answer.** For a RAG system you have access to, log the retrieved chunks for a handful of queries. Ask whether the top-3 chunks actually answer the question, whether exact terms like product codes would survive, and whether a reranker would change the order. That inspection is the evaluation loop you will build on in later lessons.
+
+## What's next
+
+You now have the retrieval pattern in place: chunk, embed, retrieve, generate. Lesson 11 zooms into the middle of that chain: embeddings themselves, how the models differ, what similarity really measures, and, just as important, when embeddings fail. Understanding the tool you are retrieving with is what lets you tune chunking and retrieval instead of guessing.
+
+[^1]: arxiv.org. [arxiv.org](https://arxiv.org/abs/2005.11401)
+[^2]: aws.amazon.com. [aws.amazon.com](https://aws.amazon.com/what-is/retrieval-augmented-generation/)
+[^3]: mckinsey.com. [mckinsey.com](https://www.mckinsey.com/featured-insights/mckinsey-explainers/what-is-retrieval-augmented-generation-rag)
+[^4]: blogs.nvidia.com. [blogs.nvidia.com](https://blogs.nvidia.com/blog/what-is-retrieval-augmented-generation/)
+[^5]: atlan.com. [atlan.com](https://atlan.com/know/what-is-rag/)
+[^6]: pinecone.io. [pinecone.io](https://www.pinecone.io/learn/chunking-strategies/)
+[^7]: weaviate.io. [weaviate.io](https://weaviate.io/blog/chunking-strategies-for-rag)
+[^8]: weaviate.io. [weaviate.io](https://weaviate.io/blog/vector-search-explained)
+[^9]: pinecone.io. [pinecone.io](https://www.pinecone.io/learn/vector-similarity/)
+[^10]: redis.io. [redis.io](https://redis.io/blog/agentic-rag-how-enterprises-are-surmounting-the-limits-of-traditional-rag/)

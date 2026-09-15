@@ -1,0 +1,113 @@
+---
+title: "Lesson 14: Data Architecture: Data Model Design, Common Data Model Patterns, and Data Skew"
+slug: data-architecture-data-model-design-patterns-data-skew
+series: "salesforce-architect"
+lesson: 14
+excerpt: "Data is the load-bearing wall of every org. Designing a data model that scales means deciding where each relationship lives, recognizing the recurring shapes that solve real problems, and keeping the load off any single parent record or owner. This lesson covers data model design, the common patterns (one-to-many, many-to-many, hierarchical, and data tiering), and the three data skews that quietly break performance."
+date: "August 17, 2026"
+author: "Adroit Consulting"
+readTime: "11 min read"
+tags: [Salesforce, Architecture, Data]
+---
+
+# Lesson 14: Data Architecture: Data Model Design, Common Data Model Patterns, and Data Skew
+
+Lesson 3 gave you the vocabulary: objects, fields, lookups, master-details, record types, formula vs roll-up. This lesson takes that vocabulary and does the actual job of architecture. A data model is a set of decisions about where records live and how they connect, made under constraints you cannot see yet: the org will grow, integrations will hammer the same parent record, and one user will end up owning ten thousand things. Design for that future, and the model holds. Ignore it, and you find out six months later when saves start failing with lock exceptions.
+
+The thread through everything here is balance. A data model that works keeps the relationships the business needs while distributing the load so no single record, owner, or lookup target becomes a bottleneck.
+
+## Data model design: start from the questions, not the objects
+
+A data model fails in one of two ways. Either it does not capture the business (the records and relationships are wrong), or it captures the business but cannot survive real volume (the shape is right, the scaling is not). Good design starts by answering the questions the model must serve, then builds the smallest set of objects and fields that answers them.
+
+The Trailhead large data volumes module frames the whole discipline as planning for scale up front rather than retrofitting it. Large data volumes lead to slower queries, slower search and list views, and slower sandbox refreshing. You avoid those problems if you design for LDV from the start. [^1]
+
+Concretely, the design pass asks four questions:
+
+1. **What is a record, and what is an attribute?** A "commission rate per account" is a field on Account. A "project engagement" that has its own lifecycle, ownership, and history is an object. Misclassifying an entity as a field hides relationships and forces the model to contort later.
+2. **What is the lifecycle, and who owns it?** A child that lives and dies with its parent and inherits its security belongs in a master-detail. A child that outlives the parent or is shared across parents belongs in a lookup. Lesson 3 covered this distinction in depth. [^4]
+3. **What is the relationship's true shape?** One-to-many, many-to-many, or hierarchical. Each maps to a different pattern, covered below.
+4. **Where should the data physically live?** In Salesforce, in an external system, or tiered between them. The answer changes the model more than any single field choice.
+
+## Common data model patterns
+
+Patterns are named solutions to problems that recur. Four show up constantly in architect work.
+
+**One-to-many.** A parent with many children. Model it as a lookup or master-detail depending on the lifecycle question. This is the most common shape in any org: Account to Contacts, Order to Line Items, Campaign to Campaign Members.
+
+**Many-to-many.** Two objects where each record of one can relate to many of the other and back. Salesforce has no native many-to-many relationship field; you model it with a junction object that holds two master-detail relationships, one to each side. A junction object is the standard answer. The Salesforce data model notation guide describes the two relationship field kinds you build on: lookup fields and parent-child (master-detail) fields. [^5] A `Service_Assignment__c` junction between `Service__c` and `Contact__c` says a contact can be assigned to many services and a service can serve many contacts, with the junction holding role-specific detail (start date, allocation, status) that belongs to neither side.
+
+**Hierarchical (recursive).** A record that relates to other records of the same object. Account can point at a parent Account via a hierarchical relationship; User is inherently hierarchical through the role hierarchy. The same-object relationship keeps the shape flat while expressing a tree.
+
+**Data tiering.** When a model holds millions of records that users touch only occasionally, the architect splits where data lives. External objects map to data stored outside the org, letting users search and interact with it on demand without copying it into Salesforce. The large data volumes module calls this a data-tiering strategy: spread data across multiple objects and bring it in on demand, avoiding both the storage cost and the LDV performance problems. [^1] External objects always reflect the current state of the external data, because you read it live instead of managing a synchronized copy.
+
+Salesforce diagrams each of these with a specific notation so that a model is readable before it is built. The notation distinguishes entities by color (which cloud owns them), by border (a record-type entity is dashed, a conceptual entity is dotted), and by relationship lines with crow's feet for cardinality. [^5] Being able to read and draw this notation matters on the exam and in real design reviews, because it is the shared language for arguing about a model before any metadata is created.
+
+## Data skew: the quiet performance killer
+
+A data model can be correct and still fail at scale. The failure mode is data skew, and it is worth naming precisely. Data skew happens when more than 10,000 child records are associated with the same parent record within an org. [^1] Keep that number in mind: it is the working threshold for every skew discussion. Salesforce names three types, and each has a distinct cause and remedy.
+
+### Account data skew
+
+Account data skew comes from piling too many child records onto one parent account. The classic trigger is a parking lot. You have unassigned contacts, so you park them all under one account named "Unassigned." Salesforce's engineering team has been explicit that this causes record locking and sharing performance problems. When you update a contact under that account, the system locks both the contact and its parent account to maintain integrity. Even though each lock is brief, if many threads update contacts under the same account at once, they all contend for the same account lock, and updates start failing. [^2]
+
+The sharing side is just as bad. Depending on your sharing configuration, changing the owner of that account can force the system to examine every child record and adjust its sharing, including recalculating the role hierarchy and sharing rules. With hundreds of thousands of children, that is a heavy operation. [^2]
+
+The fix is distribution. Salesforce recommends avoiding more than about 10,000 child records per parent. If you genuinely need a parking area, create a collection of accounts and use integration code or a trigger on the child object to spread records across them. [^2]
+
+### Ownership skew
+
+Ownership skew is a large number of records owned by a single user. Every record needs an owner, and the tempting answer is to assign the unassigned to a generic "system" user. That backfires. When the skewed owner sits in the role hierarchy, deletes and owner changes must strip sharing from the old owner, every parent user in the role hierarchy, and every user granted access by sharing rules. Ownership changes are among the most costly transactional changes in the system. [^3]
+
+When a skew cannot be avoided, the architect's lever is to keep the skewed owner out of the role hierarchy. Give that user no role, which takes them and their records out of the role hierarchy and its sharing rules. If visibility is still required in a private model, grant it narrowly: profile-level access to a subset of users, or if that is too broad, criteria-based sharing rules built on fields that do not change often, such as the owner. [^3]
+
+### Lookup skew
+
+Lookup skew is the least obvious and the one you can build by accident with a clean-looking model. It happens when a very large number of records associate to a single record in the lookup object. Because you can put a lookup field on any object, lookup skew can strike any object in the org. [^1] [^6]
+
+Salesforce's own example is instructive. A company with 500,000 accounts decides to track an educational achievement level. It creates a custom object with three achievement-level records, adds a lookup to Account, and loads the update. Even with the levels evenly split, 166,000 accounts look up to each of the three records. That is lookup skew. [^6]
+
+What makes it bad: a lookup field is a foreign key. Every insert or update locks the target record for each selected lookup field, to protect referential integrity. With normal traffic the locks are too brief to notice. Add custom code and high volume simultaneously, and you get lock exceptions that fail the save. [^6]
+
+Lookup skew is also the hardest to find. There is no tool that flags it. The engineering guidance is to search by pattern, not by tool: evaluate objects with a large number of records and heavy concurrent insert and update activity. [^6] A skewed lookup only matters under the right usage pattern, which is why a model can run fine for a year and then break when an integration starts bulk-loading through it.
+
+The mitigations follow the same logic as the other skews: reduce the frequency and duration of the locks. Salesforce lists reducing record save time, distributing the skew across more lookup values, and reducing the load as the three levers. [^6] Also consider whether the lookup target deserves to be a record at all; if it is a small, closed set of values, a picklist field may be the honest model and eliminates the foreign-key locking entirely. The Salesforce Ben guide makes exactly that point for a custom object storing sales targets: reconsider whether a picklist field replaces the object and cuts the relationships. [^7]
+
+## Worked example: a service scheduling model
+
+A field-services company needs to model technicians, the services they perform, and the sites they visit. Here is the design walk-through.
+
+1. **Entities and attributes.** Technician, Service, and Site are objects. A technician's hourly rate is a field on Technician. A service such as "HVAC repair" is an object, because it carries its own definition and can apply to many sites.
+2. **The many-to-many.** A site needs many services and a service serves many sites. Model `Site_Service__c` as a junction object with two master-detail relationships, one to Site and one to Service. Put assignment-specific detail (scheduled date, assigned technician, status) on the junction.
+3. **Ownership.** Assign each Site a real owner, the technician or dispatcher responsible for it. Do not park unassigned sites under a generic user, or you invite ownership skew as the org grows. [^3]
+4. **The parent load.** Keep an eye on the number of services or visits per site. If a handful of sites accumulate tens of thousands of visits, that is account-style skew on a custom parent. Add enough granularity (for example, visit records that belong to the site but distribute work) to keep any single parent under the 10,000 threshold. [^1]
+5. **Where data lives.** If the org records millions of historical meter readings that users rarely open, leave the current readings in Salesforce and serve the history through an external object backed by the source system, so you do not drag LDV into every query. [^1]
+
+## The pitfall to avoid
+
+**Designing the model for today's demo instead of the data's true lifetime.** The data skew failure is never visible on day one. It is visible eighteen months later, when a parking-lot account has 80,000 contacts or an integration points every order at one target record, and saves start throwing lock exceptions. The architect who avoids it asks the scaling question during design, not after the data has accumulated.
+
+A second, subtler pitfall: **treating skew as a reason to distort the model.** One commenter on the Salesforce Ben skew guide pushed back on the suggestion to open up sharing defaults or cut automation just to dodge skew. The honest fix is usually distribution and ownership design, not relaxing security or dropping needed logic. Do not mess up a correct model to avoid a relationship you actually need. [^7]
+
+## Try it
+
+A logistics company tracks shipments. Each shipment belongs to a customer, references one route, and contains many packages. The company also has 40,000 unassigned inbound shipments it is working through.
+
+1. Shipment to Package: lookup or master-detail, and why?
+2. Shipment to Customer and Shipment to Route: what shape are these, and does either risk skew? 
+3. The 40,000 unassigned shipments: where do they get owned, and what skew would a single "Unassigned" user create?
+4. The company records 20 million delivery-address lookups per year that analysts query occasionally. Where should that data live?
+
+**Answers:** (1) Master-detail: packages live and die with their shipment and should inherit its security; you likely want roll-ups on the shipment. (2) Both are one-to-many, shipment is the child. Shipment to Route risks lookup skew if thousands of shipments pile onto one route record; distribute route records or reconsider whether the route is a closed value set. (3) A single "Unassigned" owner creates ownership skew, worsened if that user has a role; distribute across real owners or a set of holding users with no role. [^3] (4) Tier it: keep recent addresses in Salesforce and serve the high-volume history through an external object, avoiding LDV storage and query cost. [^1]
+
+## What's next
+
+You now know how to shape a data model, pick common data model patterns, and keep it balanced against data skew. The next lesson is a General Systems Architecture for AI slot, and it carries that same modeling discipline across to AI systems. You will see how databases, vector databases, and embeddings follow the rules you just learned, and where this discipline shows up when you model data for an AI workload.
+
+[^1]: trailhead.salesforce.com. [Optimize Large Data Volume & Avoid Data Skew in Salesforce](https://trailhead.salesforce.com/content/learn/modules/large-data-volumes/design-your-data-model)
+[^2]: developer.salesforce.com. [Avoid Account Data Skew for Peak Performance](https://developer.salesforce.com/blogs/engineering/2012/04/avoid-account-data-skew-for-peak-performance)
+[^3]: developer.salesforce.com. [Architect Salesforce Record Ownership Skew for Peak Performance in Large Data Volume Environments](https://developer.salesforce.com/blogs/engineering/2012/06/architect-salesforce-record-ownership-skew-for-peak-performance-in-large-data-volume-environments)
+[^4]: help.salesforce.com. [Overview of Custom Object Relationships](https://help.salesforce.com/s/articleView?id=platform.overview_of_custom_object_relationships.htm&type=5)
+[^5]: architect.salesforce.com. [Salesforce Data Model Notation](https://architect.salesforce.com/docs/architect/reference-diagrams/guide/data-model-notation)
+[^6]: developer.salesforce.com. [Managing Lookup Skew in Salesforce to Avoid Record Lock Exceptions](https://developer.salesforce.com/blogs/engineering/2013/04/managing-lookup-skew-to-avoid-record-lock-exceptions)
+[^7]: salesforceben.com. [Data Skew in Salesforce: Why it Matters](https://www.salesforceben.com/data-skew-in-salesforce-why-it-matters/)

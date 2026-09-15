@@ -1,0 +1,154 @@
+---
+title: "Lesson 42: Lightning Web Components Architecture: Composition, Wire Service, and Data Services"
+slug: lightning-web-components-architecture-composition-wire-data-services
+series: "salesforce-architect"
+lesson: 42
+excerpt: "How Lightning Web Components are built from smaller pieces and fed data: component composition and the data-down/events-up contract, the wire service and its reactivity, and the Lightning Data Service cache that shares one version of a record across every component that renders it."
+date: "September 15, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Salesforce, Architecture, Lightning Web Components]
+---
+
+# Lesson 42: Lightning Web Components Architecture: Composition, Wire Service, and Data Services
+
+Lesson 41 ended with the framework decision for Experience Cloud sites, and the LWR framework is built from Lightning Web Components. This lesson drops into the code layer and studies how those components work as an architecture: how small components assemble into larger ones, how data travels down and events travel up, and how the platform gets records into your screen without you writing a data layer by hand. Three ideas carry the whole subject. Composition is how you shape a UI from reusable pieces. The wire service is how a component declares the data it needs and reacts when that data changes. Lightning Data Service is the cache underneath that shares one version of a record across every component showing it. Get those three straight and you can read any LWC codebase and predict how it behaves.
+
+## Define the terms
+
+Pin the vocabulary before the mechanics. [^1]
+
+- **Lightning Web Component (LWC)**: a UI framework built on web standards, using HTML templates, modern JavaScript, and CSS. A component is the smallest deployable unit of UI. [^1]
+- **Composition**: nesting components inside the body of another component so you build complex UI from simpler building-block components. The container is the parent; the nested ones are children. [^1]
+- **Slot**: a placeholder in a component's markup where a parent component can pass in its own markup. A component can have zero or more slots. [^2]
+- **Wire service**: the mechanism by which a component declares the data it needs and receives it reactively, via an adapter that returns a `data` object and an `error` object. [^3]
+- **Adapter**: an object that supplies data to wired properties or functions. `getRecord` is the adapter that reads a record's fields. [^4]
+- **Reactive**: the property of a wired value that it re-provisions automatically when an input it depends on changes. [^3]
+- **Lightning Data Service (LDS)**: the client-side data layer that caches records and shares them across components, so a record is loaded once no matter how many components use it. [^5]
+
+Data flows one direction on screen. Understanding that direction is half of LWC architecture.
+
+## Composition: data down, events up
+
+LWC pushes composition over inheritance. You can subclass components in JavaScript, but Salesforce is direct that inheritance is allowed yet not recommended, because composition is usually more effective. When two components would share logic, the preferred move is a plain JavaScript module that both import, not a parent class they extend. This is an architectural trademark of the stack: build small pieces and wire them together, rather than building a deep class tree. [^1]
+
+A template owner nests components inside a container component. The parent can set properties on children, call methods on children, spread properties onto children, and pass markup into slots. Each of those is a distinct communication path, and each has a rule about which direction it points. [^1]
+
+Communication runs down and up, and the framework makes the direction explicit:
+
+- **Down**: a parent sets a public property on a child through an HTML attribute. You mark the property with the `@api` decorator in the child to expose it. A parent can set a primitive like a string or number this way. [^6]
+- **Up**: a child tells its parent something by dispatching a DOM event. Lightning web components implement the `EventTarget` interface, so a child can fire `dispatchEvent` with a `CustomEvent` carrying a `detail` payload, and the parent listens for it. [^3] [^7]
+
+This is the data-down/events-up contract. Data and state flow from parent to child through attributes. Consequences flow back up through events. A child never reaches up to mutate its parent's state directly, and a parent does not reach into a child to read its internals. The contract keeps components decoupled: either side can change its internals without breaking the other, as long as the public attribute and event surface stays stable.
+
+Events follow DOM rules, which matters when you design component trees. Lightning web components use only the bubbling phase; dispatching events or adding listeners on the capture phase is not supported. When you create an event, two properties on it define how far it travels. `bubbles` controls whether the event bubbles up through the DOM, and it defaults to false. `composed` controls whether the event can pass through a shadow boundary, and it also defaults to false. [^7]
+
+A common bug lives here. A child dispatches a `CustomEvent` and expects a grandparent to hear it, but the default `bubbles: false` means the event never leaves the child unless the immediate parent listens. To cross shadow boundaries you need both `bubbles: true` and `composed: true`. The rule of thumb that keeps a tree readable: set `bubbles: true` when a direct parent needs the event, and add `composed: true` only when the event must cross into a shadow root. Salesforce's guidance is to avoid composed events when you do not need them, because crossing the shadow boundary expands blast radius and can trigger unintended behaviors. [^7]
+
+The choice between slots and data is itself a design decision. Composition tells you to reuse components, but how you customize them differs. When you pass markup into a slot, the parent decides the layout content inside the child. When you pass data through attributes, the child keeps control of how that data renders. Salesforce frames the choice as building components that accept slots versus building components that accept data, and the right answer depends on whether the child should own its presentation or let the parent shape it. [^2]
+
+## The wire service: the component declares its data
+
+With composition, a screen is a tree of components, but those components still need records. The wire service is where that starts. The component does not fetch data imperatively on load. It declares what it needs by wiring a property or function to an adapter, and the framework provisions the data. [^3]
+
+The `getRecord` adapter is the workhorse for a single record. You import it from `lightning/uiRecordApi`, import your field references from `@salesforce/schema`, and pass a `recordId` plus an array of `fields` (and optional `optionalFields`). The wired property then holds an object with two shapes: `data`, the loaded record, and `error`, any failure. This example wires an Account record by reactive `recordId` and pulls named fields out with `getFieldValue`: [^4]
+
+```js
+import { LightningElement, api, wire } from "lwc";
+import { getRecord, getFieldValue } from "lightning/uiRecordApi";
+import NAME_FIELD from "@salesforce/schema/Account.Name";
+import INDUSTRY_FIELD from "@salesforce/schema/Account.Industry";
+
+export default class AccountHeader extends LightningElement {
+  @api recordId;
+
+  @wire(getRecord, { recordId: "$recordId", fields: [NAME_FIELD, INDUSTRY_FIELD] })
+  account;
+
+  get name() {
+    return getFieldValue(this.account.data, NAME_FIELD);
+  }
+
+  get error() {
+    return this.account.error;
+  }
+}
+```
+
+The `$recordId` is not a typo. The `$` prefix marks a property as dynamic and reactive. The wire re-provisions whenever that input changes, without you calling anything. If the parent passes a new `recordId`, the wired value updates on its own. This is the reactivity that a component architect leans on: declarative data binding, not manual refresh calls scattered through lifecycle hooks. [^3]
+
+Two ways to wire matter to an architect. You can decorate a property directly, which is terse and fine when you only read the raw value. You can also decorate a function that receives `{ data, error }`, which is the route when you need to transform the result, merge it with other state, or guard rendering on loading versus error states. A wired function is the heavy-duty form; the property form is the slim form. [^3]
+
+Wire does not happen in a vacuum. When a wire adapter's configuration is complete, LDS provisions an empty object with `data` and `error`, each `undefined` by default, then fills it in. For a component that must handle the loading state cleanly, that means checking for both `data` and `error` before rendering. [^3]
+
+## Data services: the cache that shares
+
+The wire service is declarative, but Lightning Data Service is what makes it fast. Records loaded through LDS are cached and shared across components. If a page is composed of different components showing the same record, they all render the same version of the record, and the record is loaded once from the server regardless of how many components request it. That is a real performance win at the page level: ten components on one record page do not mean ten round trips. [^5]
+
+LDS does the undifferentiated data work for you. It loads record data progressively, caches results on the client, invalidates cache entries when dependent Salesforce data and metadata change, and optimizes server calls by bulkifying and deduplicating requests. Because it holds this client-side cache, subsequent reads of the same record are answered from the cache faster than a fresh server call, and LDS re-requests from the server only after the cache lifetime lapses. [^5]
+
+The invalidation is what keeps the cache honest. If LDS detects a change to a record or any data or metadata it supports, every component using a relevant `@wire` adapter receives the new value. Detection triggers when a Lightning web component mutates the record, or when the cache entry expires and a component's `@wire` triggers a read. Because changes are reflected everywhere automatically, a component does not have to coordinate with its neighbors to stay current. [^5]
+
+LDS is built on User Interface API, the same public API Salesforce uses to build Lightning Experience and its mobile apps. This matters for two architectural reasons. First, UI API returns data and metadata in a single response that matches the org's layout changes. If an admin removes a field from a layout, that field stops appearing in responses to layout-metadata requests. Second, UI API responses respect CRUD, field-level security, and sharing settings, so LDS renders only the records and fields the current user can actually see, with no extra code on your side. Your component gets the org's security model for free. [^5]
+
+## Wire versus imperative: choose by the shape of the interaction
+
+Wire is not the only way to load data, and an architect has to know where wire stops and imperative begins. The distinction is about who triggers the call and whether the data is write-backed.
+
+Use `@wire` when the data is read-only and reactive to input changes. It runs when the component loads, re-runs when a reactive parameter changes, and is cached by LDS. This is the right default for data you display on page load. [^4] [^5]
+
+Use an imperative call when the interaction is user-initiated, involves a write, or needs your own control over timing and errors. You invoke an Apex method or a `lightning/uiRecordApi` function directly in a handler, get a Promise back, and manage the result yourself. Writes must be imperative: an Apex method used with `@wire` must be annotated `cacheable=true`, and cacheable methods cannot perform DML or other server-side changes. So a save, a delete, or anything that mutates a record is inherently a button-triggered imperative call, not a wire. [^4]
+
+When a wired read sits on the same screen as an imperative write, the two must be reconciled. After you mutate data imperatively, the wired components showing that data need to know. You call `refreshApex` from `@salesforce/apex`, passing the property that holds the wire result, and the framework re-fetches and updates. Without that step, the cache and the write disagree and the screen shows stale data. [^4]
+
+The decision rule that keeps a codebase readable: wire the reads that reflect a changing input, call imperatively the writes and the user-triggered actions, and reconcile the two with `refreshApex` after each write. Once you write to a record, never assume a wired read on the same screen refreshed itself.
+
+## A worked example: an account header and details view
+
+A sales team needs an account detail screen: a header that shows the account name and industry, a detail section that lists its open opportunities, and a button that changes the account status. These three pieces exercise every mechanism in this lesson.
+
+1. **Compose from parts.** Build `cAccountHeader`, `cOpportunityList`, and `cAccountStatusButton`, and nest all three inside `cAccountDetailPage`. The page is the parent; each nested component is a child. [^1]
+
+2. **Pass data down.** The page holds the record id and passes it to each child through an `@api` property, in the template as `record-id={recordId}`. Each child reads it as `@api recordId`. No child knows where the id came from. [^6]
+
+3. **Declare the reads with wire.** `cAccountHeader` wires `getRecord` with the reactive `recordId` and reads `Name` and `Industry`. `cOpportunityList` wires a cacheable Apex method to return open opportunities keyed to the account. Both render from LDS cache, so if the header and the list page both need the Account record, it loads once. [^4]
+
+4. **Return writes with events.** When a user clicks the status button, `cAccountStatusButton` dispatches a `CustomEvent`, say `statuschange`, with the new status in `detail`. The parent page hears it and calls the imperative Apex update. After the update resolves, the page calls `refreshApex` on the wired results so the header and list re-render with fresh data. [^4] [^7]
+
+5. **Set `bubbles` and `composed` deliberately.** The message only needs to reach the direct parent page, so the event uses `bubbles: true` and skips `composed: true`. The button does not need to announce itself to the whole page's shadow roots. [^7]
+
+The result is a screen where each child owns one concern, data flows down as attributes, changes come back up as events, reads are declarative, and writes happen only on user action and then refresh the reads.
+
+## The pattern: a decision sequence
+
+The sequence an architect runs to split any LWC screen:
+
+1. Decompose the screen into single-purpose children, and prefer imported JavaScript modules over inheritance for shared logic. [^1]
+2. Decide each boundary: data passes down through `@api` attributes; consequences come up through events. Set `bubbles: true` for a parent listener and `composed: true` only when the event must cross a shadow root. [^6] [^7]
+3. Use a slot when the parent should shape layout inside a child, and an attribute when the child should own its presentation. [^2]
+4. Choose the data path per interaction. Wire the read-only, reactive, cacheable reads. Call imperatively the writes and user-triggered actions. [^4]
+5. Let LDS do the caching, and reconcile cache with writes using `refreshApex` so a screen never shows stale data. [^4] [^5]
+
+## Try it
+
+A support portal wants a case detail screen: a header with the case number and status, a list of the messages on the case, and a button to change the case status.
+
+1. Sketch the component tree. Which components are children, and what is the parent page?
+2. Which pieces load with `@wire`, and which run imperatively? Where does the status-change write live?
+3. Which wired reads depend on a reactive input like `recordId`, and what happens to them when the parent passes a new case id?
+4. The status button dispatches an event. What `bubbles` and `composed` values does it need if only the immediate parent page listens? What changes if a grandparent utility panel must also hear it?
+5. After the status write completes, what must you call so the header and the message list show the new state?
+
+A reasonable answer: compose `cCaseHeader`, `cCaseMessageList`, and `cCaseStatusButton` under `cCaseDetailPage`. Load the case record and messages with wire (cacheable, reactive to `recordId`), and run the status update imperatively from a button handler. When the parent passes a new case id, every wired read keyed to `recordId` re-provisions automatically. The status-change event needs `bubbles: true` for the direct parent, and you add `composed: true` only if a grandparent utility panel must hear it. After the write, call `refreshApex` on the wired results so all components re-render with the new status.
+
+## What's next
+
+You can now take any LWC screen apart into its composition tree, trace how data moves down and events move up, and see how the wire service and Lightning Data Service feed it records from one shared cache. You also know where that pattern stops: reactivity and caching are wins, but they are not free, and the next lesson is about the cost side of performance. Lesson 43 covers Lightning performance: caching, static resources, and what slows users down. After wiring and data services, seeing which parts of a component make the page slow, and where static resources and caching buy speed back, is the natural next step.
+
+[^1]: developer.salesforce.com. [Composition | Lightning Web Components Developer Guide](https://developer.salesforce.com/docs/platform/lwc/guide/create-components-compose-intro.html)
+[^2]: developer.salesforce.com. [Pass Markup into Slots | Lightning Web Components Developer Guide](https://developer.salesforce.com/docs/platform/lwc/guide/create-components-slots.html)
+[^3]: developer.salesforce.com. [Understand the Wire Service | Lightning Web Components Developer Guide](https://developer.salesforce.com/docs/platform/lwc/guide/data-wire-service-about.html)
+[^4]: developer.salesforce.com. [getRecord | Lightning Web Components API Modules](https://developer.salesforce.com/docs/platform/lwc/guide/reference-wire-adapters-record.html)
+[^5]: developer.salesforce.com. [Lightning Data Service | Lightning Web Components Developer Guide](https://developer.salesforce.com/docs/platform/lwc/guide/data-ui-api.html)
+[^6]: developer.salesforce.com. [Set Properties on Children | Create Lightning Web Components](https://developer.salesforce.com/docs/platform/lwc/guide/create-components-data-binding.html)
+[^7]: developer.salesforce.com. [Configure Event Propagation | Lightning Web Components Developer Guide](https://developer.salesforce.com/docs/platform/lwc/guide/events-propagation.html)

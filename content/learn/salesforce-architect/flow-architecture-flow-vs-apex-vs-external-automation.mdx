@@ -1,0 +1,110 @@
+---
+title: "Lesson 32: Flow Architecture: Flow vs Apex vs External Automation, Decision Framework"
+slug: flow-architecture-flow-vs-apex-vs-external-automation
+series: "salesforce-architect"
+lesson: 32
+excerpt: "A repeatable framework for choosing where a process runs: Record-Triggered Flow for low-density automation, the hybrid Flow plus invocable Apex pattern for medium density, Apex triggers for high density, and the boundary where automation should leave the org entirely for external, agentic, or cross-system work."
+date: "September 5, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Salesforce, Architecture, Flow, Apex]
+---
+
+# Lesson 32: Flow Architecture: Flow vs Apex vs External Automation, Decision Framework
+
+Lesson 31 organized the Apex you do write into service, domain, and selector layers behind a thin trigger. This lesson is the decision that comes before any of that structure: should you write Apex at all, build the automation declaratively in Flow, or run it somewhere outside the org? Architects who skip the question reach for a trigger out of habit, or build every process in Flow because the tool is approachable, and both defaults create orgs that are hard to govern. The goal here is a repeatable framework, not a verdict that one tool is always better.
+
+## Where a process can run: three candidate homes
+
+Before comparing tools, notice that automation on Salesforce has three possible homes, not two. The word "external" is the one architects most often forget.
+
+- **Flow**: Salesforce's point-and-click automation builder. Flow Builder lets a declarative builder model a process visually: query and update records, loop over collections, branch on conditions, send emails, and call Apex. Flows come in several types. Screen flows collect input from a user, record-triggered flows react to a record save, schedule-triggered flows run on a time event, platform-event flows react to an event, and autolaunched flows run when something calls them.[^1] A Flow is automation that runs on the platform and is governed by the same governor limits that constrain Apex. Two limits are worth stating now because they drive the whole decision: Flow has no access to `Database.savepoint` or `Database.rollback`, so it cannot do a partial commit or roll back a transaction, and it has no native Map or Set data structure, which makes complex data manipulation cumbersome.[^1]
+- **Apex**: the platform's proprietary, strongly typed, object-oriented language. Apex classes and triggers give you full data structures, loops, transaction control with savepoints, field-level errors via `addError()`, and access to the platform's core services. It is the only one of the three that runs closest to those core services, which is why it scales best for high data volume and complex logic.[^2] The cost is that it needs properly skilled developers, it must be tested and deployed through the same release discipline as any code, and its safeguards (bulkification, retries) have to be written explicitly rather than applied by the platform.[^1]
+- **External automation**: logic that does not run inside the org at all. It runs in middleware such as MuleSoft that coordinates across systems, in an agent runtime that reasons toward an outcome the way a rules engine cannot, or in an external service that subscribes to Salesforce's event stream. This is the branch that sits on the boundary between this lesson and the integration and event lessons earlier in the series. When a process must coordinate Salesforce with an ERP, a warehouse system, and a billing platform, the orchestration may not belong on any single system.[^3]
+
+The Salesforce Well-Architected guidance makes the point plainly: designing automation well is not about choosing to build with just one tool. It is about using approaches that are consistent and predictable, and that a team can develop, test, deploy, and maintain.[^3]
+
+## The framework: decide in three questions
+
+Instead of memorizing a Flow-versus-Apex scorecard, work a small ladder. Each rung eliminates a whole class of tools before you get into the fine-grained comparison.
+
+**Question 1: Is the outcome rules-based or does it require reasoning?** If the process is deterministic, meaning its result can be fully scoped and defined by a set of rules and the business needs an auditable, repeatable outcome, use traditional automation: Flow and Apex. Static execution paths are predictable and repeatable, which matters for compliance and legal adherence. If the goal is open-ended, where you know the outcome you want but cannot specify the exact execution path at design time, and the input is unstructured (conversation, documents, intent), the reasoning-based, agentic path becomes relevant. Salesforce is explicit that you should not apply agentic workflows to low-complexity work that a rule engine handles reliably, because traditional automation offers the scale, reliability, and performance those cases need.[^4]
+
+**Question 2: Should this run inside Salesforce at all?** Single-system processes that act on records belong on the platform. A process that must coordinate multiple systems, transform messages between different data models, or carry a high-volume data synchronization is a candidate for external automation, which earlier lessons covered in depth with middleware and event-driven integration. Reaching for middleware for a one-object field update is overkill; forcing a five-system orchestration through a trigger is the opposite failure. Both are architectural errors.
+
+**Question 3 (for on-platform, record-triggered work): what is the object's automation density?** This is the rung where Flow and Apex actually compete. The answer is not about who builds the automation. It is about the load placed on the specific object. Salesforce calls that load automation density, and it is the deciding heuristic.[^1]
+
+## Automation density: the Flow versus Apex matrix
+
+Automation density is a measure of the load a specific object carries during a record save. Salesforce defines it across three dimensions: the quantity of automation metadata that fires during one DML event, the volume of records processed per transaction, and the depth of the dependency graph, the cascade of downstream DML that one update triggers (for example, case to account to contact to a rollup).[^1] The density matrix below is the concrete pattern to apply.[^1]
+
+| Density | Automation quantity | Data volume (batch size) | Dependency sprawl | Architectural standard |
+|---|---|---|---|---|
+| **Low** | Under 15 automations | Standard, user-driven UI or small API loads (1 to 200 records) | Discrete, self-contained logic with 0 to 1 downstream DML on the same or a related object | Record-Triggered Flow |
+| **Medium** | 15 to 30 automations | Moderate, standard batch processing needing careful bulkification | Coupled, parent and child updates with 2 to 4 downstream DML operations and a risk of recursion | Hybrid: Flow plus invocable Apex |
+| **High** | Over 30 automations | High, large volumes with Bulk API loads (2,000 to 10,000+ records) | Complex and recursive, a deep dependency graph with 5+ downstream DML and a risk of triangular recursion | Apex Trigger metadata framework |
+
+Three principles sit under the matrix and matter as much as the row boundaries.
+
+**Choose one entry point per object.** Salesforce is direct about this: commit to a single primary entry point, either Record-Triggered Flow or Apex triggers, and avoid partitioning automation across both mechanisms on the same object. Mixing them leads to poor maintainability and fragmented governance, because ordering becomes impossible to reason about and logic gets scattered.[^1]
+
+**Prefers Flow where it is strong.** Record-Triggered Flow is the platform's premier declarative tool for record-triggered automation, and the recommended choice for most teams on most objects. It ships with platform safeguards that Apex makes you build by hand: automatic bulkification, automatic retries, and a visual representation that an administrator can read and govern without parsing code. For straightforward processes, its speed of delivery and low cost of change outweigh what Apex adds.[^1]
+
+**Reserve Apex for where Flow cannot go.** Flow is the right tool until complexity makes it the wrong one. It cannot do transactional savepoints or rollbacks. It has no Map or Set, so deduplicating an expensive computation or juggling keyed data is inefficient. It carries an elevated risk of hitting governor limits on complex logic or large volumes, where Apex, executing closer to the platform core, gives a developer control over query optimization and data handling.[^1]
+
+## The hybrid: Flow keeps the shape, Apex does the compute
+
+Medium-density objects do not force an all-or-nothing choice. The pattern Salesforce recommends is a hybrid: Record-Triggered Flow acts as the orchestration layer and keeps the readable, ordered choreography, while the operations that need real compute are encapsulated in invocable Apex methods that the Flow calls.[^1] This is how you keep the maintainability of a declarative process while giving Apex exactly the pieces it is better at: a calculation that needs a Map keyed by region, a chunk of logic that must run bulkified across thousands of line items, a standard-library call Flow does not expose.
+
+An Apex method becomes invocable by decorating it with `@InvocableMethod`, which lets a Flow invoke it as an action and pass in collections of records. That single seam is the whole hybrid architecture. The Flow stays the thing an admin can read, open, and adjust the ordering of, and the computationally heavy or bulk-sensitive parts move behind a well-defined boundary into tested code. For an object where density is climbing but is not yet high, this is usually the right target rather than a full migration to Apex.[^1]
+
+## External automation and the asynchronous boundary
+
+A separate axis runs through this decision, and it is where the word "external" earns its place. When an object's automation is complex, long-running, or high-volume, the synchronous record save becomes the wrong place for it. A limit exception in a synchronous trigger rolls the user's entire save back, which is a poor experience and a data-loss risk, so the architecture should offload the work.[^1]
+
+On-platform, Flow and Apex both have asynchronous escapes. Flow offers a Run Asynchronously path for fire-and-forget work, and scheduled paths that fire on a dynamic date and auto-cancel if the record changes, a capability Apex triggers do not have natively.[^1] When the offload crosses the org boundary, Change Data Capture publishes the record change to a high-volume event bus that external systems can consume, with replay for up to 72 hours and durability that decouples the consumer from the user's transaction.[^1]
+
+The earlier event and middleware lessons already gave you the mechanism vocabulary. What this lesson adds is where the line sits: if the downstream consumer of the automation is an external system, or the process needs to orchestrate across several systems that Salesforce does not own, the automation itself belongs in the external layer, not in a Flow or a trigger that pretends to reach across company boundaries. Keep the Salesforce automation focused on what Salesforce owns, and let the event bus carry the handoff.
+
+## Worked example
+
+A manufacturer runs an Order object that the business keeps asking to do more with. The architect walks each new requirement through the framework.
+
+1. **Order defaults and status derivation.** When an order is created from the UI, set a few field defaults and compute a status from an existing field. That is low density: a handful of automations, standard UI volume, self-contained logic. The answer is a Record-Triggered Flow, ideally a before-save flow for the same-record update.[^1]
+2. **A tax and charge engine.** The business adds regional tax rules with rates that shift and a charge calculation that must total across every line item and key results by region. As the object grows and orders arrive through Bulk API loads, density climbs into medium. Rather than rebuild in Apex, the architect keeps the Flow as the entry point and puts the keyed, bulk-safe calculation in an invocable Apex method the Flow calls. That is the hybrid pattern: readable choreography in Flow, Map-based compute in Apex.[^1]
+3. **Cross-system fulfillment.** A new requirement says an approved order must trigger a fulfillment request in the WMS and update finance in the ERP, each with different payloads. This is no longer one system's automation. Question 2 answers it: orchestration across systems that Salesforce does not own belongs in external automation. Salesforce publishes the order approval as a platform event or via Change Data Capture, and middleware or an external orchestrator coordinates the WMS and ERP steps. Salesforce does not try to reach across the company boundary itself.[^1][^3]
+4. **A separate, dense object.** Meanwhile a custom integration log object carries tens of thousands of records per load, has over 30 automations, and its updates cascade five levels deep with a real recursion risk. That object is high density, and no amount of Flow tuning fixes it. The architect moves it to an Apex trigger behind a metadata framework, where bulk handling and recursion control are explicit.[^1]
+
+The same org ends up with Flow for the order's low-density behavior, a Flow plus invocable Apex hybrid as that object matures, external automation for the cross-system handoff, and an Apex framework for the genuinely dense object. Each object got a single entry point, and the team did not import every tool into every problem.
+
+## The pitfalls to avoid
+
+**A monster flow.** One very large flow on an object that does everything is itself a sign that something is off. Salesforce flags it directly: a single "monster flow" doing a lot is a complexity signal and should be converted to Apex or broken into smaller flows with precise entry conditions.[^1]
+
+**Mixing Flow and Apex entry points on the same object.** A flow here, a trigger there, and you lose ordering and governance across the object. Pick one primary entry point and keep it.[^1]
+
+**Building a process in Flow that needs transaction control.** If the process must roll back cleanly or commit partially on a boundary condition, Flow cannot express it. That is a savepoint, rollback, and partial-commit problem, and it is an Apex problem by the product comparison, not a Flow shortcoming you work around.[^1]
+
+**Reaching for agentic automation on a rule that is fully specified.** Reasoning toward an outcome is powerful and also less predictable than a deterministic path. For a low-complexity, auditable rule, agentic automation costs you the determinism and reliability that Flow or Apex gives you for free.[^4]
+
+**Forcing cross-system work through a single system's automation.** When the real process coordinates an ERP, a WMS, and finance, no trigger in Salesforce is the right home for that orchestration. Publish the event and let the external layer coordinate, which is what the integration lessons in this series prepared you for.[^3]
+
+## Try it
+
+For each scenario, choose the architectural standard and name the deciding factor:
+
+1. An Account update should set a checkbox and send an email alert. Nothing else touches Account at save time. *(Record-Triggered Flow: low density, discrete, and Flow's email alerts are easy and scalable.)*[^1]
+2. A custom object carries 8,000-record Bulk API loads, fires 40 automations on save, and its updates cascade through five related objects with a recursion risk. *(Apex trigger behind a metadata framework: high density, and only Apex provides the bulk handling and recursion control.)*[^1]
+3. A Case object needs ordered logic across a few automations, one of which computes a heavy rollup across related records that needs a Map and must run bulkified. *(Hybrid: Record-Triggered Flow keeps the ordering, invocable Apex does the Map-based, bulk-safe compute.)*[^1]
+4. A rep submits a claim and the platform must route it to an external underwriting service that has its own approval logic, then record the result. The underwriting rules live outside Salesforce. *(External automation: the process coordinates a system Salesforce does not own, so Salesforce publishes the event and the external service runs its own rules.)*[^1][^3]
+5. A finance rule must compute a settlement amount and either commit it or roll the whole change back if a boundary check fails. *(Apex: Flow has no savepoint or rollback, so transactional control makes this an Apex requirement.)*[^1]
+6. A flow on an object has grown to thirty steps handling every rule the team could think of. *(Refactor: this is a monster flow. Break it into focused flows with entry conditions or convert the compute-heavy core to Apex.)*[^1]
+
+## What's next
+
+You can now place any process on the automation map: Flow for low density, the Flow plus invocable Apex hybrid for medium density, Apex triggers for high density, and external or agentic automation for reasoning work and cross-system orchestration, with a single entry point per object. The next lesson assumes you have made that choice and asks what keeps the thing you built fast when real data shows up. It covers bulkification and trigger frameworks: the limits-aware design that scales, avoiding SOQL and DML in loops and writing every layer against collections so a flow or trigger survives an object that carries thousands of records in one transaction.
+
+[^1]: architect.salesforce.com. [Record-Triggered Automation, Platform Decision Guides](https://architect.salesforce.com/docs/architect/decision-guides/guide/record-triggered)
+[^2]: developer.salesforce.com. [What is Apex? | Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_intro_what_is_apex.htm)
+[^3]: architect.salesforce.com. [Automated | Salesforce Well-Architected](https://architect.salesforce.com/docs/architect/well-architected/guide/automated.html)
+[^4]: architect.salesforce.com. [Determining Agentic and Traditional Workflow Automation, Platform Decision Guides](https://architect.salesforce.com/docs/architect/decision-guides/guide/determining-agentic-vs-traditional-workflow-automation.html)

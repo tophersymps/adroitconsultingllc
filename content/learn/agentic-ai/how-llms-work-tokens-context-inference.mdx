@@ -1,0 +1,98 @@
+---
+title: "Lesson 2: How LLMs Work for Implementers: Tokens, Context, Inference, Temperature"
+slug: how-llms-work-tokens-context-inference
+series: "agentic-ai"
+lesson: 2
+excerpt: "The four knobs that decide every LLM bill, latency budget, and reliability call: what tokens actually are, how the context window constrains agents, how inference really runs, and what temperature does and doesn't do."
+date: "August 05, 2026"
+author: "Adroit Consulting"
+readTime: "9 min read"
+tags: [LLMs, AI Agents, Salesforce]
+---
+
+# Lesson 2: How LLMs Work for Implementers
+
+Lesson 1 gave you the taxonomy (rules, workflows, agents) and the uncomfortable truth that most of the work is plumbing, not prompts. Lesson 2 is the machinery underneath all three rungs. You don't need to train a model or implement a transformer to build production agentic systems, but you do need to understand the four things that decide your bills, your latency, and your failure modes: **tokens**, **context**, **inference**, and **temperature**. Every one of them is a real, measurable constraint you will hit in week one of any implementation.
+
+## Tokens: the currency
+
+An LLM does not read text. It reads **tokens**: the smallest units of language a model processes, produced by a **tokenizer** that runs on your text before the model ever sees it. A token can be a whole word, part of a word, a single character, or even a short phrase. [^1] Each token maps to an ID number in the model's vocabulary; your sentence becomes a sequence of IDs, and everything the model does (training, prediction, generation) happens on those ID sequences. [^2]
+
+Most modern models use **Byte-Pair Encoding (BPE)**, a subword tokenizer that iteratively merges the most frequent character pairs, so common words become single tokens and rare words split into several. [^3] Two rules of thumb are worth memorizing, and both are approximations that break in predictable places:
+
+- **~4 characters per token** (English), or **~1.5 tokens per word**. [^1] [^4]
+- **The tokenizer is per-model.** OpenAI's GPT models use BPE with model-specific encodings (`o200k_base` for the GPT-4o family), and OpenAI ships `tiktoken`, a fast BPE tokenizer, so you can count tokens before you spend them. [^3]
+
+Where the rules of thumb break is where the money goes. Structured data, code, and JSON inflate token counts because every brace, quote, and colon tends to become its own token; non-Latin scripts inflate harder because most tokenizers are trained mostly on English text; IBM cites a Telugu sentence that tokenized to over 7x its English equivalent. [^1] I measured this while writing this lesson: `{"name": "John", "age": 30}` is **12 tokens** with `o200k_base`, while "John is 30 years old" is **6**. The same information, twice the price, just for choosing JSON. [Measured with tiktoken: https://github.com/openai/tiktoken]
+
+Why should an implementer care? Because LLM APIs are **billed per token**: input and output priced separately, with rate limits in tokens per minute. [^2] Token count is the unit of both cost and throughput, and you can measure it locally before you spend a cent.
+
+## Context: the working memory
+
+The **context window** is the maximum number of tokens a model can consider at one time: its working memory. Everything in a request competes for it: the system prompt, retrieved documents, conversation history, your new message, *and* the output, because context is usually a combined input-plus-output budget. [^1] [^5]
+
+Two facts about context matter more than the spec sheet:
+
+1. **Cost is quadratic, not linear.** Transformer self-attention compares every token to every other token, so doubling the input roughly quadruples the compute. A 10K-token context needs ~100 million comparisons; 100K needs ~10 billion. [^5] [^1] This is why your request slows down as you stuff more in, and why "just buy a bigger window" is not free.
+2. **Models don't use long contexts well.** A 2023 paper found LLMs don't robustly use information in the middle of long inputs (the well-documented **lost-in-the-middle** effect), and Redis's 2026 guidance is blunter: most long-context models show sharp performance drops past ~32K tokens, so benchmark your actual use case rather than trusting the spec sheet. [^6] [^5]
+
+Context windows have grown roughly two orders of magnitude since the original transformer, from a few thousand tokens to 1–2M today, with common configurations around 128K–200K tokens as of early 2026 (GPT-4o and Llama 3.1 at 128K, Claude 3.5 Sonnet around 200K, Gemini 1.5 Pro up to 2M). [^5] [^1] *Note: model versions and windows move fast; check current provider docs before any architecture decision.*
+
+The architectural consequence: **context engineering beats context size.** Retrieval-augmented generation (RAG) that pulls only relevant sections keeps accuracy stable as your corpus grows, while stuffing an entire corpus into one window degrades and gets expensive. Most production systems combine a reasonable window, RAG, and prompt caching. [^5]
+
+## Inference: two very different phases
+
+When you call an LLM, two phases run, and they have opposite bottlenecks. This is the single most useful mental model for debugging slow responses:
+
+- **Prefill** processes your entire input in one highly parallel pass and produces the first output token. It's compute-bound; longer prompts mean longer waits before the first word. This latency is **time to first token (TTFT)**. [^4] [^7]
+- **Decode** then generates output **one token at a time**, each depending on all previous tokens. It's sequential and memory-bandwidth-bound, measured as time per output token (TPOT) or inter-token latency. [^4] [^7]
+
+Between the phases sits the **KV cache**: the key/value tensors computed during prefill and reused during decode, growing by one entry per generated token. It's why chatbots feel fast at first and slow down as conversations (and cached state) lengthen, and why long responses with long prompts can exhaust GPU memory. [^5] [^4]
+
+For an implementer this means: sluggish *before* the first token is a prefill problem (prompt too long, or bad prompt design); sluggish *while streaming* is a decode problem (output too long, or the model is memory-bound). Different problems, different fixes. [^8]
+
+## Temperature: the randomness knob
+
+At each decode step, the model produces raw scores (**logits**) for every token in its vocabulary, converts them to probabilities via softmax, and samples the next token. **Temperature** reshapes that probability distribution *before* sampling:
+
+> P(token) = e^(logit / T) / Σ e^(logit_i / T)
+
+Higher temperature flattens the distribution (more randomness, more variety); lower temperature sharpens it (more deterministic, more focused). [^9] At **temperature 0** the model picks the single most-likely token each step: greedy decoding, the most deterministic setting available. [^10] [^11]
+
+Its partner knob is **top-p (nucleus sampling)**: keep the smallest set of tokens whose cumulative probability reaches p, and sample only from that set. Top-p adapts: when the model is confident, the nucleus is tiny; when it's uncertain, the nucleus widens. [^10] Provider guidance is to tune one or the other, not both at once. [^12]
+
+Two cautions. First, temperature doesn't make a model smarter; it only changes how it picks among what it already knows, and "0.7 for creative writing" is folklore, not a spec; choose by task (low for extraction/classification/structured output, higher for brainstorming). Second, temperature 0 is *nearly* deterministic, not bit-for-bit reproducible; floating-point math, MoE routing, and hardware load balancing can still introduce rare variation, so add a seed if you need true reproducibility. [^13]
+
+## Worked example: this lesson's own pipeline
+
+This lesson is being written by a Hermes agent running as a scheduled cron job in Adroit's "Fortress": real agentic infrastructure, and a perfect token audit. The scheduler hands the agent a directive block like this one: `TRACK=agentic LESSON=2 ... Publish to content/learn/agentic-ai/ with series='agentic-ai', lesson=2.` I counted that directive with `tiktoken`'s `o200k_base` encoding: **126 tokens**. Trivial. But the *full* request the model actually sees is the system prompt, the tool schemas for filesystem, terminal, web search, and git operations, the directive, and the retrieved research: thousands of tokens before any writing happens. Tool definitions and system prompts silently consume context budget on every single call, which is exactly why agent frameworks keep them tight.
+
+Now the reliability angle, which ties back to Lesson 1's cautionary tale: the Fortress once ran a kanban worker on a local Qwen model (`Q4_K_M.gguf`, served on the oMLX box) whose structured tool-call output was broken: it emitted `{}` for nested arguments and failed the completion gate every time (documented in ops note `t_db6b0a22`). Token mechanics explain why this bites: tool calls are structured output, structured output costs roughly 2x the tokens of prose (my 12-vs-6 measurement above), and when the model can't reliably emit that structure, the agent loop dies regardless of how good the reasoning is. The engineering response is what you'd expect from the mechanics: validate structured output with gates, keep machine-consumed generation at low temperature for determinism, and *measure* token counts before you promise a budget.
+
+## The pitfall to avoid
+
+**Tuning the wrong knob.** When an agent produces inconsistent or wrong output, the instinct is to lower temperature. Often the real cause is context: the relevant fact is buried mid-prompt (lost-in-the-middle), the window is truncated, or the retrieved context is missing. Temperature adjusts randomness; it cannot add information that isn't in the context. Debug in this order: is the information in the context at all? Is it positioned where the model actually uses it? Then, and only then, consider sampling parameters.
+
+## Try it
+
+1. Install `tiktoken` (`pip install tiktoken`) and count this exact string: `{"name": "John", "age": 30}`. Then count "John is 30 years old". You should see roughly 2x for the JSON; confirm it, don't trust my number. [^3]
+2. Take a prompt you use in production and run it at temperature 0 and temperature 0.8 ten times each. Count how many outputs differ. That spread is the cost of your randomness. Is it worth it for this task?
+3. Audit one agent request: system prompt + tool schemas + retrieved context + user message. What fraction of the context window is overhead vs. actual task content? If it's over half, that's your first optimization target.
+
+## What's next
+
+You now know the engine every agent runs on. Lesson 3 turns to the machine that uses it: the agent loop, the perceive, reason, act, observe cycle that is the shape of every agent ever built, and where your code slots into each stage. Understanding tokens and context tells you what a model can do. The loop tells you how to organize that capability into a system that actually gets work done.
+
+[^1]: ibm.com. [ibm.com](https://www.ibm.com/think/topics/context-window)
+[^2]: learn.microsoft.com. [learn.microsoft.com](https://learn.microsoft.com/en-us/dotnet/ai/conceptual/understanding-tokens)
+[^3]: github.com. [github.com](https://github.com/openai/tiktoken)
+[^4]: developer.nvidia.com. [developer.nvidia.com](https://developer.nvidia.com/blog/mastering-llm-techniques-inference-optimization/)
+[^5]: redis.io. [redis.io](https://redis.io/blog/llm-context-windows/)
+[^6]: arxiv.org. [arxiv.org](https://arxiv.org/abs/2307.03172)
+[^7]: arxiv.org. [arxiv.org](https://arxiv.org/html/2606.17104v1)
+[^8]: redis.io. [redis.io](https://redis.io/blog/prefill-vs-decode/)
+[^9]: dev.to. [dev.to](https://dev.to/fagundesv/temperature-tokens-and-context-windows-the-three-pillars-of-llm-control-34jg)
+[^10]: huggingface.co. [huggingface.co](https://huggingface.co/docs/transformers/generation_strategies)
+[^11]: community.openai.com. [community.openai.com](https://community.openai.com/t/cheat-sheet-mastering-temperature-and-top-p-in-chatgpt-api/172683)
+[^12]: tomarcher.io. [tomarcher.io](https://tomarcher.io/posts/temperature-top-p-creativity-knobs/)
+[^13]: prompt-architects.com. [prompt-architects.com](https://prompt-architects.com/blog/48-temperature-top-p-top-k-explained)

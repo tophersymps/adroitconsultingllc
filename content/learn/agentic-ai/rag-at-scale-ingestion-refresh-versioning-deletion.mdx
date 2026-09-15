@@ -1,0 +1,218 @@
+---
+title: "Lesson 35: RAG at Scale: Ingestion Pipelines, Refresh, Versioning, and Deletion"
+slug: rag-at-scale-ingestion-refresh-versioning-deletion
+series: "agentic-ai"
+lesson: 35
+excerpt: "The difference between a RAG demo and a RAG system is the write side. A demo indexes a static folder once. A system keeps a live corpus in sync with its sources: an ingestion pipeline that parses and chunks on the way in, a refresh strategy that re-embeds only what changed instead of rebuilding everything, versioning so a document or an embedding-model change is traceable and reversible, and deletion so removed or sensitive content actually disappears from retrieval. This lesson turns the read-side tuning you learned in lessons 10 through 13 into a lifecycle you can run in production."
+date: "September 7, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [LLMs, AI Agents, RAG, Data Engineering]
+---
+
+# Lesson 35: RAG at Scale: Ingestion Pipelines, Refresh, Versioning, and Deletion
+
+Lessons 10 through 13 taught you the read side of RAG: how to chunk, embed, store, retrieve, rerank, and filter. Every one of those lessons quietly assumed the corpus was already in the index. This lesson is about the write side, the half of the system that most tutorials skip. A RAG demo embeds a static folder once and calls it done. A RAG system has to keep its index in sync with sources that keep changing, and that is an operations problem, not a model problem.
+
+The framing that makes the whole lesson click: treat your embeddings as a materialized view over your source data, the same way a data warehouse treats a derived table. A materialized view is derived from source data, expensive to compute, written once, queried often, and assumed correct by everything downstream. [^1] Once you see embeddings that way, the questions you must answer are obvious. What is the source of truth? How do changes propagate? How do we handle deletes? How do we backfill safely? How do we know the data is fresh? [^1] Most RAG systems answer none of them explicitly, and that is exactly why they rot.
+
+This lesson gives you the four answers that make an index trustworthy at scale: an ingestion pipeline that turns sources into indexed chunks, a refresh strategy that re-embeds only what changed, versioning that keeps documents and embedding models traceable, and deletion so removed or restricted content stops being retrievable.
+
+## Define the terms
+
+**An ingestion pipeline** is the offline path that takes raw source content and turns it into indexed, queryable chunks. Its stages are pull, parse, chunk, embed, and store. [^2] It is the write side of RAG: it runs when content arrives, not when a user asks a question.
+
+**Refresh** is the process of keeping the index current as sources change. The two poles are snapshot refresh, re-embed the whole corpus on a schedule, and live refresh, re-embed only the items that actually changed as the changes happen. [^3]
+
+**Versioning** means tracking which content version and which embedding-model version produced each stored vector, so you can tell when a vector is stale and can migrate or roll back deliberately. [^4]
+
+**Deletion** is removing content from retrieval when the source removes it or access is revoked. Because a vector database is separate from the source system, a deletion in the source does not propagate on its own; you have to make it a first-class operation in your pipeline. [^5]
+
+## Why scale changes the problem
+
+The classic RAG diagram, load, split, embed, store, retrieve, assumes documents are static. [^1] In real systems they are not. Policies are updated. Knowledge bases are corrected retroactively. Records are deleted for compliance reasons. Meanings shift even when the text does not. [^1] If your index does not reflect those changes, retrieval quality degrades silently, and it degrades confidently. The model has no way to know the chunk it retrieved is stale, because the stale chunk looks just like a current one.
+
+The failure has a name in the operations literature: the index is a photograph. [^3] You embed a document once, and from that second the vectors are frozen while the world keeps moving. Someone edits the policy, an order ships, a record is deleted, and the index still holds the picture from the last time it was built. Ask the assistant about the current policy and it cheerfully answers from the old one. Confidently. Wrongly. [^3]
+
+Scale is what turns that latent staleness into a real bug. With twenty documents you can wipe the index and rebuild it by hand every morning. With two million chunks across dozens of sources, a full rebuild is expensive, slow, and wasteful, because you re-embed two million unchanging vectors to catch the forty that moved. [^3] At that size the only workable refresh is incremental: embed what changed, and nothing else.
+
+## The ingestion pipeline: build it like a data system
+
+Ingestion is the least glamorous and most under-engineered layer of RAG. Garbage in, garbage retrieved. [^2] The first rule of a production ingestion path is to parse, not scrape: treat every source as structured until proven otherwise. PDFs have a logical layer, HTML has a DOM, a wiki has headings and lists. A parser that preserves headings, tables, and code blocks gives your chunker the structure it needs to make good splits, while a naive text extractor flattens all of it into one undifferentiated string. [^2]
+
+The shape is consistent no matter which tools you use:
+
+1. **Pull.** A connector reaches into each source system, a wiki, an S3 bucket, a database, a ticketing system, and fetches what is new or changed. [^2]
+2. **Parse.** Extract clean text and structure from PDFs, HTML, slides, and office documents, preserving layout and headings.
+3. **Chunk.** Split each document into retrieval-sized passages using the structure-aware strategies from lesson 10, not a bare token count.
+4. **Embed.** Convert each chunk to a vector with one embedding model, and record which model produced it.
+5. **Store.** Upsert the vectors with deterministic IDs and metadata into the vector store.
+
+Two properties of this pipeline matter more than any single tool. The first is idempotency: if the job runs twice on the same document, the index must not hold two copies. [^2] The second is that every chunk carries enough metadata to find it again later, which is what makes refresh, versioning, and deletion possible at all. That point deserves its own section, because it is the load-bearing decision of the whole write side.
+
+## Deterministic chunk IDs: the foundation
+
+You cannot refresh, version, or delete what you cannot find. Before you process a single update, your vector metadata has to be designed so a change event can locate its own vectors. [^5]
+
+Do not rely on the auto-generated UUIDs your vector store hands out. A random UUID carries no relationship to the source document, so when a delete event arrives you have no way to map it back to its vectors short of scanning the whole index by metadata filter. [^5] Instead, derive every chunk ID deterministically from the source. The reference pattern is a composite built from the tenant, the integration, the resource type, the source record ID, and the chunk index: `{tenant_id}:{integration}:{resource_type}:{resource_id}:{chunk_index}`. [^5] Hash it if you need fixed length, or keep it composite and filter on the fields.
+
+The same discipline applies at the document level. Give each document a stable source ID and each chunk an ID derived from it, `document_id` plus `chunk_index`. [^6] When a source record changes, you recompute the deterministic IDs for its chunks and upsert on those IDs: replace the ones that still exist, add the new ones, delete the ones that disappeared. [^5] [^6]
+
+This one habit converts every later operation from a scan into a lookup. A refresh knows exactly which chunks belong to a changed document. A deletion knows exactly which IDs to remove. An index built this way can be kept in sync; an index built on random IDs is a write-only pile.
+
+## Refresh: batch, incremental, or live
+
+With deterministic IDs in place, the refresh strategy is a real choice, not a scramble. There are three tiers, and the right one depends on how fast your data actually changes.
+
+**Snapshot refresh** re-embeds the whole corpus on a schedule, nightly or hourly. It is simple and cheap to build, and it is correct until the moment the first document changes. Between runs the index is a fixed picture, so freshness is bounded by the time since the last batch. [^3] For a policy handbook that changes twice a year, this is the right call and you should stop reading.
+
+**Incremental refresh** detects which documents changed and re-embeds only those. The mechanism can be as coarse as a file watcher or a poll for `updated_at` timestamps, or as fine as change data capture, CDC. [^3] [^7] CDC is the cleanest source of "something changed": if your data lives in a database with logical replication or an event stream, you get an event for every insert, update, and delete, with no polling and no scanning the whole corpus looking for diffs. [^3] [^7]
+
+The efficient incremental path re-embeds by set difference, not by full replacement. A pgvector implementation makes the pattern concrete. When a document is re-chunked, compare its new chunk IDs against the stored ones: insert chunks with new IDs, delete chunks whose IDs no longer appear, and leave the unchanged chunks alone. [^4] For a ten-chunk document where only chunk 3 was edited, you re-embed one chunk and delete one, not nine. [^4]
+
+**Live refresh** streams changes into the index within seconds instead of on a schedule. The shape is: a change becomes an event, the event rides a durable stream, a consumer re-chunks and re-embeds that one item, and an upsert replaces its vectors in place. [^3] Live refresh is worth its extra complexity only when staleness is a real bug, usually for support, commerce, conversations, and telemetry, where "it changed an hour ago" needs to be retrievable an hour ago, not tomorrow. [^3]
+
+The trap in every tier is the append instinct. When a new event arrives, the naive move is to embed it and add it to the index. Add. That is the bug. Every edit appends a new vector for the same underlying item, the old stale chunk stays retrievable, and the retriever returns both, so the model sees contradictions. [^3] The fix is boring and essential: upsert on a stable, deterministic ID, replace if it exists, insert if it does not. [^3] An index that can only add is an import, not a pipeline.
+
+## Versioning: content versions and model versions
+
+There are two things to version in a RAG index, and conflating them causes most of the migration pain.
+
+**Content versioning** tracks whether a stored vector still matches the text it was embedded from. The cheapest reliable detector is a content hash stored alongside every vector. When a document is updated, your pipeline recomputes the hash and compares it to the stored one; if they differ, the content changed and needs re-embedding. [^4] Because the check is a hash comparison, it is idempotent and nearly free: you only pay embedding cost when the content actually changed. [^4] The same logic detects embedding-model drift, because you also store the model version and flag any row whose stored model no longer matches the current one. [^4]
+
+The failure that motivates all this is subtle. An embedding is a snapshot of meaning at the moment the model processed the text. Change "our refund window is 30 days" to "60 days" and the stored vector still points at the 30-day concept in embedding space. The document still surfaces for relevant queries, but its position is wrong, and downstream the LLM reads the old, incorrect text. [^4] That is worse than a missing result. It is a confidently wrong one.
+
+**Model versioning** covers the separate event of changing your embedding model. Vectors produced by different models live in incompatible embedding spaces. You cannot mix them in one index and get meaningful results, so a model upgrade forces a re-embed of the affected corpus. [^4] [^8] The pitfall that bites teams hardest is the silent drift: they switch the query path to a new model, or a provider ships a new variant of the "same" model, and forget to re-embed the existing documents. The query vectors land in a different semantic space than the document vectors, and retrieval becomes quietly terrible. [^8]
+
+The operational rule is blunt: treat any model change as a re-embed event, even when the dimensions match. [^8] And do the migration without a maintenance window. The clean pattern for a self-hosted store like pgvector is a shadow column: add a nullable column for the new model's vectors, dual-write both columns for new rows, backfill the shadow column in throttled batches, verify against an eval set, cut read traffic over with a feature flag, soak, then drop the old column and rename. [^8] That is a re-embed you can run during business hours with zero user-visible downtime.
+
+## Deletion: making content actually disappear
+
+Deletion is where RAG systems stop being demos. A vector database is separate from the source system, so deleting a record in the source does not touch the vectors derived from it. If your pipeline has no deletion handler, the chunks for a deleted deal, contact, or policy stay perfectly intact and perfectly retrievable. [^5] Those are orphan chunks, chunks whose source no longer exists, and they are a liability: an AI agent has no way to know the source record was destroyed, so it retrieves the orphan and confidently repeats deleted or restricted data. [^5]
+
+Deletion must therefore be a first-class operation, not an afterthought. Two mechanisms keep the index honest.
+
+**Event-driven deletion.** When the source emits a delete event, treat it as a tombstone, a first-class "remove these IDs" message that flows through the pipeline. The handler extracts the source record ID, looks up the deterministic chunk IDs derived from it, calls delete on the vector store, and writes an audit log entry. [^5] The hard version of this is the cascading deletion problem: when a user deletes a parent object, the source may not emit events for the hundreds of child records deleted as a result. Your ingestion logic has to understand the source hierarchy and recursively remove child chunks. [^5]
+
+**Reconciliation.** Webhooks fail. Sources go down, and users delete while your integration is disconnected. Relying on events alone guarantees the index eventually drifts out of sync. So on a schedule you enumerate the source records, compare against the IDs in your store, and delete the diff: any ID present in your store but missing from the source gets removed. [^5] A full-sync reconciliation is the belt-and-suspenders safety net that catches everything the event stream missed. [^5]
+
+**The compliance floor.** When deletion is a regulatory requirement, the right to erasure under GDPR Article 17, soft deletion is not enough. Soft-deleting a vector, marking it deleted but keeping it physically in the store, is not compliant, because the data is still retrievable from the storage layer. [^5] [^9] You must physically purge the embeddings. And because vectors can carry recoverable personal data, the erasure has to cascade to every place the data landed: the primary index, replicas, backups, and evaluation snapshots. [^9] Fully managed RAG services try to make this tractable; with Amazon Bedrock Knowledge Bases, for example, deleting the source object in S3 and syncing the knowledge base removes it from the underlying vector store. [^9] The general lesson stands regardless of vendor: design the write side so a document can be found and purged on demand.
+
+## Worked example: an ingestion and refresh manager in pure Python
+
+To see the mechanics without a vector store, you can build the whole lifecycle in a dict: deterministic chunk IDs, a content hash to detect change, set-difference refresh, and deletion by document. This is the same miniature-RAG spirit as lesson 10's worked example, crude parts, real architecture.
+
+```python
+import hashlib
+
+def chunk_doc(text, size=6):
+    words = text.split()
+    return [" ".join(words[i:i + size]) for i in range(0, len(words), size)]
+
+def chunk_id(doc_id, idx):
+    return f"{doc_id}:{idx}"
+
+class VectorIndex:
+    """A stand-in vector store. Real systems use HNSW/ANN; the lifecycle
+    logic here (deterministic IDs, hashes, set-difference refresh, delete)
+    is identical regardless of the backing store."""
+
+    def __init__(self):
+        self.chunks = {}      # chunk_id -> {"text":...}
+        self.doc_meta = {}    # doc_id -> {"content_hash":..., "chunks":{...}}
+
+    def upsert_document(self, doc_id, text):
+        new_hash = hashlib.sha256(text.encode()).hexdigest()
+        old = self.doc_meta.get(doc_id)
+        if old and old["content_hash"] == new_hash:
+            return "unchanged", [], []   # no embedding work needed
+
+        chunks = chunk_doc(text)
+        new_ids = {chunk_id(doc_id, i) for i in range(len(chunks))}
+        added, removed = [], []
+
+        for i, c in enumerate(chunks):
+            cid = chunk_id(doc_id, i)
+            prev = self.chunks.get(cid)
+            if prev and prev["text"] == c:
+                continue                # identical chunk -> leave alone
+            added.append(cid)
+            self.chunks[cid] = {"text": c}
+
+        # Set-difference delete: remove stored chunks no longer present.
+        if old:
+            for stale in old["chunks"] - new_ids:
+                removed.append(stale)
+                self.chunks.pop(stale, None)
+
+        self.doc_meta[doc_id] = {"content_hash": new_hash, "chunks": new_ids}
+        return "refreshed", added, removed
+
+    def delete_document(self, doc_id):
+        old = self.doc_meta.pop(doc_id, None)
+        if not old:
+            return 0, []
+        removed = []
+        for cid in list(old["chunks"]):
+            if self.chunks.pop(cid, None) is not None:
+                removed.append(cid)
+        return len(removed), removed
+
+    def query(self, term):
+        # Naive stand-in retrieval: return chunks mentioning the term.
+        return [c["text"] for c in self.chunks.values() if term in c["text"]]
+
+
+idx = VectorIndex()
+
+# 1. First ingest of a policy document, split into two chunks.
+doc_v1 = ("Refund window is thirty days. "
+          "Returns need a receipt within fourteen days.")
+print("chunks        :", chunk_doc(doc_v1))
+print("ingest        :", idx.upsert_document("policy_1", doc_v1))
+
+# 2. Re-run with identical content -> no work (content hash unchanged).
+print("re-ingest same:", idx.upsert_document("policy_1", doc_v1))
+
+# 3. Refresh after an edit -> only chunk 0 re-embeds, chunk 1 is untouched.
+doc_v2 = ("Refund window is sixty days. "
+          "Returns need a receipt within fourteen days.")
+print("edit          :", idx.upsert_document("policy_1", doc_v2))
+
+# 4. The old wording is gone from retrieval; the new one is findable.
+print("search 'thirty':", idx.query("thirty"))
+print("search 'sixty' :", idx.query("sixty"))
+
+# 5. Deletion removes every chunk, like a right-to-be-forgotten erasure.
+removed, ids = idx.delete_document("policy_1")
+print("delete        :", removed, "chunk(s) removed;", ids)
+print("remaining     :", len(idx.chunks), "chunk(s)")
+```
+
+Run it and watch the lifecycle. The first ingest splits the document into two chunks and reports both as added. The second call with identical text returns `unchanged` with no added or removed chunks, because the content hash did not move; that is the idempotency that keeps a double-run or a redundant webhook from burning embedding budget. After the edit, refresh reports only chunk 0 as added, because chunk 0's text changed while chunk 1 is byte-identical and left alone. That is the set-difference behavior at the heart of incremental refresh: you re-embed the one chunk that moved, not the whole document. The old "thirty days" wording stops matching while "sixty days" becomes retrievable, which is what makes an index honest instead of a photograph. And `delete_document` removes both chunks for that document in one operation, the shape a compliance erasure needs.
+
+## The pitfall to avoid
+
+The single mistake that undoes every RAG system eventually is treating ingestion as a one-time import instead of a running pipeline. Teams build a beautiful read side, tune the reranker, polish the prompt, and never build the write side that keeps the corpus current. The result is a system that answers yesterday's questions with yesterday's data and has no idea it is doing it. [^3]
+
+Two habits prevent it, and both are unglamorous. First, derive every chunk ID deterministically from its source, and upsert on that ID rather than appending, so an index never holds two versions of the same item. [^3] [^5] Second, make deletion a first-class operation with a reconciliation pass as the safety net, because a pipeline that can only add is not a pipeline, it is a pile. [^3] [^5] An index that cannot delete is an index that lies eventually. [^3]
+
+## Try it
+
+1. **Run the lifecycle script.** Copy the worked example, run it, and confirm the four behaviors: unchanged re-ingest does no work, an edit refreshes only the changed chunk, stale text stops matching, and deletion empties the document from retrieval. Then add a second document and a reconciliation function that deletes any document ID in the index that is missing from a supplied source list.
+2. **Audit your own IDs.** Look at a vector store or ingestion code you control. Can a source-record delete event find its vectors without a full scan? If the answer is no, design the deterministic ID scheme from the section above and note the mapping you would need to re-key existing vectors.
+3. **Detect staleness with hashes.** For a corpus that changes, store a content hash and the embedding-model version on every chunk. Write the check that flags any row whose hash no longer matches its current text or whose model version is old. That single query is your staleness audit, and it is what lets you alert before a user feels the drift. [^4]
+
+## What's next
+
+You can now keep a RAG index alive and honest. Lesson 36 turns the same discipline onto the code that runs the agent: testing agents, meaning unit tests for tools, integration tests that exercise the whole loop, and regression evals that catch quality drift before users do. Where this lesson made the memory dependable, lesson 36 makes the machinery provably correct.
+
+[^1]: dev.to (AWS Builders). [RAG Is a Data Engineering Problem Disguised as AI](https://dev.to/aws-builders/rag-is-a-data-engineering-problem-disguised-as-ai-39b2)
+[^2]: nirajiitr.com. [RAG Architecture Guide: Build Production Retrieval-Augmented Generation Systems](https://nirajiitr.com/guides/rag-architecture)
+[^3]: sreenathmenon.com. [Streaming Data Into RAG: Keeping the Index Live](https://sreenathmenon.com/blog/2026-07-31-streaming-data-into-rag-keeping-the-index-live/)
+[^4]: querystack.tech. [Re-Embedding on Content Updates: A Clean Strategy for Keeping Vector Stores Consistent](https://www.querystack.tech/post/re-embedding-on-content-updates-a-clean-strategy-for-keeping-vector-stores-consistent-5a27ab)
+[^5]: truto.one. [How to Handle Deleted SaaS Records in RAG Pipelines to Prevent Data Leaks](https://truto.one/blog/how-to-handle-deleted-saas-records-in-rag-pipelines-to-prevent-data-leaks)
+[^6]: developers.llamaindex.ai. [Document Management (LlamaIndex)](https://developers.llamaindex.ai/python/framework/module_guides/indexing/document_management/)
+[^7]: app-lab.ai. [Vector Database Incremental Updates: CDC, Reindexing, and Stale Embeddings](https://app-lab.ai/blog/vector-database-incremental-update/)
+[^8]: omiid.me. [Embeddings rot too. Running pgvector in production](https://omiid.me/notebook/64/embeddings-rot-too-running-pgvector-in-production)
+[^9]: aws.amazon.com. [Implementing Knowledge Bases for Amazon Bedrock in Support of GDPR Right to Be Forgotten Requests](https://aws.amazon.com/blogs/machine-learning/implementing-knowledge-bases-for-amazon-bedrock-in-support-of-gdpr-right-to-be-forgotten-requests/)

@@ -1,0 +1,100 @@
+---
+title: "Supabase Agent Skills: Benchmarks Prove Why It Matters"
+slug: supabase-agent-skills-2026
+excerpt: "Your AI coding agent half-remembers Supabase. An open Agent Skill fixes that, and Supabase's own evals prove the pattern is real."
+category: "React & Web Dev"
+categoryColor: react
+categoryGradient: "from-emerald to-emerald-dark"
+date: "August 24, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "8 min read"
+tags: [Web Development, TypeScript, MCP, AI Agents]
+bannerImage: "/banners/supabase-agent-skills-2026.png"
+---
+
+## The agent that knows everything and applies none of it
+
+Supabase hit 100,000 GitHub stars, and its codebase is everywhere in model training data. Ask most coding agents to build on Supabase and they will produce something that looks right. That is the problem: it looks right, and it is often wrong in ways that only show up in production. [^1]
+
+Pedro Rodrigues, Supabase's AI tooling engineer, catalogued what they kept seeing from agents. Agents skipped Row Level Security on exposed schemas. They hallucinated CLI commands that do not exist, like `supabase db execute`. They created views without `security_invoker = true`, which silently bypasses every RLS policy on the underlying table. They ignored the current docs entirely and leaned on training data that could be months out of date. [^1]
+
+None of this is a model being stupid. It is a model being confident about a system it half-remembers. Postgres is one of those systems: decades of features, edge cases, and performance characteristics that only matter in production. An agent generates a query that works and creates a full table scan. It suggests an index that makes writes slower. It misses Row Level Security altogether. [^2]
+
+Supabase's answer, shipped in April 2026, is an open-source Agent Skill: a set of instructions that teach a coding agent how to build on Supabase correctly, installable into Claude Code, Codex, Cursor, GitHub Copilot, and anything that speaks the Agent Skills open standard. [^1] This is a pattern every consulting team should steal, and the numbers Supabase published tell you exactly why.
+
+## What the skill actually teaches
+
+The Supabase Agent Skill covers four areas: documentation access, security, tooling workflow, and schema management. The design decisions matter more than the content, because they are what make it work.
+
+**The core principle is "verify against current docs before implementing."** Supabase moves fast. Config options, API conventions, and product docs change. An agent working from training data is working from a snapshot. So the skill instructs agents to look up documentation before writing Supabase-specific code, using three methods in priority order: the MCP `search_docs` tool, fetching docs as markdown with curl, or native web search. [^1]
+
+The skill deliberately does not tell the agent what the current API looks like. It tells the agent how to find out. That keeps the skill small, maintainable, and always accurate, because the docs are already maintained and the skill does not try to replicate them. [^1]
+
+**The security content lives inline, not in a reference file.** Supabase learned this the hard way. They originally put security guidance in separate reference files. Agents skipped them, because agents are lazy about reading reference files, and when they read one, they tend not to read more. So they moved everything critical into `SKILL.md` itself, about 100 lines, where the agent reads it the moment the skill loads. [^1]
+
+The inline checklist covers the Supabase-specific traps that trip up agents:
+
+- Never use `user_metadata` for authorization. It is user-editable. Use `app_metadata` instead. [^1]
+- Never expose the `service_role` key on the frontend. In Next.js, any `NEXT_PUBLIC_` env var ships to the browser. [^1]
+- Views bypass RLS by default. Use `security_invoker = true`. [^1]
+- `UPDATE` requires a `SELECT` policy. Without one, updates silently return zero rows, no error, just no change. [^1]
+- Storage upsert requires `INSERT` plus `SELECT` plus `UPDATE`. Granting only `INSERT` makes file replacement silently fail. [^1]
+- Deleting a user does not invalidate their JWT. You must revoke sessions first. [^1]
+
+**Tooling guidance covers both interfaces.** For the CLI, agents should discover commands through `--help` and never guess. The skill also documents known gotchas, like `supabase db query` requiring CLI version 2.79.0 or later. For the MCP server, it provides step-by-step diagnosis of common connection failures. [^1]
+
+**Schema management gets an opinionated workflow.** Instead of creating a migration entry for every DDL operation, agents modify the schema directly via `execute_sql` or `supabase db query`, iterate fast during development, and only when the schema has stabilized do they run the Supabase database advisors to catch security and performance issues, then formalize the change as a committed migration. [^1]
+
+## The benchmark that should change how you wire agents
+
+None of this matters if the skill does not move the needle. So Supabase ran evals, following OpenAI's framework for evaluating agent skills, scoring an LLM judge across six Supabase scenarios per condition. The scenarios were real tasks with real success criteria, like creating a view and being expected to add `security_invoker = true`. [^1]
+
+They tested three conditions to isolate what the skill contributes: baseline (agent relies on pretrained knowledge, no tools), MCP only (agent has the Supabase MCP server but no skill), and MCP plus Skill. Across four model-and-agent combos: [^1]
+
+![Agent correctness by setup: for Claude Opus 4.6, correctness goes 58% baseline, 50% MCP-only, 67% MCP plus skill; Claude Sonnet 4.6 goes 46, 58, 71; Codex GPT-5.4 goes 71, 71, 88; and GPT-5.4 Mini goes 42, 63, 71, so MCP plus skill beats both baseline and MCP alone in every row.](</diagrams/supabase-agent-skills-2026/1-benchmark.png>)
+
+The headline number is the Codex row: 71% baseline, 71% MCP only, 88% with the skill. But the more interesting reading is the pattern. On Opus 4.6, MCP alone did not help at all, it actually dropped correctness from 58% to 50%. The skill recovered it to 67%. On Sonnet 4.6 and GPT-5.4 Mini, MCP helped a little, and the skill added the rest. [^1]
+
+These are early results with a small sample size, scored by an LLM judge on Braintrust. Treat the exact percentages as directional, not gospel. What is robust is the direction: MCP plus skill beat both baseline and MCP alone in every single row. [^1]
+
+## Three lessons that generalize
+
+Supabase drew three conclusions from the evals, and each one transfers well beyond Supabase.
+
+**MCP alone is not enough.** This is the one that should reshape your tooling decisions. The MCP server gives an agent the ability to work with a database: create tables, run queries, manage schemas. But without workflows or guidelines, agents guess at how to combine the tools, the same gap we traced in [the stateless MCP spec](/field-notes/mcp-stateless-2026-07-28-production-agents): the interface got easier to connect, and judgment stayed the bottleneck. Ability without judgment produces confident wrongness. [^1]
+
+**Agents default to training data.** Even with the `search_docs` tool available, the MCP-only agent never called it. It relied on what it already knew instead of making an extra round-trip to verify. The skill is what steers the agent to check current docs first. This is the core reason a prompt-injection style "read the docs" instruction in your system prompt is not enough: agents skip the round-trip when they think they know the answer. [^1]
+
+**The bottleneck is context, not capability.** Every model applied `security_invoker` correctly when the skill was available. They knew how to implement it. They just did not know when. The skill supplies the judgment about when the pattern applies, and that context is what converts an agent that can do the work into an agent that does it correctly. [^1]
+
+![How MCP plus a skill work together: the MCP server gives the agent the ability to work with the database through tools like execute_sql, list_tables, and search_docs, while the Agent Skill supplies the judgment layer that teaches it when to use each one, such as adding security_invoker to views and checking docs before implementing, so the two layers together turn capability into correct output.](</diagrams/supabase-agent-skills-2026/2-mcp-plus-skill.png>)
+
+## The security boundary is non-negotiable
+
+Before you connect any of this to a real project, read Supabase's own security guidance for its MCP server, because the risk is real and specific. The MCP server operates under the context of your developer permissions. That means an agent with MCP access can execute whatever SQL it can express. [^3]
+
+The guardrails Supabase recommends: never connect the MCP server to production data, it is designed for development and testing. If you must connect to real data, set the server to read-only mode, which executes all queries as a read-only Postgres user. For moving production Supabase data elsewhere, our [managed CDC to BigQuery walkthrough](/field-notes/supabase-pipelines-cdc-bigquery) covers the safer pipeline path. Scope the server to a specific project so it cannot reach other projects in your account. Restrict which tool groups are available through the `features` option to limit what the agent can do. [^3]
+
+The `service_role` key is the sharp edge here. In the Supabase MCP model, the server uses a role that bypasses Row Level Security, which is exactly why the skill's first job is to make sure RLS policies exist and are correct before anything ships. An agent with the key and no RLS awareness is a data leak waiting for a prompt injection. [^3]
+
+Prompt injection is the attack vector you cannot see coming. An LLM connected to a database can be tricked by untrusted text in user content into following instructions it should ignore. Supabase's guidance is blunt: the MCP server is a developer tool for building and testing your application, not something you hand to customers or end users. [^3]
+
+## Adopt it, then write your own
+
+Installing the Supabase skill is one command: `npx skills add supabase/agent-skills`. Claude Code users can add it as a plugin. Once it is loaded, your agent references it when writing queries, reviewing code, or suggesting schema changes, and treats the rules as authoritative rather than generating advice from its training data. [^2]
+
+But the more durable takeaway is to build this pattern for your own stack, and Supabase's published playbook for writing a skill is a genuinely good spec. Fetch the docs rather than replicating them; your docs already exist and are maintained, so teach the agent how to find them. Keep the essential knowledge inside `SKILL.md`, because agents are lazy about reading reference files. Be opinionated, because your skill encodes the judgment calls that training data cannot. Test across agents and conditions, because what helps one model may not help another. Start simple and expand later. [^1]
+
+The Postgres Best Practices repo that preceded the full Supabase skill is the proof this generalizes. It packages 30 rules across 8 categories into a format any agent can load, prioritized by impact, each with the why and a good and bad example. Vercel did the same thing for React and Next.js, packaging years of optimization knowledge into rules an agent can reference. Cloudflare released skills for Workers, Pages, D1, and R2. [^2][^4]
+
+## What this means for your team
+
+The consulting takeaway is less about Supabase and more about how you hand systems to agents. We keep handing agents MCP access and expecting good behavior. The Supabase evals say that is a category error. Access is not judgment, and agents will default to training data when you give them the ability to work but not the rules for working correctly.
+
+If your team runs agents against any system with sharp edges, a database, a platform, an API with auth rules, spend the half day writing the skill for it. Keep the critical rules inline so the agent cannot miss them. Teach it how to verify against current docs. Put the judgment about when each pattern applies front and center. The agents already know how to do the work. The skill is what tells them when.
+
+[^1]: Supabase, "AI Agents Know About Supabase. They Don't Always Use It Right." [supabase.com](https://supabase.com/blog/supabase-agent-skills)
+[^2]: Supabase, "Introducing: Postgres Best Practices." [supabase.com](https://supabase.com/blog/postgres-best-practices-for-ai-agents)
+[^3]: Supabase MCP Server docs, "Security risks." [supabase.com](https://supabase.com/docs/guides/ai-tools/mcp)
+[^4]: Vercel, "Introducing: React Best Practices." [vercel.com](https://vercel.com/blog/introducing-react-best-practices)

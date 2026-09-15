@@ -1,0 +1,125 @@
+---
+title: "OmniStudio DM-7: Mapping Source & Target Structures"
+slug: day-36-dm-7-mapping-source-target-structures
+series: omni-studio-cert
+lesson: 36
+excerpt: "Map source fields, formulas, and constants to the exact JSON structure consumers receive in the Data Mapper output. Learn why the output mapping is the contract, how each output key resolves to a source path or a formula, how array and list maps produce repeatable structures for line items and related records, how name collisions and casing break downstream bindings, and how to design the output for the consumer instead of the source. Walk through defining a target template, mapping every output field, wiring list maps, and comparing actual output to the expected structure, then sidestep the exam traps where output is shaped like the source or array mappings go missing."
+date: "September 14, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [OmniStudio, DataMappers]
+---
+
+Lesson 35 covered formulas, the values a Data Mapper computes. [^2][^3] This lesson stays on the Data Mapper family but shifts from the value to the vessel that carries it. Requirement DM-7 asks you to map source and target data structures to achieve the expected output structure. [^1] That phrasing is the whole requirement in eleven words: you shape where data comes from and where it lands, and the shape it lands in is your contract with everything downstream. [^1][^2]
+
+The idea is simple to state and easy to get wrong. A Data Mapper reads from a source, whether that is Salesforce objects in an Extract or an incoming JSON payload in a Transform, and it produces an output. [^1][^3] The output mapping is the set of rules that turns that source into that output. Each key in the output JSON points back to a source field, a formula, or a constant. The nesting of the output mirrors the target structure you want consumers to receive. [^2][^3] When the output resolves the way you mapped it, every consumer downstream reads a payload that matches what they built against. When it does not, the mapper runs fine and everyone downstream notices a bind that no longer lines up. [^4][^5]
+
+Three facts anchor the whole requirement, and each one maps to a quiz question. The output mapping determines the JSON a consumer receives, so when a question asks what shapes what the consumer gets, the answer is the output mapping, not the browser, the API version, or chance. [^2][^3] A list like line items in an order is produced by mapping over a source array, an array or list map that repeats a structure for each item. [^2][^3] And an output key that must be renamed for the consumer is renamed in the mapper's output mapping, not in every consumer. [^2][^3][^4] Hold those three and the DM-7 questions are nearly free.
+
+## Deep Dive
+
+### The output mapping is the contract
+
+Start with the definition, because everything else leans on it. In an Omnistudio Data Mapper, to map data from the extraction step JSON to the output JSON, you go to the Output tab. [^3] For a Transform, you map data from the input to the output on the Transforms tab. [^2] In both cases you are building the same artifact: a list of mappings, each of which takes an input path and assigns it an output path, and the collection of those output paths is the JSON structure the mapper returns. [^2][^3]
+
+Call that output structure the contract, because that is what it is. Every consumer that calls the mapper, an Omniscript, an Integration Procedure, a FlexCard, a REST client, reads the mapper output and expects specific field names at specific levels of nesting. [^1] The output mapping is the single place that behaves like this: it defines exactly which keys exist, what type each one holds, and how nested and repeated structure is. [^2][^3][^5] If a downstream FlexCard binds to `customer.firstName` and the mapper emits `Account.FirstName`, the card renders an empty field. If a document template looks for `lineItems[]` and the mapper returns a flat string, the array bind breaks. [^5][^6]
+
+The documentation frames the stakes directly. JSON is the native format throughout Omnistudio, consumed by Integration Procedures, OmniScripts, and external REST calls, so the output you map is what those consumers work against. [^1][^5] Shape it well and consumers bind cleanly. Shape it by accident, which usually means shaped like the source, and every consumer pays for the mismatch. [^2][^4]
+
+### Source to target: each output key resolves to a source field, formula, or constant
+
+Drill into a single mapping row. For an Extract, you choose the source field from the extraction step JSON and enter the desired output path. [^3] For a Transform, you put the input path in the Input JSON Path field and the desired output path in the Output JSON Path field. [^2] For a Load, the direction reverses: you map the input JSON path to the target Salesforce object and field on the Fields tab. [^4] The mechanics differ slightly per interface, but the core idea is identical: a mapping connects a key that exists to a key that must exist, and the output key is what consumers see.
+
+Path syntax matters and it is a common place to trip. Path levels are separated by colons, not dots. For a case with a last name, the path is `Case:Last_Name__c`, and for a nested contact it is `Case:Contact:LastName`. [^2] This colon notation is one of the smallest facts in the domain and one of the most likely to appear in a scenario where you must recognize a valid mapping path. A wrong separator, or a capitalCity vs a camelCase key, produces a binding that resolves to nothing. [^2][^5]
+
+An output key does not have to map to a source field. It can map to a formula, which lesson 35 covered in depth, or to a constant, which the platform treats as a literal value or a default. [^2][^3] The point of the requirement is that each output key has a decided origin: a source path, a computed value, or a fixed literal. [^1][^2] When you map the output for the consumer, you are choosing, for every key the consumer expects, exactly where its value comes from. [^2][^4][^5]
+
+The way the tasks line up in different interfaces is also worth noting. Fields with matching names are matched automatically in an Extract's Output map, and the designer shows matched mappings in a column so you can see which fields connected by name alone before you confirm or override them. [^3] That automatic match is convenient, but it is a trap when source and consumer disagree on names, which is exactly when you must override it with an explicit mapping. [^3][^4]
+
+### Renaming, flattening, and nesting in the Output tab
+
+Because each output key is set in the mapping, Data Mappers restructure and rename data by mapping the input path to the desired output path. [^2] That sentence is the heart of the requirement. You can rename a field, so a source `ShipToState__c` becomes `shippingAddress.state` in the output, or flatten nested input into a single key, or take flat fields and nest them under an object. [^2] All of it is the same operation, moving a source to a target path that differs from where it started. [^2]
+
+The upstream lesson's worked case, an Account with its Contacts, shows the shape flexibility. [^7] The Extract reads the object and the mapping decides whether the output arranges the Account fields flat, nests the Contacts into an array, or renames Account fields, and none of those decisions is forced by the source. [^1][^7] The source has its shape, and the output has the shape the consumer needs, and the mapping is the bridge between them. [^2]
+
+When renaming, decide the canonical key once. The exam trap for renaming is reaching into consumers to change a binding. Ask where an output key is renamed, and the answer is always the mapper's output mapping. [^2][^3] Change it there and every consumer receives the corrected name with no further work, which is why the best practice is to make the name right in one place rather than patching N bindings. [^2][^4]
+
+### Array and list mapping for lists
+
+The structure that trips most real builds is the list. A consumer that needs line items needs an array, not a single scalar, and producing that array is a distinct mapping concern. [^2][^3][^4]
+
+The platform names the mechanism. In an Extract, to map data into a list in the output, you use the `listname|#` syntax. [^3] The list name specifies the key of the output node, the `#` specifies the position in the list where the output resides, and the pipe symbol separates the two. [^3] Map each source item to `lineItems|1`, the next to `lineItems|2`, and the output assembles them into an array: `lineItems: ["a", "b", "c"]`. [^3] The platform treats lists as a first-class output concern with its own type family, `List<String>`, `List<Integer>`, `List<Double>`, and `List<Map>`, so you also declare that a node holds a list rather than a scalar. [^5]
+
+The reason lists collapse without effort is that a scalar output mapping produces one value, not a repeated structure. [^2][^3] If the source holds a Contacts array and the output maps a single Contact field to a single key, the consumer expecting a list gets one item, or an error, or nothing, because there is no rule telling the mapper to repeat the structure for every source item. [^2][^4] The array mapping is that rule: it declares the output node is a list and tells the mapper which source array drives it, and the mapper then emits one output element per source item. [^2][^4] That is the answer to the list question. Line items, related records, recipients on an envelope, every one of them is array mapping over a source list. [^5][^6]
+
+### Name collisions and casing
+
+Names are where the consumer contract bites. Output keys must match what consumers expect, and case sensitivity and duplicates break downstream bindings. [^2][^5] JSON keys are exact: a consumer built against `firstName` does not find FirstName, and two output nodes that both resolve to the same key collide, which turns an ordered structure into a conflict the mapper has to resolve. [^3][^5]
+
+Name the output path deliberately and keep it stable. Because the output path is set in the mapper, the rule is to make the output card look exactly like the consumer's expectation and then leave the name alone. [^2][^3][^5] The consumer does not adapt to the source's names or casing; the mapping adapts the source to the consumer. [^4]
+
+### Design the output for the consumer, not the source
+
+The requirement closes with a rule that sounds like advice and functions as a boundary. Design the output for the consumer, not for the source: rename, flatten, or nest to match the target's expectations exactly. [^1][^2][^4] The source has a shape because Salesforce or the upstream system gave it one. The output has a shape because the consumer needs a different one. Those two shapes can differ, and editing the consumer to pin the gap is the wrong move. [^2][^4]
+
+The reason this is a requirement and not a style note is that it is where failures concentrate. Real projects produce mappers whose output is a near mirror of the source object, every field named like the object and every step of the source structure preserved, and then a FlexCard or a document template that wanted a consumer-shaped payload has to fight the source shape every time it is called. [^1][^4][^6] The intended read of the requirement is the warning: when you name, nest, and array the output, you are delivering the contract, so deliver the shape the other side already agreed to. [^1][^2][^4]
+
+Output data types reinforce the consumer orientation. The Output tab lets you assign many types, boolean, currency, string, number and list types, and date formats, and the guidance is to choose a compatible type so no data is lost. [^5] A key that must be rendered as a currency should be typed Currency, a key that must be a list should be List, and a key that must be a date should carry a date type. [^5] The type, like the name, is part of the contract the consumer binds against. [^5]
+
+## Configuration Walkthrough
+
+Build a concrete case so the steps stick: an order payload the consumer expects, with an order header, a nested customer object, and a lineItems array. Walk through the numbered steps against a Data Mapper Extract reading Order and OrderLineItem, or a Transform reshaping a flat JSON input; the mapping operation is the same either way. [^2][^3]
+
+1. **Define the target JSON structure (the template).** Write down the exact output you want to deliver before you open the mapper. For this case the target is `{"orderNumber": "...", "customer": {"name": "...", "email": "..."}, "lineItems": [{"product": "...", "qty": 1, "price": 2.5}]}`. [^1][^2] This template is your contract, and the Expected JSON Output pane is where you keep it visible while you build. [^6] Having it written down first is what stops you from drifting into source-shaped output. [^4]
+
+2. **Map each output field to a source path or a formula.** Start every field. For the Extract, on the Output tab add a mapping and choose the source field from the extraction step JSON and the output path you want. [^3] For a Transform, set the Input JSON Path and the Output JSON Path. [^2] Map `OrderNumber → orderNumber`, and where the consumer wants a customer object, map `AccountName → customer:name` and `AccountEmail → customer:email` so those two land nested under a customer object, because nesting mirrors the target structure. [^2] Use colons to separate path levels. [^2] Where a value is not a raw field, like a formatted total or a joined label, map it to a formula result, reusing the formula lesson's `CONCAT` or arithmetic pattern, and point the output key at that result. [^2][^3]
+
+3. **Set up the array mapping for lists.** The consumer expects `lineItems` to be an array, one entry per order line. [^5] In the Extract, map each line field into the position syntax and let the output assemble the list, so `OrderLineItem:Product__c → lineItems|1`, the next line → `lineItems|2`, and so on, which produces `lineItems: ["widget", "gadget", ...]`. [^3] For a Transform feeding `lineItems|#` from the source array, use the list map to repeat the structure per item. [^3] Give the node a `List<...>` output data type so the consumer binds it as an array, not a scalar. [^5] Skipping this step is the failure mode: without the list map the array collapses or errors downstream. [^4][^5]
+
+4. **Test: compare actual output to expected structure.** Go to the Preview tab, paste sample input into the Input pane on the left, and click Execute, then read the Response pane. [^2][^3] Compare that response, field by field, to your template from step one: every key there, every key spelled and cased the way the consumer expects, the customer object nested, and lineItems a real array. [^5][^6] For an Extract with no matching records, remember the mapper returns empty JSON, `{}`, on recent releases, so an empty read and a bad mapping can look alike, which is exactly why the template comparison matters. [^3] When a list still reads as a scalar or a key comes back misspelled, fix it in the mapping, not in the consumer. [^4]
+
+That is the full build. The steps worth re-reading are one, three, and four. The template is the contract, the list map is what makes line items stay an array, and the preview comparison is what catches it all before any consumer depends on it. [^2][^3][^4][^6] Get those right and the mapper outputs a stable, consumer-shaped contract.
+
+## Exam Traps
+
+- **Output shaped like the source, not the consumer.** A mapper that mirrors the source object's field names and nesting forces every downstream binding to fight it. [^1][^4] Map the output to the consumer's expected names, casing, nesting, and arrays, and set a template before you build. [^2][^4]
+
+- **Duplicate or conflicting output keys.** Two mappings that resolve to the same output node collide, and a consumer binding on that key gets ambiguous or overwritten data. [^3][^5] Give every output key one decided origin and keep keys unique and stable. [^2][^3]
+
+- **Array mapping missing.** A consumer that needs a list, line items or related records, gets a scalar or an error when the output has no list map. [^2][^4][^5] Use the `listname|#` syntax and a list output data type so the mapper repeats the structure for each source item. [^3][^5]
+
+- **Wrong path separator.** Path levels in mappings use colons, so `Case:Last_Name__c`, not a dot, and nested nodes resolve through the colon chain. [^2] A single wrong separator or a case mismatch resolves to nothing and a binding empties out. [^2][^5]
+
+- **Renaming in the consumer instead of the mapper.** When a consumer expects a different key name, rename the output path in the mapper's output mapping, not in every consumer binding. [^2][^3][^4] The mapper change lands everywhere all at once.
+
+## Exam Tip
+
+Compress DM-7 into a short chain. The output mapping, the rules that turn source to output, is what determines the JSON a consumer receives. [^2][^3] Each output key resolves to a source field, a formula, or a constant, with colons separating every path level. [^2] Arrays for line items and related records need array mapping, which the `listname|#` syntax and a list output type express, repeating the structure for each source item. [^3][^5] Names, casing, nesting, and types are set in the mapping, so rename and type where the consumer needs it there, not in every binding. [^2][^4] Design the output for the consumer, not the source, then test actual output against the expected template in the Preview tab. [^1][^2][^4] When a question asks what makes the consumer's JSON, where a list comes from, or where a rename happens, the answer is the output mapping in every case. [^1][^2][^3][^4][^5]
+
+## Try It
+
+Open the Data Mapper Designer in a sandbox and build the order payload from the walkthrough. [^2][^3] Before touching the mapper, write the target template on paper: order number, a customer object, a lineItems array. [^4][^6] Build an Extract and enter that template as the Expected structure, then map five or six fields into it: an order field, two fields nested under a customer object, and line items into a `lineItems|N` list. [^3][^6] Preview it with real Order and OrderLineItem rows and confirm the response matches the template exactly. [^2][^3]
+
+Then break it on purpose. Delete the list map and run the Extract to see the line items collapse, so you feel why array mapping is not optional. [^3][^5] Change one output key, then preview again, and watch the consumer contract break over one name. [^2][^4] Re-add the list map and restore the correct key. [^3] That deliberate break converts the list and rename traps from an answer into a fact your hands verified.
+
+Finally, do the same shape in a Transform mapper with a flat JSON input, mapping the same consumer template in, including the list, and preview it to confirm shape carries across interface types. [^2][^3] Across Extract and Transform the mapping and the array rule work the same way, which is the difference between knowing these patterns as correct answers and knowing them as the mechanism you have built. [^2][^3]
+
+## What's Next
+
+You have now mapped source to target across the Data Mapper family: the output mapping as the contract a consumer binds against, each output key resolving to a source path, formula, or constant, and array mapping as the mechanism that turns a source list into the arrays line items and related records need. [^1][^2][^3] Lesson 37 turns to Data Mapper Best Practices (DM-8). That lesson distills everything the Data Mapper domain has covered, the four interfaces, formulas, extraction, and source and target mapping, into the practices that make mappers stable, targeted, well-named, field-level secure definitions every OmniScript, Integration Procedure, and FlexCard can rely on, and how to look for the performance and maintainability signals that separate a good mapper from a fragile one. [^1][^7]
+
+## Related Requirements
+
+- Formulas in Data Mappers, lesson 35 of 46 (DM-6)
+- Data Mapper Best Practices, lesson 37 of 46 (DM-8)
+- Transform Interface & Document Generation, lesson 34 of 46 (DM-5)
+
+## References
+
+[^1]: [Inputs and Outputs for Omnistudio Data Mappers, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_inputs_outputs_for_data_mappers.htm&type=5)
+[^2]: [Omnistudio Data Mapper Transform Data Mappings (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_dataraptor_transform_data_mappings.htm&type=5)
+[^3]: [Omnistudio Data Mapper Extract Output (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_dataraptor_extract_output.htm&type=5)
+[^4]: [Omnistudio Data Mapper Load Overview (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_load_overview.htm&type=5)
+[^5]: [Omnistudio Data Mapper Output Data Types (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_output_data_types_47661.htm&type=5)
+[^6]: [Use Quick Match to Map Data (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_use_quick_match_to_map_data.htm&type=5)
+[^7]: [Omnistudio Data Mapper Extract Overview (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_extract_overview.htm&type=5)

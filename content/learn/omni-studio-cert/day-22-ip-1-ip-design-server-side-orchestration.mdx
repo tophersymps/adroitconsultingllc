@@ -1,0 +1,123 @@
+---
+title: "OmniStudio IP-1: IP Design, Server-Side Orchestration"
+slug: day-22-ip-1-ip-design-server-side-orchestration
+series: omni-studio-cert
+lesson: 22
+excerpt: "Learn what an Integration Procedure actually is: a declarative, server-side process that runs many actions in one server call. Design the input and output JSON contracts before you add a single action, order actions so output feeds input, and know why this one-call design is what makes IPs the right data source for FlexCards and OmniScripts."
+date: "August 31, 2026"
+author: "Adroit Consulting"
+readTime: "11 min read"
+tags: [OmniStudio, Integration]
+---
+
+The Integration Procedure is where OmniStudio stops being a UI toolkit and becomes an orchestration engine. FlexCards and OmniScripts handle what the user sees. The Integration Procedure (IP for short) handles everything that happens behind the screen: pulling data out of Salesforce, calling an external system, reshaping what comes back, saving results, and handing the caller a clean answer. All of it, in one server-side call.
+
+This lesson is the first of the Integration Procedures domain, which is 15% of the exam. It is also the requirement the rest of the domain builds on, because every later lesson, from action types to response handling to error resolution, assumes you understand what an IP is and how it is designed. Get the mental model right here and the rest of the domain is detail on top of it.
+
+## Deep Dive
+
+### What an Integration Procedure is
+
+An Integration Procedure is a declarative, server-side process that executes multiple actions in a single server call.[^1] Each of those three pieces matters.
+
+Declarative means you build it by adding configured actions in a designer, not by writing imperative code. You are not typing loops and branches into a method. You compose a sequence of actions and the platform runs them in order. Server-side means it runs on the server, not in the browser, which is exactly why it can do work a client component cannot or should not. A single server call is the part that explains the performance story, and it is worth sitting with.
+
+Think of the IP as the orchestrator of the OmniStudio suite. When an OmniScript needs to collect a record, check a credit bureau, and store the result, it does not fire three separate requests and stitch them together. It calls one IP, and that IP coordinates all three steps internally. The calling component stays thin and the complexity lives where it belongs, on the server.
+
+Salesforce's own framing is direct: an IP can be called from an OmniStudio component such as an OmniScript or FlexCard, from an API, or even from an Apex method.[^1] That breadth of invocation is part of why IPs matter. They are not only for screen-driven flows. You can trigger one from code when you need the same orchestration outside a UI.
+
+The official material also draws the line against OmniScripts and Data Mappers. An IP can perform more data processing steps than a Data Mapper can, and it is more flexible than a calculation procedure.[^1] Data Mappers read, transform, and write data, but an IP composes those operations with external calls and flow control into a single transaction. That is the difference between a tool and an orchestrator.
+
+### The typical shape of an IP
+
+The exam wants you to recognize the standard flow of an IP, and it is a forward pipeline. You accept input JSON, extract data, transform it, call external systems, load results, and respond.
+
+The canonical sequence, in order:
+
+1. Accept input JSON from the caller.
+2. Extract data, usually with a Data Mapper Extract that pulls from Salesforce.
+3. Transform the data into the shape the next step needs, often with a Data Mapper Transform or a set action.
+4. Call external systems, for example an HTTP action that hits a third-party API.
+5. Load results, typically with a Data Mapper Load that writes back to Salesforce.
+6. Return output to the caller through a Response Action.
+
+This is the exact order the quiz leans on, and it is worth memorizing as a pipeline rather than as a list: extract, transform, integrate, persist, respond. Data moves forward through the procedure. Each action consumes what the previous action produced and produces what the next one consumes. If you remember nothing else about the shape, remember that flow.
+
+The reason the order matters is that each action's output feeds the next action's input. You cannot call the external system before you have extracted the identifiers that identify what to look up. You cannot load results before the external call has returned them. The order is not cosmetic; it is the data dependency chain of the whole operation.
+
+### Why one server call is the performance argument
+
+The single most important property of an IP, and the one the exam keeps circling back to, is that it consolidates orchestration into one server round trip. This is the answer to the quiz question about why you would use an IP instead of multiple callouts from a FlexCard.
+
+Imagine a FlexCard that must show an account, its open cases, and the status of an external credit check. If the FlexCard does this naively, it makes a separate request for each piece: one to load the account, one to load the cases, one to hit the credit API. Each request is a round trip across the network, each adds latency, and each is a separate place for failure and inconsistent handling to creep in.
+
+An IP collapses all of that into one server call. The FlexCard invokes the IP, the IP extracts the account, extracts the cases, calls the credit system, assembles the JSON, and returns once. One round trip replaces three or more. The latency you save is not trivial, and the consistency you gain matters just as much: because everything runs inside one transaction on the server, the data is gathered and handled together instead of in separate, independently failing requests.
+
+The official best practices are explicit about this. They tell you to use an Integration Procedure for all data calls to Salesforce, keep each IP to a small group of related functions for reuse and performance, and trim the response so you only return what is needed.[^2] "Use an IP for all data calls" is the architectural rule in a sentence. When a FlexCard or OmniScript needs data, route it through an IP and let the IP be the single point of contact with the data.
+
+### Design considerations
+
+Designing an IP is not dropping actions until it works. The exam expects you to think about four things up front.
+
+**Action ordering.** Because output feeds input, the order of actions is the design. Lay out the data dependency chain before you build. Extract before transform, transform before external call, external call before load, everything before respond. If an action produces a node another action consumes, the producing action must come first.
+
+**Input and output contracts.** Every IP has a contract: what the caller passes in and what the caller gets back. Define both before adding actions. The input contract is the JSON structure the IP expects to receive, and the output contract is the JSON structure the Response Action returns. If you skip this step, you end up with an IP whose callers guess at the shape, and guessing leads to integration bugs.
+
+**Transaction boundaries.** An IP runs as one server-side transaction. That means the work inside it is coordinated, but it also means you should think about scope. A single IP should do one coherent job, not everything your org does. The official guidance warns against both extremes: keep each IP small and focused for reuse, but do not fragment a single operation into a chain of tiny IPs that each add a round trip. Find the boundary where one call completes one logical operation.
+
+**Where logic belongs: IP versus Apex.** This is a real design decision. The exam wants you to know that OmniStudio pushes you toward declarative configuration, and IPs cover a huge amount of orchestration without code. The effort comparison in the official material is striking: a difficult backend service that takes six weeks to build in Apex takes about a day with an Integration Procedure, a roughly 97% reduction in effort.[^3] That is the case for preferring an IP when it can do the job. But not everything belongs in an IP. Complex custom business logic, heavy computation that the declarative actions cannot express, or operations that need the full power of a programming language are still Apex territory. The design rule is: prefer the declarative IP when it covers the requirement, and reach for Apex when the orchestration outgrows what actions can express. The exam tests that you know IPs replace a lot of Apex, not that they replace all of it.
+
+### How IPs are invoked
+
+Knowing what calls an IP tells you how to design it, because each caller imposes a different constraint.
+
+An OmniScript invokes an IP through a Remote Action or an Integration Procedure Action element and passes the script's data JSON as input. The IP's response lands back in the script's data JSON, which is why naming and response shape matter so much downstream. A FlexCard can configure an IP as its data source directly, so the card's data comes from the IP's response.[^4] An external system can call the IP through an API. Apex can invoke it programmatically through the OmniIntegrationProcedure class.[^5] The same IP can serve all of these.
+
+The lesson for design is in that last sentence. Design the response for the consumer. If the consumer is a FlexCard, the output JSON should be shaped the way the card's binding expects it. If the consumer is an OmniScript, the response should drop into the nodes the script's formulas and actions reference. If the consumer is an API or Apex, the response should be a clean, documented structure that the calling code can rely on. A well designed IP has a response contract that each of its consumers can depend on, and a Response Action that trims that response to exactly what the caller needs rather than shipping the entire internal JSON.
+
+## Configuration Walkthrough
+
+Building an IP that is well designed, as opposed to one that merely works, follows a consistent path. Walk through it in this order.
+
+1. **Define the IP's input JSON contract.** Before you create any action, write down what the IP will receive. For a credit check IP, that might be an account Id and a product Id. For an order lookup, a customer Id and a date range. This contract is the answer to "what does the caller pass in." Name the nodes clearly, because everything downstream references them. If the contract is wrong here, every action you add on top of it is wrong too.
+
+2. **Add actions in order: extract, transform, call, load.** Now build the pipeline. Add the Data Mapper Extract that pulls the data the operation needs from Salesforce. Add the Transform that reshapes it for the next step. Add the external call, for example an HTTP action that posts to or fetches from the third-party system. Add the Load that persists results back to Salesforce. Keep each action's output feeding the next action's input, and check the data dependency chain as you go: does the action I am adding have everything it needs from the actions before it?
+
+3. **Configure the Response Action for the caller.** This is the contract on the way out. Decide what the caller actually needs and configure the Response Action to return only that. If the FlexCard needs the account, the cases, and the credit status but not the intermediate transform nodes, trim to those. A clean, minimal response is easier for the caller to consume and cheaper to send.
+
+4. **Test with sample input in the IP test tool.** Every IP can be run in the designer with a sample input to verify the pipeline before anything calls it. Use the tool's preview to provide input with the expected structure and run the actions one at a time, watching the JSON as it builds.[^6] This is where you catch a bad field reference, a transform that drops data, or a response that is missing a node, before a FlexCard or OmniScript depends on it.
+
+## Exam Traps
+
+- **Confusing IPs with OmniScripts.** An OmniScript is a guided, client-side experience the user walks through. An IP is a server-side process with no UI at all. If a question describes something running on the server with no user interaction, it is an IP. If it describes a screen the user fills in, it is an OmniScript. Mixing these up is the fastest way to lose a question.
+
+- **Chatty design: many IPs per operation.** The whole point of an IP is to consolidate orchestration into one server call. Building one tiny IP per step recreates the round-trip problem the IP is supposed to solve. Design one orchestrating IP per logical operation, not a chain of chatty ones. The official guidance pushes the other direction: use IPs for all data calls and keep each one to a small group of related functions.[^2]
+
+- **No clear response contract.** An IP without a defined output is a black box that callers cannot reliably consume. The caller does not know what nodes exist, what the structure is, or whether the response will be consistent. Define the output JSON up front and enforce it with a Response Action that returns exactly the agreed shape.
+
+## Exam Tip
+
+IP equals one server-side transaction. Design the contract first, both the input JSON and the output JSON, then order the actions to move data forward through the pipeline. Extract, transform, integrate, persist, respond. Get the contract and the order right and the rest of the Integration Procedures domain is detail.
+
+## Try It
+
+Open the Integration Procedure Designer in a sandbox and build a small IP from scratch. Define its input JSON contract on paper first: what will the caller pass in? Then add a Data Mapper Extract, a Transform, and a Response Action, and run it with sample input in the test tool, watching the JSON flow from action to action. When it works, change the output contract and re-run to see how the response changes. That exercise makes the "contract first, then order" habit concrete in a way reading about it cannot.
+
+## What's Next
+
+This lesson covered how an IP is designed and orchestrated as a whole. Lesson 23 moves into the building blocks inside the procedure: IP Action Types, covering Groups, Data Mapper, HTTP, Remote, and Sub-IP actions (IP-2). That is where the abstract pipeline from this lesson becomes the specific actions you configure to extract, call, and load.
+
+## Related Requirements
+
+- Day 23, IP Action Types: Groups, Data Mapper, HTTP, Remote, Sub-IP
+- Day 28, Response Action
+- Day 41, IP Errors
+
+## References
+
+[^1]: [Integration Procedures (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_integration_procedures.htm&type=5)
+[^2]: [Integration Procedure Best Practices, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_integration_procedure_best_practices.htm&type=5)
+[^3]: [Get Started with OmniStudio Integration Procedures, Trailhead](https://trailhead.salesforce.com/content/learn/modules/omnistudio-integration-procedures/get-started-omnistudio-integration-procedures)
+[^4]: [Configure an Integration Procedure Data Source on a FlexCard, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_configure_an_integration_procedure_data_source_on_a_flexcard.htm&type=5)
+[^5]: [OmniIntegrationProcedure, Salesforce Developer Docs](https://developer.salesforce.com/docs/atlas.en-us.industries_reference.meta/industries_reference/meta_omniintegrationprocedure.htm)
+[^6]: [Integration Procedures for Unit Testing, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_test_proceduresintegration_procedures_for_unit_testing_55410.htm&type=5)

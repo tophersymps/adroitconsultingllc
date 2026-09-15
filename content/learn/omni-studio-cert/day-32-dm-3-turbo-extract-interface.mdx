@@ -1,0 +1,117 @@
+---
+title: "OmniStudio DM-3: Turbo Extract Interface"
+slug: day-32-dm-3-turbo-extract-interface
+series: omni-studio-cert
+lesson: 32
+excerpt: "Configure and retrieve data from a single object and its related fields using the Turbo Extract Interface. Learn why Turbo Extract is the performance-optimized reader for the common case, how related fields come back through an object's lookups and child relationships in one optimized pass, where the single-object ceiling sits, when to choose Turbo Extract over the full Extract, and how to build one for pre-filling an OmniScript, sourcing a FlexCard, or doing a quick lookup by Id."
+date: "September 10, 2026"
+author: "Adroit Consulting"
+readTime: "15 min read"
+tags: [OmniStudio, DataMappers]
+---
+
+Lesson 31 built the full Extract: one definition spanning multiple objects, filters bound to input parameters, and an output mapping that acts as the JSON contract a caller receives. [^5] It also spent a paragraph repeatedly telling you that Turbo Extract is the faster, simpler reader for one narrow shape, which was the right amount of detail for that lesson and the wrong amount for this one. Requirement DM-3 is its own exam item, and it asks you to configure and retrieve data from a single object and related fields using the Turbo Extract Interface. [^1] That sentence is the entire brief, and it is worth reading slowly, because both halves of it carry a constraint. The "single object" half is the ceiling. The "related fields" half is what keeps Turbo Extract useful despite that ceiling. Get both straight and the DM-3 questions are close to free.
+
+## Deep Dive
+
+### What Turbo Extract actually is, and what it trades away
+
+Start with the definition the platform gives you. Turbo Extract is a Data Mapper interface that reads Salesforce data from a single sObject, with related fields pulled in through the object's relationships, and it returns JSON. [^6] That is it. No multi-object joins beyond the relationships you walk from the primary object, no output mapping step to reshape the result, no formulas to compute new values on the way out. [^6][^1] The interface is deliberately narrower than Extract, and the narrowness is the point.
+
+Now connect that to the performance claim, because the claim is the reason the interface exists. The platform documentation describes Turbo Extract as the optimized path for the common read case: one object plus related fields. [^6] Where a regular Extract pays for flexibility, walking relationships and building a mapped output structure, Turbo Extract takes the constrained shape and does the retrieval in a more direct way. [^6][^1] Same data source, same JSON return type, less machinery.
+
+The trade is what the exam cares about. Extract gives you multiple objects, filters on whatever fields you need, formulas, and a deliberate output mapping. [^1][^5] Turbo Extract gives you one object, related fields, and speed. [^6] When that is all an operation needs, paying for the full Extract's flexibility is waste. When the operation needs more, Turbo Extract simply cannot do it, and reaching for it anyway is the mistake DM-3 tests. [^6]
+
+There is a naming trap buried here that is worth calling out early. "Single object" does not mean "one flat record with nothing attached." Turbo Extract reads one primary object and can pull fields from objects related to it. [^6] That distinction is the whole reason the interface fits real screens. An Account screen rarely shows an Account in isolation. It shows the Account, plus maybe the owning rep's name, or the parent account's name, or a couple of fields from a related record. That is still a single-object read in the Data Mapper sense, because one object dominates and the rest hangs off it. [^6] Turbo Extract handles that shape natively.
+
+### Related fields: how the single-object read stays useful
+
+The mechanism for related fields is relationship traversal. When you build the Turbo Extract, you add the primary object to the source, then pull fields from related objects by walking the object's lookups or its child relationships. [^6] A lookup from the primary object points up to one parent record, so you can read a field from that parent, such as the Account's Owner name or its Parent Account name. A child relationship points down to many records, so you can pull values from the related children in the same retrieval pass. [^6]
+
+The best way to think about it is that you are reading one record and its neighborhood in a single optimized trip. [^6] You are not writing a query per object, and you are not stacking extract steps to assemble the result by hand. The mapper walks the relationship and returns the combined fields. [^6][^3] That single-pass behavior is what makes Turbo Extract fast: one primary object, one retrieval operation, related fields folded in.
+
+Related fields are also where the practical discipline lives. Pull the related fields a screen or a caller actually needs, and stop there. Every extra relationship you walk and every extra field you read adds weight to the result, and the interface's speed advantage shrinks as the result grows. [^3][^6] The mapper best practices guidance that applies across all interfaces applies here with extra force: extract only the data the operation uses. [^3] A Turbo Extract that pulls fifteen related fields to populate a card showing two has chosen the fast interface and then spent the speed anyway.
+
+One more boundary worth fixing in memory: relationships are supported, formulas are not, and multi-object filtering is not. [^6] A quiz answer that claims Turbo Extract "can't use relationships" is wrong, and the platform documentation is explicit that related fields come through the object's relationships. [^6] The thing Turbo Extract cannot do is span several primary objects with independent filters across all of them, which is exactly the case the full Extract was built for. [^1][^5][^6]
+
+### The trade-off line: Turbo Extract versus Extract
+
+The exam keeps coming back to a single decision, so make it a reflex: prefer Turbo Extract when one object dominates and related fields suffice, and choose Extract when filters span multiple objects. [^1][^5][^6]
+
+Read the decision as two questions. First, how many primary objects does this read genuinely need? If the answer is one, Turbo Extract is on the table. If the answer is three independent objects that each need their own filtering, you are in Extract territory. [^5][^6] Second, do you need anything the narrow interface gives up? Complex filter conditions across objects, computed formulas, or a reshaped output contract all push you to Extract. [^1][^6] Two yes-or-no questions, and the interface picks itself.
+
+The performance argument is not a license to always pick the fast one. It is conditional on the shape being right. A Turbo Extract applied to a multi-object filtering problem does not run and then run slowly. It does not fit the shape at all, and you end up splitting the read across multiple mappers or moving the logic into an Integration Procedure, which is more work than starting with the correct interface would have been. [^3][^5] Choosing the faster interface for the wrong shape is a false economy.
+
+There is a pattern worth noticing in how the two interfaces divide the work. Extraction in OmniStudio is not one tool; it is a small family of readers, and each member exists because a different shape is common enough to deserve its own optimized path. [^1][^6] Extract covers the broad, flexible case, and Turbo Extract covers the frequent, simple case. [^1][^6] That is the same instinct the platform applies elsewhere in the data layer, where specialization for common shapes buys performance that a single general tool cannot match. Knowing which shape your read has is the skill; knowing which tool matches is the answer.
+
+### Use case fit: where Turbo Extract earns its keep
+
+Three scenarios come up over and over, and each one is a shape that Turbo Extract was built for.
+
+Pre-filling an OmniScript from a record is the first, and it is the canonical example. [^6] A user opens a guided flow to update an Account, and the first step should already show the current Account values instead of an empty form. The read is one record by Id, possibly with a couple of related fields, and the result feeds straight into the OmniScript's data. [^6] This is a single-object read with a known key, which is precisely the Turbo Extract shape, and it runs on every form load, so the performance case is real rather than theoretical. [^6]
+
+A FlexCard data source for a single record with details is the second. [^6] A card that displays one record and a handful of related values, say an account card showing the account plus its owner and parent, is one primary object with related fields. [^6] Turbo Extract returns that as JSON the card can bind to directly. [^6] The card does not need multi-object filtering and does not need a computed output shape, so the flexible Extract would add configuration without adding value. [^6]
+
+Quick lookups by Id are the third, and the broadest. [^6] When an Integration Procedure, an OmniScript, or another mapper needs one record's details and it already has the Id, the read is about as simple as data access gets: one object, one key, a few fields. [^6] Turbo Extract is the right interface, and using it keeps a fast, single-purpose read from carrying the weight of a general-purpose one. [^6]
+
+A useful habit for all three: notice what they share. Each starts from one record the caller already identifies, pulls that record and its immediate related fields, and hands JSON back. [^6] When your problem has that shape, Turbo Extract is not a compromise. It is the correct interface, and the full Extract would be the overbuilt choice.
+
+## Configuration Walkthrough
+
+Building a Turbo Extract is a short, predictable ritual. Walk through one on a concrete case: pre-filling an OmniScript with an Account record by Id, including the owning rep's name as a related field.
+
+1. **Create a Turbo Extract Data Mapper.** In the OmniStudio Data Mapper designer, create a new mapper and pick Turbo Extract as the interface. [^1] Name it for what it returns, for example `GetAccountForPrefill`. Because you need one object with related fields and nothing more, this is a Turbo Extract rather than a full Extract, and you are choosing it deliberately for the speed and simplicity of the single-object path. [^1][^6]
+
+2. **Choose the primary object and its input.** Add Account as the primary sObject, then define the input the caller supplies. [^6] For a prefill by record Id, that input is the Account Id, and the caller passes it at runtime so the same mapper serves any account. [^6] The input parameter is not optional decoration; skip it and the read has no key to work from, which means it returns nothing useful or far more than you intended. [^6]
+
+3. **Add related fields from lookups or child relationships.** Walk the relationship to pull the fields you need from related records. [^6] The Account's owning rep is a lookup, so you can read a field from the User record through that lookup, such as the owner's name, and it comes back alongside the Account's own fields in the same pass. [^6] If you also needed values from a child relationship, you would walk that relationship the same way. [^6] Pull only the related fields the screen uses; over-selecting erodes the performance advantage the interface was chosen for. [^3][^6]
+
+4. **Map the output and test with a sample record.** Review the output the mapper will return, confirm the fields you want are included in the JSON, then open the preview and run it with a real Account Id from your sandbox. [^6] Read what comes back: the Account fields you selected, the related owner name where you expect it, and no fields you did not map. [^6] Run it again with a different Id to confirm the input parameter actually drives the read. [^6] If a field is missing or a related value is null, check whether the relationship is what you assumed, because a wrong relationship returns an empty value rather than an error. [^6]
+
+That is the whole build, and its shortness is the lesson. Four steps, one object, related fields folded in, JSON out. When a read fits this shape, the configuration cost is small and the runtime is fast. When a read does not fit, the friction shows up here, at step two or three, where you discover you need a second independent object or a filter that spans more than the primary. That friction is your signal to switch to the full Extract. [^1][^5][^6]
+
+## Exam Traps
+
+- **Using Turbo Extract for multi-object filtering.** This is the trap the requirement is built around. Turbo Extract is single-object-centric and is not built for complex filtering across several objects. [^6] When a question describes filters spanning multiple objects, the answer is the full Extract, not Turbo Extract. [^1][^5][^6]
+
+- **Forgetting the input parameter, the record Id.** A Turbo Extract needs a key to read by, and that key arrives as an input parameter the caller supplies. [^6] Leave it out and the read has no anchor, so it returns nothing useful or a result far wider than the screen wanted. Define the input and bind it to the primary record's Id. [^6]
+
+- **Dismissing Turbo Extract's relationship support.** A tempting wrong answer claims Turbo Extract "can't use relationships." It can. Related fields come through the object's lookups and child relationships in the same optimized pass. [^6] The real limitation is the single primary object, not the absence of relationships. [^6]
+
+- **Over-selecting related fields.** Every extra relationship and field adds weight to the result set, and the speed advantage is the whole reason you chose this interface. [^3][^6] Map only the fields the operation uses and stay within the practical limits the mapper best practices set for healthy definitions. [^3]
+
+- **Treating Turbo Extract and Extract as interchangeable.** They are not. Extract handles multiple objects, complex filters, formulas, and a deliberate output mapping. Turbo Extract handles one object plus related fields and returns JSON directly. [^1][^5][^6] Match the interface to the shape of the read.
+
+- **Choosing the interface after building.** Decide which reader you need at design time, from the shape of the requirement. Discovering mid-build that you needed multi-object filtering means rebuilding in the other interface, which is wasted effort and a sign the shape was not read first. [^1][^6]
+
+## Exam Tip
+
+Compress DM-3 into five words: one object, related fields, speed. [^6] When a question describes reading a single record and its related values quickly, by Id or as a form prefill or as a single-record card source, the answer is Turbo Extract. [^6] When a question describes filters that span several objects, or a reshaped output contract, or computed formulas, the answer is the full Extract. [^1][^5] And when a wrong answer claims Turbo Extract cannot use relationships or cannot return JSON, both are false: it walks relationships for related fields and it returns JSON, its limitation is the single primary object. [^6] One object plus related fields plus speed equals Turbo Extract. Anything more complex means Extract.
+
+## Try It
+
+Open the Data Mapper designer in a sandbox and build the `GetAccountForPrefill` Turbo Extract from the walkthrough. Add Account as the primary sObject, define the Account Id as an input parameter, and pull the owner's name through the lookup relationship as a related field. [^6] Run it in the preview with a real Account Id, confirm the Account fields and the related owner name come back as JSON, then run it with a different Id to prove the input drives the read. [^6]
+
+Next, push on the ceiling deliberately. Try to add a second independent object with its own filter to the same Turbo Extract and watch the interface refuse the shape, which is the single-object limitation showing itself. [^6] Then build the same read as a full Extract, add the second object and a filter bound to an input parameter, and compare how much more configuration the flexible interface costs. [^1][^5] Feeling both builds side by side is the fastest way to make the DM-3 decision instinctive.
+
+Finally, time the two if your sandbox allows it, or at least reason about the difference in work each interface does, so the performance claim is something you have seen rather than something you memorized. [^6]
+
+## What's Next
+
+You now have the full read side of the Data Mapper domain: the fundamentals from lesson 30, the multi-object Extract from lesson 31, and Turbo Extract, the optimized single-object reader, here. [^1][^6] Lesson 33 turns to the other direction of the data cycle with the Load Interface, specifically multi-object writes (DM-4), where a mapper takes an incoming JSON payload and writes it into one or more objects, mapping source nodes to target fields and handling the write shapes a save operation needs. [^1]
+
+## Related Requirements
+
+- Data Mapper Fundamentals & Source/Target Types, lesson 30 of 46 (DM-1)
+- Extract Interface: Multi-Object, Filters & Parameters, lesson 31 of 46 (DM-2)
+- Load Interface: Multi-Object Writes, lesson 33 of 46 (DM-4)
+- Data Mapper Best Practices, lesson 37 of 46 (DM-8)
+
+## References
+
+[^1]: [Omnistudio Data Mappers (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_dataraptors.htm&type=5)
+[^2]: [Discover Data Mapper Types and Functions, Trailhead (Omnistudio DataRaptors module)](https://trailhead.salesforce.com/content/learn/modules/omnistudio-dataraptors/discover-dataraptor-types)
+[^3]: [Omnistudio Data Mapper Best Practices (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_dataraptor_best_practices.htm&type=5)
+[^4]: [Omnistudio Data Mapper and Integration Procedure Security Settings, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_and_integration_procedure_security_settings_56587.htm&language=en_US&type=5)
+[^5]: [Omnistudio Data Mapper Extract Overview (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_extract_overview.htm&language=en_US&type=5)
+[^6]: [Omnistudio Data Mapper Turbo Extract Overview (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_turbo_extract_overview.htm&language=en_US&type=5)

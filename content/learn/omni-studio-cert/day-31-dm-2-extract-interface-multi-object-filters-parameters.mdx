@@ -1,0 +1,123 @@
+---
+title: "OmniStudio DM-2: Extract Interface: Multi-Object, Filters & Parameters"
+slug: day-31-dm-2-extract-interface-multi-object-filters-parameters
+series: omni-studio-cert
+lesson: 31
+excerpt: "Configure and retrieve data from multiple objects with various filter options using the Data Mapper Extract Interface. Learn how a single Extract pulls related records across objects in one definition, how WHERE clauses and input parameters make filters reusable, how the output mapping shapes the exact JSON callers receive, why filtering early and selecting only needed fields keeps queries fast, and how Extract respects field-level security. This lesson turns the full-featured reader you met in DM-1 into a real, parameterized query tool."
+date: "September 9, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [OmniStudio, DataMappers]
+---
+
+Lesson 30 set up the shape of the whole domain: Data Mappers are the declarative data layer underneath every OmniScript, FlexCard, and Integration Procedure, and Extract is the full-featured reader among the four interfaces. [^1] This lesson stops there and makes you build one properly. Requirement DM-2 asks you to configure and retrieve data from multiple objects with various filter options using the Extract Interface, and the whole requirement is about turning a single Extract into a reusable, well-shaped query. [^1] The three ideas that carry it are multi-object retrieval, parameterized filters, and output mapping, and the exam checks all three.
+
+Start with the name and what it promises. An Extract reads Salesforce data and returns it as JSON, XML, or a custom format, using complex field mappings. [^5] Unlike Turbo Extract, which is optimized for a single object plus its related fields and gives up formulas and output mapping, Extract is the workhorse that pulls from one or more objects and from related objects. [^1][^5][^6] When an OmniScript needs a rich structure, when a FlexCard needs nested related data, when an Integration Procedure needs a shaped payload to hand onward, an Extract is typically the provider. [^5] Everything else in this lesson refines that one sentence.
+
+## Deep Dive
+
+### Multiple objects in one definition: parent, child, and joins
+
+The first thing to unlearn from Turbo Extract is the single-object ceiling. Turbo Extract reads from one Salesforce object type, with fields from related objects bolted on. [^6] Extract lifts that ceiling. One Extract definition can query a primary object and its related records, and return them all in a single structured result. [^1][^5] That is the sentence the exam wants you to hold: a multi-object read happens in one definition, not by stacking several extract steps and stitching the JSON together by hand. [^5]
+
+The mechanism is relationship notation. When you add the primary object to the source, you add related objects through their relationship to it, the same relationship pattern the best practices lesson told you to prefer over multiple extract steps. [^3][^5] The canonical example is an Account plus its Contacts. You add Account as the primary sObject, then add Contact through the relationship from Account, and one Extract returns the Account header with a Contacts array nested inside it. [^5] You did not write two queries and join the results in code. The mapper walked the relationship for you.
+
+The depth goes further than one level. Related objects can themselves carry their own related records, so an Account can pull its Contacts, and each Contact can pull its own related records through a further relationship, letting a single definition return a nested tree of parent and child data. [^5] This is where the Extract earns its reputation as the tool for rich reads. A screen that must show an account, all its contacts, and detail about each contact uses one mapper and one server call, not a pyramid of hand-orchestrated queries.
+
+The alternative framing is that an Extract is effectively building a query across objects for you. The platform documentation describes an Extract as reading Salesforce data with complex field mappings, and part of that complexity is exactly this ability to span objects through relationships. [^5] When a question says "retrieve data from multiple objects," the answer is Extract, because it is the interface built for that span. [^1][^2] Turbo Extract is the fast single-object read; Extract is the multi-object read. [^2] Keep those two fixed in your head and the interface questions get easy.
+
+There is a guardrail you should carry into every multi-object Extract, and it comes from the mapper best practices. Keep the number of sObjects in a mapper to three or fewer to avoid server performance problems. [^3] Multi-object power is real, but it is not a license to join everything in the org into one giant query. [^3] Pull the objects the operation actually needs, and keep the definition focused.
+
+### Filter options: WHERE clauses and input parameters
+
+Reading multiple objects is only half the requirement. The other half is controlling which rows come back, and that is where filters live. An Extract that returns every Account in the org is a performance hazard and almost never what a screen wants. Filters narrow the result set before it leaves the database. [^5]
+
+The first and simplest filter is a WHERE clause with a fixed value. You add a filter on a field and give it a constant, so the Extract returns only the records that match, for example every Account whose Industry equals a fixed string. [^5] That works, and it is the right tool for a filter that never changes. The moment the value needs to vary, a hardcoded filter becomes a liability, because it is baked into the mapper and every caller gets the same rows. [^2]
+
+That is why input parameters exist. An input parameter is a value you declare on the mapper and reference inside the filter, and the caller supplies the actual value at runtime. [^2][^5] The standard syntax is a named parameter bound with a colon, exactly like a bind variable: `Id = :recordId` filters on a record Id the caller passes in, and `Industry = :industry` filters on an industry the caller selects. [^5] Each caller can invoke the same Extract with a different parameter value and get different, correctly filtered rows. That is what makes a mapper reusable: one definition, many callers, values supplied at call time. [^2]
+
+This is the heart of exam question one. An Extract must return Accounts filtered by industry. How is the filter value passed? As an input parameter, `WHERE Industry = :industry`, and the caller supplies the industry value at runtime. [^2] The wrong answers all miss the point in a slightly different way. Hardcoding the value in the mapper makes it one fixed industry forever. Routing it through a FlexCard state is an odd, fragile way to smuggle a filter value into a server-side query, and FlexCard state is a UI-side mechanism, not a query parameter. Saying it cannot be filtered is simply wrong, because Extract is built to filter. [^2][^5] The correct, reusable answer is the input parameter, and the reason it is correct is that it decouples the query definition from the specific value. [^2]
+
+Two habits make parameterized filters comfortable in practice. First, declare the parameter once and reference it with the colon binding in every filter that needs it, so there is a single source of truth for the name. [^5] Second, use names that describe the value, like `recordId`, `industry`, or `status`, rather than positional placeholders, so the mapper reads clearly and a caller knows exactly what to pass. [^5]
+
+There are more filter options than a single equality, and the exam can lean on the idea of "various filter options" in the requirement. Extract filters support comparisons beyond equals, so you can filter on ranges, on sets, and on other conditions a query needs. [^5] Combine multiple conditions to narrow the result precisely, for example matching on both a status and a territory. [^5] The requirement wording, "various filter options," is a deliberate nod to this breadth: it is not just one WHERE clause with one value, it is whatever conditions the query needs, expressed with input parameters so the values stay reusable. [^1][^5]
+
+### Output mapping: you decide the JSON contract
+
+Reading the right rows is one job. Shaping what comes back is the other, and it is easy to underestimate because it decides everything downstream. The output mapping is the list of target nodes you define on the mapper, and it determines the exact JSON structure a caller receives. [^5] Quiz question three tests this directly: what determines the JSON structure callers get from an Extract? The mapper's output mapping. [^2] Not the caller's profile, which controls permissions but not shape. Not the API version. Not luck. The output mapping is the returned JSON contract. [^5]
+
+What can the output mapping do? It picks fields, so you map only the fields a consumer needs and leave the rest of the object behind. [^5] It renames keys, so the JSON uses the names your OmniScript or external system expects rather than the raw API field names. [^5] It flattens or nests, so you can pull a value up to the top level or tuck it inside a structure, whichever the consumer wants. [^5] In short, the output mapping lets you present the data in the shape the downstream consumer was built against, instead of forcing the consumer to adapt to whatever the query happened to return. [^5]
+
+This is the difference between a query and a contract. A raw query returns whatever columns you asked for, in a fixed flat shape. An Extract with a deliberate output mapping returns a document: named keys, nested related data in the places you put them, values renamed and arranged for the caller. [^5] Integration Procedures lean on this constantly, because the Response Action hands the output onward and the next system only understands the shape you defined. [^3] The output mapping is how you make that shape predictable.
+
+The cost of ignoring the output mapping is silent, ugly breakage. If you leave default mappings in place or map far more than you need, the JSON grows to include data nobody reads, and the structure drifts from what the consumer expects. If you then bind against a key the mapping never produced, the binding returns nothing. [^2] That is why the mapping is worth building deliberately, field by field, against the exact shape the screen or the external API consumes. [^5]
+
+### Performance: filter early, narrow, and select only what you need
+
+An Extract that is technically correct can still be a problem if it is wasteful, and the exam rewards knowing where the waste comes from. The pattern has three moves. Filter early and narrowly, so the database returns a small candidate set instead of a wide table. Select only the fields you need, so each row carries less data back. And stay mindful of result-set size, because a mapper that returns ten thousand rows to populate a card showing five is doing real damage. [^3][^5]
+
+The best practices guidance is blunt about the number of objects. Keep the count of sObjects in a mapper to three or fewer, because more objects in a single definition risks server performance problems. [^3] That is a hard ceiling the exam may echo, so treat three as the practical limit for a healthy Extract and split a broader read into separate focused mappers or chain them through an Integration Procedure instead. [^3]
+
+Filtering early has a compounding benefit. The narrower the filter, the fewer rows the relationship walk has to assemble, which means the multi-object nesting you built stays cheap. [^5] A filter that returns one Account with a dozen Contacts is a light query. The same definition with no filter returns every Account and every Contact in the org, and the output mapping then ships all of it to a screen that wanted one card. [^3][^5] The discipline is the same one the mapper best practices and the IP best practices both teach: a mapper should extract only the data one operation needs. [^3]
+
+### Field-level security: Extract respects FLS
+
+Security was a load-bearing point in lesson 30, and it carries straight into the multi-object Extract. A Data Mapper respects field-level security. When the OmniStudio security setting `EnforceDMFLSAndDataEncryption` is enabled in the Omni Interaction Configuration, the platform automatically enforces field-level security for all Data Mappers, Extract included. [^4] That means a user with read access to some fields but not others will not receive the hidden fields in the Extract output, and cannot read data their profile does not permit. [^4]
+
+This matters even more here than it did with a single simple read, because an Extract spans multiple objects and can pull many fields. The wider the mapping, the more opportunity there is to expose a field a low-privilege user should never see, if the tool did not enforce FLS. Because Extract does, the security posture is built into the data path rather than left to whoever remembered to write a clause. [^4] That is exactly why the platform recommends Data Mappers over raw SOQL when field security is a concern: a bare Apex query does not enforce FLS by itself, while a mapper does. [^1][^4]
+
+Keep the practical implication straight. When you design an Extract that will run under restricted profiles, the FLS enforcement is a feature, not a bug. It means the mapper returns only what the current user is permitted to see, so a single reusable definition stays safe across different callers with different permissions. [^4] Design the mapping as if any permitted field could be the one that leaks, and let the enforcement guard the rest.
+
+## Configuration Walkthrough
+
+Building a multi-object, parameterized Extract is a small ritual, and the steps are the same every time. Walk through one on a concrete case: an Extract that returns an Account by Id, with its Contacts, filtered by industry, shaped for a rep-facing screen.
+
+1. **Create the Extract Data Mapper.** Open the OmniStudio Data Mapper tab and create a new mapper. [^1] Name it to say what it does, for example `GetAccountWithContactsByIndustry`. Because you need multiple objects, related data, filters, and a deliberate output structure, this is a full Extract, not a Turbo Extract. [^1][^5] If all you needed were a few fields off one Account, Turbo Extract would be the faster choice, but the moment you span objects or need structured output, Extract is correct. [^1][^6]
+
+2. **Add the primary object and related objects.** In the source, add Account as the primary sObject. [^5] Then add Contact through its relationship to Account, using relationship notation, so one definition returns the Account header and its Contacts array nested together. [^5] Add any other related object the screen genuinely needs, but keep the total at three or fewer to respect the best-practice ceiling. [^3] This is the step that makes the Extract a multi-object read rather than a single-object query. [^5]
+
+3. **Add WHERE filters and input parameters.** Add a filter on the Account Id so the Extract returns one record, and bind the value to an input parameter with the colon syntax: `Id = :recordId`. [^5] Add a second filter on Industry bound to another parameter: `Industry = :industry`. [^5] The caller now supplies both `recordId` and `industry` at runtime, and the same mapper serves any account in any industry. [^2] Do not hardcode a value here unless you genuinely never want it to change, because a fixed value is what turns a reusable mapper into a one-purpose query. [^2]
+
+4. **Map output fields to the target JSON structure.** Go to the Output mapping and decide what the caller receives. [^5] Pick the fields the screen shows, such as Account name, phone, and website, and each Contact's name, email, and title. [^5] Rename any key whose JSON name should differ from the raw API field name, and nest the Contacts under a clear array node so the screen can loop it. [^5] This mapping is the contract: it defines the exact JSON a caller gets, so make it match what the consumer was built against. [^5]
+
+5. **Test with sample parameters.** Open the Preview tab, supply sample values for the input parameters, and execute the mapper. [^2] Read what comes back. Confirm the Account fields are present, the Contacts array is populated and nested where you put it, every node you mapped appears with the value you expect, and the filter actually excluded rows that do not match the supplied industry. [^2][^5] Test with a second set of parameter values to confirm the mapper returns different, correctly filtered results, which is the whole point of parameterization. [^2] Catch a dropped field or a wrong relationship here, before any OmniScript or FlexCard depends on the shape. [^3]
+
+## Exam Traps
+
+- **Hardcoding filter values.** A filter with a fixed value makes the mapper return the same rows for every caller, which defeats reuse. [^2] Parameterize values you expect to vary by declaring an input parameter and binding it with the colon syntax, `WHERE Industry = :industry`, and supply the value at call time. [^5]
+
+- **Selecting more fields or data than needed.** Mapping every field or omitting filters ships a wide, heavy result to a screen that wanted a handful of fields. [^3][^5] Filter early and narrowly, select only the fields the operation uses, and keep the mapper to three or fewer sObjects to avoid server performance problems. [^3]
+
+- **Filtering on fields that do not exist or have the wrong name.** A filter or a binding that references a nonexistent field, or the wrong API name, returns nothing or throws, and it can pass silently in testing. [^2] Verify the field exists on the object and use its exact API name in both the filter and the output mapping, because paths must match the real field names. [^2][^5]
+
+- **Treating Turbo Extract and Extract as interchangeable.** Turbo Extract is the fast single-object reader with related fields; Extract is the flexible multi-object reader with formulas, filters, and output mapping. [^1][^6] When a question names multiple objects or rich structured output, the answer is Extract, not Turbo Extract. [^2]
+
+- **Forgetting the output mapping is the contract.** The JSON a caller receives is decided by the mapper's output mapping, not by the caller's profile or the API version. [^5] If you do not shape the mapping deliberately, the output drifts from what downstream consumers expect. [^5]
+
+## Exam Tip
+
+Hold the three pillars of the Extract in your head. It queries multiple objects in one definition through relationships, so an Account and its Contacts return together. [^1][^5] It filters with WHERE clauses, and the values pass in as input parameters bound with the colon syntax, `WHERE Industry = :industry`, which is what makes the mapper reusable across callers. [^2][^5] And its output mapping decides the exact JSON structure callers receive, so the mapping is the returned contract. [^5] Filter early and narrowly, select only needed fields, keep the sObject count at three or fewer, and remember that Extract respects field-level security when the enforcement setting is on. [^3][^4] When a question mentions multiple objects, parameterized filters, or structured output, the answer is the full Extract. [^2]
+
+## Try It
+
+Open the Data Mapper Designer in a sandbox and build the `GetAccountWithContactsByIndustry` Extract from the walkthrough. Add Account as the primary sObject and its related Contacts, bind the Account Id and the Industry filters to input parameters with the colon syntax, and map only the fields a rep-facing screen would show, nesting the Contacts under a clear array. [^5] Then open the Preview, run it with one set of parameter values, confirm the Account header and Contacts array come back shaped as you expect, and run it again with a different industry to prove the filter changes the result. [^2][^5] Next, build the same read as a Turbo Extract and try to add a second object or a formula, so you feel the ceiling that makes the full Extract the right tool for multi-object work. [^1][^6] Finally, test with a user profile that lacks read access to one mapped field, and confirm the Extract omits that field from the output, which shows FLS enforcement working. [^4]
+
+## What's Next
+
+You can now pull multiple objects into one Extract, filter them with reusable input parameters, and shape the output contract. Lesson 32, Turbo Extract Interface (DM-3), turns to the leaner reader you have been comparing against all lesson: Turbo Extract, the interface optimized for reading a single object plus its related fields with maximum performance and simplicity. [^6] It covers where the single-object read shines, what Turbo Extract gives up compared to the full Extract, and when to choose it. That lesson completes the read-side pair, so the next domain step, the Load Interface, can add the write side of the data cycle. [^2]
+
+## Related Requirements
+
+- Data Mapper Fundamentals & Source/Target Types, lesson 30 of 46 (DM-1)
+- Extract Interface: Multi-Object, Filters & Parameters, lesson 31 of 46 (DM-2)
+- Turbo Extract Interface, lesson 32 of 46 (DM-3)
+- Data Mapper Best Practices, lesson 37 of 46 (DM-8)
+
+## References
+
+[^1]: [Omnistudio Data Mappers (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_dataraptors.htm&type=5)
+[^2]: [Discover Data Mapper Types and Functions, Trailhead (Omnistudio DataRaptors module)](https://trailhead.salesforce.com/content/learn/modules/omnistudio-dataraptors/discover-dataraptor-types)
+[^3]: [Omnistudio Data Mapper Best Practices (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_dataraptor_best_practices.htm&type=5)
+[^4]: [Omnistudio Data Mapper and Integration Procedure Security Settings, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_and_integration_procedure_security_settings_56587.htm&language=en_US&type=5)
+[^5]: [Omnistudio Data Mapper Extract Overview (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_extract_overview.htm&language=en_US&type=5)
+[^6]: [Omnistudio Data Mapper Turbo Extract Overview (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_turbo_extract_overview.htm&language=en_US&type=5)

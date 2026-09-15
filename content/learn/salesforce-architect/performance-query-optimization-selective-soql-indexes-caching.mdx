@@ -1,0 +1,113 @@
+---
+title: "Lesson 24: Performance: Query Optimization, Selective SOQL, Indexes, and Caching"
+slug: performance-query-optimization-selective-soql-indexes-caching
+series: "salesforce-architect"
+lesson: 24
+excerpt: "How a query becomes fast: the selectivity thresholds the optimizer uses to decide whether an index is worth it, how to write SOQL that the optimizer will actually treat well, how to measure and index, and Platform Cache as the lever that skips the query entirely."
+date: "August 27, 2026"
+author: "Adroit Consulting"
+readTime: "11 min read"
+tags: [Salesforce, Architecture, Performance, RAG]
+---
+
+# Lesson 24: Performance: Query Optimization, Selective SOQL, Indexes, and Caching
+
+Lesson 23 gave you the observability layer: debug logs, Event Monitoring, health checks, and alerts. Those tools tell you a query is slow after it happens. This lesson is about stopping the slowness before it starts. Lesson 17 handed you the volume toolkit: archiving, big objects, skinny tables, and an indexing strategy. This lesson is the craft underneath that toolkit. It answers the question that decides whether any of it pays off: how does Salesforce decide whether a query is cheap, and what can you write, measure, and cache so the cheap path is the one that runs?
+
+The core fact to internalize is that the database's own optimizer cannot do its job on Salesforce's multitenant tables. The Lightning Platform query optimizer steps in to fill that gap. It decides which index, if any, drives a query, which table drives a join, and how to order the rest to minimize database I/O. [^1] Everything in this lesson is about giving that optimizer what it needs: a selective filter on an indexed field. When you do, the optimizer narrows the read. When you do not, it has no choice but a full scan. Those are the two outcomes, and almost every performance problem in this domain is a failure to pick the first one.
+
+## Define the terms first
+
+- **Selective query**: a query with at least one filter on an indexed field where that filter reduces the result set below a system-defined threshold. Selectivity is the single concept that decides whether the optimizer uses an index. [^2] [^7]
+- **Selectivity**: the fraction of records a filter condition matches. The smaller the fraction, the more selective the filter, and the more likely the optimizer will use an index rather than scan the table. [^2]
+- **Index**: a database structure the optimizer can use to find rows without scanning every row. Salesforce maintains indexes automatically on common standard fields and lets you request custom indexes on custom fields. [^2]
+- **Full scan**: reading every row in a table to find the matches. This is what happens when no usable index exists, and it is the expensive path you design against. [^1]
+- **Query Plan**: a view in the Developer Console that shows how the optimizer would execute a query, including whether it would use an index. It is the tool you use to check your work before you ship a query. [^7]
+- **Platform Cache**: a distributed in-memory cache for Salesforce session and org data, with its own limits and partitions. It stores frequently used values so you do not have to recompute or re-query them. [^3]
+- **Cache hit and cache miss**: a hit is a read satisfied from the cache without running the underlying query; a miss is a read that returns nothing and forces you to load and store the value. [^3] [^6]
+- **Time to live (TTL)**: how long a cached value lives before it expires, which you assign when you put the value in. [^4]
+
+## How the optimizer decides: selectivity and indexes
+
+The optimizer does not use an index just because one exists. It consults statistics about the distribution of data in each index and runs a pre-query to decide whether using the index would actually speed things up. [^2] The rule it applies is a pair of thresholds, and they are worth memorizing because they come up in every LDV review.
+
+A **standard** indexed field is used when the filter matches less than 30% of the first million records and less than 15% of the records after that. A **custom** indexed field is used when the filter matches less than 10% of the first million records and less than 5% of the additional records. [^2] The supporting help article states the threshold a slightly different way, as 10% of the first million records and less than 5% after, up to a maximum of 333,000 records, and it notes that indexed standard fields can use a higher threshold. [^7] The exact numbers drift with releases, so treat them as a decision rule rather than a constant. What does not change is the shape of the rule: a filter that matches too much of the table gets no index help, because a lookup would be slower than a scan.
+
+Compound logic follows the same idea. With AND, the optimizer uses the indexes unless one of them returns more than 20% of the object's records. With OR, it uses them unless all of them return more than 10%. With LIKE, it applies similar considerations. [^2] The practical meaning: OR is the expensive operator, because every branch has to be cheap for the index to survive; AND is forgiving, because one selective branch can carry the whole query.
+
+Two more facts matter. The platform maintains indexes by default on common standard fields for most objects: RecordTypeId, Division, CreatedDate, SystemModstamp (Last Modified Date), Name, Email for contacts and leads, foreign key relationships, and the record ID primary key. [^2] And index tables do not include null values by default, so a filter looking for empty values does not benefit from a standard custom index. [^2] If you need empty-value rows indexed, you work with Customer Support to enable and rebuild the index to include them. [^2]
+
+## Writing SOQL the optimizer will use
+
+Now the craft. You cannot control the optimizer, but you can control the shape of the query you hand it. The first rule is to filter on an indexed field. A query is only selective when one of its filters is on an indexed field and that filter pulls the result set below the threshold. [^7] If you filter on a field with no index at all, you have already lost the cheap path, no matter how tight the filter is.
+
+The second rule is to avoid the operators that push the optimizer off the index even when the field is indexed. A custom index is typically not used when the filter operator is a negative operator, such as NOT EQUAL TO, NOT CONTAINS, or NOT STARTS WITH. [^7] The canonical example is `Name != ''`, which matches nearly every record and is non-selective even though Name is an indexed field. [^7] The CONTAINS operator can also drop the index when the rows it must scan exceed the limit. [^7]
+
+The third rule is to keep in mind that selectivity is about reducing rows below a threshold, and that two selective filters are better than one. When two or more filters in the WHERE clause each reduce the rows, query performance improves. [^7] So write the filter that narrows the most, and add a second one on an indexed field where it helps.
+
+There is a hard floor under all of this. Salesforce may terminate non-selective SOQL queries that run against objects containing more than 200,000 records, to avoid long execution times. [^7] Inside triggers, where you have no control over the row counts your code runs against, selectivity is not a nicety. It is a requirement for the code to run at all. Lesson 17's indexing lesson and this one converge here: a trigger that fires on an object past a few hundred thousand records and issues a non-selective query is a production incident waiting to happen.
+
+## Measure, then index
+
+The optimizer's own statistics are the ground truth, and you can read them with a simple query. To learn the distribution of values in a field, run a grouped count against the object. For a picklist like StageName, the docs' example is a `GROUP BY ROLLUP` over the field, which returns the record count for every value plus the total for the object. [^1] From that you know immediately whether a filter on one value is selective against the threshold. For a date field, the same idea works grouped by week and year, so you can see whether, say, a `CloseDate = THIS_WEEK` filter is cheap. [^1]
+
+The steps for any slow query are the same, and they apply to SOQL, reports, and list views alike. First, identify the query that is slow. Second, confirm which field or fields it filters on and whether those fields have indexes. The optimizer page lists the standard fields that ship with indexes, and for custom fields you work with Customer Support to add one. [^1] [^2] Third, measure selectivity with the grouped-count query. Fourth, only invest in a custom index if the filter is selective against the threshold; indexing a low-selectivity field is wasted effort, because the optimizer will ignore it. [^2]
+
+Two constraints shape what you can index. Custom indexes work on custom fields except text areas (long), text areas (rich), non-deterministic formula fields, and encrypted text fields. [^2] The help article lists a similar set, excluding multi-select picklists, currency fields in multicurrency orgs, long text fields, and binary fields. [^7] A formula field can be indexed only under strict conditions, for example when it references fields from a single object only and does not use non-deterministic functions. [^7] Before you open a case, verify the field can be indexed at all.
+
+A custom index is created through Salesforce Customer Support or deployed as metadata, and when Support creates one in production it is copied to sandboxes you create afterward. [^2] You can also get an index cheaply by marking a field as an External ID, which causes Salesforce to create an index on it automatically, limited to auto number, email, number, and text fields. [^2]
+
+Finally, use the Query Plan view in the Developer Console to check your work. The optimizer's behavior can change without notice as Salesforce tunes it, so the docs advise tuning non-selective queries based on what the query plan actually reports rather than assuming. [^7] The plan tells you directly whether the optimizer would use an index for your query, and that is the check that keeps you from shipping a guess.
+
+## Caching: skip the query entirely
+
+A selective query with the right index is fast. Caching is the layer above that: instead of making the query fast, you stop running it. Platform Cache stores frequently used session and org data in a distributed in-memory cache so you do not have to recompute or re-query it, and it isolates that cache space so one application cannot steal capacity from another. [^3] It is the right lever for values that are read far more often than they change and where a slightly stale copy is acceptable.
+
+The API gives you two scopes. The session cache holds data tied to one user session; the org cache holds data shared across the org. [^3] Each has its own class set, `Cache.Session` and `Cache.Org`, plus partition-specific variants. [^3] Partitions let you allocate cache capacity per application so that one app's cached data is not overwritten by another's or by less critical data. [^3] The mechanics are a small namespace: you `put` a value with a key and a TTL, and you read it back by key.
+
+The limits are tight and they shape the design. Enterprise editions get 10 MB of Platform Cache, Unlimited and Performance get 30 MB, and other editions get none. [^4] A single cached item caps at 100 KB, session cache TTL runs from 5 minutes up to 8 hours, and org cache TTL runs from 5 minutes up to 48 hours with a 24 hour default. [^4] Those numbers are the reason the best practice is to cache a few large items rather than many small items separately, and to stay mindful of limits to avoid unexpected evictions. [^5]
+
+A cache is only as correct as its miss handling. The documented best practice is to test for cache requests that return null, because a miss returns null and you must load and store the value yourself. [^3] The `Cache.CacheBuilder` interface does this for you: it safely retrieves a value and, on a miss, builds and stores it, so your calling code does not have to remember to check for null on every read. [^6] Use it. Hand-rolled miss handling is exactly where caching bugs hide.
+
+Choose what you cache by asking whether recomputation is expensive and the data is stable. A lookup table that changes weekly, a set of account entitlements that updates rarely, or a computed configuration value that every request touches are all good candidates. A per-user, per-moment value is a bad candidate; you would burn the cache and still miss. And remember the memory limit. With 10 MB in an Enterprise org, you are not caching large result sets. You are caching the small, hot, stable values that would otherwise be recomputed on every request.
+
+## Worked example: a slow Case dashboard
+
+A field service org runs a dashboard that shows open Cases grouped by territory, sorted by last activity date. The dashboard used to be instant. Now, with 3 million Cases and 2.4 million of them closed, it takes minutes and occasionally times out. The architect's plan:
+
+1. **Identify the slow query.** The dashboard filters by territory and sorts by last activity date, so the load-bearing query is a SOQL over Case with a filter on a territory custom field and an order by on a date field.
+2. **Check the fields.** The architect opens the Query Plan for the query. The plan shows no index use, which confirms a full scan. [^7]
+3. **Measure selectivity.** They run a grouped count over the territory field. It returns a few hundred records per territory out of 3 million, far under the 10% custom-index threshold. The field is high-cardinality and selective. [^2] [^1]
+4. **Index it.** Because the filter is selective and the field can be indexed, they request a custom index on the territory field through Support. They do not index the two-value status field, because it is low-cardinality and the optimizer would ignore it. [^2] [^7]
+5. **Consider a two-column index for the sort.** The list view selects by territory and sorts by last activity date, exactly the pattern a two-column custom index is built for, so they request one on those two fields rather than two single-column indexes. [^2]
+6. **Cache what is stable.** The territory list and the territory-to-owner mapping change rarely and are read on every dashboard load. They move those into Platform Cache with an org partition and a TTL long enough to survive a working day, using the CacheBuilder interface so a miss loads and stores the value cleanly. [^3] [^6]
+
+The result: the dashboard query is now selective and uses an index, so the scan is gone, and the stable lookup values no longer hit the database at all. The same query that timed out now returns fast because the architect gave the optimizer a filter it could use and stopped re-querying the values that did not change.
+
+## The pitfall to avoid
+
+**Assuming an indexed field means an indexed query.** Two failures share this root. The first is writing a filter on an indexed field with an operator the optimizer will not use. `Name != ''` is on an indexed field and is still non-selective, because it matches nearly everything and uses a negative operator. [^7] The field was never the problem. The operator and the selectivity were. The second failure is indexing a low-cardinality field and declaring victory, when the optimizer bypasses it because the filter matches too much of the table. [^2]
+
+The reverse failure lives in the cache. **Caching without a TTL plan, or caching values that change under you.** Platform Cache evicts by least recently used behavior and has hard size limits. [^4] [^5] If you put values with a long TTL into a tiny partition, or you cache data that your own code mutates elsewhere, you get stale reads and silent evictions. Cache the values that are genuinely stable, size the partition to the data, and let the TTL do the rest.
+
+## Try it
+
+A logistics org has a custom object, `Shipment__c`, with 5 million records. A trigger fires after insert on Shipment and runs a query filtering by `OwnerId` and by `Status != 'Delivered'`. The query keeps failing with a non-selective query error. Answer before reading on.
+
+1. Why does the trigger's query fail even though OwnerId is an indexed field? *(The `Status != 'Delivered'` filter is a negative operator, and it matches most of the table, so the query is non-selective. Salesforce may terminate non-selective queries on objects past 200,000 records.)* [^7]
+2. How does the architect confirm which filter is the problem? *(Use the Query Plan view in the Developer Console, and run a grouped count to see the distribution of Status and Owner values against the thresholds.)* [^7] [^1]
+3. The `Status != 'Delivered'` pattern is the hot path, but the field is low-cardinality. Can a custom index fix it? *(No. A negative operator and a low-cardinality filter are exactly the cases where a custom index is typically not used.)* [^7] [^2]
+4. What is the better rewrite? *(Filter on the selective indexed field, for example a carrier field or an activity date that narrows the set, and express the desired state with a positive condition rather than a negation.)* [^7]
+5. The dashboard rereads a stable list of shipment routes on every load. Where does that list belong? *(Platform Cache, in an org partition with a sensible TTL, read through CacheBuilder so a miss loads it once.)* [^3] [^6]
+
+## What's next
+
+You can now read a query plan, measure selectivity, index the fields the optimizer will actually use, and cache the values that should never hit the database. The next lesson steps back from Salesforce and treats performance as a general systems problem: performance engineering for AI systems, covering latency budgets, caching, throughput, and batching. It is the same discipline, applied at the system scale where a single query is no longer the unit you optimize.
+
+[^1]: developer.salesforce.com. [Lightning Platform Query Optimizer | Best Practices for Deployments with Large Data Volumes](https://developer.salesforce.com/docs/atlas.en-us.salesforce_large_data_volumes_bp.meta/salesforce_large_data_volumes_bp/ldv_deployments_infrastructure_salesforce_query_optimizer.htm)
+[^2]: developer.salesforce.com. [Indexes | Best Practices for Deployments with Large Data Volumes](https://developer.salesforce.com/docs/atlas.en-us.salesforce_large_data_volumes_bp.meta/salesforce_large_data_volumes_bp/ldv_deployments_infrastructure_indexes.htm)
+[^3]: developer.salesforce.com. [Platform Cache | Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_cache_namespace_overview.htm)
+[^4]: developer.salesforce.com. [Platform Cache Limits | Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_platform_cache_limits.htm)
+[^5]: developer.salesforce.com. [Platform Cache Best Practices | Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_platform_cache_best_practices.htm)
+[^6]: developer.salesforce.com. [Safely Cache Values with the CacheBuilder Interface | Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_platform_cache_builder.htm)
+[^7]: help.salesforce.com. [Improve Performance of SOQL Queries using a Custom Index](https://help.salesforce.com/s/articleView?id=000385213&language=en_US&type=1)

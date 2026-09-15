@@ -1,0 +1,156 @@
+---
+title: "Lesson 34: Agent UX: streaming output, progress indicators, and when users need to see the loop"
+slug: agent-ux-streaming-progress-seeing-the-loop
+series: "agentic-ai"
+lesson: 34
+excerpt: "A chat model answers once and stops. An agent answers by running a loop: call the model, read the result, call a tool, feed the output back, call the model again, sometimes several times. That loop takes tens of seconds, and a single spinner is not enough. This lesson gives your agent a face. It sets up streaming output that delivers the reply as it is generated, progress indicators that show which step the loop is on, and the judgment about when the loop must be visible at all. You will learn the response-time limits that decide the question for you, the difference between streaming the answer and reporting progress on the work, and how to surface tool calls and interim messages without dumping raw reasoning on a user. The worked example takes the ticket resolver from lesson 33 and turns it into a streamed, progress-aware runner your team could actually show a customer."
+date: "September 6, 2026"
+author: "Adroit Consulting"
+readTime: "15 min read"
+tags: [LLMs, AI Agents, UX, Streaming, Progress]
+---
+
+# Lesson 34: Agent UX: streaming output, progress indicators, and when users need to see the loop
+
+Agents are the slowest interactive thing most teams have ever shipped, and most teams discover that the hard way. A chat model answers once and stops. An agent answers by running a loop: it calls the model, inspects the output, runs any tool the model requests, feeds the result back, and calls the model again. A task you could describe in one sentence can take several of those cycles, and each cycle costs the latency of a full model call plus whatever the tools do. Wait long enough on a real task and you are watching a spinner for twenty or thirty seconds. That is not a product defect. It is the shape of the work.
+
+Lesson 33 ended with a ticket resolver that does genuine work: gathers account context, checks a refund policy, and drafts a reply. That resolver answered in one silent chunk. If you shipped it as-is, the person waiting on it would see nothing for twenty seconds and then a wall of text, and they would have no way to tell whether it was thinking, stuck, or crashed. This lesson closes that gap. You will give the resolver a face: streaming output that delivers the reply as it is generated, progress indicators that show which step of the loop it is on, and the design judgment about when the loop needs to be visible to the person at all.
+
+## Define the terms
+
+**Streaming output** is delivering part of a response as soon as it is generated instead of holding everything until the run finishes. On the wire, streaming usually means server-sent events (SSE): the server opens one HTTP connection and pushes chunks down it as they arrive. [^5] The user's cursor or message bubble starts moving within the first few tokens instead of after the final one.
+
+**A progress indicator** is any UI feedback that tells the user work is happening and roughly where it stands: a percent-done bar, a step list that lights up as items complete, a counter, even a changed cursor. Its job is to bridge what Don Norman called the gulf of evaluation, the gap between what the system is actually doing and what the user can perceive it doing. [^4] The narrower that gulf, the less the wait feels like a failure.
+
+**Seeing the loop** is the agent-specific version of progress: exposing the intermediate state of the run, the tools it is calling, the messages it is producing, so that a long operation reads as deliberate work rather than dead air. A chat app streams the answer. An agent app should do that and also show the machinery when the machinery is what makes the wait bearable.
+
+## The response-time limits decide the problem for you
+
+You do not have to invent your own latency policy. Two decades of interaction-design guidance give you thresholds to build against, and they are unusually stable because they come from human perception, not from whatever front-end framework is current. [^3]
+
+Around **0.1 seconds**, the system feels instantaneous. No progress feedback at all is needed; the result simply appears. Between **0.1 and 1 second**, the user notices the delay but their flow of thought stays intact, so light feedback is enough, often just a changed cursor that says the computer is working. Past **1 second**, the user's flow breaks, and they need some unambiguous sign that work is happening. Past **10 seconds**, the user's attention is gone: they will look for something else to do, and they need a progress indicator that tells them what to expect, plus a way to interrupt. [^3] Those are not suggestions. They are the floors your agent UX has to respect.
+
+This matters far more for agents than for plain chat because of the shape of the run. A single streamed model completion crosses the 1-second line but can stay under the attention limit. An agent that makes four model calls and three tool calls can easily sit above 10 seconds before it has produced a single answer token. The Vercel AI SDK's own streaming guide uses a blocking chat UI as its warning example because users find themselves staring at spinners for five, ten, even forty seconds while the whole response waits to be generated. [^2] For an agent, replace "response" with "entire task" and the same warning is stronger.
+
+## Two different signals: the answer and the work
+
+The core mental model for this lesson is that an agent UI runs two distinct signals, and conflating them is the most common mistake.
+
+The first signal is the **answer**, the actual text the user came for. It streams in at token granularity. On the OpenAI Agents SDK this is the raw response surface: `Runner.run_streamed()` gives you a result, `result.stream_events()` yields events, and you catch the text deltas as they arrive. [^1] On Anthropic's API the same idea appears as `content_block_delta` events whose `delta.type` is `text_delta`. [^5] The answer is what makes a long wait tolerable, because the user starts reading while the system still works.
+
+The second signal is the **work**: the state of the loop, which tools have run, which messages have been produced, whether an approval is pending. This is progress reporting, and it is what tells the user the system is not frozen. On the Agents SDK, the higher-level `RunItemStreamEvent` gives you exactly this. It fires per completed item, not per token, with semantic names like `tool_called`, `tool_output`, and `message_output_created`. [^1] That is the level you render a step list from, because a tool call is a unit a human can understand, while a token is not.
+
+Stream the answer for tolerability. Report the work for reassurance. Do one without the other and you get a reply that pops out of nowhere with no sense the system did anything, or a status list that spins forever and then stops. The final section of this lesson shows both running together.
+
+## Streaming output, by example
+
+Streaming the answer first. Here is the minimal pattern in the OpenAI Agents SDK: start the run in streamed mode, walk the event stream, and print text deltas as they arrive. [^1]
+
+```python
+import asyncio
+from openai.types.responses import ResponseTextDeltaEvent
+from agents import Agent, Runner
+
+async def main():
+    agent = Agent(name="Resolver", instructions="You resolve order issues.")
+    result = Runner.run_streamed(agent, input="Order 55219 never arrived.")
+
+    async for event in result.stream_events():
+        if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
+            print(event.data.delta, end="", flush=True)
+
+asyncio.run(main())
+```
+
+The `flush=True` matters in a terminal: without it the process buffers and you defeat the purpose of streaming. In a web app you push each delta down an SSE connection or a websocket instead of printing, but the authoring shape is the same, you receive a small chunk and forward it immediately.
+
+Anthropic's streaming carries the same idea with SSE event types. `message_start` opens the stream, then each content block fires `content_block_start`, a run of `content_block_delta` events, and `content_block_stop`, and the whole message closes with `message_delta` and `message_stop`. The text travels in `text_delta` chunks inside the `content_block_delta` events. [^5] The SDK wraps this in `client.messages.stream(...)`, where iterating `stream.text_stream` gives you the text deltas directly. [^5] Cross-framework, the contract is identical: a stream of small deltas you forward as they arrive, plus a final assembled message you can store once the stream ends.
+
+One framework note worth holding onto. A streaming run is not finished when the last visible token lands. Post-processing, session persistence, approval bookkeeping, and history compaction can all finish after the final token. On the Agents SDK you must keep consuming `result.stream_events()` until the iterator ends, and only then trust `result.is_complete` to reflect the final state. [^1] If your UI marks the run "done" the moment the message bubble fills, you can paint a success state before the run actually completed.
+
+## Progress indicators: when to show them, and what to show
+
+The response-time thresholds tell you **whether** to show progress. Use the bands as a first pass: under a second, a cursor change. Under ten, a lightweight busy indicator. At or past ten seconds, a real progress indicator that tells the user what to expect and how to interrupt. [^3] Most agent runs land in the top band, which is why this lesson exists.
+
+The harder question is **what** to show, because agents break the classic answer. A percent-done bar assumes the system knows how much work remains, and an agent usually does not. The loop has no fixed step count; the model decides how many tool calls to make. Nielsen's own guidance notes that when you cannot compute a percentage, you should provide running progress feedback in terms of the absolute work done, such as naming each step as it processes, rather than faking a fraction. [^3]
+
+So for agents, prefer a **step list** over a percentage. Render each completed unit of work as an item that moves from "running" to "done". The Agents SDK surfaces these units directly through `RunItemStreamEvent`: a `tool_called` item when a tool starts, a `tool_output` item when its result arrives, a `message_output_created` item when the agent produces a message. [^1] That maps cleanly onto a status list that reads like a person's notes on the work:
+
+```
+Resolving order 55219 ...
+  [done] Loaded account acme_8841
+  [done] Checked refund policy for shipping
+  [running] Drafting reply
+```
+
+Two design rules keep that list honest. First, show what the agent is actually doing, not a prettier story. If you label a step "Drafting reply" while the model is still calling tools, the user catches the mismatch and trusts nothing. Second, keep the list human-readable. Do not display raw tool arguments or raw chain-of-thought. The tool-call JSON and the model's private reasoning are debugging surfaces, not progress. Anthropic streams extended reasoning through `thinking_delta` events for a reason, so you can choose to omit or summarize it rather than being forced to show it. [^5] A user waiting on a refund wants to know the agent checked the policy, not that it pondered for 400 tokens about whether the delivery window applies.
+
+## When users need to see the loop, and when they do not
+
+Lead with the cases where the loop must be visible, because those are the ones that look like bugs if you get them wrong.
+
+Show the loop when the run is **long**, meaning it will cross the attention limit of ten seconds. An observable status list turns a forty-second batch into a readable sequence of completed steps instead of an interminable pause. [^3]
+
+Show the loop when a tool has **side effects** that a user must reconcile with the outcome. When your resolver recommends a refund, the user needs to know a policy check happened so the recommendation does not arrive from nowhere. If the agent touched a real system, wrote a record, or spent money, the person responsible for it needs to see that work happen.
+
+Show the loop when the run **needs a decision**. An agent that pauses for approval is the clearest possible case for exposing state. The Agents SDK supports this directly: a run that requires tool approval finishes its event stream and exposes the pending approvals, which you surface as an "approve or reject this step" prompt, then resume. [^1] A user staring at a spinner during an approval wait is a user about to kill the process and restart it.
+
+Show the loop when **dead air reads as failure**. If your users will assume a thirty-second silence means the request was dropped, you owe them a monotone indicator, a cursor, a pulse, even just a changing status line, that says the system is alive and working. [^4]
+
+Now the cases where you should hold the loop back. When the task is a single fast answer that streams in under a second, a step list is theater and can feel heavier than the work. When the user is asking a simple closed question, stream the answer and stop. And when the internal state is pure noise, a model's token-by-token deliberation about punctuation, do not surface it as progress, it will convince users the agent is lost rather than working. Visibility is a tool for trust, not a dashboard for your own debugging.
+
+## Worked example: give the resolver a face
+
+Take the ticket resolver from lesson 33 and make it stream its work. This runner prints each tool call and tool output as it happens, then streams the drafted reply token by token. It does exactly what the two-signal model prescribes: step-level progress from the run item events, answer text from the raw response deltas. [^1]
+
+```python
+import asyncio
+from openai.types.responses import ResponseTextDeltaEvent
+from agents import Agent, ItemHelpers, Runner
+
+async def run_with_face(resolver: Agent, question: str):
+    result = Runner.run_streamed(resolver, input=question)
+
+    async for event in result.stream_events():
+        if event.type == "raw_response_event":
+            if isinstance(event.data, ResponseTextDeltaEvent):
+                print(event.data.delta, end="", flush=True)
+        elif event.type == "run_item_stream_event":
+            item = event.item
+            if item.type == "tool_call_item":
+                print(f"\n[work] calling {item.name}")
+            elif item.type == "tool_call_output_item":
+                short = ItemHelpers.text_message_output(item)[:60]
+                print(f"[work] {item.name} returned: {short}")
+            elif item.type == "message_output_item":
+                print(f"\n[answer] ")
+
+    # A streamed run is complete only when the event stream ends.
+    assert result.is_complete, "run did not finish cleanly"
+    return result.final_output
+```
+
+Run it on the refund case and the terminal shows the whole story: the account load, the policy check, then the drafted reply flowing out a few characters at a time. That single change, streaming the answer over step status, is what turns an agent from a black box into something a person can watch work.
+
+If the resolver ever reaches a tool that needs approval, the same loop handles it. Once `stream_events()` ends, check `result.interruptions`; if any are pending, surface them as an approve-or-reject prompt, then resume the run with the approved state. [^1] The UI consequence is worth naming: the status list is the natural place to render that prompt, because the user is already reading the loop as a sequence of steps and an approval is just the step where the agent waits on them.
+
+## The tradeoff to hold onto
+
+Streaming and status lists are not free. They add surface area: event loops, connection handling, a render layer, resumption logic, and more states to test. For a low-stakes autocomplete or a sub-second answer, that machinery is waste. For a multi-step agent that a customer is actually waiting on, it is the difference between a product that feels broken and one that feels deliberate. Let the response-time limits make the call. If your run sits under a second, stream and stay quiet. If it crosses ten, show the work. The resolver crosses ten, so it gets a face.
+
+## Try it
+
+1. **Stream a plain answer.** Take any single-turn agent and switch it to `run_streamed`. Confirm the reply renders token by token and that `result.is_complete` is true only after the loop ends. [^1]
+2. **Build a step list.** Extend the worked example to collect tool calls into an ordered list instead of printing them, and render it as a status panel with a running-and-done state per step. [^1]
+3. **Add an approval surface.** Give the resolver a tool marked for approval, run it, and confirm the pending approval appears after the event stream and that resuming with `approve` continues the run. [^1]
+4. **Apply the thresholds.** Write down the worst-case latency for one of your real agent runs, then decide whether it needs a cursor, a busy indicator, or a step list. Justify the choice against the response-time bands. [^3]
+
+## What's next
+
+Lesson 34 gave your agent a face, but a resolver is only as good as the knowledge it answers from. Lesson 35 turns to retrieval at production scale: RAG at scale, meaning ingestion pipelines that load and chunk your source material, a refresh strategy that keeps indexed copies current without rebuilding everything, versioning so embeddings track the content they came from, and deletion so removed or sensitive documents disappear from retrieval. Where this lesson made the loop visible, lesson 35 makes the memory behind the loop dependable at a size where re-indexing everything on every change stops being an option.
+
+[^1]: openai.github.io. [Streaming (OpenAI Agents SDK)](https://openai.github.io/openai-agents-python/streaming/)
+[^2]: ai-sdk.dev (Vercel). [Foundations: Streaming](https://ai-sdk.dev/docs/foundations/streaming)
+[^3]: Nielsen Norman Group. [Response Time Limits: The 3 Important Limits](https://www.nngroup.com/articles/response-times-3-important-limits/)
+[^4]: Nielsen Norman Group. [Progress Indicators Make a Slow System Less Insufferable](https://www.nngroup.com/articles/progress-indicators/)
+[^5]: Anthropic. [Streaming messages (Claude Platform Docs)](https://docs.anthropic.com/en/api/streaming)

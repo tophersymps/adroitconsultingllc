@@ -1,0 +1,116 @@
+---
+title: "Lesson 13: Security, Part 3: External Access, OAuth, SAML/SSO, Connected Apps, and Communities"
+slug: security-external-access-oauth-saml-connected-apps-communities
+series: "salesforce-architect"
+lesson: 13
+excerpt: "How outside systems and outside people get in. OAuth flows for machine access, SAML single sign-on for employee logins, connected apps as the doorway, and Experience Cloud communities as the portal where customers and partners authenticate without touching your internal identity system."
+date: "August 16, 2026"
+author: "Adroit Consulting"
+readTime: "11 min read"
+tags: [Salesforce, Architecture, Security]
+---
+
+# Lesson 13: Security, Part 3: External Access, OAuth, SAML/SSO, Connected Apps, and Communities
+
+Lessons 11 and 12 covered the inside of the org: who sees which records, who can do which things, and how a user proves they are who they say they are. This lesson turns outward. External access is the set of doors you cut into the fortress so machines and outsiders can get in without undoing everything you locked down on the inside. Two very different kinds of outsiders exist, and confusing them is a classic architect failure.
+
+**External systems** need to read and write data through APIs. They authenticate with OAuth flows, and the doorway they walk through is a connected app. **External people**, customers and partners, need to log into a portal, not into your employee org. They authenticate through SAML single sign-on or the community's own identity, and the doorway is an Experience Cloud site. A single connected app can serve both purposes in some configurations, but the decision about which population you are serving should come first, because it decides everything downstream. [^1]
+
+## The connected app: the doorway to the API
+
+A connected app is "a framework that enables a third-party application to integrate with Salesforce by using APIs and standard protocols, such as SAML, OAuth, and OpenID Connect." It tells Salesforce which authentication protocol the external application uses, where that application runs, and what policies govern its access. When you log into the Salesforce mobile app and see your own org's data, you are using a connected app. [^1]
+
+Two things matter to an architect here.
+
+First, the connected app is where you attach **security policies**: who can use the app, which IP ranges it may come from, whether MFA is required, and when access expires. You configure these as permissions and policies on the app itself, which means the app is not a plain token dispenser. It is a control point you can lock. [^1]
+
+Second, **the connected-app model is changing.** As of Spring '26, creating new connected apps is restricted. Salesforce recommends external client apps instead, and tells you to contact Support if you must still create a connected app. Existing connected apps keep working. If you are building a fresh integration today, external client apps are the recommended replacement. The OAuth flows this lesson covers apply to both; the distinction is the management model, not the protocol. [^1]
+
+## OAuth 2.0: the protocol for machine access
+
+OAuth 2.0 is "an open protocol that authorizes a client application to access data from a protected resource through the exchange of tokens." An authorizing server grants access tokens to the client, and a resource server validates those tokens before allowing the client into the protected API. [^2]
+
+The core idea an architect must hold onto: **OAuth separates who you are from what you can do.** The client never holds a username and password that it reuses for every call. It holds a short-lived access token, and usually a refresh token it can trade for a new access token when the old one expires. If an access token leaks, its blast radius is bounded by its short lifetime and its scopes.
+
+Salesforce supports several OAuth flows, and the flow you pick depends on the shape of the calling system. Getting this wrong produces either a credential dump or an integration that breaks the moment a person changes their password. The three flows that matter most:
+
+**Web server flow.** A web app with a backend exchanges an authorization code for an access token. The user is redirected to Salesforce, logs in, approves the app, and Salesforce hands the backend a code that the backend trades for tokens. This is the flow for a browser-based app with a server component. The catch: it requires the user to complete a UI login, so those logins are subject to your org's MFA enforcement. [^3]
+
+**Username-password flow.** The client sends a username and password to the token endpoint. Salesforce is explicit about the problem: it "recommend[s] avoiding this flow because it passes credentials back and forth," and recommends blocking all connected apps from using it. It generates temporary access tokens and exists for special scenarios, not as a general pattern. [^4]
+
+**JWT bearer and client credentials flows.** These are server-to-server flows with no interactive user at all. In the JWT bearer flow, a server signs a token with a private key and presents it; Salesforce verifies the signature with the public key registered on the connected app. In the client credentials flow, the app presents its own credentials and gets tokens on behalf of a configured execution user. Neither involves a UI login, so neither trips MFA. These are the flows to reach for when two systems talk to each other directly. [^1] [^4]
+
+A useful design rule: **if a person will ever see the flow, use a flow that redirects and shows a login. If no person is involved, use a server-to-server flow.** Force a UI login only when it is genuinely a human, because MFA enforcement makes interactive logins heavier than they used to be.
+
+## SAML and SSO: how employees and partners sign in once
+
+Single sign-on lets a user authenticate once against a trusted identity provider and then reach multiple applications, including Salesforce, without logging in again. Salesforce Identity implements SSO with SAML. [^5]
+
+The mental model is a service-provider arrangement. An external identity provider (for example an enterprise directory or a customer's own identity service) is the source of truth for who a user is. Salesforce is the service provider that trusts assertions from that identity provider. When the identity provider is not involved, you are setting up Salesforce as the service provider with the identity provider. [^6]
+
+Two roles matter in the SAML relationship:
+
+- **Salesforce as service provider.** An external identity provider authenticates your users, and Salesforce trusts its assertions. This is the common enterprise setup: an employee logs into their company portal, and from there reaches Salesforce without a second login.
+- **Salesforce as identity provider.** Salesforce authenticates the user and issues SAML assertions to other service providers, such as a partner application or another org.
+
+The step an architect needs to know cold is creating a SAML single sign-on setting in Salesforce, which is the Salesforce side of a service-provider configuration. You create the setting with the information from your identity provider, including the identity provider's certificate and issuer, and you decide how the SAML assertion identifies the user, for example the Federation ID on the User object. [^6]
+
+## Experience Cloud: the portal for external people
+
+Experience Cloud is the product that hosts the communities customers and partners log into. A site is "an extension of your Salesforce org that allows users (external and internal) to interact and have selected access to data and functionality." The exact access depends on the license the user holds. [^7]
+
+The architect's first decision here is **licensing, not pages.** A community license works like a standard Salesforce license for external users: they can access the site as many times as they want. Salesforce distinguishes two populations: **authenticated users**, who log in to the site, and **guest users**, who access it without logging in. If the site is a public knowledge base, you may not need licenses for guest users at all. If external users must log in and see data, you buy community licenses for them. [^7]
+
+The license tiers map to how much the external user can do:
+
+- **Customer Community** is the standard license for external customers who need access to records.
+- **Customer Community Plus** adds access to reports and dashboards.
+- **Partner Community** is aimed at partners and carries the broadest sharing and CRM object access among the community licenses.
+
+Salesforce is blunt about the anti-pattern: "We highly discourage the use of internal licenses for external use cases." External user licenses are the only licenses suited to secure an external-facing portal. Using internal licenses for a community is how an org leaks access, because internal licenses carry far more capability than an outsider should hold. [^7]
+
+A community does not exist in isolation. It is governed by the same sharing model from Lesson 11, but with an external-facing layer on top: sharing sets and external roles grant community users access to records in a way that never surfaces the internal role hierarchy. The data your community user can see is still bounded by object permissions and the sharing model; a community license does not grant blanket access.
+
+## Choosing the right door for the right visitor
+
+Put the decision tree together. Ask what is knocking:
+
+1. Is it a **machine** calling the API? Use a connected app or external client app with a server-to-server OAuth flow (JWT bearer or client credentials), or a username-password flow only where there is no other option. Prefer JWT or client credentials so nothing a human types is involved.
+2. Is it a **person on your own team**? Authenticate through SAML single sign-on from your identity provider. Their identity lives outside Salesforce; Salesforce trusts it.
+3. Is it a **customer or partner**? Give them an Experience Cloud community with the right external license, and decide whether they authenticate through the community's identity or through SAML from a partner identity provider.
+
+The trap to avoid is mixing them: letting a community sit on internal licenses, or running a machine integration on a flow that requires an interactive MFA login and then watching it fail at 3 a.m. when no human is around to approve it.
+
+## Worked example: standing up a customer portal
+
+A manufacturer wants a self-service portal where customers track their orders and a nightly job where their ERP syncs order status into Salesforce. Here is the external-access design.
+
+1. **Decide the two doors.** The ERP is a machine; it gets an external client app with a server-to-server OAuth flow. The customer is a person; they get an Experience Cloud community with a Customer Community license per user. [^1] [^7]
+2. **Create the external client app for the ERP.** Enable OAuth settings and the client credentials flow, then select the execution user the tokens run as. Require a client secret. The ERP stores the consumer key and secret and exchanges them for tokens with no interactive login. [^1]
+3. **Resist the username-password shortcut.** Someone suggests the ERP just use the username-password flow because it is easier to set up. Reject it: it passes credentials back and forth, and the recommendation is to block the flow on connected apps. Server-to-server is the right shape for a nightly batch job. [^4]
+4. **Build the community.** Create an Experience Cloud site for customers. Assign a Customer Community license to each customer user. If a subset of customers needs to see reports, plan a Customer Community Plus upgrade for them rather than giving everyone the more capable license. [^7]
+5. **Lock the community to the sharing model.** Configure sharing sets and external roles so a customer sees only their own account's records and nothing else. The internal role hierarchy never reaches them, which is exactly what you want. The customer's view is bounded by object permissions and external sharing, not by what an employee could see.
+6. **Apply MFA where it belongs.** The interactive community login can be subject to MFA. The ERP flow is not, because no UI login happens. [^3]
+
+## Try it
+
+You are asked to wire up two things: a logistics provider that needs to push shipment status into Salesforce hourly, and a partner portal where resellers log in to see their deal pipeline.
+
+1. Which OAuth flow does the logistics provider use, and why not the username-password flow?
+2. Which license tier fits resellers who need to see their deals and run pipeline reports?
+3. Your company runs an enterprise identity service. Should the resellers authenticate through SAML or through the community's built-in login?
+4. Someone proposes using internal Salesforce licenses for the partner users to keep licensing cheap. What is the risk, and what does Salesforce say about it?
+
+A reasonable answer: the logistics provider uses JWT bearer or client credentials, because it is a server-to-server job with no human, and the username-password flow is discouraged because it moves credentials around. Resellers get a Partner Community license, since they need CRM data and reports beyond the Customer tiers. If the company has a real identity service, SAML single sign-on is the cleaner option, because identity stays in one place. Internal licenses for external users are the anti-pattern Salesforce explicitly discourages, because they carry far more access than an outsider should hold and are not suited to secure an external-facing portal.
+
+## What's next
+
+You can now classify every visitor to the org, machine, employee, or external person, and route each through the right door with OAuth, SAML, connected apps, and communities. The next lesson closes the security thread and turns to the data it all protects. It covers data architecture: data model design, the common data model patterns, and the data skew that turns a clean model into a bottleneck at volume.
+
+[^1]: help.salesforce.com. [Connected Apps](https://help.salesforce.com/s/articleView?id=xcloud.connected_app_overview.htm&language=en_US&type=5)
+[^2]: help.salesforce.com. [Authorize Apps with OAuth](https://help.salesforce.com/articleView?id=remoteaccess_authenticate.htm&language=en_US)
+[^3]: help.salesforce.com. [OAuth 2.0 Web Server Flow for Web App Integration](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.remoteaccess_oauth_web_server_flow.htm&type=5)
+[^4]: help.salesforce.com. [OAuth 2.0 Username-Password Flow for Special Scenarios](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.remoteaccess_oauth_username_password_flow.htm&type=5)
+[^5]: trailhead.salesforce.com. [Set Up Single Sign-On for Your Internal Users](https://trailhead.salesforce.com/content/learn/modules/identity_login/identity_login_sso)
+[^6]: help.salesforce.com. [Step 2: Create a SAML Single Sign-On Setting in Salesforce](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.sso_service_provider_configuration.htm&type=5)
+[^7]: help.salesforce.com. [Experience Cloud User Licenses](https://help.salesforce.com/s/articleView?id=platform.users_license_types_communities.htm&language=en_US&type=5)

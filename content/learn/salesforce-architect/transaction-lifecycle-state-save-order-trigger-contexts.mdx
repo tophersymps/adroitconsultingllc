@@ -1,0 +1,177 @@
+---
+title: "Lesson 39: Transaction Lifecycle: State, Save Order, and the 4 Trigger Contexts in One Transaction"
+slug: transaction-lifecycle-state-save-order-trigger-contexts
+series: "salesforce-architect"
+lesson: 39
+excerpt: "A record save is not one moment. It is a transaction that walks a fixed sequence: the record loads, system validation runs, before-save Flows and before triggers fire, custom validation and duplicate rules run, the record writes to the database but does not commit, after triggers fire, then assignment, workflow, escalation, roll-up, and sharing logic run, and only then does the transaction commit. Each phase sees the record in a different state, and that state difference is what before-save logic exploits and after-save logic must respect. This lesson walks a single save through that lifecycle, defines the four trigger contexts (before insert, before update, after insert, after update) that one transaction can run, and shows why a workflow field update re-fires triggers while a validation failure rolls everything back."
+date: "September 12, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [Salesforce, Apex, Triggers, Transaction, Architecture]
+---
+
+# Lesson 39: Transaction Lifecycle: State, Save Order, and the 4 Trigger Contexts in One Transaction
+
+Lesson 38 sized the transaction: how many queries and DML statements a save is allowed. This lesson is about what happens inside one of those saves, step by step, and why the order matters more than any single rule in it.
+
+Most trigger bugs are not logic bugs. They are sequencing bugs: code that is correct in isolation and wrong in production because the developer did not know when in the transaction their code ran. An after trigger reads a roll-up summary and gets a stale number, because roll-ups recalculate near the end of the sequence. A workflow field update makes a trigger run twice, and code that was not written to survive a second pass doubles its effect. An unhandled exception in any phase rolls back the entire save, including work a completely different part of the org triggered.
+
+Get the lifecycle straight and these stop being surprises. They become phases you can name on a whiteboard before anyone writes a trigger.
+
+## Define the terms
+
+- **Transaction**: one unit of DML on a record or set of records, from the moment the operation starts until it commits or rolls back as a whole. All the work in that unit succeeds together or fails together.[^1]
+- **Save order (order of execution)**: the fixed sequence Salesforce runs whenever a record is inserted, updated, upserted, deleted, or undeleted. Every automation on that save, whatever its type, runs at a defined point in that sequence.[^1]
+- **Before context**: the phase before the record is written to the database. The records in `Trigger.new` hold their current in-memory values, and a trigger can change those values directly without issuing a DML statement.[^2]
+- **After context**: the phase after the record is written to the database but before the transaction commits. The record has an Id (for inserts) and its changes are persisted. Modifying that same record now requires a separate DML update, which starts a new pass through the save order.[^2]
+- **Trigger event**: a DML operation paired with a phase, declared in the trigger signature, such as `before insert`, `after update`, or `after undelete`.[^1]
+- **Trigger context variables**: `Trigger.isBefore`, `Trigger.isAfter`, `Trigger.isInsert`, `Trigger.isUpdate`, `Trigger.isDelete`, `Trigger.isUndelete`, and `Trigger.operationType`, which tell the trigger which context it is running in. `Trigger.new` and `Trigger.old` (via `oldMap`) expose the new and previous record values.[^4]
+- **The four trigger contexts of a save**: before insert, before update, after insert, and after update. These are the write contexts a transaction can run through, defined by the operation (insert or update) crossed with the phase (before or after). Delete and undelete are sibling events outside the four save contexts.[^1]
+
+## The save order, in one pass
+
+When a record save starts, Salesforce executes a defined sequence. The canonical order, as documented in the Apex Developer Guide and repeated across Trailhead, is:[^1][^2]
+
+1. Load the original record from the database (or initialize a new one for an insert).
+2. Apply the new field values from the request on top of it.
+3. Run system validation: required fields, field formats, max lengths.
+4. Run before-save record-triggered Flows.
+5. Run before Apex triggers (before insert, before update, before delete for the relevant operation).
+6. Run custom validation rules.
+7. Run duplicate rules.
+8. Write the record to the database. It is in the database now, but the transaction is not committed.
+9. Run after Apex triggers (after insert, after update, after delete, after undelete).
+10. Run assignment rules (Lead and Case assignment).
+11. Run auto-response rules.
+12. Run workflow rules. If a workflow rule updates a field, the record gets one more pass: before update and after update triggers run again, and validation is re-evaluated, capped at that single extra pass.
+13. Run escalation rules.
+14. Run process automation and Flows launched by processes or workflow rules.
+15. Run entitlement rules for Cases.
+16. Recalculate roll-up summary fields on master records, if the record is a detail in a master-detail relationship.
+17. Recalculate criteria-based sharing rules.
+18. Commit the transaction.
+19. Run post-commit logic: email alerts, platform events, future and queueable methods, asynchronous paths.
+
+Two properties of that list do the real teaching, and both are load-bearing for architecture.
+
+Step 8 is the hinge. Everything from step 9 through step 17 runs against a record that is in the database but not committed. That gap is why after context exists and why it so often does the wrong thing when a developer treats it as "done and final." The record is not final until step 18.
+
+The order around steps 5 and 6 produces a lift that surprises people who just wrote their first trigger: before triggers run before custom validation rules. A before trigger can set a field value and a custom validation rule created in Setup then checks the new value, all in the same save. That is the documented reason the "set a default before save" pattern works so cleanly, and it is also why a validation rule can suddenly start rejecting records you did not touch: a before trigger upstream changed what the rule sees.[^2]
+
+## State in memory versus state in the database
+
+The whole transaction is a story about two places a record can live. Before step 8 the authoritative values are in `Trigger.new`, in memory. After step 8 the authoritative values are in the database.
+
+Before triggers read and write `Trigger.new` directly. That write is effectively free: it does not consume a DML statement, because the values are part of the in-memory record that step 8 persists. Salesforce's guardrail for choosing a before trigger is exactly this: use before context to set or normalize fields on the record being saved, because you get the change with no extra DML and the transaction stays small.[^3]
+
+For an update, `Trigger.old` (and `oldMap`) holds the previous database values, read-only. That is how a before update trigger answers "what changed?" It compares the old value to the one in `Trigger.new` and only acts when the field actually transitioned, which is the pattern that keeps update logic from running on every save.[^4]
+
+After triggers run against a record that exists in the database. An after insert trigger can read the new record's Id and create child records or update related objects. That is the legitimate job of after context: touching records that need the saved Id or that were not part of the original DML. It comes with a cost. Any DML an after trigger issues is a new DML statement against the transaction budget from Lesson 38, and if that DML targets the same record it re-enters the save order from step 1. After context is not the place to tidy up the record you just saved; before context is.[^3]
+
+## The four trigger contexts in one transaction
+
+A single transaction can exercise all four save contexts. This is the idea the lesson title points at, and it is where architects who only ever think "insert" or "update" get into trouble.
+
+The four contexts are before insert, before update, after insert, and after update. A save that touches a record in only one of those operations runs two of them: an insert runs before insert then after insert, and an update runs before update then after update. But a transaction is not limited to one DML statement, and it is not limited to one operation. A batch process that upserts 10,000 records, some new and some existing, runs before insert, before update, after insert, and after update in that single transaction. A process that inserts a lead and then immediately updates a field on it runs all four as well, across the two statements.[^1]
+
+Write triggers that assume which context they will face, and the mixed batch is where the assumption breaks. The fix is to dispatch on the context instead of guessing it. The modern way uses `System.TriggerOperation`, an enum with members such as `BEFORE_INSERT`, `BEFORE_UPDATE`, `AFTER_INSERT`, and `AFTER_UPDATE`, in place of a chain of boolean checks.[^5]
+
+```apex
+trigger LeadLifecycle on Lead (before insert, before update, after insert, after update) {
+    switch on Trigger.operationType {
+        when System.TriggerOperation.BEFORE_INSERT { LeadHandler.beforeInsert(Trigger.new); }
+        when System.TriggerOperation.BEFORE_UPDATE { LeadHandler.beforeUpdate(Trigger.new, Trigger.oldMap); }
+        when System.TriggerOperation.AFTER_INSERT { LeadHandler.afterInsert(Trigger.new); }
+        when System.TriggerOperation.AFTER_UPDATE { LeadHandler.afterUpdate(Trigger.new, Trigger.oldMap); }
+    }
+}
+```
+
+One trigger per object, a single dispatch point, and every handler method lives in a testable class. That is the pattern Salesforce recommends, and it has a second benefit: when multiple triggers sit on the same object, the platform does not guarantee their firing order, so a handler packed into the trigger fences you off from both that nondeterminism and the first trigger's budget spending.[^5]
+
+## Worked example: a support case flows through all four contexts
+
+A support org records Service Contract reassignments. A nightly batch loads cases from an external system in one transaction: some cases are new (insert) and some already exist (update). The batch is a single DML save, so the transaction runs all four contexts.
+
+The handler uses the dispatch above. Here are the two methods that carry the state-dependent work:
+
+```apex
+public with sharing class CaseHandler {
+    public static void beforeInsert(List<Case> newCases) {
+        for (Case c : newCases) {
+            if (c.Priority == null) {
+                c.Priority = 'Medium';            // free: no DML, part of the save
+            }
+            if (c.AccountId == null) {
+                c.addError('A new case needs an Account before save.');
+            }
+        }
+    }
+
+    public static void beforeUpdate(List<Case> changed, Map<Id, Case> oldMap) {
+        for (Case c : changed) {
+            Case old = oldMap.get(c.Id);
+            if (old.Priority == 'High' && c.Priority == 'Low') {
+                c.addError('A High case cannot drop straight to Low.');
+            }
+        }
+    }
+
+    public static void afterInsert(List<Case> newCases) {
+        List<Task> followUps = new List<Task>();
+        for (Case c : newCases) {
+            if (c.Priority == 'High') {
+                // The case has an Id now; create a child that needs it.
+                followUps.add(new Task(Subject = 'Triage the new high-priority case', WhatId = c.Id));
+            }
+        }
+        if (!followUps.isEmpty()) {
+            insert followUps;                      // counts against the DML budget
+        }
+    }
+}
+```
+
+Three decisions in that handler map directly to the lifecycle.
+
+`beforeInsert` sets a default and blocks the save with `addError` before the write happens. The default costs nothing against the DML budget, and the error stops steps 6 and 8 from ever running for the bad record. A save blockage that early is the cheapest possible failure: no database write, no workflow, no rollback storm.[^2]
+
+`beforeUpdate` compares `oldMap` to the new value and rejects a transition it does not allow. It only reviews the cases that are actually being updated, which keeps the validation tight and the transaction honest.[^4]
+
+`afterInsert` creates child Tasks that need the new case's Id. That Id does not exist until step 8, so the work cannot happen in before context, and the DML it issues is a real statement against the Lesson 38 budget. This is the correct division of labor, and it is exactly the split Salesforce recommends: set or update the record itself in before context, touch related records in after context.[^3]
+
+Now the part of the transaction outside the handler. If any workflow rule on Case updates a field, step 12 re-runs before update and after update triggers one extra time, then stops. Code in this handler that was not static-safe would run twice, which is why the dispatch pattern here routes everything through a class whose logic is deliberately written to be re-entrant or guarded. And if the batch contains one case that fails a validation, the entire transaction rolls back, including the Tasks from every case that succeeded before it. That all-or-nothing property is not a bug; it is the transaction contract, and a design that cannot tolerate it moves the work to a separate transaction, the Lesson 37 lesson, rather than fighting the rollback.[^1]
+
+## Three consequences you should respect, not work around
+
+A rollup value read in an after trigger may be stale. Roll-up summary recalculation happens at step 16, well after after triggers at step 9. An after update trigger that reads a master's roll-up field and builds logic on it is building logic on the previous value. Query the related record fresh or move the reliance later.[^1]
+
+A workflow field update re-fires the update triggers once. The platform caps this at a single extra pass, so it is not an infinite loop, but it is enough to double the side effects of trigger code that was not written to run twice. Guard with a static boolean or make the work idempotent.[^1]
+
+Any unhandled exception or validation failure rolls back the entire transaction. This is not limited to the Apex you wrote. A failing entitlement rule, sharing recalculation, or installed automation in any later phase throws away the earlier work in the same save. The rollback is the reason the "small transaction" advice from Lesson 37 is architecture and not preference.[^1]
+
+## Try it
+
+1. A before insert trigger sets a field, then a validation rule in Setup rejects that value. What order made that possible, and where would you look to fix it? *(Before triggers run before custom validation rules, step 5 before step 6. The rejection is a product of the field the trigger set, not a broken rule.)*[^2]
+
+2. A developer writes an after update trigger that updates a field on the same record. What does it cost, and what does it trigger? *(One extra DML statement against the budget, and a full re-entry into the save order starting at step 1, which fires the record's update triggers again.)*[^3]
+
+3. An after insert trigger reads a roll-up summary field on the parent to decide a value. What is wrong with what it sees? *(The roll-up recalculates at step 16, after after triggers at step 9, so the trigger reads the pre-recalculation value.)*[^1]
+
+4. A batch upserts 5,000 leads, 2,000 new and 3,000 existing. How many of the four save contexts run, and why does a trigger that assumes "all leads are new" break? *(All four: before insert, before update, after insert, after update run within the single transaction. Insert-only logic misreads the 3,000 updates as if they were new records.)*[^1]
+
+5. A workflow rule field update makes your trigger fire twice. What is the worst case, and what is the one guardrail that caps it? *(Side effects double because undeclared code was not written to be re-entrant; the platform caps the re-fire at one extra pass, so it is not an infinite loop.)*[^1]
+
+6. Where can you still set a default before the record is written without spending DML budget? *(Before context. Values set on `Trigger.new` in a before trigger or before-save Flow are persisted by the same save with no separate DML statement.)*[^3]
+
+7. Name the modern replacement for a chain of `Trigger.isBefore` and `Trigger.isInsert` checks inside one handler. *(Dispatch on `System.TriggerOperation`, an enum with members such as `BEFORE_INSERT` and `AFTER_UPDATE`, routed through a single trigger per object into a handler class.)*[^5]
+
+## What's next
+
+You have now walked a single record save from load to commit: the fixed save order, the before and after states, and the four trigger contexts a transaction can run through. The lesson that follows pulls the camera all the way back. Lesson 40 moves off the record and onto the agent: general systems architecture, and the difference between stateful and stateless agents across context, memory, and tool state. It reuses the same instinct this lesson built, tracking what is held where and how long it lasts, and applies it to a service rather than a database row.
+
+[^1]: developer.salesforce.com. [Order of Execution for Triggers | Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_triggers_order_of_execution.htm)
+[^2]: developer.salesforce.com. [Triggers | Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_triggers.htm)
+[^3]: trailhead.salesforce.com. [Apex Triggers | Trailhead](https://trailhead.salesforce.com/content/learn/modules/apex_triggers)
+[^4]: developer.salesforce.com. [Trigger Context Variables | Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_triggers_context_variables.htm)
+[^5]: developer.salesforce.com. [Trigger Class | Apex Reference](https://developer.salesforce.com/docs/atlas.en-us.apexref.meta/apexref/apex_class_System_Trigger.htm)

@@ -1,0 +1,131 @@
+---
+title: "OmniStudio IP-5: Caching in Integration Procedures"
+slug: day-26-ip-5-caching-in-integration-procedures
+series: omni-studio-cert
+lesson: 26
+excerpt: "Determine and configure caching mechanisms within Integration Procedures to maximize performance. Learn what OmniStudio actually caches (metadata versus data), how Org Cache and Session Cache split shared versus per-user scope, how Time To Live controls freshness, and why cache keys decide whether a repeated request gets the right stored answer. This is requirement IP-5 in the Integration Procedures domain."
+date: "September 4, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [OmniStudio, Integration]
+---
+
+The fastest work an Integration Procedure does is the work it never has to do. Every time an IP runs a Data Mapper Extract, it goes back to the database and re-runs the query. Every time it fires an HTTP action against an external system, it pays for a full network round trip. Do that once and the cost is small. Do it five hundred times a day with the same reference data and you are spending query limits, server CPU, and wall-clock time on results that have not changed since the last run. Caching is the mechanism that stops that waste: store a result the first time you compute it, and hand back the stored copy on every later request that asks for the same thing. [^1]
+
+Requirement IP-5 asks you to determine and configure caching mechanisms within IPs to maximize performance. [^1] It is a design skill more than a click-through one. The two caching types, Org Cache and Session Cache, the Time To Live value, and the granularity decision (cache the whole procedure or just one block of steps) are all tools. The exam checks whether you know which tool fits which job, and it does that through three claims you need to be able to defend. First, an IP avoids re-fetching the same reference data on every run by configuring caching with a sensible Time To Live. Second, the data that belongs in a cache is stable, expensive reference data such as catalogs and rates, not volatile values and not one user's private session data. Third, when users see outdated data after the source changes, the cause is cache configuration, specifically a Time To Live or scope that is wrong or an invalidation step that never ran. Every section below teaches toward those three claims.
+
+## Deep Dive
+
+### What OmniStudio actually caches
+
+Start with a clear split, because it explains two very different behaviors you will see on the job. OmniStudio caches two kinds of content: metadata and data. [^1]
+
+Metadata is the definition of an Integration Procedure or Data Mapper: the steps, the mappings, the formulas, the structure and configuration that describe what the component does. OmniStudio stores that definition in a Metadata Cache so that a component loads fast every time it is invoked, instead of re-reading and re-parsing its own configuration from storage. This cache is internal. You do not configure its scope or Time To Live, and it holds definitions, not actual records. [^1] You can influence it in only one coarse way: an Integration Procedure has a Disable Definition Cache checkbox in its Procedure Configuration, and checking it turns metadata caching off for that procedure. The typical use is diagnostic, comparing a procedure's Browser, Server, and Apex CPU values in the Preview with the box checked and unchecked to see how much the metadata cache is buying. [^1]
+
+Data is the content users actually care about: the response of a Data Mapper or the response of an Integration Procedure. This is the part you configure, and it is the subject of this requirement. When data caching is on and a request arrives with the same input it has seen before, OmniStudio returns the cached response instead of re-running the query or the callout. [^1] The two configurable cache types are Org Cache and Session Cache, and both are part of the Salesforce Platform Cache. [^1][^2] That lineage matters because the platform cache comes with hard capacity limits that are shared org-wide, so an aggressive cache design can starve other features that also rely on the cache partition. Cache is a finite resource, not an infinite one.
+
+### Org Cache versus Session Cache: shared versus per-user
+
+The single most important judgment in this requirement is scope, and it maps to one question: who is allowed to see a cached answer?
+
+**Org Cache.** Cached data here is shared among all users in the same org. [^2] One user runs the IP, the result lands in the org cache, and every other user who runs the same IP with the same input gets that same stored result without re-running the work. That is enormously efficient for data that is identical for everyone, and it is precisely why Salesforce says to use Org Cache only for non-sensitive data that is not user-specific. [^2] Good examples are picklists, configuration values, and object data that carries no access restrictions. [^1] Product catalogs, currency or tax rates, a list of valid shipping zones, a lookup table of country codes: these are the same for every user, so a shared cache serves them correctly and cheaply.
+
+The warning attached to Org Cache is the load-bearing one for the exam's data-leakage trap. Because the org cache is shared, anything user-specific that lands in it becomes visible to other users, and anything access-restricted can be returned to a user who should never have seen it. A cached record that user A could read but user B cannot must not be served to B from a shared cache. Salesforce is blunt about this: use org cache only for non-sensitive data. [^2] If you put a private account balance or a role-restricted document into Org Cache, you have built a leak.
+
+**Session Cache.** Cached data here is stored per user and lives only for the user's active login session. [^1][^2] It is private to that session, which makes it the safer choice for personalized data and for data that changes based on the user's profile or permissions. [^2] If the expensive work depends on who is asking, such as a dashboard that shows a user's own records or a quote assembled from that user's entitlements, Session Cache keeps the benefit of caching without crossing the user boundary. Each user's session gets its own stored results, and when the session ends the data is gone. [^1]
+
+The tradeoff is efficiency. Session Cache saves work only when the same user comes back with the same request within one session. It does nothing for the far more common pattern where a thousand different users all ask for the same catalog. That pattern wants Org Cache. Choosing between them is not a preference; it is a direct consequence of whether the data is shared or user-specific. Shared and non-sensitive means Org Cache. User-specific, permission-dependent, or sensitive means Session Cache or no cache at all.
+
+### Time To Live: the freshness dial
+
+Time To Live (TTL) decides how long a cached result is allowed to sit before it is treated as stale and recomputed. In the Procedure Configuration this is the Time To Live In Minutes property. [^3] Every cache type has a floor and a ceiling that Salesforce enforces. [^3]
+
+For Session Cache, the default Time To Live is 5 minutes and the maximum is 480 minutes, which is 8 hours. The cache clears when the user's session expires no matter what value you set, because a session cache cannot outlive its session. [^3] For Org Cache, the default is 1440 minutes (24 hours) and the maximum is 2880 minutes (48 hours). [^3] The minimum for both is 5 minutes. [^3]
+
+Here is the mental model that ties TTL to correctness. TTL is a freshness contract between you and the data. If the source data changes rarely, a long TTL is fine, because the stored copy stays accurate for a long time and you collect the performance savings the whole way. If the source data changes often, a long TTL is a bug, because users keep getting a version that stopped being true hours ago. This is the classic stale-data failure mode, and it is exactly what quiz question 3 is testing. When users report outdated values right after reference data changed, the first suspect is a TTL that outlived the data's relevance, or an invalidation that never fired. The remedy is either to shorten the TTL so the cache re-reads the source sooner, or to clear the cached entry when the source changes so the next request rebuilds it.
+
+The shorter the TTL, the more often the cache misses and the less performance you gain. The longer it is, the more performance you gain and the greater the risk that a user sees data that no longer reflects the source. There is no universal correct number. There is only the right trade for how often a given data set actually changes, which is why the exam frames TTL as a judgment call driven by volatility rather than a value to memorize.
+
+### Granularity: top-level caching versus Cache Blocks
+
+Caching is not all-or-nothing across a procedure. OmniStudio gives you three ways to apply it, and picking the right one is part of determining the mechanism. [^2]
+
+You can cache metadata for the whole procedure, which happens by default and which you can disable per procedure with the Disable Definition Cache checkbox. [^1]
+
+You can cache the response of the entire procedure, called top-level data, by setting the Salesforce Platform Cache Type and Time To Live in the Procedure Configuration. [^3][^4] Top-level caching is the whole-procedure version: run the IP once, cache its full response keyed to the request input, and serve that stored response on later matching requests. One condition is important to internalize: if a procedure with top-level caching enabled fails, its data is not cached. [^4] A failed run does not poison the cache with a partial result, but it also does not populate it.
+
+You can cache only part of the procedure by placing a set of steps inside a Cache Block. A Cache Block saves the output of the steps within it to a session or org cache for quick retrieval, and it is the right tool when some parts of a procedure update data or when different pieces of cached data should expire at different times. [^5] Salesforce's own example is weather data: current conditions change more frequently than a user's session data, so the two belong in different cache treatments rather than one blanket whole-procedure cache. [^5] Top-level caching overrides Cache Block caching for the duration of the top-level Time To Live, so if you set a whole-procedure cache, its TTL governs. [^3]
+
+### What a cached result is keyed to
+
+A cache that holds one result is only useful if the system can tell whether a new request should get that result or should be recomputed. That decision is made by the cache key. OmniStudio derives the key from the request input, and the rule to remember is that the same request input returns the cached data. [^1]
+
+The framework surfaces this in the procedure's debug output as `vlcCacheKey`, the key for any data stored in the cache. [^4][^5] Related JSON nodes make the caching state visible: `vlcCacheResult` is set to true when data is retrieved from the cache, `vlcCacheEnabled` is set to false when caching is disabled through the `ignoreCache` option, and `vlcCacheException` reports any caching error. [^4][^5] For top-level caching these nodes appear under the root node of the JSON; for a Cache Block they appear under that block's Info node, such as `CacheBlock1Info`. [^4][^5] When you invoke a procedure over REST, the same values come back as response headers rather than as body nodes. [^4]
+
+You do not hand-write `vlcCacheKey` in normal configuration; the framework generates it from the input that reached the cached action. But you must reason about it, because the key is the entire safety boundary between "cache hit with the right answer" and "cache hit with someone else's answer." A cached result is keyed to the input that produced it. If two logically different requests collapse onto the same key, the second request gets the first request's data. If the input a cached result depends on changes but the key does not, users get stale results served from cache. This is why the design guidance is explicit that cache keys must uniquely identify cached results, and why changing the shape of a procedure's inputs demands re-examining what the cache is keyed on.
+
+### Design judgment: what belongs in the cache
+
+Every exam scenario in this requirement ultimately reduces to one sentence, and you should be able to say it without hesitating: cache stable, expensive, shared data, and never cache volatile or user-specific data without careful keys and a short TTL. [^2]
+
+Unpack the three adjectives. Stable means the value does not change often, so a stored copy stays accurate and a long TTL is safe. Expensive means computing it is costly enough that avoiding the recompute is worth the cache's complexity and its share of platform cache capacity: an external callout, a heavy multi-object extract, a transform over thousands of rows. Shared means the same answer serves many users, so the org cache's efficiency is real and no user-specific boundary is crossed. Product catalogs, pricing and tax rates, configuration tables, and reference lookups clear all three bars at once. [^2]
+
+The data that fails the test is the data the traps warn about. Volatile values, such as random values or anything that changes on every read, defeat the entire purpose: they are stale the moment they are cached, so a cache hit is a wrong answer. User-specific data in a shared cache is inefficient, and worse, it is a data leakage risk, because the org cache is shared across users. [^2] And anything sensitive, confidential, or regulated is disqualified outright. Salesforce warns not to cache confidential or regulated information unless the security settings that would protect it are enforced, and to use org cache only for non-sensitive data. [^2][^3] When in doubt about scope or sensitivity, the correct default is often no cache at all.
+
+## Configuration Walkthrough
+
+Put the model to work with a concrete procedure. Say you run a service that serves a product catalog plus a set of shipping rates to a customer-facing flow. The catalog changes weekly; the rates change monthly; both are identical for every user. Caching both well means two decisions, not one, because they change on different schedules.
+
+1. **Identify the expensive, stable actions.** Open the IP in the Integration Procedure Designer and trace which actions do heavy work: external lookups, large Data Mapper Extract operations, transforms over many records. These are the candidates. For the catalog service, the expensive steps are the extract that pulls the full product list and the callout or lookup that resolves shipping rates. Both are stable across users.
+
+2. **Enable caching at the right granularity.** Decide between whole-procedure top-level caching and a Cache Block. Because the catalog and the rates expire on different schedules, do not cache the whole procedure on one TTL. Place the catalog-producing steps and the rate-producing steps so each can carry its own treatment, and remember that if a whole-procedure cache is set, its Time To Live governs over any Cache Block. [^3] If the different expiry schedules matter, reach for Cache Blocks rather than a single top-level cache. [^5]
+
+3. **Set the scope.** In the Procedure Configuration, set the Salesforce Platform Cache Type to Org Cache or Session Cache, or leave it blank for no caching. [^3] The catalog and rates are shared and non-sensitive, so Org Cache is correct: every user who asks for the catalog gets the same stored answer, and the org does the expensive extract once instead of once per user. [^2] If any part of the response were user-specific or permission-dependent, that part would need Session Cache or no cache, never a shared org entry.
+
+4. **Set the Time To Live to match volatility.** Specify Time To Live In Minutes, with a floor of 5 and a ceiling of 480 for Session Cache or 2880 for Org Cache. [^3] The weekly catalog can ride a long TTL, since even a day-old copy is accurate. The rates change monthly, so an even longer TTL is safe there. If either changed hourly instead, you would shorten its TTL accordingly. The value tracks how often the source actually changes, nothing else.
+
+5. **Verify the cache keys uniquely identify cached results.** Confirm the request input that feeds the cached action produces one key per distinct answer, so a request for catalog page A never returns catalog page B's stored response. [^4] If the inputs include an identifier or a filter value, make sure that value is part of what the cache keys on. Two different inputs landing on one cached result is a wrong-answer bug that looks, from the user's side, like the procedure is broken.
+
+6. **Plan invalidation for when the source changes.** TTL is passive: it eventually ages a value out. Invalidation is active: it removes the value now. When the catalog or the rates are updated in the source system, clear the affected cache so the next request rebuilds it rather than serving the old copy. The documented mechanism is clearing the org or session cache for the procedure from the Developer Console, with the legacy `clearOrgCache` and `clearSessionCache` calls giving way to Connect APIs starting in Summer '25. [^4] Note that top-level and Cache Block data is also cleared when the Integration Procedure is deactivated. [^3] Invalidation is the step people skip, and a skipped invalidation is the most common reason users keep seeing data that the source no longer reflects.
+
+7. **Activate the version and test.** Top-level caching only happens when the Integration Procedure is active, so click Activate Version. [^3] Test in the Preview tab using the two caching options in the Options JSON: `ignoreCache`, which defaults to true and does not clear or save cache data, and `resetCache`, which defaults to false and forces data to be saved. [^4] To actually exercise the cache, set `ignoreCache` to false, run once to populate it, then run again and confirm the CPU metrics drop and a cached-response marker appears. [^6] Run a failed case too, to confirm a failed procedure does not cache its partial data. [^4]
+
+## Exam Traps
+
+- **Caching volatile data.** A cache stores a snapshot, and a volatile value is out of date the instant it is stored. Random values, live counters, and anything that changes on every read are the wrong fit for a cache. A cache hit on volatile data is a guaranteed wrong answer, which is why the design rule says cache stable data and never volatile values. [^2]
+
+- **Too-long TTL on frequently changing data.** Users see stale results because the TTL outlived the data's relevance. The catalog that changes every hour but rides a 48-hour org TTL will serve yesterday's prices all day. The fix is not a bigger cache; it is a shorter TTL matched to how often the source changes, or active invalidation when the source updates. [^3][^4]
+
+- **User-specific data in a shared cache.** This is the leakage trap behind the org-cache warning. The org cache is shared by all users, so any user-specific or access-restricted data placed there becomes visible to users who should not have it. Salesforce directs org cache to non-sensitive, non-user-specific data, and Session Cache to user-specific data. [^1][^2] If the answer to "who may see this?" is anything other than "everyone," a shared org cache is the wrong home for it.
+
+- **Treating invalidation as optional.** TTL handles aging; it does not handle the moment the source changes and the old copy is now wrong. Without an explicit invalidation step, users keep getting stale data until the TTL finally expires. On the exam, "users see outdated data after reference data changes" is a config symptom first and a code bug second, and the diagnosis begins with the cache's TTL, scope, and whether anything cleared it. [^4]
+
+## Exam Tip
+
+Cache stable, expensive, shared data, and keep three dials in mind for everything else. Freshness is the Time To Live, so match it to how often the source changes. Safety is the scope and the keys, so keep user-specific and sensitive data out of the shared org cache and confirm keys uniquely identify each stored result. When users report stale data, check the cache first: a TTL that is too long, an org cache holding user-specific data, or an invalidation that never ran explains most of the field reports you will ever debug. [^2][^4]
+
+## Try It
+
+Open the Integration Procedure Designer in a sandbox and build the catalog service described above: an input that accepts a small list of lookup names, a Data Mapper Extract Action that pulls matching records, and a Response Action that returns them. In the Procedure Configuration set the Salesforce Platform Cache Type to Org Cache and a Time To Live of a few minutes. Activate the version. Open the Preview, edit the input JSON, and set `ignoreCache` to false. [^6] Execute once to populate the cache, then execute a second time with the same input and watch the performance metrics fall and the cached-response marker appear. Then change the input values and run again: you should see a fresh execution, which proves the cached result was keyed to the input, not served blindly. Finally, clear the cache from the Developer Console, run once more, and confirm the first run is slow again because the cache was empty. That exercise turns TTL, scope, and invalidation from reading into muscle memory. [^4]
+
+## What's Next
+
+Caching made a procedure fast by letting it skip work it had already done, but it did nothing for the procedure that fails partway through and leaves its work half done. Lesson 27, Exception Handling: Try/Catch and Rollback (IP-6), is the next requirement in the Integration Procedures domain, and it teaches how to contain failures inside a procedure, catch them where they happen, and decide when a failed step should roll back the work that already ran. Caching decides what a procedure reuses; exception handling decides what it does when something goes wrong, and the two together are how a production Integration Procedure stays both fast and reliable.
+
+## Related Requirements
+
+- IP Design: Server-Side Orchestration (earlier lesson)
+- IP Action Types: Groups, Data Mapper, HTTP, Remote, Sub-IP (earlier lesson)
+- Chainable Integration Procedures, lesson 25 of 46 (IP-4)
+- Exception Handling: Try/Catch & Rollback, lesson 27 of 46 (IP-6)
+- Resolve Caching Problems, a later lesson in this series
+- Integration Procedure Best Practices, a later lesson in this series
+
+## References
+
+[^1]: [Improve Performance by Using Caching, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_cache_for_dataraptors_and_integration_procedures_54751.htm&type=5)
+[^2]: [Cache for OmniStudio Integration Procedures, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_cache_for_dataraptors_and_integration_procedures_1.htm&type=5)
+[^3]: [Configure Top-Level Caching for an Integration Procedure, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_configure_top_level_caching_for_an_integration_procedure_54929.htm&language=en_US&type=5)
+[^4]: [Cache for Top-Level Integration Procedure Data, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_cache_for_top_level_integration_procedure_data_54841.htm&language=en_US&type=5)
+[^5]: [Enhance Performance by Using Cache Blocks, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_enhance_performance_using_cache_blocks_48810.htm&language=en_US&type=5)
+[^6]: [Create a Top-Level Caching Example, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_create_a_top_level_caching_example_54974.htm&language=en_US&type=5)

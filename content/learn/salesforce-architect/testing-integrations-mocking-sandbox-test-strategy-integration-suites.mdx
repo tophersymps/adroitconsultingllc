@@ -1,0 +1,121 @@
+---
+title: "Lesson 29: Testing Integrations: Mocking, Sandbox Test Strategy, and Integration Test Suites"
+slug: testing-integrations-mocking-sandbox-test-strategy-integration-suites
+series: "salesforce-architect"
+lesson: 29
+excerpt: "Testing an integration is not the same as testing the code on one side of it. You have to fake the external system to unit test your Apex, pick the right sandbox to test against real data, and build suites that prove the pieces work together before they reach production. This lesson covers each layer: mocking callouts, a sandbox strategy, and integration test suites."
+date: "September 2, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Architecture, Testing, Integrations]
+---
+
+# Lesson 29: Testing Integrations: Mocking, Sandbox Test Strategy, and Integration Test Suites
+
+Lesson 28 showed how to design a high-volume event stream that stays inside its allocations. This lesson turns the lens around and asks how you prove that the integrations from the last several lessons actually behave the way you drew them. An integration has two halves you do not control equally. You control your Apex, your triggers, your flows. You do not control the external REST service, the downstream ERP, or the vendor API. That asymmetry is the whole problem of integration testing, and the entire discipline is about managing it.
+
+The short version: mock the callout to test your code in isolation, use a sandbox to test against realistic data and real platform behavior, then assemble integration test suites that prove the seams between systems hold. Those three are not alternatives. They are the bottom, middle, and top of the same strategy, and an architect who skips one ends up with a deployment that fails in a way unit tests never saw coming.
+
+## Define the terms
+
+- **Mock**: a stand-in object that returns scripted responses instead of calling the real dependency. In Apex, you provide a class that implements `HttpCalloutMock` and return whatever fake `HttpResponse` the test needs. [^1]
+- **Stub**: a broader version of the same idea, used to fake whole Apex classes when the code under test depends on another class rather than on an HTTP call. The Apex Stub API generates a stub at runtime as an anonymous subclass and lets you define its behavior. [^2]
+- **Test double**: the umbrella term that covers mocks, stubs, fakes, and spies, any object that replaces a real dependency so a test can run without it. [^4]
+- **Sandbox**: a copy of your production org that Salesforce provisions for development and testing. The type of sandbox controls what data gets copied. A Developer sandbox copies configuration and metadata. A Full sandbox copies records, attachments, and metadata, a full replica. [^3]
+- **Partial Copy sandbox**: a sandbox that copies a template-defined subset of records and metadata, sitting between Developer and Full. [^3]
+- **Unit test**: a test of a single unit of logic in isolation, with the dependencies replaced. The base of the test pyramid, numerous and fast. [^4]
+- **Integration test**: a test that takes a small group of units, often two, and verifies they work together. Google's testing blog gives the cleanest framing: an integration test takes a small group of units, often two units, and tests their behavior as a whole. [^5]
+- **End-to-end test**: a test that drives the entire system, every service and the user interface, the way a real user would. Slow, fragile, and few, at the top of the pyramid. [^4] [^5]
+- **Sandbox template**: a saved selection of records and setup that a Partial Copy or Full sandbox refresh uses to decide which data to bring across. [^3]
+- **Test.startTest() and Test.stopTest()**: the calls that wrap the actual exercise of code being tested, giving that section a fresh set of governor limits and running queued asynchronous work synchronously. [^7]
+
+## The problem mocking solves: you cannot hit the real service
+
+The most important constraint in Apex integration testing is that real callouts do not happen in test context. When an HTTP callout is invoked while a test is running, the callout is not made. Instead the runtime returns whatever your mock provided. [^1] Think about what that does to your options. A test that simply calls `Http.send()` against your real integration endpoint would get nothing back, or would fail, because the platform refuses to make the network call. So you have to decide, before you write a single assertion, what the external system would have said.
+
+That decision is the real skill. A mock is not a way to make the test pass. It is a way to encode your contract with the external system into the test. You return the success JSON that the API produces for one test. You return the 500 with an error body for another. You return an unexpected schema for a third. Each mock is a small statement about what your code should do given a specific response, and together they are the closest thing you have to a specification of the seam.
+
+### Mock the HTTP callout
+
+Salesforce gives you a direct path for callouts. You write a class that implements `HttpCalloutMock` and defines a `respond` method, which returns the fake `HttpResponse`. Then you register it with `Test.setMock(HttpCalloutMock.class, yourMock)` before the code runs. From that point, any HTTP callout in the test receives your response instead of a real network reply. [^1]
+
+There are two practical habits worth keeping. First, vary the responses. A single happy-path mock proves the code can pass data through, but it proves nothing about error handling, timeouts, malformed payloads, or unexpected status codes. Write one test per response shape. Second, keep the mock honest against the real contract. A mock that returns JSON the real API would never return teaches your code to handle a lie. Pull a captured sample of real responses when you can, and shape the mocks from those samples rather than from memory.
+
+A note on naming, because it matters on the exam and in teams. A mock and a stub are related but not identical. A stub returns canned data and you do not assert on how it was used. A mock goes one step further and verifies behavior, for example that a given method was called with specific arguments. The Salesforce Stub API can serve both roles. [^2] For the exam, keep the split clean: a stub provides data, a mock verifies interaction.
+
+### Mock whole classes with the Stub API
+
+Callouts are not the only dependency you need to fake. Your Apex class might depend on another class in your own codebase, a wrapper around a legacy system, a service layer, or a class with complex setup. The Apex Stub API lets you generate a runtime stub of any class and define how its methods behave. [^2]
+
+The mechanism is straightforward. You implement `System.StubProvider`, which has a single method, `handleMethodCall`, that the runtime invokes whenever a stubbed method is called. Inside it you inspect which method was invoked and return the value the test needs. Then you obtain a stub with `Test.createStub(SomeClass.class, provider)`. [^2]
+
+That is exactly what ApexMocks, the popular open source library, is built on. Rather than hand-writing a `StubProvider` for every class, ApexMocks gives you a framework you configure with fluent calls. The Stub API page notes that you can build your own framework or use one someone else built. [^2] Either way, the underlying capability is the same runtime-generated stub.
+
+There is a hard ceiling you should know before you reach for the Stub API. It cannot mock static methods, private methods, properties, triggers, inner classes, system types, or batchable classes. [^2] Plan your seams around that. Put your testable logic in instance methods on classes you can stub, and keep the static entry points thin.
+
+## The sandbox test strategy: choose the right copy
+
+Mocking handles the unit layer, where you test code against faked external systems. But there is a whole class of integration behavior that mocks cannot catch: how the platform itself behaves with real data under real governor limits. That is what sandboxes are for, and the choice of sandbox type is an architectural decision, not an admin task.
+
+Salesforce provides four sandbox types, and they differ by what data they copy. [^3] A Developer sandbox is an isolated environment that copies your production configuration and metadata, with no data unless you add it. It refreshes quickly and is the workhorse for day to day development. A Developer Pro sandbox raises the data allowance so you can load a subset of records for testing customizations that depend on data. A Partial Copy sandbox copies a template-defined subset of records and metadata, which is how you get realistic test data without a full copy. A Full sandbox is a complete replica, records, attachments, and metadata, and it is the only type that supports performance testing, load testing, and staging. [^3]
+
+The strategy question is: where does each kind of integration testing belong? Unit tests with mocks run in any sandbox and in the developer console, because they need no real data and no real network. Integration tests that exercise your code against the platform's data model and governor limits belong in a Partial Copy sandbox, which carries enough real shape to be meaningful. Load and performance testing of an integration path belongs only in a Full sandbox, both because it is a full replica and because Salesforce says Full sandboxes are where such testing is supported. [^3]
+
+The mistake to avoid is treating every sandbox as interchangeable. Refreshing a Full sandbox is slow and expensive enough that Salesforce notes the refresh interval makes it difficult to use for development. [^3] So you reserve Full for the testing that needs the whole org, and do your iteration in Developer and Partial Copy sandboxes. And whatever the type, apply a sandbox template to the Partial Copy and Full sandboxes so you bring across only the records you need for testing, rather than the entire production data set. [^3]
+
+One more habit, and it connects sandboxes to mocks. Unit tests in Apex should not depend on data in the org at all. Salesforce's testing best practices say to create the data the test needs in the test class, and to create it before `Test.startTest`, so tests do not rely on data in a particular organization. [^6] The sandbox is a place to run your full suite against realistic data and to validate deployments. It is not a crutch for a test that forgot to set up its own data. Keep tests self-contained, and the sandbox becomes a staging area for integration verification rather than a dependency of every test.
+
+## Integration test suites: prove the seams
+
+Mocks prove each unit behaves against a faithful fake. Sandboxes prove the platform behaves with real data. The third layer, integration test suites, proves that the seams between the pieces hold. Recall the definition: an integration test takes a small group of units, often two, and tests their behavior as a whole. [^5] The unit of work here is not a single method. It is a handshake: your Apex calling out to a service, a trigger reacting to a DML operation that fires a platform event, a flow that reads a record a batch job just wrote.
+
+The test pyramid gives you the shape of a healthy suite. Martin Fowler's framing is that you have many fast, isolated unit tests at the base, fewer integration tests in the middle, and a small number of slow end-to-end tests at the top. [^4] Google's testing blog is blunter about the top of the pyramid: end-to-end tests are valuable but expensive and brittle, so you keep them few and focused on the user journeys that carry real value, and you push coverage down into integration and unit tests. [^5]
+
+Two properties decide whether an integration suite is healthy: placement and honesty. Placement means a real integration test actually exercises the seam. If the code under test calls a mock, that is a unit test, not an integration test. An integration test for a callout would use a sandbox and a live or simulated version of the external endpoint to verify the two sides agree on the contract. Honesty means the test fails when the seam breaks. A suite where the mock and the real service have drifted, where the probe never runs against the real contract, is churn, not coverage.
+
+In Apex, a few mechanics make these suites behave. Wrap the actual exercise of the code in `Test.startTest()` and `Test.stopTest()`. [^7] The code between those two calls runs with a fresh set of governor limits, which is how you test that a batch job or a large callout-heavy operation stays inside its allocations. The same calls make queued asynchronous work run synchronously at `stopTest`, so you can assert on the result of a `@future` method or a batch job without waiting. [^7] And follow the coverage and setup rules from the testing best practices page: cover each branch, test both valid and invalid inputs, exercise bulk behavior with at least 20 records, and use `runAs` to test different user contexts. [^6]
+
+## Worked example: testing a credit check callout
+
+A lending org exposes a `CreditCheckService` that calls an external bureau and returns a risk score. The architect designs three layers of tests.
+
+1. **Unit test with a mock.** Each test implements `HttpCalloutMock` and registers it with `Test.setMock`. One mock returns a 200 with a low risk score, another returns a 200 with a high score, a third returns a 500, and a fourth returns malformed JSON. Each one pins down what `CreditCheckService` does with that response: parse and return the score, throw a typed exception, throw a different exception, raise an alert. [^1] This is the fast, high-volume base of the pyramid, and it needs no sandbox and no real network.
+
+2. **Integration test in a Partial Copy sandbox.** A separate suite runs against a bureau sandbox endpoint that emulates the real service. It confirms the real request body your code sends matches what the bureau expects, and that the response parser handles the live schema. Because it runs in a Partial Copy sandbox with template-selected records, the test sees realistic customer data under real platform limits. [^3] This suite catches the drift between your mock and the real service, exactly what the unit layer cannot.
+
+3. **Load verification in a Full sandbox.** Before release, the org runs a scripted load against the credit check path in a Full sandbox to confirm response time and callout limits hold under expected volume. Salesforce reserves this kind of performance and load testing for Full sandboxes. [^3] A handful of scenarios, not a big suite, because these runs are slow and expensive.
+
+The pattern is the point. The mock makes the logic testable and fast. The sandbox makes the seam with the real service testable and honest. The load run in Full makes the production behavior testable at scale. Each layer catches what the layer below it cannot.
+
+## The pitfalls to avoid
+
+**Mocking the thing you are trying to test.** The classic failure is an integration test that mocks the external service and then claims to have verified the integration. It verified your code against a fake, which is a unit test doing its job. It did not verify the seam. If your goal is to prove the two sides agree, you need the real or emulated endpoint in a sandbox. Do not let the word integration on the suite lull you into skipping the actual handshake.
+
+**Letting mocks and the real service drift.** A mock built once from memory and never rechecked will quietly teach your code a contract the real API does not honor. Sample real responses, shape your mocks from them, and revalidate whenever the vendor changes the API. Google's advice applies here: keep the fast tests many, but keep them honest. [^5]
+
+**One sandbox for everything.** If every test runs in whatever sandbox is free, you cannot tell which results are real and which are artifacts of missing data. Match the sandbox type to the need: Developer for iteration, Partial Copy for data-dependent integration tests, Full only for the load and staging work that requires the full replica. [^3]
+
+**Ignoring test start and stop.** Code that runs outside a `startTest`/`stopTest` block shares the limiting context, so a test that should verify a batch job or a callout-heavy path under its own limits will silently not do so. Wrap the thick part of the test, create the data first, and let `stopTest` flush the async work synchronously. [^7]
+
+## Try it
+
+A healthcare org's `ClaimSubmissionService` calls an external clearinghouse to submit a claim and get back a submission ID and status. The architect is asked to design the test strategy.
+
+1. What does the unit layer look like, and what does each test pin down? *(Each test registers an `HttpCalloutMock` via `Test.setMock`: one 200 success, one 200 with an unexpected status field, one 500, one timeout. Each asserts how `ClaimSubmissionService` responds.)* [^1]
+2. The service also depends on an internal `ClaimPayerRouter` class. What are your options to test `ClaimSubmissionService` without a real router? *(Use the Stub API with `Test.createStub` and a `System.StubProvider`, or a framework like ApexMocks that builds on it.)* [^2]
+3. Your org wants integration tests against real contract data. Which sandbox type do you choose, and why not Full? *(A Partial Copy sandbox with a sandbox template, because it brings a realistic subset and refreshes far faster than a Full replica.)* [^3]
+4. Where do you run the load test that verifies callout limits under high claim volume? *(Only a Full sandbox, which is where Salesforce supports performance and load testing.)* [^3]
+5. A batch job submits a thousand claims per run. How do you test that it stays inside its governor limits and completes? *(Wrap the exercise in `Test.startTest()` and `Test.stopTest()`, create the thousand records first, and let `stopTest` run the batch synchronously against a fresh limit context.)* [^7]
+6. What is the single line that separates your unit tests from your integration tests? *(Whether a real seam is exercised. Unit tests run the code against a mock; integration tests verify the handshake with the real or emulated endpoint in a sandbox.)* [^5]
+
+## What's next
+
+You can now mock callouts and classes to unit test your Apex, choose the right sandbox type for the testing you are actually doing, and assemble integration suites that prove the seams hold before production. The next lesson moves from proving that the software you control works to proving that the AI systems your pipelines increasingly call on work. It covers general systems architecture for testing AI systems, including evals, golden sets, canaries, and regression testing, which is how you gain confidence in a model's output, not just in the code that surrounds it.
+
+[^1]: developer.salesforce.com. [Testing HTTP Callouts by Implementing the HttpCalloutMock Interface | Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_classes_restful_http_testing_httpcalloutmock.htm)
+[^2]: developer.salesforce.com. [Build a Mocking Framework with the Stub API | Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_testing_stub_api.htm)
+[^3]: help.salesforce.com. [Sandbox Types and Templates | Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=platform.create_test_instance.htm&type=5)
+[^4]: martinfowler.com. [The Practical Test Pyramid](https://martinfowler.com/articles/practical-test-pyramid.html)
+[^5]: testing.googleblog.com. [Just Say No to More End-to-End Tests | Google Testing Blog](https://testing.googleblog.com/2015/04/just-say-no-to-more-end-to-end-tests.html)
+[^6]: developer.salesforce.com. [Testing Best Practices | Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_testing_best_practices.htm)
+[^7]: developer.salesforce.com. [Using Limits, startTest, and stopTest | Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_testing_tools_start_stop_test.htm)

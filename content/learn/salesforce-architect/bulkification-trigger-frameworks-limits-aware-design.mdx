@@ -1,0 +1,229 @@
+---
+title: "Lesson 33: Bulkification & Trigger Frameworks: Limits-Aware Design That Scales"
+slug: bulkification-trigger-frameworks-limits-aware-design
+series: "salesforce-architect"
+lesson: 33
+excerpt: "The reason a trigger that works on one record fails on a data load. Governor limits put a hard ceiling on SOQL, DML, heap, and CPU per transaction. Bulkification keeps every layer working on collections, and a trigger framework keeps one handler in charge of the object so the code that touches the platform is tiny and the logic is testable."
+date: "September 6, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Salesforce, Architecture, Apex, Triggers]
+---
+
+# Lesson 33: Bulkification & Trigger Frameworks: Limits-Aware Design That Scales
+
+Lesson 32 told you where the automation should live: Flow for low density, Apex for high density, external for cross-system. This lesson assumes you made that call and Apex is the answer. Now the question is whether the code survives real data. A trigger that works perfectly when a human saves one account can fail with a `System.LimitException` the first time someone runs a data load and drops 5000 records on it. The difference is bulkification, and it is not a style preference. It is the difference between code that runs and code that dies at the 101st query.
+
+The core idea is a ceiling. Salesforce runs millions of orgs on shared hardware, so it enforces per-transaction governor limits that cap how much work any single unit of Apex may do. Your job as architect is to design inside those limits from the start, and to organize triggers so the code that touches the platform stays tiny while the logic lives somewhere you can test it. Bulkification is how you fit the work under the ceiling. The trigger framework is how you keep it governable.
+
+## Define the terms
+
+- **Bulkification**: writing Apex so it handles a collection of records at once instead of one record at a time. Salesforce defines it as making sure the code properly handles more than one record at a time, because a single instance of the code may be invoked by a batch of records and must process them all as a bulk.[^1]
+- **Governor limit**: a per-transaction cap on platform resources such as SOQL queries, DML statements, heap memory, and CPU time, enforced at runtime to stop any single Apex transaction from monopolizing shared resources.[^2]
+- **Trigger context variables**: `Trigger.new`, `Trigger.old`, `Trigger.newMap`, `Trigger.oldMap`, and `Trigger.size`, which expose the records that fired the trigger and let handlers route on operation and phase.[^3]
+- **Trigger batch**: the record-set unit Apex triggers execute on. Triggers operate on batches of 200 records at a time, so a 400-record load fires the trigger twice, once per 200 records.[^4]
+- **Trigger framework**: a design pattern that keeps one trigger per object and moves the trigger's logic into handler and helper classes, so the trigger itself only registers events and delegates.[^5]
+- **Trigger handler class**: the class that receives the trigger context and routes to the right method per event (before insert, after update, and so on).[^5]
+- **Helper (service) class**: the class that holds reusable business logic, callable from the handler and from anywhere else in the org, which is what makes the logic testable and reusable.[^5]
+- **Recursion guard**: a static flag that tracks whether the framework is already executing, so a DML call inside a trigger does not re-fire the same trigger endlessly.[^6]
+
+## The ceiling: governor limits are a design constraint, not an error
+
+Governor limits exist because the platform is multitenant. Salesforce is explicit that these limits ensure runaway code does not monopolize resources on a shared platform.[^4] Reading them as a nuisance misses the point: they are the contract that every Apex solutions shares, and designing under them is part of the job.
+
+The limits that matter most for triggers, on synchronous Apex:
+
+- **SOQL queries**: 100 per transaction for synchronous Apex, 200 for asynchronous.[^4]
+- **DML statements**: 150 calls per transaction.[^4]
+- **Callout (HTTP) time**: a maximum cumulative timeout for all callouts in a transaction, 120 seconds.[^2]
+- **Heap size**: 6 MB for synchronous Apex, 12 MB for asynchronous.[^2]
+- **CPU time**: a maximum on server CPU, generally 10,000 milliseconds for synchronous Apex and higher for asynchronous.[^2]
+
+Numbers drift between versions and channels, so treat these as the shape of the constraint rather than gospel. The exam and the interview both want the reasoning, which is stable: every query and every DML statement you add to a transaction consumes the same shared budget, and when you put one inside a loop that runs once per record, you spend the budget in proportion to the batch size.
+
+The most important limit for a trigger author is the **Apex trigger batch size of 200**.[^4] Triggers do not run once per record. They run once per 200 records in the triggering set. A load of 2000 records fires the trigger ten times, and each firing is a fresh transaction against its own governor budget. This is why a trigger that holds one SOQL query inside a per-record loop is a time bomb: a 300-record update can fire 300 queries in a single transaction, and the governor throws `System.LimitException` at query 101.
+
+## Bulkify: always assume the trigger sees a collection
+
+The first rule of bulkification is to stop writing triggers for a single record. Salesforce's guidance is direct: always assume the trigger operates on a collection of records so that it works in all circumstances.[^4] It does not matter that the user interface usually saves one record. When the origin is a bulk DML operation or the API, the trigger operates on a record set.[^4]
+
+The failure pattern is a trigger that grabs `Trigger.new[0]`:
+
+```apex
+trigger MyTriggerNotBulk on Account (before insert) {
+    Account a = Trigger.new[0];
+    a.Description = 'New description';
+}
+```
+
+This works on one record and silently misbehaves on a collection, since only the first record is addressed. The bulkified version iterates the whole set:[^4]
+
+```apex
+trigger MyTriggerBulk on Account (before insert) {
+    for (Account a : Trigger.new) {
+        a.Description = 'New description';
+    }
+}
+```
+
+That iteration is still cheap, because it touches no database. The expensive failures come when SOQL and DML sit inside loops, and those are the next two sections.
+
+## Bulk SOQL: query once, bind the collection
+
+The pattern that destroys triggers is a SOQL query inside a loop over `Trigger.new`. A query written per parent runs once per parent, and with a large batch it exhausts the SOQL budget.[^4]
+
+The anti-pattern, a query per account:
+
+```apex
+trigger SoqlTriggerNotBulk on Account (after update) {
+    for (Account a : Trigger.new) {
+        Opportunity[] opps = [SELECT Id, Name, CloseDate
+                              FROM Opportunity WHERE AccountId = :a.Id];
+        // process opps
+    }
+}
+```
+
+If 150 accounts fire this trigger, that is 150 queries in one transaction, and the governor limit of 100 does not survive contact with a data load.
+
+The bulkified version queries **once for the whole collection**, binding `Trigger.new` in the `WHERE` clause, then iterates the returned set:[^4]
+
+```apex
+trigger SoqlTriggerBulk on Account (after update) {
+    List<Opportunity> relatedOpps = [SELECT Id, Name, CloseDate
+                                     FROM Opportunity
+                                     WHERE AccountId IN :Trigger.new];
+    for (Opportunity opp : relatedOpps) {
+        // process opps
+    }
+}
+```
+
+One query returns the opportunities for every account in the trigger, regardless of batch size. This is the pattern Apex designers mean by bulk SOQL: let the query do the heavy lifting of collecting related records, then iterate the results, never issuing a query inside the iteration.[^1] The same rule applies to helper methods. Any method that runs a query must receive a collection and query for all of it in one call, because governor limits are shared across the whole transaction, not per method.[^1]
+
+## Bulk DML: one call on the collection
+
+DML follows the same shape. Apex allows up to 150 DML calls per transaction, so an `update` issued once per record in a loop dies on any batch large enough.[^4] The anti-pattern updates one opportunity at a time:
+
+```apex
+for (Opportunity opp : relatedOpps) {
+    if (opp.Probability > 50 && opp.Probability < 100) {
+        opp.Description = 'Qualified lead';
+        update opp;              // one DML call per iteration
+    }
+}
+```
+
+A bulk account update with related opportunities easily pushes this past 150 calls. The fix collects the records to change and issues a single DML statement against the whole list:[^4]
+
+```apex
+List<Opportunity> toUpdate = new List<Opportunity>();
+for (Opportunity opp : relatedOpps) {
+    if (opp.Probability > 50 && opp.Probability < 100) {
+        opp.Description = 'Qualified lead';
+        toUpdate.add(opp);
+    }
+}
+update toUpdate;   // one DML call, any number of records
+```
+
+One `update` statement handles every opportunity, no matter how many qualified inside the batch. The budget is spent in statements, not records, so batching the records into one statement is the whole trick.
+
+A useful detail: because triggers already batch records 200 at a time, you do not gain extra efficiency from a SOQL `for` loop's internal record batching inside a trigger. The SOQL `for` loop still looks clean, but a standalone query would run the same number of times because the trigger itself batching is doing that job already.[^4]
+
+## The trigger framework: one trigger per object
+
+Bulkification gets the code under the limit. The trigger framework keeps it governable, and the two go together. A trigger that accumulates every rule, all its DML, and its validation logic into one file becomes impossible to order, test, or reason about. Salesforce's own best practice is to keep a single, thin trigger per object, and Salesforce community architecture extends that into a named framework.[^5][^1]
+
+The framework has three layers:
+
+**1. The trigger.** One trigger per object, and it only registers events and delegates. It reads the context variables and calls the matching handler method. This is all the trigger file should ever contain. A version that routes every event:
+
+```apex
+trigger AccountTrigger on Account (after insert, after update, before insert, before update) {
+    AccountTriggerHandler handler = new AccountTriggerHandler(Trigger.isExecuting, Trigger.size);
+
+    if (Trigger.isInsert) {
+        if (Trigger.isBefore) {
+            handler.OnBeforeInsert(Trigger.new);
+        } else {
+            handler.OnAfterInsert(Trigger.new);
+        }
+    } else if (Trigger.isUpdate) {
+        handler.OnBeforeUpdate(Trigger.new, Trigger.old);
+        handler.OnAfterUpdate(Trigger.new, Trigger.old, Trigger.newMap, Trigger.oldMap);
+    }
+}
+```
+
+The trigger clarifies a point Lesson 32 made: committing to one entry point per object. If you split logic across multiple triggers on the same object, you lose control of execution order, because you do not get to choose which trigger runs first, and all the triggers share one governor budget.[^6] One trigger file, routing every event, keeps the ordering explicit and the budget predictable.
+
+**2. The handler class.** The handler owns the context routing above and contains the orchestration. It is where you might call a service class or a future method, and it is Apex code you can call directly from a unit test, which a trigger body alone cannot be.[^5]
+
+**3. The helper, or service, class.** The helper stores the reusable business logic, which is why the framework makes code reusable and testable. Lesson 31 covered this as the service and domain layers. A service method that updates related contacts is callable from the handler, from a Flow invocable method, or from a test, and that reuse is the payoff of the framework.[^5][^7]
+
+The benefit is direct: the trigger stays a thin, readable router; the logic lives in classes you can test in isolation; and the class methods can be invoked from other code paths, not just from a record save. The clearest sign a trigger needs this treatment is when it stops being readable in one screen.[^6]
+
+## Recursion: the guard the framework carries
+
+A trigger that performs DML on the same object it fires on will re-enter itself. Account on before update runs an update, which fires before update again, forever, until a governor limit stops the runaway. The standard guard is a static flag in the handler: set it when the framework starts executing, check it before doing work, clear it when done, so the recursive call returns immediately.[^6]
+
+Static variables live for the duration of the transaction and are shared across instances, which is exactly what a recursion guard needs: the nested invocation must see that the outer one is already in flight.[^6] This guard is one more thing a framework gives you for free once it is written once, and one more runaway that bulk logic shielding alone does not prevent.
+
+## Worked example: an order-to-fulfillment trigger, bulkified
+
+A distributor needs, after an order is inserted, to update the related inventory quantities and create a fulfillment task per order line. Orders arrive through a Bulk API load of thousands at a time. The architect wires it through a framework and bulkifies each layer.
+
+1. **One trigger.** `OrderTrigger` fires on `after insert` and delegates to `OrderTriggerHandler.OnAfterInsert(Trigger.new, Trigger.newMap)`. The trigger file is a router and nothing else.[^5]
+
+2. **Handler starts clean.** `OnAfterInsert` takes the whole `List<Order>` and hands it to the service. It does not loop yet; it treats the collection as the unit of work.[^4]
+
+3. **Collect the keys, query once.** The service gathers the order IDs into a `Set<Id>`, then runs a single query for all related order lines: `[SELECT Id, Part__c, Quantity__c FROM Order_Line__c WHERE Order__c IN :orderIds]`. One query, regardless of how many orders are in the batch.[^4]
+
+4. **Aggregate in memory.** It totals units needed per part in a `Map<Id, Decimal>` while iterating the returned lines, then runs one query for the inventory records by part. Still two queries total, and no query inside any loop.[^4]
+
+5. **Adjust and insert in bulk.** It decrements each inventory record and builds the fulfillment tasks in lists, then issues one `update` for all inventory and one `insert` for all tasks. Four DML statements total for a load of thousands of orders, nowhere near the 150-statement ceiling.[^4]
+
+6. **Guard against recursion.** The framework's static guard is set at entry and cleared at exit, so the inserts of fulfillment tasks do not re-enter `OrderTrigger` if a task update fires back into the flow.[^6]
+
+The result is a trigger that survives a 10,000-record load because every database touch is amortized across the whole batch, and every layer from trigger to service is independently testable. The framework route it inherited from Lesson 32's density decision, and the bulkification is what lets that decision hold up at real volume.
+
+## The pitfalls to avoid
+
+**SOQL or DML inside a loop.** The single largest cause of `System.LimitException`. A query or a statement inside a per-record `for` loop makes resource use scale with batch size, and the governor budget does not. Query once, bind the collection, aggregate in memory, and issue DML on lists.[^1][^4]
+
+**Assuming single-record input.** Triggers that index `Trigger.new[0]` or otherwise assume one record work on a UI save and break on a data load or API batch. Write for the collection and every origin works.[^4]
+
+**Letting the trigger become the logic.** Logics that live entirely in the trigger body cannot be unit tested, ordered, or reused, and they tend to swallow every new rule until they are unreadable. Move logic to handler and service classes behind a single trigger per object.[^5][^6]
+
+**Multiple triggers on one object.** Order of execution becomes uncontrollable and all the triggers share the same governor budget, so redundant queries compound. One entry point per object, as Lesson 32 established, is also the trigger-framework rule.[^6]
+
+**Forgetting that triggers batch at 200.** If you size an assumption to "a few records," a real load reveals the batch behavior. Design the budget for the largest realistic batch, not the demo.[^4]
+
+## Try it
+
+A custom object carries high record volume and the org wants to add automation. For each scenario, name the bulkification fix or the framework decision:
+
+1. A trigger updates one related record inside a loop over `Trigger.new`. A Bulk API load of 600 records starts throwing `System.LimitException`. Which governor limit fired, and what is the one-line fix? *(SOQL or DML budget, depending on which sits in the loop. Move the query out to `IN :Trigger.new` and the DML to a single call on a collected list.)* [^1][^4]
+
+2. A trigger performs an `update` on its own object inside a `before update` handler, and the org sees runaway saves. What is missing? *(A recursion guard: a static flag in the handler that makes the nested invocation return immediately.)* [^6]
+
+3. An object has four separate triggers, each with its own SOQL for the same related data. What is the architectural fix and what does it recover? *(Replace them with one trigger that routes to a handler, which both restores ordered execution and stops redundant queries from sharing the same budget.)* [^5][^6]
+
+4. A service method that runs a SOQL query takes a single parent Id and is called once per record from the trigger. Why is this still a governor risk, and how do you fix it? *(The method queries per call inside the loop, so it spends the budget per record. Have the method accept a collection and query once.)* [^1]
+
+5. A load of 1000 records fires a trigger. How many times does the trigger execute, and why does a per-firing budget make each one safe? *(Five times, because triggers batch at 200 records. Each firing is a transaction with its own governor budget, so per-firing spend is what must stay under the limits.)* [^4]
+
+6. Where does the business logic belong so it can be called from a Flow invocable method and a unit test alike? *(A helper or service class, per Lesson 31's layering, which the trigger handler calls.)* [^5][^7]
+
+## What's next
+
+You can now keep Apex under the governor ceiling by working on collections everywhere, and you have a framework that keeps one thin trigger per object routing into testable handler and service classes. The next lesson steps back from the code to the shape of the data those triggers act on. It returns to data model design with a focus you have not hit yet: inheritance and polymorphic relationships, where one object must stand in for several real kinds of thing, and the denormalization tradeoffs that make some of those shapes fast and others a maintenance hazard. You will learn which representation fits a set of related business entities and what you give up when you flatten them.
+
+[^1]: developer.salesforce.com. [Apex Design Best Practices | Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_best_practices.htm)
+[^2]: developer.salesforce.com. [Execution Governors and Limits | Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_gov_limits.htm)
+[^3]: trailhead.salesforce.com. [Learn Apex Trigger Fundamentals and Best Practices | Trailhead](https://trailhead.salesforce.com/content/learn/modules/apex_triggers/apex_triggers_intro)
+[^4]: trailhead.salesforce.com. [Effective Bulk Apex Trigger Design Techniques | Trailhead](https://trailhead.salesforce.com/content/learn/modules/apex_triggers/apex_triggers_bulk)
+[^5]: apexhours.com. [Trigger Handler Pattern in Salesforce | Apex Hours](https://www.apexhours.com/trigger-handler-pattern-in-salesforce/)
+[^6]: salesforcecodex.com. [Top Mistakes Developers Make in Salesforce Apex Triggers | Salesforce Codex](https://salesforcecodex.com/salesforce/top-mistakes-developers-make-in-salesforce-apex-triggers/)
+[^7]: architect.salesforce.com. [Record-Triggered Automation, Platform Decision Guides](https://architect.salesforce.com/docs/architect/decision-guides/guide/record-triggered)

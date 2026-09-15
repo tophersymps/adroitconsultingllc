@@ -1,0 +1,107 @@
+---
+title: "The 90% Discount on Tokens You're Not Claiming"
+slug: prompt-caching-ai-infrastructure-2026
+excerpt: "Agent loops re-prefill the same system prompt every turn. Prompt caching is the cheapest lever in an AI stack, and agent workloads are what break it."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "September 12, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "11 min read"
+tags: [AI Infrastructure, Cost Optimization, Prompt Caching, KV Cache, Agents, FinOps]
+bannerImage: "/banners/prompt-caching-ai-infrastructure-2026.png"
+---
+
+Every API call to a language model reprocesses your whole prompt from scratch unless you do something about it. That prompt carries the system instructions, the tool definitions, and for an agent, the full conversation history. In most production applications almost all of that content is identical from one request to the next, yet absent caching the model works through that repeated prefix before it writes a single new word, and you pay full price for it every time.[^1]
+
+For a single agent turn the waste is invisible. For an agent loop it stops being invisible quickly. A ten-turn agent session with a 5,000-token system prompt re-reads that same prompt ten separate times when nothing is cached. Multiply that across a team of agents running a pipeline all day and the token bill becomes a headline in its own right.[^1]
+
+Prompt caching fixes that waste, and the fix is cheaper than any model-routing or quantization change you are likely considering this quarter because it targets the input side directly, and input is where the repeated-prefix waste lives.[^1] The providers have spent 2025 and 2026 turning caching into a first-class billing feature with discounts up to 90 percent on cache hits. The uncomfortable part for anyone building agents: agent workloads are precisely the shape that breaks caching, because caching rewards a stable prompt prefix and an agent loop is designed to keep changing its input.
+
+## How prompt caching works: the KV cache stretched across requests
+
+The mechanism is worth understanding at the right depth, because every decision that follows hangs off a single fact: the cache matches exact prefixes, not meaning.
+
+A transformer generates text one token at a time. At every layer each token is projected into a Query, a Key, and a Value vector, and attention uses those to decide which earlier tokens matter to the token being generated now. Without optimization, generating token 500 means recalculating the Key and Value vectors for all 499 tokens before it, every single time, which is quadratic and painfully slow on long prompts.[^1]
+
+The fix every production model uses is the key-value (KV) cache. The model computes the Key and Value tensors for each token once and stores them. Generating the next token then only needs the Key and Value for that single new token; everything before it is pulled from cache. That turns the dominant cost from quadratic into linear in the length of the prompt.[^1]
+
+The pipeline splits into two phases. **Prefill** reads your whole prompt in parallel and builds the KV cache, a running record of what each token means to the attention mechanism at every layer. **Decode** generates the answer one token at a time, appending each new token's state to the cache. The old tokens never get recomputed.
+
+![The two phases of LLM request processing: prefill reads the whole prompt in parallel to build the key-value cache, then decode generates one token at a time reusing it; prompt caching saves the expensive prefill across separate API calls when the prefix repeats, so only the variable tail is processed fresh.](</diagrams/prompt-caching-ai-infrastructure-2026/1-prefill-decode.png>)
+
+Prompt caching takes that KV cache and stretches it across separate requests instead of confining it to one request. The provider hashes the prefix of an incoming prompt, OpenAI for instance hashes roughly the first 256 tokens for routing, and checks that hash against a store of recently computed KV tensors.[^1] If it matches, the provider skips the prefill for that portion and moves straight to the new variable part of the prompt. A miss means a full prefill, and the new prefix is written to the cache for next time.[^1]
+
+Because the match is by hash of the exact token prefix, a single byte difference anywhere in the cached prefix breaks the hash and the whole thing misses. The cache is not semantic. It does not think "this is basically the same." It asks only "have I already seen this same prefix in this shape?"[^3]
+
+That is the whole ballgame. The design question for any agent workflow is: how much of my prompt stays byte-for-byte identical across turns, and how do I keep it that way?
+
+## The 2026 provider economics: the discount is real, and the write is not free
+
+The providers converged on the same economic shape: cache reads are dramatically cheaper than base input tokens, cache writes cost a bit more, and the exact multipliers shift by model and provider. Apologizing in advance, the per-model rate sheets require a look at the current pricing page before you budget against a specific model, because every provider updates rates by model generation and the numbers below move.[^1]
+
+Anthropic's structure is the cleanest to internalize and it is what most agent builders will meet first. A 5-minute cache write costs 1.25x the standard input rate, a 1-hour write costs 2x, and a cache read costs 0.1x, a 90 percent discount. On Claude Sonnet 5 at the standard $3 per million input tokens, that works out to $3.75 per million to write a 5-minute cache, $6 per million for the 1-hour tier, and $0.30 per million to read.[^1] The default cache lives 5 minutes and refreshes for free every time it is read, so a steady stream of requests keeps it alive indefinitely; the 1-hour cache suits slower agent loops and human-in-the-loop approval steps where the gap between requests exceeds 5 minutes but stays under an hour.[^1][^4]
+
+There is a minimum cacheable length, and it is not small. As of July 2026 Claude Opus 4.8, Sonnet 5, Sonnet 4.6 and Sonnet 4.5 all require a 1,024-token minimum prefix, while Opus 4.6 and 4.5 need 4,096 tokens. A prefix below the floor still succeeds, it just processes at full price with no error telling you why.[^1]
+
+OpenAI runs implicit caching with no setup on GPT-4o and newer, with a flat 1,024-token minimum that grows in 128-token increments.[^2] The discount varies by tier: roughly 75 percent off on the GPT-4.1 family, up to 90 percent off across the current GPT-5.x lineup, and as high as 98.75 percent on some realtime audio models.[^1] The 2026 wrinkle is that cache writes stopped being free. OpenAI began charging 1.25x the uncached input rate for cache writes starting with GPT-5.6, on both automatic and the new explicit mode; on GPT-5.5 and earlier the writes remain free.[^1]
+
+![The 2026 prompt-caching pricing across the big providers: Anthropic writes at 1.25x (5 min) or 2x (1 hour) and reads at 0.1x a 90 percent discount with a 1,024 to 4,096 token minimum; OpenAI discounts up to 90 percent with a 1,024 token minimum and a 1.25x write from GPT-5.6; Google discounts 90 percent on cached tokens with a 2,048 to 4,096 minimum and a per-hour storage price for explicit caches.](</diagrams/prompt-caching-ai-infrastructure-2026/2-provider-economics.png>)
+
+Google's story is the one that surprises people, because it separates the opportunity from the trap. Gemini 2.5 and later models get a 90 percent discount on cached tokens, for both implicit and explicit caching, and implicit caching is on by default with no setup and no guarantee of a hit.[^1][^5] Explicit caching is the trap: you create a cache object, get an ID, reference it in future requests, and the savings are guaranteed rather than opportunistic. But Google charges a continuous hourly storage price for as long as the cache exists, on top of the standard rate to write it. At the current $1.00 per million tokens per hour on Flash-tier storage and $4.50 on Pro-tier storage, a cache that gets hit constantly is a bargain and a cache you create and then forget is a liability. Delete explicit caches when the job finishes rather than leaving them to expire on their own.[^1] Two take-aways apply across every provider. First, the cache itself is expensive to store; a 100,000-token prompt can generate several hundred megabytes of KV tensors, multiplied by every concurrent user, which is exactly why writes cost more than a normal input pass.[^1] Second, the Jevons paradox is real for tokens: when tokens get cheaper per unit, teams tend to use more of them rather than less. A team that turns on caching responds by running longer agent loops, larger context windows, and more turns, so the per-token bill drops while the overall invoice continues to rise. Caching is not a reason to stop watching total spend, it is a reason to pair the technical fix with usage governance.[^1]
+
+## Why agent workloads break caching, and how to stop breaking it
+
+Here is where the theory meets the agent. Everything above assumed your prompt has a stable head and a growing tail. An agent loop is built to keep redesigning the head. Every mechanism an agent has for doing its job turns out to be a cache-breaker when handled carelessly, and they compound across turns.
+
+The first and most common break is a non-deterministic value sitting in what should be the static prefix. A timestamp, a request ID, a UUID placed anywhere before the cached region defeats the hash on every request, so you write a fresh cache entry each time and never read one. The fix is to never let a changing value serialize before the stable content.[^1][^6]
+
+The second is tool and schema churn. Tool definitions sit in the cached prefix on Anthropic, which processes `tools`, then `system`, then `messages` in that order up to the cache breakpoint.[^3][^4] If your harness reorders JSON keys, regenerates a schema with a new version field each call, or adds a tool mid-session, the prefix hash changes and every earlier turn's cache is dead. A stable agent harness keeps its tool surface byte-identical while it runs.[^6] Anthropic documents that `tools` are part of the cached prefix, so changing the tool list, the tool names, the descriptions, the schemas, or the ordering changes your cache picture.[^4][^6]
+
+![The cache-hostile loop: an agent turn reorders tool-schema keys, injects a timestamp, or swaps a model mid-session, which changes the token prefix and invalidates the entire saved KV cache, so the next turn pays for a full prefill again; a cache-friendly loop keeps the system prompt and tool definitions byte-identical and only appends new history to the tail.](</diagrams/prompt-caching-ai-infrastructure-2026/3-cache-friendly-loop.png>)
+
+The third is model switching. Caches are tied to a specific model version. Switching from Sonnet to Opus, or to a newer version of the same model, invalidates the existing cached prefix and forces a full prefill before a new cache can be created.[^1] Treat a model swap as a cache boundary, because the safe mental model is that you are starting a new cache lane.[^6]
+
+The fourth is thinking and multimodal settings. On Anthropic, changing extended thinking settings, thinking budget, or adding or removing images alters message blocks and can invalidate part of the prefix even when your actual user request looks similar. This is a hidden source of churn: a session feels expensive and nobody changed the visible ask.[^6][^3]
+
+The fifth is the quiet one for self-hosted stacks, and it is where our own infrastructure burned us. On a local inference engine, prompt caching happens at the engine level instead of in a billing API, and it has the same exact-prefix rule plus its own memory budget. llama.cpp logs `forcing full prompt re-processing due to lack of cache data` at trace verbosity, which is level 4, while the default server runs at level 3, so the line is never printed by default and the failure is invisible: the answer stays correct and time-to-first-token simply refuses to fall no matter how warm the conversation gets.[^7] On a Qwen3.6-35B-A3B build, a reproducer in a llama.cpp issue ran five simulated agents at fixed prompt sizes for three rounds and every round after the first landed where the first did, a cold cache miss each time, because the harness was mutating the prefix. The maintainers' shorthand is the whole lesson: "You simply cannot cache something that changes."[^7]
+
+We hit this directly in the Adroit stack. Our local inference layer is llama.cpp and MLX-class tooling, so the KV cache is not a billing line we skip, it is a memory budget we have to manage on shared hardware, and a context-reset that discards it is real work thrown away, not a line item on an invoice.[^8] The failure mode we watch is exactly the one Particula documents: llama.cpp context checkpoints store only non-reconstructible partial state, and when no checkpoint clears the position threshold the server drops every checkpoint it holds and prefills the whole conversation again, at 149.6 MiB of state per checkpoint and up to 32 checkpoints per slot, roughly 4.7 GiB discarded and rebuilt on a default-configured slot. The result returns HTTP 200 with a perfectly reasonable answer, and nothing in the response tells you it happened.[^7] That is the shape of a cost problem that survives a whole sprint of "the model is just slow on this hardware."
+
+## How to design a cache-friendly agent from the first turn
+
+The remedy is mechanical, and it is cheap to bake in at the start and painful to retrofit. Order the prompt so the stable content sits at the head and the changing content at the tail: system prompt and tool definitions first, reference material next, and the live conversation turn last. Put static material at the top and the section that changes with each call at the bottom, because a change early in the prompt invalidates everything below it.[^1]
+
+Use explicit cache breakpoints on the part you can anchor. On Anthropic you can mark a large stable block, the system prompt, a legal contract, a schema, so that block is treated as the reusable prefix, and combine explicit breakpoints with automatic caching, which places its breakpoint on the last cacheable block and lets it move forward as the conversation grows.[^4] Put recurring guidance in a stable file, `CLAUDE.md` or the equivalent, so it moves out of ad hoc chat messages and into a source of truth that does not get retyped with slight variations every turn, because a repasted brief with tiny wording changes reintroduces instability into the prefix.[^3]
+
+Keep the tool surface stable while a session runs, and add deltas rather than rewriting the brief. A cache-hostile pattern is to build the same request by assembling a fresh system block each turn. A cache-friendly pattern extends the conversation and only appends new history, preserving the earlier turns as the cached prefix.[^6] And when the thread gets muddy, summarize and reset, because a bad long thread can be both expensive and low-signal even when parts of it are cacheable; cacheable does not always mean valuable.[^3]
+
+Then measure it. Every provider exposes cache statistics in response usage fields: `cache_read_input_tokens` and `cache_creation_input_tokens` on Anthropic, `cached_tokens` on OpenAI, cached-content token counts on Gemini. Estimate the hit rate by dividing cached input tokens by total cache-eligible input tokens, and treat a sudden drop as a production alert, because it almost always means something changed in your reusable prefix.[^1][^4] On the self-hosted side, run the server at trace verbosity and watch for `forcing full prompt re-processing` and `erasing invalidated context checkpoint`, and budget for the checkpoints themselves, since at the default 32 per slot and roughly 150 MiB each they consume over half of the default 8,192 MiB cache-RAM on a unified-memory machine, out of the same pool as your model weights.[^7]
+
+## When caching pays off, and when it does not
+
+Caching pays when a large part of the input stays identical across requests, which is the definition of three workloads. Multi-turn conversations where history grows but earlier turns stay unchanged. Retrieval-augmented generation where the same documents and knowledge base chunks are retrieved for similar queries, provided your retrieved context is stable enough to stay in the prefix rather than re-inserted with a changing byte. And coding agents and developer tools, which reuse the same system prompt, tool definitions, and repository context across many turns in a single session. Those three are exactly where the big savings land.[^1]
+
+Caching does not pay when there is nothing to reuse. A genuine one-off prompt, a document summarized once and never touched again, a workload that is mostly output with a short trivial input: caching has nothing to grab onto and the write premium is pure cost. And low-traffic applications may see few hits and little benefit, because the savings depend on identical prefixes being reused frequently within the retention window. It is worth measuring actual hit rates before assuming caching will reduce a bill.[^1]
+
+The magnitude when it does pay is not small. Flexera's worked example is a RAG support bot on Claude with a 10,000-token system prompt plus reference content handling 5,000 requests a day. Uncached, that is 50 million repeated input tokens a day, about $4,500 a month for the same static content processed over and over. With a 95 percent hit rate, cache reads at the 0.1x rate plus the write premium land the same workload at roughly $709 a month, an 84 percent cut on that part of the bill.[^1] That is a change measured in hours of work, on the biggest recurring line item in an AI stack.
+
+![The cost of a 10,000-token prefix on a RAG bot handling 5,000 requests a day: without caching the same static content reprocesses from scratch at about $4,500 a month, and with a 95 percent cache hit rate the same workload drops to about $709 a month, an 84 percent cut on that line item.](</diagrams/prompt-caching-ai-infrastructure-2026/4-cost-payoff.png>)
+
+## The lever, applied to agent pipelines
+
+Prompt caching is the cheapest token you are not claiming, and it is an infrastructure decision with a real failure mode, not a free switch. The providers priced it to be worth capturing: up to 90 percent off cache reads across Anthropic, OpenAI, and Google. The boundary of the opportunity is the one thing that is identical across them all, that the match is exact, byte for byte, on a stable prefix. Agent workloads exist to change their input, so the winning design is boring and mechanical: keep the system prompt and tool definitions stable at the head, grow the conversation only at the tail, anchor one explicit breakpoint on the expensive stable block, watch the cache-read fields for a drop, and on self-hosted engines give the KV cache a memory budget and a trace-level alert so a silent reset stops being silent.
+
+The teams that treat cache discipline as part of prompt and agent design will carry a structurally lower unit cost into every task they automate. The ones that treat prompt caching as something the provider hands out for free will keep paying full price for the same prefix, forever, one agent turn at a time.
+
+*Note: provider pricing and model names are current as of mid-September 2026 and change frequently by model generation; check each provider's current pricing page before budgeting against a specific model. Cost figures from third-party analyses and vendor documentation are as reported by the cited sources. Fortress references describe Adroit's own local inference infrastructure, generalized for confidentiality.*
+
+[^1]: Flexera. [Prompt Caching breakdown: How it reduces token spend (2026)](https://www.flexera.com/blog/ai/prompt-caching-breakdown/)
+[^2]: OpenAI. [Prompt caching | OpenAI API docs](https://developers.openai.com/api/docs/guides/prompt-caching)
+[^3]: mager.co. [Claude: How prompt caching actually works](https://www.mager.co/blog/2026-04-29-claude-prompt-caching/)
+[^4]: Anthropic. [Prompt caching | Claude Platform Docs](https://platform.claude.com/docs/en/build-with-claude/prompt-caching)
+[^5]: Google. [Gemini Developer API pricing](https://ai.google.dev/gemini-api/docs/pricing)
+[^6]: Flexera. [Prompt Caching best practices](https://www.flexera.com/blog/ai/prompt-caching-breakdown/#best-practices-for-prompt-caching)
+[^7]: Particula Tech. [Full Prompt Re-Processing: llama.cpp Cache Fixes That Work](https://particula.tech/blog/prompt-reprocessing-swa-hybrid-models-kv-cache)
+[^8]: Adroit Blog. [Local LLM Infrastructure in 2026](/field-notes/local-llm-infrastructure-2026)

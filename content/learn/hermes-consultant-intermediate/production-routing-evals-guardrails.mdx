@@ -1,0 +1,116 @@
+---
+title: "Lesson 3: Advanced Hermes Configuration: Model Routing, Evals, and Guardrails in Production"
+slug: production-routing-evals-guardrails
+series: "hermes-consultant-intermediate"
+lesson: 3
+excerpt: "When the agent leaves the sandbox and runs at real volume in front of a client, three decisions decide whether it holds up: which model runs which task, how you prove the output is still correct, and how you keep the guardrails you documented actually enforced. This lesson teaches all three."
+date: "August 29, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [AI Agents, Consulting, LLMs]
+---
+
+# Lesson 3: Advanced Hermes Configuration: Model Routing, Evals, and Guardrails in Production
+
+Lesson 2 taught you to capture requirements as-built, with the rule, the exception, and the boundary written down so they survive handover. That gives you the spec. This lesson is about what happens when the system built to that spec runs for real: at real volume, against real client data, unattended and under supervision at the same time. Three decisions decide whether a running agent holds up, and they are exactly the ones Level 1 does not prepare you for.
+
+The first is model routing. Which model runs which task, and who decided. The second is evals. How you prove the agent's output is still correct after you changed the rules, the data, or the model, instead of trusting that it is. The third is guardrails. How you keep the boundaries you documented in Lesson 2 actually enforced while the system runs on its own, including when nobody is in the room to approve a command. Each one looks like a config detail and turns out to be an operating decision. By the end of this lesson you can make all three deliberately.
+
+## The shift from Level 1 to here
+
+Level 1 taught you to scope an engagement and keep it alive week to week. The implied model was one agent, one model, one carefully watched build. That is the lab setup. Production is not the lab with a bigger workload. It is a different kind of system with different failure modes, and the differences are what this lesson is about.
+
+Three of those differences matter most. In the lab you can afford one capable model for everything; in production that is the most expensive and often the slowest way to run. In the lab you can verify by eye; in production the output volume is too high to look at everything and you need a systematic check. In the lab you are in the room to approve destructive commands; in production the agent runs at night and on a schedule, and the approval step either happens automatically or the run fails closed. Routing, evals, and guardrails are the three levers you pull to make the lab agent into a production one. Everything else stays the same.
+
+## Model routing: the operating decision hiding in a config field
+
+Start with the counterintuitive claim. The most expensive mistake in agent production is not choosing a bad model. It is giving every task the same model. A single default treats a two-line data lookup and a multi-step architectural judgment as equal work, and that is wrong on both sides: the easy task overpays and the hard task under-performs.
+
+Model routing is the discipline of deciding which capability runs which task, and of making that decision explicit instead of implicit. It has three parts, and a working practitioner handles all three.
+
+**Route by task difficulty, not by convenience.** A production agent does heterogeneous work: cheap extraction, medium reasoning, expensive judgment. Each tier has a natural model. The discipline is to name the tiers and pin them. In Hermes Agent the concrete example here, the mechanism for this is layered: a per-job model pin on a scheduled task, a fleet-wide `cron.model` default that is independent of your chat model, and a `delegation` block that routes the subagents you spawn to a specific provider and model. [^1] [^2] Each layer lets you say "this specific workload runs on this specific model," so a heavy scheduled analysis can run at a strong model while cheap recurring jobs run at a minimal one, without touching your global default. [^1]
+
+**Route by cost and latency budget.** Clients care about the bill and about how fast the thing responds. A model that is five times the price for a task the cheap model does equally well is waste you can measure. The routing decision is a budget decision: you decide up front what each tier costs per run and you size the fleet against the client's tolerance. In practice this means the expensive model is reserved for the cases where the answer quality actually changes the outcome, and everything routine rides the cheap tier.
+
+**Route by reliability, not just capability.** The model that scores highest on a benchmark is not automatically the model you trust with the client's Monday report. Benchmarks measure what a model can do in isolation. Production measures what it does consistently, all month, under the same prompt and the same data. The discipline is to route a workload to the model you have actually observed holding up, not the one with the best marketing. This is the point where routing and evals meet, and it is the reason you do not pick a model and forget about it. You pick it, then you prove it, then you revisit it when the output drifts.
+
+There is a sharp edge to routing that bites the unwary: the unattended job that inherits a model you did not choose. If a scheduled job is not pinned, it can silently follow the global default, and a switch to a more expensive model or provider spends money on every run with nobody noticing. Hermes Agent guards against this by failing closed: an unpinned job that loses its model/provider snaps into a skipped state and stops calling the API until an operator restores the configuration. [^1] That behavior is the correct production posture, and you should copy it even in systems without the guard. An unattended job should never silently inherit a cost change. Either it is pinned deliberately, or it stops.
+
+## Evals: proving the output is still correct
+
+Routing tells the system which model to trust. Evals tell you whether the trust is still justified. This is the piece consultants skip most often, because it feels optional until the day the output is quietly wrong. It is the regression suite for the agent, and it is the production form of the validation record from Lessons 1 and 2.
+
+Here is the core claim. A config change, a data change, a rule change, or a model change can each silently degrade an agent's output, and you cannot see the degradation by reading the code because there is no code to read in the usual sense. The agent's behavior lives in its instructions, its context, and its model. The only way to catch a regression is to hold the agent's output against a fixed set of known-good cases and watch for movement. That fixed set is the eval suite, and building it is a discipline, not a tool install.
+
+An eval suite for a consulting delivery has three parts.
+
+**The gold set.** A small collection of real, representative cases where you know the correct output. These come straight from the as-built requirements and the validation record: the three reconciliation cases, the mismatch that must be refused, the boundary case that must not be crossed. You write the expected output for each one, exactly. The gold set is your ground truth, and it only means something if it is derived from what the client actually does, which is why Lesson 2's register is the input.
+
+**The trigger.** Evals are worthless if they only run when you remember. They run automatically, on a schedule and before every significant change. In Hermes Agent terms, an eval is a cron job that loads the skills, runs the gold set through the agent, and reports pass or fail per case. [^3] The discipline is the same as for any test: it runs when you are not looking, and it catches the regression the day it happens instead of the week the client reports it.
+
+**The pass bar.** For each case you define what counts as correct, and you make the bar specific enough that a human does not have to judge it. The reconciliation matches the two clean sources to the tolerance. The mismatch is refused, not explained. The boundary holds. When a case fails, the eval tells you which requirement broke, and that points straight back at the register. A failing eval is not a problem to hide; it is the earliest possible warning that a requirement is no longer met, and it is the entire point.
+
+The discipline has a rhythm. Every change to the system, the rules, the data sources, or the model triggers a full eval run before the change is trusted. A change that passes the eval is deployable. A change that fails it is not, no matter how good the change looked in isolation. Over weeks, the gold set grows as new edge cases surface in real use, and each one is added as a case, so the suite gets stricter the longer the system runs. That is the trajectory you want: an agent that is harder to silently break this month than it was last month.
+
+## Guardrails: the boundary actually enforced
+
+Lesson 2 made you write the boundary, the line the system does not cross. Here is the production problem. A boundary written in a requirements document is a hope. A boundary enforced by configuration is a guardrail. The gap between them is where client trust is won or lost, and it is a gap you close by construction, not by intent.
+
+The guardrail model has a specific shape. There is a floor that never comes down, a set of rules the operator extends, and a policy for what happens when nobody is in the room to approve. You need all three.
+
+**The floor that never comes down.** Certain actions are catastrophic enough that no amount of trust, no approval mode, and no automation should ever run them: wiping a filesystem root, a fork bomb, formatting a live disk. In Hermes Agent these live in a hardline blocklist that trips before the approval layer even sees the command, with no override flag, so even YOLO mode and headless cron approval cannot run them. [^4] This is the production posture for irreversible actions: they are not approved, they are structurally impossible.
+
+**The operator's deny list.** Above the floor sit the client-specific rules, the ones that encode the boundary from your register. These are glob patterns that block matching commands unconditionally, before any approval mode is consulted: no forced git push, no writes to the production data source, no calls to the vendor's staging endpoint from the agent. [^4] The point is that a deny rule is stronger than a rule the agent is expected to follow on its own. The agent can ignore an instruction. It cannot run a command that the guard layer blocks.
+
+**The headless policy.** Production agents run unattended, on a schedule and at night, which means the human approval step from the lab is gone. You have to decide, in advance, what happens when an unattended run hits a dangerous command. The safe default is to deny: the command is blocked, the run finds another path or stops, and nothing destructive happens while nobody watches. [^4] [^5] The alternative, auto-approve everything in a headless run, is a decision you make only for a fully trusted, isolated environment, and you make it knowing exactly what you gave up. This is the guardrail that carries the client-facing promise, because it is the one that holds when you are not there.
+
+There is a fourth guardrail that is not about commands at all, and it is easy to overlook. Production agents touch credentials, and credentials should be isolated from the code and from each other. In Hermes Agent, secrets live in `.env` or a secret store, never in the config that gets committed, and subprocess and MCP environments get filtered so a tool does not inherit keys it does not need. [^6] [^7] The discipline transfers to any delivery: least privilege for the agent, least privilege for each of its tools, and no secret ever sitting in a file that can be pushed to a repo.
+
+## Worked example: the Monday report, hardened for production
+
+Take the logistics engagement from Lessons 1 and 2 to its production form. The six-week engagement closed, the agent passed its parallel run, and it is now the system the company runs. The consultant was right to keep a support window, because the production hardening is a distinct piece of work.
+
+Start with routing. The agent's real workload is not one task. It reconciles three data sources, which is cheap and routine. It drafts the report, which needs real writing quality. It handles the mismatch exception, which needs careful judgment and must refuse rather than invent. The consultant splits the tiers: the reconciliation and the daily data pull run on the cheap, fast model via a per-job pin; the report draft and the mismatch case run on the stronger model. Each scheduled job is pinned to its model explicitly, so nothing rides the global default and a future model switch cannot silently change the bill. [^1]
+
+Now the evals. The consultant turns the validation record from Lesson 2 into a gold set: the three reconciliation cases with their expected totals, the tolerance check, the mismatch case that must be refused with the exact refusal wording, and the boundary case that must never be crossed. A scheduled eval job loads the reconciliation skill, runs the agent against the gold set, and posts a pass or fail per case to the team channel. [^3] The rule is unforgiving: any change to a rule, a source, or a model runs the full gold set first, and a failing case blocks the change. When the warehouse system changes its export format and the reconciliation suddenly disagrees, the eval catches it the same day, the consultant sees which requirement broke, and they fix the rule before anyone reads a wrong Monday report.
+
+Then the guardrails. The boundary from the register becomes deny rules: the agent never writes to the three source systems, never force-pushes, never runs the vendor's production data job. [^4] The report-outbound step keeps a human approval on the draft, and the headless data-pull jobs run with the fail-closed policy so an unattended run that hits something dangerous stops instead of proceeding. [^5] Credentials for the three systems are split across separate env entries, so no single tool inherits all of them. [^7] None of these is a rule the agent is expected to remember. Each is a structural limit the agent cannot cross.
+
+Notice what the hardening did. The agent that ran fine in the support window is now a system that can run without the consultant in the room: it routes work to the right capability, it proves its own output against a fixed standard on a schedule, and it is structurally unable to cross the lines the client cares about. That is the difference between a working agent and a production system, and it is a difference you build, not a difference you hope for.
+
+## The pitfalls that break production agents
+
+**One model for everything.** The single most common failure. It overpays on routine work, underperforms on hard work, and removes the budget conversation entirely. Route by tier, and make every routing decision explicit.
+
+**Trusting an eval you never built.** A system with no gold set cannot tell you it is broken until a client does. Build the suite from the validation record, run it on a schedule, and treat a failing case as the earliest warning you have.
+
+**A guardrail that lives only in a document.** A boundary written down is a hope. Encode it as a deny rule or a structural limit, or accept that it will not hold. The client cares about the enforced boundary, not the documented one.
+
+**Letting an unattended job inherit cost or capability silently.** An unpinned scheduled job that follows a changing global default can spend money and change behavior with nobody deciding. Pin every job that matters, and make unpinned jobs fail closed.
+
+**Storing secrets where they can ship.** A credential in a config file that gets committed is a breach waiting for a repo push. Secrets go in the environment and the secret store, isolated from code and from each other.
+
+## Try it
+
+Take the engagement you built in Lessons 1 and 2 and harden it for production.
+
+1. List the agent's real workload and split it into three tiers: cheap routine, medium reasoning, expensive judgment. Name which model each tier uses, and write the budget each tier is allowed per run.
+2. Decide how each scheduled task gets its model. Pin the ones that matter, and write the rule for what happens if a job is left unpinned (fail closed or follow default, and why).
+3. Turn your validation record into a gold set. Write five cases with exact expected output, including at least one case the agent must refuse rather than answer.
+4. Design the eval trigger: when it runs, what it does on a pass, and what it does on a fail. Make the pass bar specific enough that nobody has to judge it by eye.
+5. Convert the boundary from your register into guardrails. Write the floor, the deny list, and the headless policy, and state which of the three protects each boundary.
+6. Map every secret the agent needs and split them so no single tool inherits them all.
+
+If you can defend all six, you have a lab agent that is ready to run in front of a client.
+
+## What's next
+
+You can now route work to the right model, prove the output is correct on a schedule, and hold the documented boundaries by construction. The next lesson moves from operating a single hardened system to the toolkit that delivers many of them. It teaches building a reusable delivery toolkit: skill packaging done right, how to turn the working patterns from this engagement, the capture discipline, the eval suite, the guardrail set, into packaged skills another consultant can load on the next project without relearning them. That is where a consultant stops solving one client's problem and starts building the repeatable edge that makes every delivery faster and more consistent.
+
+[^1]: Hermes Agent Docs, Scheduled Tasks (Cron), model routing and the model drift guard. [hermes-agent.nousresearch.com/docs/user-guide/features/cron](https://hermes-agent.nousresearch.com/docs/user-guide/features/cron)
+[^2]: Hermes Agent Docs, Configuration, the delegation section and provider configuration. [hermes-agent.nousresearch.com/docs/user-guide/configuration](https://hermes-agent.nousresearch.com/docs/user-guide/configuration)
+[^3]: Hermes Agent Docs, Scheduled Tasks (Cron), skill-backed and no-agent jobs. [hermes-agent.nousresearch.com/docs/user-guide/features/cron](https://hermes-agent.nousresearch.com/docs/user-guide/features/cron)
+[^4]: Hermes Agent Docs, Security, dangerous command approval, the hardline blocklist, and user-defined deny rules. [hermes-agent.nousresearch.com/docs/user-guide/security](https://hermes-agent.nousresearch.com/docs/user-guide/security)
+[^5]: Hermes Agent Docs, Security, approval modes including the headless cron policy. [hermes-agent.nousresearch.com/docs/user-guide/security](https://hermes-agent.nousresearch.com/docs/user-guide/security)
+[^6]: Hermes Agent Docs, Configuration, directory structure and the secrets model. [hermes-agent.nousresearch.com/docs/user-guide/configuration](https://hermes-agent.nousresearch.com/docs/user-guide/configuration)
+[^7]: Hermes Agent Docs, Security, environment variable and MCP credential filtering. [hermes-agent.nousresearch.com/docs/user-guide/security](https://hermes-agent.nousresearch.com/docs/user-guide/security)

@@ -1,0 +1,143 @@
+---
+title: "Lesson 38: Observability at Scale: Metrics, Alerts, Cost Dashboards, and SLOs"
+slug: observability-at-scale-metrics-alerts-slos
+series: "agentic-ai"
+lesson: 38
+excerpt: "Lesson 20 taught you to open one trace and read it end to end. At scale you cannot read every trace, and you should not want to. This lesson turns observability into a system that watches itself: the metrics that tell you something changed, the alert tiers that decide who gets paged and who gets a ticket, the cost dashboard that makes spend a number you can steer, and the service-level objectives that turn 'reliable enough' from a phrase into a measured target with an error budget. A worked example builds an SLI-to-SLO chain for a customer support agent, and a try-it prompt has you define your own."
+date: "September 10, 2026"
+author: "Adroit Consulting"
+readTime: "15 min read"
+tags: [LLMs, AI Agents, Observability, SRE]
+---
+
+# Lesson 38: Observability at Scale: Metrics, Alerts, Cost Dashboards, and SLOs
+
+Lesson 20 showed you how to trace a single agent request and replay it until it stops failing. That works when you have one request in front of you and a bug to chase. It stops working the day the agent serves a thousand requests an hour and the wrong answers stop being individual bugs and become a pattern you have to notice. No human reads a thousand traces a day. At scale, observability has to run in the background and decide for itself what deserves a human, what deserves a dashboard glance, and what deserves to change how the team plans the next week.
+
+This lesson is the layer above the trace. It answers four questions: how do you know something changed, how do you make sure the right person hears about it, how do you keep cost visible instead of surprising, and how do you define what good looks like so a release has a target to hold? Those four maps onto metrics, alerts, cost dashboards, and service-level objectives. [^1]
+
+The one idea to carry out: **at scale, observability is a decision system, not a viewing window. Metrics detect that something changed, alerts route that change to the right responder, dashboards make the trend visible, and SLOs define the threshold that separates a change you tolerate from a change you page someone about.** The trace stays, but it stops being the primary interface and becomes the evidence you open after a metric or an alert tells you where to look. [^2]
+
+## The shift from traces to metrics
+
+A trace answers "what happened in this one request." A metric answers "has anything about the whole population changed?" They are different questions, measured at different granularities, and you need both. When you open a metric chart and see latency climbing, you have not found the cause. You have found the moment to stop and start looking. Then you drill into the traces from that window to learn why. [^2]
+
+For an agent, metrics split into three groups, and each group catches a different failure mode.
+
+Operational metrics track whether the system works: request rate, error rate, time to first token (TTFT), total generation latency, and token throughput. These are the familiar service-health numbers, and they align with a normal SLO framework. They tell you the agent is up and answering. [^2]
+
+Economic metrics track what it costs: input token count, output token count, cost per request, and cost per user session. An agent can be perfectly healthy operationally and silently bankrupt you, because a retrieval-heavy or loop-prone agent burns tokens on every turn. These metrics catch that. [^2]
+
+Quality proxy metrics are the leading indicators of a bad answer before any eval runs: user feedback rate, retry rate, and refusal rate. When users start re-triggering the same request or downvoting more often, something degraded even though every operational number looks fine. These proxies are faster than an eval loop, because they come straight from user behavior. [^2]
+
+The reason an agent needs all three is that an agent's failure modes are not the same as a web service's. A traditional service fails by being slow, down, or erroring. An agent can be fast, up, and returning a 200 while it misunderstands the intent, retrieves the wrong context, calls the wrong tool, or leaks sensitive data. Uptime is not the same as reliability for an agent. [^3]
+
+## The metrics that matter, with thresholds
+
+The practical question is which metrics to put on a dashboard and what numbers to alert on. The table below is a starting set, drawn from a production observability guide, with categories and alert thresholds included. Treat the exact numbers as a baseline you tune to your own workload, not as a universal contract. [^2]
+
+| Metric | Category | What it tracks | Alert threshold |
+| --- | --- | --- | --- |
+| Time to first token | Operational | ms from request to first token | P99 under 5s for chat |
+| Total generation latency | Operational | end-to-end request duration | alert if over 60s |
+| Error rate | Operational | percent of failing requests | alert if over 5% for 5 minutes |
+| Input token count | Economic | prompt tokens per request | alert on outliers over 2x p95 |
+| Output token count | Economic | completion tokens per request | alert on outliers over 2x p95 |
+| Cost per request | Economic | estimated USD per request | alert if over 2x daily baseline |
+| Cost per user session | Economic | cost across a multi-turn conversation | alert if a session exceeds 10x average |
+| Retry or regeneration rate | Quality proxy | users re-triggering the same input | alert if over 10% above baseline |
+| Refusal rate | Quality proxy | model declining to answer | alert on spikes over 2x baseline |
+| Safety eval score | Quality | harmful or policy-violating output | page immediately on any failure |
+
+Two notes on that table. First, latency deserves a caveat that a p99 on an agent is not the same as a p99 on a request you can predict. Time to first token and total generation both depend on how many tokens the model produces, which is non-deterministic. A p99 latency number without understanding the token distribution can mislead you. [^4] Second, the cost-per-session row is the one that catches the worst agent failure mode: a loop that keeps re-asking itself the same question. Each individual request is within every limit, but the session accumulates tokens until it is ten times the average. That is the metric that turns a runaway agent into an alert instead of a surprise. [^2]
+
+## Alert tiers: who gets paged, who gets a ticket
+
+A metric is only useful if it reaches the right person with the right urgency. The mistake most teams make is one alert level for everything, which means either the on-call engineer gets paged for trivia or a real emergency drowns in noise and gets ignored. The fix is tiers, each with a different response obligation. [^2]
+
+Tier 1 pages immediately. These are the conditions that can harm a user or the company right now: error rate over 5 percent for five consecutive minutes, P99 time to first token over 60 seconds, a safety eval firing on any sampled response, or eval scores dropping more than 25 percent below baseline in fifteen minutes. When one of these trips, a human needs to be looking within minutes. [^2]
+
+Tier 2 sends a Slack notification and expects a response within an hour. These are trends that are bad but not yet an emergency: cost per request doubling against the daily baseline, a quality score dropping more than 10 percent versus the seven-day rolling average, or token quota approaching 80 percent of the provider limit. A human should see it soon, but it can wait until the page-1 stuff is handled. [^2]
+
+Tier 3 goes to a daily digest or a ticket. These are slow, cross-day signals that flag something worth investigating this week, not this minute: retrieval latency trending upward over seven days, a new user segment with unusual request patterns, or token cost per session creeping above baseline. [^2]
+
+The discipline of tiers is that you decide the threshold before the incident, not during it. When a real page lands at 2 a.m., the on-call engineer should not be deciding whether this is important enough to wake someone. The tier was decided in a calm room weeks earlier. [^5]
+
+## Cost dashboards: make spend a number you steer
+
+Cost control, from Lesson 27, made the bill smaller with caching and model tiers. This lesson is about making the bill visible so you can steer it. A cost dashboard turns spend from a number you discover at the end of the month into a number you watch change in real time, and that visibility itself changes behavior. [^2] [^6]
+
+The key metric shapes are token usage broken out by input and output, and cost broken out the same way, plus cost per request and cost per session. Attribution matters most: if a request is not tagged with the feature, model, or prompt template that produced it, its cost is a line item nobody can own, and unattributed spend is exactly how a bill becomes a surprise. [^2]
+
+LangSmith's prebuilt dashboards include a Cost and Tokens section that shows total and per-trace token counts and costs broken down by token type, measured through its cost tracking. [^7] Its custom dashboards let you pick a metric, and cost is one of them, with sum, average, and percentile aggregations for total, input, or output cost. You can group by run name, run type, tag, project, or metadata, which is what turns a flat spend number into per-feature and per-model attribution. [^8] The templates even include a "most expensive models" chart, which directly points at the first place to look when spend climbs. [^8]
+
+When you serve your own models rather than calling a provider, attribution gets harder and the FinOps layer from Lesson 27 takes over: per-tenant allocation, a tagging schema that survives from pod labels through the exporter into Prometheus, and showback before chargeback. The dashboard is the same idea, just a harder join underneath. [^6]
+
+## SLOs: what "reliable enough" actually means
+
+Metrics tell you something changed. Alerts route the change. A dashboard shows the trend. But none of them define what good looks like, and without that, a release cannot be judged and a team cannot plan. That is what a service-level objective, or SLO, is for.
+
+In Google's SRE model, a service-level indicator, or SLI, is a quantitative measure of some aspect of the service, and the SLO is the target value or range for that measure. [^3] The distinction matters because an agent's reliability is multidimensional. It can be highly available but low quality, high quality but too expensive, cheap but unsafe, or safe but too slow. A single uptime number cannot capture that, so you need several SLIs and an SLO for each dimension you care about. [^3]
+
+Here is the shift that trips most teams up: for an agent, the SLI should measure the outcome, not the infrastructure. An incident response agent should not be measured only by how fast it responds, but by whether it identifies the correct affected service, summarizes the incident accurately, and recommends safe next steps. A customer support agent should not be measured only by resolution speed, but by whether the resolution is correct, compliant, and accepted by a human reviewer. Start with the workflow the agent supports, not the model. [^3]
+
+A practical framework groups agent SLIs into five categories, and you pick the ones that matter for your workflow. [^3]
+
+1. **Availability**: uptime, request success rate, tool availability, dependency health, latency.
+2. **Quality**: task success rate, correct classification rate, grounded answer rate, tool-call accuracy, human acceptance rate.
+3. **Safety**: policy violation rate, sensitive data exposure rate, unauthorized tool-call attempts, prompt injection success rate.
+4. **Cost**: cost per workflow, token usage, retry loops, model spend per successful task.
+5. **Recoverability**: time to detect unsafe output, time to disable an agent, rollback time, human override rate.
+
+## Worked example: SLOs for a customer support agent
+
+Consider a customer support agent that classifies incoming tickets, drafts responses, retrieves account information, and recommends escalation paths. If you only measure it by speed, it can look successful while creating customer harm, because fast wrong answers are still wrong and fast policy violations are still policy violations. [^3]
+
+Start by defining the job. The agent supports ticket triage, which means the workflow it carries is "classify this ticket, draft a response, and decide whether a human should take over." The people who depend on its output are the support team. The systems it can access are the account database and the escalation queue. The cost of a wrong action is a misclassified priority-one ticket or a draft that breaks policy. [^3]
+
+From that job, choose SLIs and set SLOs:
+
+- Correct ticket classification rate. SLO: classify priority-one tickets correctly in at least 98 percent of reviewed cases.
+- Sensitive data exposure. SLO: zero confirmed exposure incidents per quarter. This one is a safety SLO, and it does not get a "mostly" attached to it.
+- Human edit rate on drafts. SLO: at least 90 percent of agent-drafted responses require only minor human edits before sending.
+- First-response latency. SLO: P95 draft generation completes within 20 seconds.
+
+Now the important part: an SLO with no error budget is a wish. The error budget is the allowance for being wrong that the SLO implies. If the SLO says 98 percent correct classification, the error budget is 2 percent. That budget is a planning tool: when you have spent the budget, you stop shipping risky changes and focus on reliability until it is replenished. A team that treats the budget as slack to burn and a team that treats it as a scarce resource make very different decisions about whether to deploy a prompt change this week. [^1] [^9]
+
+The SLO also links backward to evals. If the SLO says zero unauthorized production changes, the eval suite needs adversarial approval-bypass cases. If it says correct escalation, the evals need messy, ambiguous escalation scenarios. Otherwise the dashboard measures a different system from the one the release gate approved. Your evals should rehearse the promises production will later measure. [^3]
+
+## Building it: metrics, alerts, dashboard, SLO in order
+
+Here is a concrete build order, so the system is useful early instead of perfect late. [^5]
+
+1. Instrument. Add auto-instrumentation to your agent today, so every model call, tool call, and retrieval step emits a span with token counts and latency. Most major LLM SDKs support a drop-in tracer or proxy that needs only an endpoint change, so you get the 80 percent of the value in under an hour. [^2]
+2. Build the metrics dashboard this week. Start with error rate, p95 latency, tokens per minute, and cost per hour, broken down by model and feature where your tagging allows it.
+3. Define the alert tiers. Pick the Tier 1 condition that would wake you at 3 a.m., set it, and test it. A Tier 1 alert that nobody has ever triggered in a test is an alert you cannot trust. [^5]
+4. Layer in evals. Run heuristic evals on 100 percent of traffic, since they are cheap, and LLM-as-judge evals on a 5 to 20 percent sample biased toward the interesting cases: high latency, negative feedback, out-of-distribution inputs. Attach the scores back to the originating trace so you can correlate quality with request characteristics. [^2]
+5. Write the SLO. Pick the two or three dimensions that matter most for the workflow, set targets with explicit error budgets, and wire the alert thresholds so that spending the budget pages someone. [^3]
+
+Structure the dashboard the way an on-call engineer reads it at 3 a.m., which is top to bottom. Top row, current status: error rate, p95 latency, cost per hour, with green, yellow, red indicators. Second row, quality trends: eval scores, user feedback, refusal rate. Third row, cost and volume: requests per minute, tokens per minute, cost per hour versus the daily budget. Bottom row, deployment metadata: which prompt templates, models, and app versions are live, and when they shipped. That bottom row is what you check first when a quality or cost anomaly started at a specific time, because it usually lines up with a deployment. [^2]
+
+## Try it
+
+1. Pick an agent you have built, and write the SLI-to-SLO chain for it by hand. Define the job, choose two SLIs from the quality and cost categories, set a target and an explicit error budget for each, and write the alert that fires when the budget starts to burn. Do not use a support agent; pick something you actually built. [^3]
+2. Sketch your dashboard as a 3 a.m. page. Lay out the four rows described above on paper, and for each chart write the exact metric, the breakpoint that turns it red, and the person who owns it. If a row has a chart nobody can own, cut it. [^2]
+3. Audit one real metric for attribution. Take the cost per session chart in your observability tool, or a spending view if you have one, and check whether every session is tagged with the feature that produced it. For any untagged line item, write the one-line tagging rule that would fix it. [^8]
+
+## Summary
+
+Observability at scale is observability that makes decisions. Metrics aggregate millions of events into the handful that tell you something changed. Alert tiers route that change to the right responder with the right urgency. Cost dashboards turn spend into a number you steer instead of one you discover. SLOs define what reliable enough means and give a release a target to hold, with an error budget that turns reliability from a wish into a planned tradeoff. The trace you learned in Lesson 20 is still the evidence, but at scale it is the thing you open after the system tells you where to look, not the thing you watch all day.
+
+## What's next
+
+You can now define and measure what healthy looks like. Lesson 39 turns to what happens when healthy breaks: production troubleshooting, meaning debugging loops, bad tools, and context bloat. Observability tells you something is wrong and where; the next lesson is how you get in and fix it when the failure is an agent caught in a loop, a tool returning garbage, or a context that has grown past what the model can use.
+
+[^1]: New Relic. [SLOs, SLIs, and SLAs: Meanings and Differences](https://newrelic.com/blog/observability/what-are-slos-slis-slas)
+[^2]: Inference.net. [LLM Observability: A Complete Guide to Monitoring Production Deployments](https://inference.net/content/llm-observability-monitoring-production-deployments/)
+[^3]: Tech Scoop. [How to Build SLOs for AI Agents Before They Break Enterprise Workflows](https://techscoop.substack.com/p/how-to-build-slos-for-ai-agents-before)
+[^4]: Braintrust. [What is LLM monitoring? (Quality, cost, latency, and drift in production)](https://www.braintrust.dev/articles/what-is-llm-monitoring)
+[^5]: Datadog. [SLOs: How to Establish and Define Service Level Objectives](https://www.datadoghq.com/blog/establishing-service-level-objectives/)
+[^6]: github.com. [Local LLM infrastructure 2026, Adroit blog](https://github.com/kelex1812/adroit-blog/blob/main/content/blog/local-llm-infrastructure-2026.mdx)
+[^7]: docs.langchain.com. [Cost tracking, LangSmith docs](https://docs.langchain.com/langsmith/cost-tracking)
+[^8]: docs.langchain.com. [Monitor projects with dashboards, LangSmith docs](https://docs.langchain.com/langsmith/dashboards)
+[^9]: Google. [Service Level Objectives, SRE Workbook](https://sre.google/workbook/implementing-slos/)

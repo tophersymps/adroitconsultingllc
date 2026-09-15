@@ -1,0 +1,94 @@
+---
+title: "React Compiler Turned One: The useMemo Answer"
+slug: react-compiler-automatic-memoization-2026
+excerpt: "A year after React Compiler 1.0 went stable, here is when you can delete useMemo and when you cannot."
+category: "React & Web Dev"
+categoryColor: react
+categoryGradient: "from-emerald to-emerald-dark"
+date: "August 27, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: 9
+tags: [React, Performance, Web Development]
+bannerImage: "/banners/react-compiler-automatic-memoization-2026.png"
+---
+
+For the better part of a decade, writing fast React meant keeping a mental map of what rendered what, and encoding that map by hand. You wrapped a callback in `useCallback` so a child would not re-render. You put an expensive calculation in `useMemo`. You wrapped the component in `React.memo` and prayed the props were stable. Every one of those decisions was a small bet about object identity, and the bets were easy to get wrong.
+
+React Compiler promises to take the manual encoding out of it. The compiler, which went stable with version 1.0 on October 7, 2025, analyzes your components at build time and inserts memoization automatically, including in places a human cannot reach with the hooks.[^1] A year in, the question teams are actually asking is more practical: does this mean I can delete my `useMemo` and `useCallback`?
+
+The honest answer is "usually not for existing code, and only for performance in new code." The longer answer, and the one worth paying attention to, is about the one category of memoization that the compiler will not fix for you, the kind that is secretly carrying application behavior rather than just avoiding wasted renders.[^3] This article is about telling those two apart.
+
+## What the compiler actually does
+
+React Compiler is a build-time optimizer, not a runtime change. It lowers your JavaScript and JSX into a high-level intermediate representation, then runs multiple passes that reason about data flow and mutability before deciding which values and pieces of rendered output it can safely reuse.[^3] When it decides reuse is safe, it inserts the equivalent of `useMemo`, `useCallback`, and `React.memo` into the compiled output, without you writing any of them.[^1]
+
+![React Compiler replaces manual memoization with build-time automatic memoization, condensing the useMemo, useCallback, and React.memo stack into plain components the compiler optimizes](</diagrams/react-compiler-automatic-memoization-2026/1-compiler-vs-manual.png>)
+
+The distinguishing trick is that it can memoize conditionally. Manual memoization requires hooks to run in the same order on every render, which means you cannot call `useMemo` after an early `return`. The compiler has no such constraint, because it is not emitting hook calls the way you would; it can keep a value stable even after a conditional return in your component.[^1] That is not a small corner case. It is the case where manual memoization is impossible, which is precisely where components are hardest to optimize by hand.
+
+The compiler also ships validation passes that encode the Rules of React. Using its understanding of data flow and mutability, it flags code that breaks those rules, and those diagnostics now live in the normal `eslint-plugin-react-hooks` package under its `recommended` preset rather than in a separate compiler plugin.[^1] The most useful ones are `set-state-in-render`, which catches render loops, `set-state-in-effect`, which flags expensive work inside effects, and a `refs` rule that stops unsafe ref access during render.[^1] You can upgrade the linter before you ever turn the compiler on, and get the diagnostic value without the build change.
+
+## The production numbers, read carefully
+
+The strongest evidence that the compiler works is Meta's own deployment. The compiler ships in the Meta Quest Store, and Meta reports initial loads and cross-page navigations improving by up to 12 percent, with certain interactions running more than 2.5 times faster, all with neutral memory usage.[^1][^2]
+
+Those numbers are real, and they are also not your forecast. React's own post warns that results vary by application, which makes sense: an app that already has carefully targeted manual memoization has less redundant work for the compiler to eliminate than one with deep re-render chains and almost none.[^3]
+
+Independent case studies fill in the realistic picture. Sanity Studio, after precompiling 1,231 of its 1,411 components, measured a 20 to 30 percent overall reduction in render time and latency.[^2] Wakelet, rolling the compiler to 100 percent of users, improved LCP by about 10 percent, from 2.6 seconds to 2.4 seconds, and INP by about 15 percent, from 275 milliseconds to 240. Its biggest wins were in pure-React elements like Radix dropdowns, where the INP speedup approached 30 percent.[^2]
+
+The honest counterpoint comes from a test on roughly 15,000 lines of real application code. Initial load showed almost no change, with Lighthouse scores effectively identical before and after. Interaction performance varied sharply by use case: a theme toggle saw total blocking time drop from 280 milliseconds to zero, while a checkbox filter dropped from 130 to 90 milliseconds, and the compiler could not fully eliminate re-renders there because of non-memoized object references coming from an external library.[^2]
+
+That spread is the lesson. The compiler pays off most where re-render chains are deep and unoptimized, and least where the expensive work is already isolated or where the re-renders are driven by object identity created outside your components. Treat Meta's figures as directional evidence for a trial, not as a promise that a config flag buys you 12 percent on page load.
+
+## The answer about useMemo and useCallback
+
+React's guidance is explicit, and it splits cleanly between new and existing code. For new code, rely on the compiler's memoization by default, and use `useMemo` or `useCallback` only where you need precise control. For existing code, leave correct manual memoization in place, or remove it only after careful testing, because deleting it can change both compiler output and application behavior.[^1]
+
+That split is the part most "the compiler makes memoization obsolete" takes get wrong. The compiler does not remove the need to understand why you memoized something. It removes the chore of typing the hooks for the common performance case, and it replaces the senior engineer's job with a harder one: recognizing when the compiler's optimization and the application's semantics are not the same thing.[^3]
+
+Here is the category that matters. Consider a chat room component where a `useMemo` builds an `options` object with `roomId` and `reconnect: true`, and a `useEffect` depends on that object and opens a connection. A developer will tell you the `useMemo` is there for performance. In practice its real job is to stabilize the object so the effect does not reconnect on every render. That is behavior, not optimization.
+
+If you strip that `useMemo` and let the compiler decide, the effect's firing depends on whether the compiled object keeps its identity. The compiler may preserve it today, but React warns that future compiler versions can make memoization more granular, and a memoized value used as an effect dependency can then make that effect over-fire or under-fire.[^1]
+
+The stronger fix is to stop making incidental object identity part of the effect contract at all. Build the `options` object inside the effect and depend on `roomId` directly, so the dependency array says what the code actually means: reconnect when the room changes.[^3] Then no performance optimization is doubling as a semantic guarantee, and the compiler has nothing to break.
+
+## Adopting it incrementally
+
+You do not have to flip the compiler on for a whole codebase at once. React documents three incremental paths, and they are the right way to roll this out in an existing production app.[^4] Our [scalable React guide](/field-notes/scalable-react-2026) covers the surrounding architecture this fits into.
+
+The first is directory-based adoption with Babel overrides. You apply `babel-plugin-react-compiler` only to a matching path, for example `./src/modern/**/*.{js,jsx,ts,tsx}`, and expand the glob as confidence grows, while legacy directories stay uncompiled.[^4]
+
+The second is annotation mode, using `compilationMode: 'annotation'` plus a `"use memo"` directive at the top of individual components and hooks. Only code that opts in gets compiled. This gives the finest control, and the cost is that you must remember to add the directive to every new component.[^4]
+
+The third is runtime gating with feature flags. The compiler wraps optimized code in a runtime check against a flag you control, which lets you run A/B tests or roll the compiler out by user segment before committing to full adoption.[^4]
+
+![The three incremental adoption paths: Babel directory overrides, use memo annotation mode, and runtime gating with feature flags, plus the effect dependency pitfall where memoization doubles as behavior](</diagrams/react-compiler-automatic-memoization-2026/2-adoption-paths.png>)
+
+Two practical rules hold across all three. If you have poor test coverage, pin the compiler to an exact version such as 1.0.0 rather than a range, and upgrade it deliberately, because changing memoization can surface Rules of React violations that are not statically detectable.[^1] And use the `"use no memo"` directive to temporarily exclude a problematic component while you debug, rather than disabling the whole rollout.[^4]
+
+The compiler supports React 17 and later. Projects below React 19 configure a minimum target and add the `react-compiler-runtime` package, while React 19 needs none of that.[^1]
+
+## Where it ships today
+
+The integration story is more nuanced a year on than the launch announcements implied. Expo SDK 54 enabled the compiler by default for new apps, but Expo's current documentation still walks you through an explicit enablement flow, and from SDK 55 the compiler lint rules ship by default while the compile itself remains a configuration choice.[^3]
+
+Vite is the clearest example of launch summaries aging. Vite 8, released March 12, 2026, moved `@vitejs/plugin-react` v6 away from Babel as a default dependency, and the compiler is available through a `reactCompilerPreset` that is explicitly opt-in.[^3][^5] A new Vite app does not compile React automatically.
+
+Next.js treats it as first-class, exposing a dedicated `reactCompiler` configuration option, and [Next.js 16 lists compiler support as stable](/field-notes/nextjs-16-3-instant-navigations), with the team recommending version 15.3.1 or later for the best build performance via an experimental SWC path.[^1][^2]
+
+A few compatibility notes are worth carrying into a trial. Some `react-hook-form` users report that functions including `useWatch` and `getValues` can misbehave under the compiler.[^2] And the compiler requires healthy React code: it flags Rules of React violations, but it will not turn an impure render or broken hook order into a correct component.[^1] If your codebase is full of those violations, fix them first; the compiler is a reward for following the rules, not a license to stop.
+
+## The takeaway
+
+One year in, the story is maturity, not launch hype. The compiler is stable, its diagnostics live in the tooling teams already run, and the framework integrations are real but uneven enough that you should inspect your exact toolchain rather than assume it is enabled everywhere.[^3]
+
+The rule of thumb is short. In new code, let the compiler memoize, and reach for the hooks only for precise control. In existing code, do not go on a delete spree. And for anything where object identity controls an effect or another behavioral contract, understand why the identity matters before you touch it, because that is the one place automatic memoization can quietly change what your app does.[^1][^3]
+
+React itself makes the broader point in the upgrade guidance: memoization that reduces work and identity stability that determines behavior are two different things.[^3] The compiler is excellent at the first and deliberately leaves the second to you. That is not a limitation to work around. It is the part of the job that still needs a human.
+
+[^1]: React Compiler v1.0 announcement, October 7, 2025. [react.dev](https://react.dev/blog/2025/10/07/react-compiler-1)
+[^2]: InfoQ, Meta's React Compiler 1.0 Brings Automatic Memoization to Production. [infoq.com](https://www.infoq.com/news/2025/12/react-compiler-meta/)
+[^3]: Refonte Learning, React Compiler Turned One in 2026: What Actually Changed for Frontend Developers. [refontelearning.com](https://www.refontelearning.com/blog/react-compiler-production-assessment)
+[^4]: React, Incremental Adoption guide. [react.dev](https://react.dev/learn/react-compiler/incremental-adoption)
+[^5]: Vite 8 announcement. [vite.dev](https://vite.dev/blog/announcing-vite8)

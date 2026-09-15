@@ -1,0 +1,220 @@
+---
+title: "Lesson 22: Building Without a Framework: the Agent Loop by Hand in 100 Lines"
+slug: agent-loop-by-hand-no-framework
+series: "agentic-ai"
+lesson: 22
+excerpt: "Lesson 21 ended on a quiet note: sometimes you don't need a framework at all. This lesson makes that concrete. You write the loop yourself, in roughly a hundred lines, with nothing but an LLM API and a while loop. You see the canonical agent loop in real code, you build a working agent with two tools, you learn the one ordering mistake that trips up every beginner, and you find out exactly where a hand-rolled loop runs out of room and a framework starts to earn its complexity."
+date: "August 25, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [LLMs, AI Agents, Architecture]
+---
+
+# Lesson 22: Building Without a Framework: the Agent Loop by Hand in 100 Lines
+
+Lesson 21 mapped the framework terrain and finished with an idea that quietly matters: if your job is a bounded cron task, the honest answer is often that you need no framework at all. This lesson makes that concrete. You are going to build an agent with nothing but an LLM API, a Python file, and a while loop, and you are going to watch it work. Doing this once is the fastest way to see through every framework you will ever use afterward.
+
+The claim in the title is not a gimmick. A working agent really does fit in about a hundred lines. The loop underneath LangGraph, the OpenAI Agents SDK, and every tool you met last lesson is the same few lines of logic wearing different clothes. Once you have written it yourself, no framework is a black box again.
+
+## The loop is settled
+
+The first thing to internalize: the agent loop is a solved problem. Steve Kinney spent an unreasonable amount of time reading the source code of major frameworks, expecting to find meaningfully different approaches, and found the same six lines of logic in all of them. [^1]
+
+```
+while (!done) {
+  const response = await callLLM(messages);
+  if (response.toolCalls.length > 0) {
+    const results = await executeTools(response.toolCalls);
+    messages.push(...results);
+  } else {
+    done = true;
+    return response;
+  }
+}
+```
+
+Every framework converges on this shape. A while loop calls the model. If the response contains tool calls, your code executes those tools and feeds the results back. If the response is plain text, the loop stops and returns it. That is the whole mechanism. [^1]
+
+What makes it work is how a tool call is represented on the wire. When you send a message to an LLM API, you can pass a list of tools, and each tool is a name, a description, and a JSON schema for its parameters. If the model decides it needs one, it does not return a sentence. It returns a structured object that says "call this function with these arguments." Your code runs the function and sends the result back as a new message. So when you ask a model for the weather in Chicago and it has a `get_weather` tool, it does not guess. It emits `get_weather(city="Chicago")`, your code runs it, and the model uses the real result to answer. [^1]
+
+There are only two signals in the whole system. A tool call is the continuation signal: the model is not done, it needs information or needs to take an action. A text-only response is the termination signal: the model has what it needs and is answering. [^1]
+
+## Build it yourself
+
+The clearest way to see this is to write it. Here is a working agent in Python, using the OpenAI-compatible API shape, adapted from the loop in Steve Kinney's walkthrough and the dev.to no-framework tutorial. It gets two tools: a calculator and a fake weather lookup. [^1] [^3]
+
+First the tools, which are just Python functions plus the JSON schemas that describe them to the model. [^2] [^3]
+
+```python
+import json
+import math
+
+# --- Tool implementations ---
+
+def calculator(expression: str) -> str:
+    """Safely evaluate a math expression."""
+    try:
+        result = eval(expression, {"__builtins__": {}}, {"sqrt": math.sqrt, "pow": pow})
+        return str(result)
+    except Exception as e:
+        return f"Error: {e}"
+
+def get_weather(city: str) -> str:
+    """Return fake weather data for the demo."""
+    fake = {"london": "Cloudy, 15C", "tokyo": "Rainy, 18C", "new york": "Sunny, 22C"}
+    return fake.get(city.lower(), "No weather data for this city.")
+
+TOOLS = {"calculator": calculator, "get_weather": get_weather}
+
+TOOL_SCHEMAS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "calculator",
+            "description": "Evaluate a math expression and return the result.",
+            "parameters": {
+                "type": "object",
+                "properties": {"expression": {
+                    "type": "string",
+                    "description": "A Python math expression, e.g. '2 + 2' or 'sqrt(16)'"}},
+                "required": ["expression"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get the current weather for a city.",
+            "parameters": {
+                "type": "object",
+                "properties": {"city": {
+                    "type": "string",
+                    "description": "City name, e.g. 'Tokyo'"}},
+                "required": ["city"],
+            },
+        },
+    },
+]
+```
+
+Now the loop itself. This is the heart of the agent. [^3]
+
+```python
+from openai import OpenAI
+
+client = OpenAI()  # reads OPENAI_API_KEY from the environment
+
+def run_agent(user_query: str):
+    messages = [
+        {"role": "system",
+         "content": "Use tools when needed. Once you have enough info, answer."},
+        {"role": "user", "content": user_query},
+    ]
+
+    while True:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=messages,
+            tools=TOOL_SCHEMAS,
+            tool_choice="auto",
+        )
+        message = response.choices[0].message
+
+        # No tool calls means the model is answering. Stop.
+        if not message.tool_calls:
+            return message.content
+
+        # There are tool calls. Append the assistant message BEFORE the results.
+        messages.append(message)
+
+        for tool_call in message.tool_calls:
+            name = tool_call.function.name
+            args = json.loads(tool_call.function.arguments)
+            result = TOOLS.get(name, lambda **k: f"Unknown tool {name}")(**args)
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": str(result),
+            })
+```
+
+That is it. Roughly sixty lines of Python, and it is an agent. Run it on a task that needs both tools. [^3]
+
+```python
+if __name__ == "__main__":
+    print(run_agent("What is the square root of 144, and the weather in Tokyo?"))
+```
+
+The trace shows the loop doing its job. The model sees it needs the calculator and returns a tool call. Your code runs the calculator, gets `12.0`, and appends that as a tool result. The model sees it still needs the weather and returns a second tool call. Your code runs `get_weather`, appends "Rainy, 18C", and on the next iteration the model has everything it needs, so it returns plain text and the loop exits. [^3]
+
+The key insight, and it is worth stating plainly: the LLM never runs a tool. It only proposes "call this function with these arguments." Your code does the execution and feeds the result back. The model is the brain, your code is the hands. [^3]
+
+## The one mistake that trips up every beginner
+
+There is a line in that loop that looks harmless and is the most common bug in the whole pattern. You must append the assistant's message, the one containing the tool calls, to the conversation history *before* you append the tool results. [^1]
+
+The API requires each tool result to reference a `tool_call_id` that already exists in the conversation. If you append the tool results first, the API rejects the request with a validation error that does not obviously point at the problem, because the error is about message ordering, not about your tools or your prompt. Swap the order and it works. This is the kind of detail you only learn by writing the loop yourself, and it is exactly why building by hand once is worth the hour. [^1]
+
+The Anthropic API shapes the same loop a little differently: tool results go into a `{role: "user", content: toolResults}` message, and you check `response.stop_reason == "end_turn"` instead of checking for empty tool calls. [^4] The loop structure is identical. Once you have written one, porting to a different provider is mechanical. [^1]
+
+## A hundred lines is not a stunt
+
+You might be suspicious that a hand-rolled loop only works on toy demos. The strongest counterexample comes from the mini-SWE-agent project. [^5] The team behind SWE-agent, a coding agent that took over a year of engineering, stripped it down to about a hundred lines of Python that give the model a single tool, bash, and parse actions out of the model's output with a regex instead of using structured tool calling. No JSON schemas, no tool-calling protocol. That hundred-line version still scored 74 to 76.8 percent on SWE-bench Verified depending on the model, against a state of the art around 80.9 percent. The team was stunned. A hundred lines gets you most of the way to the best coding agent in the world, because the loop is not where the difficulty lives. [^1]
+
+The same point lands from another angle. Kinney's measured numbers: a standard chat interaction costs roughly 1x tokens, a single-agent loop costs about 4x, and a multi-agent system costs around 15x, because every handoff re-establishes context. [^1] That is a strong argument for building the single-agent loop yourself and only paying framework complexity when the task actually demands it.
+
+## Where the hand-rolled loop runs out
+
+Building the loop yourself is the right start. Running it in production without hardening is not. The loop is the easy part. Everything around it is where production agents actually fail, and this is where a framework starts to earn its keep. [^1]
+
+The minimum safety controls you will add to that sixty-line loop, and most are a few lines each:
+
+**Max iterations.** Set a hard cap on how many times the loop can run. Typical production values are 15 to 25 steps. When the cap hits, do not just stop silently. Use the early stopping pattern: append a message like "You have reached the maximum number of steps. Provide your best answer now based on the work you have done so far," and call the model one final time without tools, so it can synthesize what it gathered instead of leaving the user with nothing. [^1]
+
+**Wall-clock timeout.** A per-run cap protects against a tool that hangs or a model that generates a very long response. Something like 300 seconds is reasonable for most tasks. [^1]
+
+**Token and cost budgets.** A hard ceiling on spend per run. Watch whether token consumption grows linearly, which is expected, or quadratically, which means the full conversation is being re-sent every turn without compaction, and that will blow a budget fast. [^1]
+
+**Loop detection.** An agent can be running without progressing. Hash each iteration's tool name and a result preview. If you see three identical fingerprints in a row, the agent is stuck. One production system repeated the same answer 58 times before anyone noticed. [^1]
+
+**Error classification.** Decide what to retry and what to give up on. HTTP status codes make this easy: 429, 500, 502, 503, and 504 are retryable, use exponential backoff with jitter. 401, 403, and 422 mean something is fundamentally wrong, so stop immediately. Retrying a 403 will not make the credentials appear. [^1]
+
+**Context management.** The conversation grows every iteration, and tool results are the biggest contributor. Tool result clearing, replacing old outputs with short summaries, is the safest form of compaction. Paginated reads that return a window of a file with line numbers beat returning the whole file. [^1]
+
+Write all of that down and you have essentially rebuilt a small framework, which is exactly the point. Build the minimal loop, get it working, then add safety controls, then context management, then observability, in that order. Resist the urge to start with a framework, because you will understand the framework far better once you have hit the problems it was built to solve. [^1]
+
+## When a framework is the right call
+
+The honest boundary from Lesson 21 still holds. A hand-rolled loop is the right tool when your agent is a straightforward loop with tools: a bounded cron job, a single research pass, a content pipeline with a gate. LangGraph and similar runtimes add machinery you do not need there.
+
+The moment your problem grows past a simple loop, the hand-rolled version starts to cost more than it saves. The reasons to reach for a framework are concrete and mostly about state. [^1]
+
+**Durability and resumability.** An LLM call is high latency and non-deterministic. Retrying a failed thirty-second agent run from scratch is expensive. If your workflow must survive a process restart and resume from the last successful checkpoint, that is what LangGraph's checkpointing at every node transition provides, and a hand-rolled while loop does not. [^1]
+
+**Parallel branches.** When scheduled nodes run in parallel and state merges per superstep, a graph runtime handles it. Your sequential while loop cannot, by construction. [^1]
+
+**Human-in-the-loop approval.** Pausing a run for a human, resuming later, and time-travel debugging (load a prior checkpoint, modify state, fork execution from there) are all features of a stateful graph runtime. None of them fall out of a bare loop. [^1]
+
+The decision rule is the same one Lesson 21 gave you, now in starker terms: if the loop is the whole problem, build it by hand. If state that survives failures and branches is the problem, that is the specific thing a framework exists to give you, and carrying a hundred lines of hand-rolled state management is how you end up maintaining your own worse version of LangGraph. [^1]
+
+## The Fortress angle
+
+This is not abstract at Adroit. The Hermes agents that write and publish the lessons you are reading run exactly this way: a small program with a system prompt, a set of tools, and a loop, coordinated by a cron scheduler and a kanban workspace rather than by a graph runtime or a role-based crew. There is no long-running, crashable, branching workflow here that needs durable checkpointing, so the loop is the honest fit. The lesson generalizes: match the coordination to the coordination you actually have, and when the loop is all you need, write the loop.
+
+## Try it
+
+1. **Type the loop, do not paste it.** Rewrite the Python agent above by hand. Delete the comment about appending the assistant message before the tool results, run it, and read the validation error you get. That error is the lesson, and you will never make the mistake again. [^1]
+2. **Add a third tool.** A file reader, a web search stub, or a database query. Write the function, add its schema to `TOOL_SCHEMAS`, and confirm the model can chain it with the existing tools. The whole design principle is that adding a tool is adding a function and a schema, nothing else. [^3]
+3. **Harden the loop.** Add a max iteration cap and the early-stopping message from the safety section. Give the agent a task that will fail or loop (a tool that always errors), and watch the cap fire instead of running forever. [^1]
+4. **Port it.** Rewrite the same loop against the Anthropic API using the shape from the walkthrough: tool results in a user message, `end_turn` as the stop check. Notice how little changes. [^1]
+
+## What's next
+
+You can now see the agent loop in real code, which means no framework is a black box to you again. Lesson 23 names the common shapes that loop takes: agent patterns, ReAct, plan-and-execute, reflection, and tool loops, and when each one earns its place. Building the loop by hand gave you the machinery; the patterns tell you how to compose that machinery for real tasks. [^1]
+
+[^1]: stevekinney.com. [The Anatomy of an Agent Loop](https://stevekinney.com/writing/agent-loops)
+[^2]: leoniemonigatti.com. [Building an AI agent from scratch in Python](https://www.leoniemonigatti.com/blog/ai-agent-from-scratch-in-python.html)
+[^3]: dev.to. [Build an AI Agent from Scratch: No Frameworks, Just Python](https://dev.to/shashi_kiran_bcfdbb223140/build-an-ai-agent-from-scratch-no-frameworks-just-python-3850)
+[^4]: anthropic.com. [Building Effective Agents](https://www.anthropic.com/engineering/building-effective-agents)
+[^5]: github.com. [SWE-agent/mini-swe-agent](https://github.com/SWE-agent/mini-swe-agent)

@@ -1,0 +1,129 @@
+---
+title: "Lesson 24: Multi-Agent Systems: Orchestrator-Worker, Supervisor, and Debate"
+slug: multi-agent-systems-orchestrator-worker-supervisor-debate
+series: "agentic-ai"
+lesson: 24
+excerpt: "Lesson 23 taught you the single-agent patterns. This lesson puts several agents in one system. You learn the three coordination shapes that dominate real multi-agent work: orchestrator-worker (a central agent splits and delegates), supervisor (a coordinator routes to specialized workers via handoffs), and debate (multiple instances argue toward a consensus), plus when each one earns its complexity and when one agent is still the right call."
+date: "August 27, 2026"
+author: "Adroit Consulting"
+readTime: "11 min read"
+tags: [LLMs, AI Agents]
+---
+
+# Lesson 24: Multi-Agent Systems: Orchestrator-Worker, Supervisor, and Debate
+
+Lesson 23 gave you the single-agent patterns: ReAct, plan-and-execute, reflection. Each of those still runs one agent talking to a set of tools. This lesson changes the unit of design. Instead of one loop, you get several loops that have to coordinate, and the interesting questions stop being about reasoning and start being about control. Who decides what each agent does? How do results flow back? How do you stop two agents from working at cross purposes?
+
+Before you reach for any of these patterns, hold the simplest fact in mind. Anthropic's engineers say the most successful implementations they have seen use simple, composable patterns rather than complex frameworks, and that you should find the simplest solution possible and only increase complexity when needed. [^1] Multi-agent systems are a way to increase complexity. They are worth it only when a single agent genuinely cannot do the job. The rest of this lesson is about the three shapes that complexity takes, and how to tell when you need them.
+
+## When one agent stops being enough
+
+The LangChain team frames the decision cleanly. When developers say they need multi-agent, they are usually after one or more of three capabilities. [^3]
+
+- **Context management.** A single agent with a bounded context window cannot hold a whole organization's worth of domain knowledge. Splitting work across specialists lets each one carry only the context it needs, instead of one agent drowning in a prompt too large to reason over. [^3]
+- **Distributed development.** Different teams build and maintain capabilities independently, then compose them into a larger system with clear boundaries. Each specialist is owned by the people who understand it. [^3]
+- **Parallelization.** Spawn specialized workers for independent subtasks and run them at the same time, which turns a long serial chain into a short parallel step. [^3]
+
+Multi-agent also earns its keep when one agent has too many tools and starts making bad choices about which to use, or when a task needs deep specialized knowledge with long prompts and domain-specific tools that no single agent can hold well. [^3] The flip side is just as important: a single agent with the right tools and prompt can often match a multi-agent design, and it is always simpler to debug. Reach for the coordinated system only when you have identified a real cost that one agent is paying. [^3]
+
+## The orchestrator-worker pattern
+
+The orchestrator-worker pattern is a central LLM that dynamically breaks a task down, delegates each piece to worker LLMs, and synthesizes their results. [^1] The word to hold onto is "dynamically." The subtasks are not predefined; the orchestrator decides what they are after it sees the specific input, which is what separates this pattern from plain parallelization where the split is fixed in code. [^1]
+
+This is the right shape for complex tasks where you cannot predict the subtasks in advance. Anthropic's example is coding products that make changes to multiple files, where the number of files and the nature of the change in each one depend on the task, and search tasks that gather and analyze information from many sources. [^1]
+
+A minimal sketch of the loop, using the graph language you met in Lesson 23:
+
+```python
+def orchestrator(state):
+    # one LLM call: read the goal, emit a task list with workers
+    tasks = llm.invoke(f"Break this into subtasks and name a worker for each: {state['goal']}")
+    return {"tasks": tasks}
+
+def worker(state, task):
+    # each worker runs one subtask, possibly on a cheaper model
+    return {"results": state["results"] + [run_subtask(task)]}
+
+def synthesize(state):
+    # one LLM call: turn the collected results into a final answer
+    return {"answer": llm.invoke(f"Combine these into one response: {state['results']}")}
+```
+
+The orchestrator is the only agent that sees the whole goal. Each worker sees only its slice, which is exactly the point: workers stay focused and their context stays small, while the orchestrator pays for the broader view. The cost is that the orchestrator becomes a single point of failure and a routing bottleneck, and every subtask's result has to flow back through it to be synthesized. [^3]
+
+## The supervisor pattern
+
+The supervisor pattern is orchestrator-worker with a sharper division of control. A central supervisor agent coordinates specialized worker agents, and it communicates with them through handoffs: structured messages that name the next worker to take control. [^4] [^5] Where an orchestrator decomposes a task and dispatches all the pieces, a supervisor routes work round by round. It decides which specialist should act next, hands off, the specialist does its part and hands back, and the supervisor decides what comes after, until it decides the work is done. [^4]
+
+LangGraph ships this as a built-in primitive. The `create_supervisor` factory builds a supervisor that manages a list of agents, and each specialized agent is exposed to the supervisor as a tool it can call. [^4] The reference implementation describes it this way: a supervisor agent orchestrates multiple specialized agents. [^4] The supervisor can run workers in sequence or in parallel depending on the request, which makes it the natural fit for a personal-assistant shape where one coordinator fields a user request and routes it to the right domain expert. [^5]
+
+The supervisor earns its keep when the work is genuinely separable into specialized roles, each with its own tools and prompts, and when you want a single accountable coordinator in front of the user. Its weaknesses mirror the orchestrator's: the supervisor is the chokepoint, it sees and routes everything, and a supervisor that over-routes everything to one worker is a known failure mode. [^4] If the coordinator never sends work anywhere except its favorite specialist, you have paid for a coordinator that is not coordinating.
+
+The distinction between the two patterns is a matter of emphasis, not a hard line. Orchestrator-worker emphasizes decomposition: one task becomes many subtasks, often run in parallel, then merged. Supervisor emphasizes routing: one coordinator repeatedly decides which specialist acts next and passes control with a handoff. A supervisor with parallel worker dispatch and an orchestrator with sequential steps blur into each other. What matters is that you can name which control shape you built, because the debugging story follows the shape.
+
+## The debate pattern
+
+Debate is the odd one out, because it is not about dividing labor. It is about redundancy. In multi-agent debate, multiple model instances each propose an answer and then argue over several rounds, reading each other's responses and reasoning, until they arrive at a common final answer. [^2] Du and colleagues, who proposed this in 2023, frame it as a society of minds: instead of one model trying to verify its own output, several instances cross-examine each other. [^2]
+
+Their results are the reason the pattern exists. They report that the debate procedure significantly enhances mathematical and strategic reasoning across a number of tasks, and that it improves the factual validity of generated content, reducing the fallacious answers and hallucinations that contemporary models are prone to. [^2] The mechanism works because a single model asked to critique itself tends to reinforce its own blind spots, whereas a second instance with a different framing can catch an error the first one is confident about.
+
+The shape of a debate round looks like this:
+
+```text
+Round 1
+Agent A: "The answer is 42, because of reason one."
+Agent B: "The answer is 31, because of reason two."
+
+Round 2
+Agent A: "B's reason two ignores the constraint in the question. Here is the revised case for 42."
+Agent B: "A's case assumes the constraint is binding. It is not. I hold at 31, and here is the counter."
+
+Round 3
+... until both instances converge, or the coordinator calls it.
+```
+
+The cost is easy to state: you are paying for several full model calls, and multiple rounds of them, for a single answer. That is why debate earns its complexity only when correctness on the first shot matters more than speed or token cost. It is the pattern for high-stakes single decisions where a wrong confident answer is expensive and a retry is not free. When you need fast, cheap, high-volume throughput, debate is the wrong tool.
+
+Debate also has a structural trap. The instances are all running the same underlying model, so they share its biases. If the model has a systematic error, the whole committee may converge on that error in agreement, and agreement feels like confirmation. Watch for the committee that always lands on the same wrong number: that is not consensus, that is a shared hallucination.
+
+## Worked example: one task, three coordination shapes
+
+Take a task an enterprise system might actually get: "Assess whether Acme Corp is a safe vendor to onboard, using the last four quarters of financial data and its recent security history, and return a one-paragraph decision."
+
+The orchestrator-worker version splits the task up front. The orchestrator reads the goal and emits three subtasks: pull and summarize the four quarterly financials, gather the security history, and score each against a vendor-risk rubric. The financial and security workers can run in parallel, each with focused context and its own tools. A synthesizer merges the two results and the rubric score into the one-paragraph decision. Fast, parallel, each worker's context stays small, and the whole thing is one decomposition followed by a merge.
+
+The supervisor version keeps the same three specialists but routes differently. The supervisor reads the goal, hands off to the financial specialist, gets the summary back, hands off to the security specialist, gets that back, then decides whether it also needs the rubric scorer or whether it has enough to write the decision itself. Slower, because the routing is sequential round by round, but more flexible if the supervisor discovers mid-flight that it needs a fourth specialist it did not plan for.
+
+The debate version ignores the division of labor entirely and attacks the judgment. Three instances each read the financial summary and security history independently, each proposes a vendor-risk verdict, and they argue until they converge. Slowest and most expensive, but if a wrong onboarding decision is a serious exposure, the cross-examination is worth the tokens.
+
+None of these is universally correct. Orchestrator-worker wins when the subtasks are discoverable and parallelizable. Supervisor wins when you need flexible round-by-round routing and a single accountable coordinator. Debate wins when a single high-stakes judgment needs to be right the first time. [^2] [^3]
+
+## The pitfalls to avoid
+
+The first pitfall is reaching for multi-agent because it sounds impressive. Every additional agent is an additional thing to trace, an additional source of nondeterminism, and an additional bill. If a single agent with the right tools can do the job, build that, and only add coordination when you can point to the specific cost a single agent was paying. [^3] This is the same advice Anthropic gives: start simple, and increase complexity only when needed. [^1]
+
+The second pitfall is a coordinator that does not coordinate. A supervisor that routes everything to one worker, or an orchestrator that emits a task list but never checks whether the workers actually did their parts, is a single agent wearing a costume. Audit your traces for routing diversity, the discipline from Lesson 13 on observability, and confirm the coordinator is actually making decisions and not just forwarding.
+
+The third pitfall is shared-model confirmation. In debate, and in any system where multiple agents run the same base model, the committee inherits the model's blind spots. Agreement is not correctness, especially when every member shares the same bias. Use debate for high-stakes judgments, not as a general quality booster, and keep an external eval on the other side of it.
+
+The fourth pitfall is forgetting the single-agent discipline from the last few lessons. Every worker in a multi-agent system still needs stopping conditions, validation, and a bounded token budget. A supervisor that can hand off forever is a token-billing incident, and a debate that never converges is the same bug with better manners. The coordination layer does not remove the loop discipline; it multiplies it by the number of agents.
+
+## Try it
+
+1. **Trace a single agent you already have.** Write down the tools it holds and the context it carries. Ask whether it has too many tools to choose between well, or too much context to reason over. That assessment is your honest starting point for whether multi-agent is warranted. [^3]
+
+2. **Build an orchestrator-worker version of a three-step task.** Take a task that splits naturally, like the vendor assessment above. Write one orchestrator that emits a task list, two workers that each run one piece, and a synthesizer that merges results. Measure the wall-clock time against doing the same steps serially in one agent. [^1]
+
+3. **Build a supervisor with handoffs.** In LangGraph, use `create_supervisor` to wrap two specialized agents as tools and route a request between them. Log every handoff and confirm the supervisor actually distributes work across both specialists instead of favoring one. [^4]
+
+4. **Run a two-round debate on a factual question.** Give two instances the same question, let them answer, then feed each one the other's answer and ask for a revised position. Count how often the second round changes or hardens an answer, and whether the change is toward correctness. [^2]
+
+## What's next
+
+You can now build several agents that coordinate. Lesson 25 turns to the piece that keeps them safe in production: human-in-the-loop control. You learn approvals that gate risky actions, interrupts that let a person step in mid-run, escalation when an agent hits something it should not decide alone, and kill switches that stop a runaway system before it does damage. Coordinating agents is one thing; staying in control of them while they work is the next. [^1]
+
+[^1]: anthropic.com. [Building Effective Agents](https://www.anthropic.com/engineering/building-effective-agents)
+[^2]: arxiv.org. [Improving Factuality and Reasoning in Language Models through Multiagent Debate (Du et al., 2023)](https://arxiv.org/abs/2305.14325)
+[^3]: docs.langchain.com. [Multi-agent (LangChain)](https://docs.langchain.com/oss/python/langchain/multi-agent)
+[^4]: reference.langchain.com. [langgraph_supervisor](https://reference.langchain.com/python/langgraph-supervisor)
+[^5]: docs.langchain.com. [Multi-agent: subagents (LangChain)](https://docs.langchain.com/oss/python/langchain/multi-agent/subagents-personal-assistant)

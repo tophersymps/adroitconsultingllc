@@ -1,0 +1,112 @@
+---
+title: "Lesson 8: Configuration: Models, Providers, and Fallbacks: Why 'It Works on My Machine' Isn't Enough"
+slug: configuration-models-providers-fallbacks
+series: "hermes-consultant"
+lesson: 8
+excerpt: "The consultant's configuration discipline: the model, provider, and fallback choices that make an agent dependable are part of the deliverable, not an install detail. How to separate secrets from settings, verify what the running agent actually resolved, and build for the outage so the client's agent survives a provider that does not."
+date: "September 2, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [AI Agents, Consulting, LLMs]
+---
+
+# Lesson 8: Configuration: Models, Providers, and Fallbacks: Why 'It Works on My Machine' Isn't Enough
+
+Lesson 7 stood the agent up: isolated, verified at the base, and reachable through a gateway on the channel your client actually uses. This lesson goes one level down, into the settings that decide which model thinks, which provider serves it, and what happens when that provider stops answering. It is where the phrase "it works on my machine" gets dismantled. The configuration you carry into a client engagement is not a personal preference. It is a contract with that client's future, and if it only runs because of something true about your laptop, it will fail the moment it leaves your hands.
+
+The skills transfer to any agent platform, because they are not really about YAML. They are about three disciplines: naming the parts of a configuration that differ between environments, proving which settings the running agent actually honors, and building the agent to survive the failures it will meet in the field. Hermes Agent is the concrete example, but every one of these disciplines applies to whatever agent you deliver for someone else.
+
+## Define the terms before you configure anything
+
+Two words get used as if they were the same thing, and treating them as interchangeable is the first way deployments go wrong. The model is the reasoning engine. It is the thing that decides the next token, and it is the largest driver of the quality of the answer, the latency you wait for, the cost you pay, and the style the client experiences. The provider is the service that actually runs that model for you and hands back its output. It owns the credentials, the endpoint, the uptime, and the bill.
+
+They belong in separate parts of the configuration, and not as an accident of file layout. You want to be able to change the provider while keeping the model, and to change the model while keeping the provider, because those two actions serve different consulting goals. Keeping the model and swapping the provider is how you build resilience when a vendor goes down. Keeping the provider and swapping the model is how you tune cost or capability over the life of the engagement. If model and provider are welded together in your mental model and in your config, you cannot do either cleanly.
+
+Hermes models this split directly. In the `model:` section of `config.yaml` you set the provider and the model as separate keys, so `default` names the model and `provider` names who serves it, and you can pick both interactively with `hermes model`.[^1][^2] Treat the split the way the tool does. When a client asks you what the agent "runs on," the honest answer names both halves, because the model is what the client experiences and the provider is what can fail.
+
+## Separate the secrets from the settings
+
+A clean configuration separates the parts that must stay the same from the parts that must differ. There are two kinds of values in any agent config, and mixing them is the second way deployments rot. Settings are the decisions that should travel with the project: which model, which provider, how the agent behaves, what its tools are. Secrets are the credentials that must never travel anywhere: the API keys, the bot tokens, the passwords that prove you are allowed to call the provider.
+
+Hermes enforces the split by giving each its own home. Non-secret settings live in `config.yaml`. Secrets live in `.env`, the file that holds API keys and tokens and is never meant to be committed or shared. When you set a value through the command line, `hermes config set` routes it to the correct file automatically: an API key goes to `.env`, everything else to `config.yaml`.[^1] The rule of thumb is blunt: secrets go in `.env`, everything else goes in `config.yaml`.[^1]
+
+The consulting reason for the split is that it makes the configuration portable in the direction you actually need. When you hand an engagement to a second environment, or a second consultant, or a client's own infrastructure team, the settings should come with you and the secrets should not. The new environment supplies its own keys. If every secret is buried in the same file as every decision, then copying the configuration to a fresh machine also copies your credentials, and editing the configuration to fit a new machine risks breaking a secret you did not mean to touch. Separate the concerns and each machine stands up from the settings alone, with only the credentials it owns.
+
+## Prove which settings the running agent honors
+
+Here is the discipline behind "it works on my machine," and why the phrase is a warning rather than a compliment. Every agent resolves its configuration through a chain of sources, and the value that ends up running is not necessarily the value you typed into the file you think of as the config. If you never verify what the running agent actually resolved, then "it works on my machine" can be true for a reason you do not understand, which means it will stop working in an environment where that reason is absent.
+
+Hermes resolves settings in a defined order, highest priority first: command-line arguments override the config file, the config file overrides the environment file, and both override built-in defaults.[^1] That precedence is exactly the kind of thing that produces a haunted deployment. You set a model in `config.yaml`, but an old environment variable or a per-invocation flag is silently winning, so the agent runs on something you did not configure. It works on your machine because of a coincidence of shell state, and you hand it over believing the config file is the truth.
+
+The fix is verification, and it is the same verification discipline you have used since discovery. After you set a value, check what the running agent actually honors, rather than trusting that the edit took effect. Read the resolved configuration back. Confirm the active profile and the model in the startup banner. When a change does not seem to have landed, ask which of the precedence layers could be overriding it before you edit the same file again. The goal is not to memorize precedence rules. It is to develop the reflex that the behavior you observe is the only evidence that counts, and to trace it back to the source when it does not match what you intended.
+
+## Why "it works on my machine" is a consulting failure
+
+Step back from the tooling and name the actual failure. When a consultant says "it works on my machine," they are usually reporting that the agent behaves correctly in a single environment they control. That report is true and useless at once, because it says nothing about whether the agent will behave correctly in the environment where the client will depend on it. The machine difference is rarely the operating system. It is the unexamined configuration: the model that only exists on your account, the API key that only exists in your shell, the local model server that only runs because you started it, the fallback you never configured because your machine never hit the outage.
+
+The transferable consulting habit is to treat the configuration as part of the deliverable, versioned and documented alongside the code, not as the private state of your workstation. When you deliver an agent, you deliver a reproducible description of how it should run: which model, which provider, which behavior settings, and which secrets the target environment must supply. That description is what lets a second machine, or the client's team, stand the agent up and get the same behavior you got. If the configuration only exists in your head or your laptop, you have not delivered an agent. You have delivered a demo.
+
+This is where the isolation you built in lesson 7 pays off. Each engagement runs in its own profile with its own `config.yaml` and its own `.env`, so the configuration that matters is captured per client rather than tangled with everything else you run.[^3] When an engagement ends or hands over, that profile is the complete, self-contained description of the system, ready to be backed up, archived, or recreated in the client's environment.
+
+## Build for the outage: the fallback chain
+
+Now the part most consultants skip, because it only becomes necessary after the work is "done." A client's agent runs unattended, on a gateway, at hours when nobody is watching, and providers fail in ways that are not the agent's fault. Rate limits hit when a subscription window fills. A provider returns a server error or goes down entirely. An auth token expires. When that happens to an agent with no fallback configured, the client's tool simply stops working, and the person who discovers it is not the person who built it.
+
+The consultant's job is to make the outage survivable before it happens, and that is a configuration decision, not a hope. Hermes models three layers of resilience that are worth copying in any platform you use. The first layer is credential pooling: multiple API keys for the same provider, tried in order, so a single exhausted key does not stop the agent.[^4] The second is a cross-provider fallback chain: a list of backup provider and model pairs that Hermes tries in turn when the primary fails, configured in the top-level `fallback_providers` list in `config.yaml` or interactively with `hermes fallback`.[^5] The third covers the auxiliary tasks, the vision calls and compression summaries and approvals that run beside the main conversation, each of which can be routed to its own provider so a side task does not take down the agent's thinking.[^5]
+
+Understand when the fallback fires, because that tells you what it is for. It activates on rate limits and server errors after retries are exhausted, and immediately on auth failures and not-found responses, and when the provider returns malformed or empty output repeatedly.[^5] When it triggers, Hermes swaps the model and provider in place and keeps going, preserving the conversation history and tool calls so the agent continues from exactly where it stopped.[^5] It is turn-scoped rather than permanent: each new message starts on the primary again, so a transient outage is absorbed and the agent returns to your configured model as soon as the primary is healthy.[^5] And it is inherited by the things you delegate, so cron jobs and subagents carry the same chain rather than each needing its own.[^5]
+
+None of this is free, and the honest consultant says so to the client. A provider switch clears the prompt cache, because caches are keyed to the model serving the request, so the turn after a fallback re-reads the full history at full price.[^5] An agent that bounces between providers costs more than one that stays put. That is the price of staying alive through an outage, and it is a cost the client should know about before the incident rather than after.
+
+The consulting discipline underneath is simple. When you hand over an agent, ask yourself what happens when the primary provider fails at 3am. If the honest answer is that the agent stops until a human fixes it, the configuration is not done. Resilience is a setting you choose, and choosing not to configure it is still a choice, just one you are making silently on the client's behalf.
+
+## Route expensive reasoning where it earns its keep
+
+Models are not interchangeable, and they are not all priced the same. The same agent runs different work at different stakes, and a configuration that sends every request to the most expensive reasoning model is spending the client's money on tasks that did not need it. The cost-conscious consultant separates the heavy lifting from the routine.
+
+Hermes gives you a lever for this. Subagents and auxiliary tasks do not have to run on the same model as the main agent. By default delegation inherits the parent model and provider, but you can override it so that narrowly scoped subtasks route to a cheaper, faster model while your primary agent runs the expensive reasoning model that the hard questions deserve.[^5] This is cost engineering expressed as configuration, and it is exactly the kind of thing you discussed with the client in the ROI lesson. The price you quoted was built on assumptions about how the agent would be used, and the configuration is where you make those assumptions true, routing the expensive calls to the work that justifies them and the cheap calls to the work that does not.
+
+## Worked example: configuring for someone else's machine
+
+Bring the disciplines together on the engagement you have carried through this series. You scoped it, deployed it isolated, and it works on your machine. Now you are asked to run it in the client's environment, and "it works on my machine" is about to meet reality.
+
+First, separate. You review the profile for the engagement and confirm the secrets live only in its `.env`, never in the settings file and never in any version-controlled file. The settings in `config.yaml` describe the agent completely without any credential in them, so a fresh environment can stand it up by supplying its own keys.
+
+Second, prove. You do not trust that the settings file is what runs. You confirm the active profile, read back the resolved model and provider, and verify the agent is actually using the pair you priced. You trace any behavior that does not match back to which precedence layer is overriding your intent, and you fix the source, not the symptom.
+
+Third, harden. You configure a fallback chain with a second provider and model, because the client's agent will run unattended and the primary will fail eventually. You confirm the chain applies where the client uses the agent, on the gateway and in any scheduled work, not just in your interactive terminal. You tell the client what the fallback costs, so the resilience is a decision they made rather than a surprise in their bill.
+
+Fourth, hand over a description. You deliver the versioned configuration as part of the deliverable, with the settings separated from the secrets and the resilience choices documented. A second machine, or the client's team, can recreate the agent's behavior from the description alone. That is the difference between a config that runs on your machine and a config that runs wherever it is deployed.
+
+## The pitfalls to avoid
+
+**Welding model and provider together.** If you cannot swap the provider without changing the model, you cannot absorb an outage, and if you cannot swap the model without touching the provider, you cannot tune cost. Keep them separate so each serves its purpose.
+
+**Burying secrets in settings.** A key that travels with the config is a credential you will eventually leak, and a config that cannot run without your personal keys is a config that will not run for the client. Secrets in `.env`, settings in `config.yaml`, never the two mixed.
+
+**Trusting the file instead of the running agent.** Precedence means the file you edited may not be the value that runs. Verify what the agent actually honors, and trace surprises back to the source before you edit the same setting again.
+
+**Delivering an agent with no fallback.** An agent that dies when its provider does is not dependable, and the person who finds that out at 3am will not thank you. Configure the chain, confirm it reaches the surfaces the client uses, and tell the client what it costs.
+
+**Configuring for your laptop instead of the handover.** If the working configuration lives only in your head, you delivered a demo. Version it, separate it, document it, and make it reproducible, or it never survives the move.
+
+## Try it
+
+Take the engagement you have been carrying and run the configuration discipline on paper before you touch any settings:
+
+1. Name the parts. What model and what provider is the agent running on, and why those two rather than any others?
+2. Name the split. Which values are settings that should travel with the project, and which are secrets that must be supplied fresh by each environment?
+3. Name the proof. How do you confirm that the model and provider the running agent uses are the ones you configured, not a value a precedence layer is overriding?
+4. Name the outage. What happens when the primary provider fails, and what fallback chain makes the agent survive it?
+
+If you can answer all four, you are configuring for the client's machine instead of your own. If the instinct is to open the settings and start typing before you can name the model and provider you intend to use, that is the builder reflex again, and it is the exact reflex this lesson exists to catch.
+
+## What's next
+
+You can now configure an agent so it survives leaving your machine: model and provider chosen and separated deliberately, secrets kept out of the settings, the running behavior verified rather than assumed, and a fallback chain that absorbs the outage. The next lesson moves from how the agent reasons to what it can do. It covers tools and skills, what ships with Hermes Agent, how to extend it, and, crucially, how to know what is real versus what is only claimed, which is the discipline of trusting an agent's capabilities only after you have seen them work.
+
+[^1]: Hermes Agent Docs, Configuration, the directory structure, configuration precedence, and how secrets route to `.env` while settings route to `config.yaml`. [hermes-agent.nousresearch.com/docs/user-guide/configuration](https://hermes-agent.nousresearch.com/docs/user-guide/configuration)
+[^2]: Hermes Agent Docs, LLM and Model Providers, the `model:` config section where provider and model are separate keys, and the `hermes model` picker. [hermes-agent.nousresearch.com/docs/integrations/providers](https://hermes-agent.nousresearch.com/docs/integrations/providers)
+[^3]: Hermes Agent Docs, Profiles, isolated per-engagement homes that keep one client's config, memory, and state separate from every other. [hermes-agent.nousresearch.com/docs/user-guide/profiles](https://hermes-agent.nousresearch.com/docs/user-guide/profiles)
+[^4]: Hermes Agent Docs, Credential Pools, rotating across multiple API keys for the same provider so one exhausted key does not stop the agent. [hermes-agent.nousresearch.com/docs/user-guide/features/credential-pools](https://hermes-agent.nousresearch.com/docs/user-guide/features/credential-pools)
+[^5]: Hermes Agent Docs, Fallback Providers, the `fallback_providers` chain, when it triggers, its turn-scoped behavior, the prompt-cache cost, and how delegation and cron inherit the chain. [hermes-agent.nousresearch.com/docs/user-guide/features/fallback-providers](https://hermes-agent.nousresearch.com/docs/user-guide/features/fallback-providers)

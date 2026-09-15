@@ -1,0 +1,131 @@
+---
+title: "Lesson 14: Agent Memory: Short-Term vs Long-Term, Episodic vs Semantic"
+slug: agent-memory-short-term-long-term-episodic-semantic
+series: "agentic-ai"
+lesson: 14
+excerpt: "An agent with no memory answers the same question the same way forever. This lesson maps the memory taxonomy production systems borrow from cognitive science: the context window as working memory, long-term stores for persistence, episodic memory for what happened, semantic memory for what you know, and the pipeline that turns raw interactions into retrievable knowledge."
+date: "August 17, 2026"
+author: "Adroit Consulting"
+readTime: "10 min read"
+tags: [LLMs, AI Agents]
+---
+
+# Lesson 14: Agent Memory: Short-Term vs Long-Term, Episodic vs Semantic
+
+A plain LLM is a perfect amnesiac. Give it the same question in a fresh session and it reasons the same way, because it carries nothing from one session to the next. That is fine for a chatbot and fatal for an agent, which is expected to remember your preferences, resume a half-finished job, and learn from what it did last week. Lesson 13 gave you a retrieval stack for knowledge. This lesson is about a different kind of persistence: memory that follows the agent itself.
+
+The mental model you should keep: **the context window is the agent's working memory, and long-term memory is everything it moves out of the window so it survives the session.** How you choose what moves, and where it lives, is the design problem this lesson walks through. [^1]
+
+## The taxonomy: borrowing from cognitive science
+
+The terms short-term, long-term, episodic, and semantic are not new. They come from the psychology of human memory, most influentially the 1972 framework by psychologist Endel Tulving, which distinguished episodic memory (personal experiences, tied to a time and place) from semantic memory (general facts, independent of context). [^4] AI agent design borrowed this vocabulary wholesale, because the shape of the problem matches: an agent has limited working memory, a durable store, and two very different kinds of things worth remembering. [^2]
+
+Four categories organize almost every production system:
+
+1. **Short-term memory (working memory).** The model's context window plus the conversation turns and tool results currently in it. It is fast, always present, and strictly bounded by token limits. [^1]
+2. **Long-term memory.** A persistent external store that survives across sessions. Implemented with databases, vector embeddings, or knowledge graphs, it scales well past any context window. [^3]
+3. **Episodic memory.** Time-indexed records of specific events and experiences: the exact conversation from Tuesday, the tool call that failed, the recommendation that underperformed. It is about what happened. [^2] [^3]
+4. **Semantic memory.** General facts and rules that hold across contexts: the user prefers Python, the deploy target is Railway, the compliance rule. It is about what you know. [^2] [^3]
+
+A fifth category, **procedural memory**, shows up in some guides: the how-to knowledge of executing multi-step processes, often encoded as skills, tools, or workflows rather than retrievable facts. [^2] Many frameworks fold it into semantic memory or treat it as a separate tool layer. Either way, it is real, and worth naming when you design for it.
+
+## Why the context window is not enough
+
+The temptation is to dodge the problem entirely: just buy a bigger context window. That works up to a point, and fails past it for a structural reason. Attention complexity grows with context length, and even a very large window is still finite. A relationship that spans weeks, a research project that reads dozens of documents, a multi-day debugging session: each can overflow even the largest window, and full-context methods still have to reason through irrelevant material they should have dropped. [^1]
+
+Bigger windows help, but they do not remove the need for memory. The Redis team's framing is blunt: agents that try to memorize while reading lose information as the fixed-length memory gets overwritten and earlier evidence is compressed or discarded. [^1] Three concrete walls show up without persistent memory:
+
+- **Personalization dies between sessions.** You tell the agent you prefer Python and deploy to Railway. Next session, it has no idea. [^1]
+- **Long-horizon tasks break.** A research project, a debugging session, a multi-day code review each need enough state to resume cleanly. [^1]
+- **Multi-system context evaporates.** An agent pulling from a CRM, a ticketing system, and an observability stack loses the thread when every call starts cold. [^1]
+
+The design question underneath all three is the same: what should the agent remember, and in what form?
+
+## The memory pipeline: from raw interaction to retrievable knowledge
+
+The Redis long-term memory guide describes the path from raw text to useful knowledge as a four-stage pipeline, and it is the pattern to internalize because it mirrors what you already built in the RAG lessons. [^1]
+
+1. **Chunk the text.** Split raw interactions into bounded pieces.
+2. **Embed and index.** Vectorize the chunks and store them where they can be retrieved, usually a vector store like the ones from Lesson 12.
+3. **Retrieve at query time.** Pull the relevant pieces for the current turn, the same retrieval problem you solved in Lessons 10 through 13.
+4. **Consolidate.** Decide what is worth keeping, and upgrade or discard what is not.
+
+The crucial step is the last one, consolidation. This is where the episodic/semantic distinction becomes a living process rather than a static label. Episodic memories get distilled into semantic knowledge: a fact that stays useful without its original context moves to semantic memory, and the raw episode drops out. [^1] Over time, patterns extracted from episodic memory generalize into semantic knowledge, so the agent stops needing the individual case and can act on the rule. [^2]
+
+Concretely, the machine-learning engineering blog on this topic describes it this way: with episodic memory, the agent does not just know general investment principles; it remembers that three months ago it recommended a tech-stock portfolio to User A and the recommendation underperformed. That specific experience informs future advice in a way general knowledge cannot. Over time, the general lesson gets distilled out: this client is risk-averse, avoid concentrated tech positions. The episode is the evidence; the semantic fact is what survives. [^2]
+
+## Context management: the short-term side of the problem
+
+Long-term memory gets the attention, but most agents spend most of their tokens on short-term context that never should have been persisted at all. Context management is the discipline of deciding what sits in the window for any given turn. [^5]
+
+The main approaches, with their tradeoffs:
+
+- **Sliding window.** Keep the most recent N turns, drop the oldest. Cheap, keeps recent continuity, but older context falls out and stays gone. Good for short, task-focused interactions. [^5] [^6]
+- **Summarization.** Compress older dialogue into a rolling summary so the model does not need the full transcript. Preserves continuity, but summaries can omit details, merge separate ideas, or drift over time. [^5] [^6]
+- **Structured / fact extraction.** Pull discrete facts out of conversation and store them, rather than keeping the prose. Precise, but needs a reliable extraction step. [^6]
+- **Retrieval-augmented recall.** Let the agent retrieve from its own past sessions, not just a knowledge base. This is where long-term memory and context management meet. [^6]
+
+Oracle's engineering guide gives the pragmatic verdict: no single approach wins. The best practical pattern is hybrid layered memory, where recent turns stay close, older dialogue is summarized, vector retrieval handles references phrased differently, structured memory holds extracted facts, and a **memory manager** decides what to include in each turn. [^5]
+
+The memory manager is the piece most tutorials skip and most production systems need. It is not a model or a special algorithm; it is a layer that assembles the context package for every turn: which recent turns to include, whether the rolling summary is needed, which retrieved chunks are useful, what structured facts apply. [^5] One reference shows the shape:
+
+```
+context_package = {
+    "question": question,
+    "recent_context": recent_turns,
+    "rolling_summary": summary,
+    "structured_memory": structured_memory,
+    "episodic_memory": episodic_memory,
+    "retrieved_memory": retrieved_memory,
+}
+```
+
+Everything the model sees for that turn flows through this one layer. That is the difference between memory that helps and memory that bloats. [^5]
+
+## MemGPT: teaching the agent to manage its own context
+
+The most influential idea in this space turns the agent itself into the memory manager. The 2023 MemGPT paper (MemGPT: Towards LLMs as Operating Systems) proposed **virtual context management**, a technique borrowed from how operating systems fake more memory than they physically have. The OS keeps hot data in fast RAM and swaps cold data to disk, moving it back only when needed. MemGPT applies the same idea to the context window: the LLM manages a hierarchy of memory tiers, moving data between them, so it appears to have far more context than its window actually holds. [^7]
+
+The agent learns to issue self-directed operations: it decides when to write a fact to long-term memory, when to recall an older memory into context, when to purge what is no longer relevant. This is a shift from memory as something your *code* manages to memory the *model* manages, which matters for a track about agents that direct their own processes. The original MemGPT work showed the approach beating baseline systems on document analysis and long-conversation tasks. [^7]
+
+For an enterprise build, you do not have to go full MemGPT. The takeaway is architectural: memory management is a first-class component, and the cleanest systems give the agent tools to read from and write to its own memory rather than hiding the store behind opaque code.
+
+## Worked example: how the Fortress actually remembers
+
+This is not abstract at Adroit. Hermes, the agent framework that runs the Fortress, ships a bounded, curated memory that persists across sessions, and its design maps almost one-to-one onto this lesson's taxonomy. [^8]
+
+The core store is two files injected into the system prompt as a frozen snapshot at session start:
+
+- **MEMORY.md**, the agent's personal notes (environment facts, conventions, lessons learned), capped at 2,200 characters.
+- **USER.md**, the user profile (preferences, communication style, expectations), capped at 1,375 characters.
+
+That is semantic memory in its cleanest form: general facts that hold across sessions, curated, and deliberately small. [^8] The character caps are the interesting design choice. Memory does not auto-compact; when a write would overflow, the `memory` tool returns an error, and the agent must consolidate in the same turn, merging overlapping entries or removing stale ones before retrying. The consolidation step from this lesson's pipeline is not a background job; it is a hard requirement enforced by the tool. [^8]
+
+For episodic memory, Hermes separates past sessions from active memory. Every CLI and messaging session is stored in a SQLite database with full-text search, and the agent has a `session_search` tool to find things it discussed weeks ago, even when they are no longer in active context. [^8] This is the episodic/ephemeral split done right: the raw episode lives on disk, searchable on demand, and only the distilled facts earn a spot in the tiny curated store.
+
+Notice what this design gets right. The semantic store is aggressively bounded, which forces consolidation and prevents the system prompt from bloating. The episodic store is searchable but cold, which keeps it out of the context window until needed. The memory manager is the agent itself, using tools to read and write. It is a small, practical instance of the MemGPT pattern, and it is running the very pipeline that publishes this lesson.
+
+## The pitfall to avoid
+
+The most common failure is treating memory as an unlimited append log. Store every message, cram everything into the prompt, and two things happen. First, cost and latency climb as context grows, and reasoning quality drops as the window fills with irrelevant material. [^1] Second, and worse, you get confident stales: the agent surfaces a fact that was true last month and is not anymore, because nothing ever demoted it. Redis's framing again: agents that try to memorize while reading lose information as fixed-length memory gets overwritten and earlier evidence is compressed or discarded. [^1]
+
+The mirror-image pitfall is the opposite: no memory at all, and re-deriving everything every session. That is a stateless chatbot, not an agent. The target is the middle: a bounded semantic store you consolidate aggressively, a searchable episodic log you can pull from on demand, and a memory manager that decides what each turn actually needs. [^5]
+
+## Try it
+
+1. **Classify your memory.** Take an agent you have built or would build and map its data onto this taxonomy. What is working memory (context window)? What is episodic (specific past events)? What is semantic (facts and rules)? What is procedural (how-to, tools, skills)? Write the answer in a few lines. Most teams discover they have been storing episodic data as if it were semantic, or vice versa.
+2. **Build a memory manager.** Sketch the `context_package` dict for your agent: which fields it would assemble for a typical turn, and what rule decides each one (recent turns always, summary when history exceeds N, retrieved memory on user reference, structured facts always). Write the pseudo-code or the actual JSON shape. [^5]
+3. **Exercise the consolidation loop.** Use a memory tool with a character cap, real or simulated. Fill it, then force a write that overflows, and practice the consolidation pass: merge two overlapping entries into one, drop a stale entry, then retry the write. Watch how bounded memory forces better curation than an unbounded store ever does. [^8]
+
+## What's next
+
+You now know how an agent holds a past. Lesson 15 is about controlling what fills that past: context engineering, deciding what to include, and trimming, summarization, and windowing to keep the window focused. Memory stores what happened; context engineering decides what of it deserves to be in front of the model at all.
+
+[^1]: redis.io. [redis.io](https://redis.io/blog/long-term-memory-architectures-ai-agents/)
+[^2]: machinelearningmastery.com. [machinelearningmastery.com](https://machinelearningmastery.com/beyond-short-term-memory-the-3-types-of-long-term-memory-ai-agents-need/)
+[^3]: ibm.com. [ibm.com](https://www.ibm.com/think/topics/ai-agent-memory)
+[^4]: mem0.ai. [mem0.ai](https://mem0.ai/blog/long-term-memory-ai-agents)
+[^5]: blogs.oracle.com. [blogs.oracle.com](https://blogs.oracle.com/developers/which-agent-memory-approach-is-best-for-long-conversations)
+[^6]: patronus.ai. [patronus.ai](https://www.patronus.ai/ai-agent-development/agentic-memory)
+[^7]: arxiv.org. [arxiv.org](https://arxiv.org/abs/2310.08560)
+[^8]: hermes-agent.nousresearch.com. [hermes-agent.nousresearch.com](https://hermes-agent.nousresearch.com/docs/user-guide/features/memory)

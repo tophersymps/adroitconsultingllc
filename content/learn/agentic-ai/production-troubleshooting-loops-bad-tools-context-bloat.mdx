@@ -1,0 +1,151 @@
+---
+title: "Lesson 39: Production Troubleshooting: Debugging Loops, Bad Tools, and Context Bloat"
+slug: production-troubleshooting-loops-bad-tools-context-bloat
+series: "agentic-ai"
+lesson: 39
+excerpt: "Lesson 38 gave you the detection layer: metrics, alerts, SLOs, a dashboard that tells you something changed. This lesson is what you do in the twenty minutes after the alert. Three failure classes cover most production incidents that are not infrastructure outages, and they are loops, bad tools, and context bloat. You get a triage order that tells you which one you are looking at, the diagnostic signature that finds the exact turn where an agent started going in circles, the tool contract that turns an opaque failure into an actionable one, and the measurement that tells you whether your context is growing past what the model can use. A worked example walks a runaway refund agent from symptom to root cause to the three fixes that stop it recurring."
+date: "September 11, 2026"
+author: "Adroit Consulting"
+readTime: "17 min read"
+tags: [LLMs, AI Agents, Debugging, Operations]
+---
+
+# Lesson 39: Production Troubleshooting: Debugging Loops, Bad Tools, and Context Bloat
+
+Lesson 38 built the system that tells you something is wrong. Metrics detect the change, alerts route it to a responder, the dashboard shows the trend, and the SLO decides whether the change is worth paging someone about. Lesson 20 taught you to open a trace and read it end to end. This lesson sits between the two. It is the work you do after the alert fires and before you write the postmortem: opening the right trace, finding the turn where the agent went wrong, and fixing the thing that caused it rather than the thing that surfaced it.
+
+Three failure classes account for most production agent incidents that are not ordinary infrastructure outages. The agent gets stuck in a loop. A tool returns something wrong, empty, or misleading. The context window fills with material the model can no longer use well. They present with similar symptoms, which is why teams waste hours fixing the wrong layer.
+
+The one idea to carry out: **troubleshoot in a fixed order, and let the trace tell you which class you are in before you change any code. Repetition in the trace means a loop, a tool result that does not match its stated success means a bad tool, and token counts climbing turn over turn mean context bloat. Each has a different fix, and each fix is cheap once you know which one you have.**
+
+## A triage order that saves the first hour
+
+Symptoms overlap heavily. A loop produces a timeout, and a timeout looks like a slow model. Context bloat produces bad answers, and bad answers look like a prompt problem. A bad tool produces retries, and retries look like a loop. Sorting by symptom wastes time, so sort by evidence instead.
+
+Open the trace of one failing run and ask three questions in order.
+
+1. **Does the trace show repetition?** Same tool name with the same arguments appearing more than once, or a cycle of two or three turns repeating. If yes, you have a loop. Go to the loop section.
+2. **If there is no repetition, look at the tool results.** Find the last tool result before the agent produced the bad output, and check whether it contains what it claims to contain. If a call reported success but the payload is empty, truncated, or wrong, you have a bad tool.
+3. **If neither of those holds, look at the token counts.** If input tokens per turn are climbing, and the run reaches its bad outcome late in a long context, you have context bloat.
+
+Ten minutes of reading one trace in that order beats an afternoon of guessing. The rest of this lesson is how to act on each verdict.
+
+## Loops: what actually repeats, and why
+
+A loop is the same decision made twice without new information arriving between the two. That definition matters, because it excludes a lot of things people call loops. An agent that tries three different search queries is not looping. An agent that calls `get_order_status(order_id=4471)` eight times is.
+
+Agent frameworks ship a step cap, and it is a seatbelt rather than a diagnosis. LangGraph raises a recursion limit error when a graph reaches the maximum number of steps without hitting a stop condition, and its documentation names an unbounded cycle as the usual cause, while noting that complex graphs can hit the default limit without any bug at all.[^1] The `recursion_limit` value on a runnable config defaults to 25 if you do not provide one.[^2] The OpenAI Agents SDK takes the same approach from the other end: it raises `MaxTurnsExceeded` when a run exceeds `max_turns`, the shipped default is 10, and you can attach an error handler that converts the exception into a clean final answer such as "I couldn't finish within the turn limit. Please narrow the request."[^3]
+
+Read the error precisely, because it tells you which of two situations you are in. Either the agent legitimately needed more steps than the cap allows, in which case raising the limit is correct, or the agent was repeating itself and the cap did its job. Raising the cap without checking is the single most common mistake here. It converts a five second failed run into a ninety second failed run that costs nine times as much.
+
+### The diagnostic: repeated tool signatures
+
+The fastest way to find the loop is to log a signature per tool call: the tool name plus its arguments, canonicalized so that key order and whitespace do not create false negatives. Then count occurrences within a single run. The first signature that appears for the second time marks the exact turn where the agent stopped making progress, and everything after it is waste.
+
+Once you have that turn, the root cause is nearly always one of three things.
+
+**No stop condition the model can recognize.** The agent cannot tell that it is done, so it keeps checking. A study of over a thousand annotated multi-agent traces found that 12.4 percent of design-category failures were agents failing to recognize task completion, and 15.7 percent were step repetition, making repetition the largest single mode in that category.[^9] The paper's broader finding is the useful part: these failures tend to originate in system design, not in the model's raw capability, which means they are fixable in your code rather than by waiting for a better model.
+
+**A tool that returns success without changing anything.** The agent retries because from its perspective nothing happened yet. This is the overlap between loops and bad tools, and it is covered in the next section.
+
+**Retries with no error feedback and no backoff.** If the only thing you send back after a failure is the string "error", the next attempt is identical to the last one, and the model has no new information to act on. Anthropic's tool use documentation describes the intended behavior instead: set `is_error` on the tool result, and when a request is invalid because of a missing parameter, Claude will retry two or three times with corrections before apologizing to the user.[^8] The retries work because the error text says what to fix.
+
+### The three fixes that hold
+
+Bound the loop with a no-progress detector of your own, tighter than the framework cap. Track signatures per run and stop after two identical calls, returning a partial result plus a clear reason. Then make the tool honest, so the most common loop cause disappears. Then give the agent an explicit completion criterion in the system prompt, phrased as a condition it can evaluate, such as "if the order lookup returns no rows, stop and tell the user the order was not found instead of retrying."
+
+LangChain's guidance on agent observability frames the same workflow from the tooling side: whether an agent is stuck in an infinite loop or confidently returning wrong answers, the trace holds the sequence of decisions that produced it, and newer tooling lets you query a trace in natural language rather than reading every span by hand.[^10]
+
+## Bad tools: how a tool lies to an agent
+
+A tool is the contract between your deterministic code and a non-deterministic caller, and the most damaging way to break that contract is not to fail. It is to report success while delivering nothing useful.[^7]
+
+Three shapes of this, all common in production.
+
+**The success-shaped lie.** The API returns HTTP 200 with an empty body, and your wrapper hands the agent `{}` with no error flag. The agent sees a result, sees no rows, and tries again. Every retry is a loop iteration you will later misdiagnose.
+
+**The silent truncation.** A search tool returns the first ten results and drops the rest, without saying so. The agent concludes the data does not exist. This is worse than an error because the agent builds a confident wrong answer on top of it.
+
+**The opaque failure.** A traceback lands in the tool result. The model cannot act on a stack trace, and Anthropic's guidance on writing tools is explicit that error responses should be prompt-engineered to communicate specific, actionable improvements rather than opaque error codes or tracebacks.[^7]
+
+We hit the first shape ourselves, in a scheduled job rather than an LLM tool. A nightly script inserted a new entry into an index file. It ran green every night and reported success every night. It had silently stopped doing anything, because the marker it inserted before had been removed in a reorganization, so the code took a branch that updated a timestamp and wrote nothing else. Nothing crashed. No alert fired. We caught it weeks later by comparing what the job claimed against what the file actually contained. The lesson generalizes directly to agent tools: a tool that cannot do its job must say so, loudly and specifically, because the caller is a model that will otherwise assume the empty result is the answer.
+
+### What a good tool result contains
+
+- A truthful status. If the operation did not achieve its purpose, mark it as an error even when the transport layer says 200.[^8]
+- A specific, actionable message. "Missing required parameter: order_id" beats "invalid request". The model can fix the first one and cannot fix the second.
+- Only high-signal content. Anthropic's tool-writing guidance is to return only high-signal information to the agent, and to treat a pattern of redundant tool calls as a signal that your pagination or token limits need rightsizing.[^7]
+- A size the caller can absorb. A tool that dumps 40,000 tokens into the window has just caused the third failure class on this list.
+
+The general rule, which we apply to cron jobs as much as to LLM tools, is to verify the effect rather than the exit code. A zero exit status means the process finished. It does not mean the work happened.
+
+## Context bloat: growth you can measure
+
+Context degrades as it grows. Chroma evaluated 18 language models and found that performance drops as input length increases, in non-uniform ways, even when the task is held constant and only the input length varies.[^4] Anthropic describes the same effect as an attention budget: every token introduced spends some of it, and because the transformer architecture creates pairwise relationships across the context, the model's ability to hold those relationships thin out as the window fills.[^5] The practical consequence is that a bigger context window does not remove the problem. It relocates it, because the model was already working well below its nominal maximum.
+
+Two things bloat an agent's context faster than anything else: tool definitions and tool results.
+
+Tool definitions arrive before the conversation starts and stay for the whole run. Anthropic measured a five-server setup, GitHub plus Slack plus Sentry plus Grafana plus Splunk, at 58 tools consuming roughly 55,000 tokens, with Jira alone adding about 17,000. They report seeing tool definitions consume 134,000 tokens before optimization. Loading only the tools a task needs, through on-demand discovery, took one measured configuration from about 72,000 tokens to about 8,700, an 85 percent reduction that preserved 95 percent of the context window.[^6] For a small toolset this is not your problem. Past a few dozen tools, it is the first thing to look at, and the same article notes that wrong tool selection and incorrect parameters get more common when tools have similar names, which a smaller loaded set directly reduces.[^6]
+
+Tool results are the other half, and they are usually the bigger half in long runs. Here the smallest available lever is tool result clearing: once a tool has been called deep in the history, the raw result rarely needs to stay visible.[^5] A worked example in Anthropic's context engineering cookbook clears two of three retained file reads and takes the message list from roughly 128,000 tokens down to roughly 43,000.[^11] Compaction is the heavier lever, summarizing a conversation near the window limit and restarting the window with the summary. In Claude Code this preserves architectural decisions, unresolved bugs, and implementation details while discarding redundant tool output, and the agent continues with the compressed context plus the five most recently accessed files.[^5]
+
+Two structural options exist when clearing and compaction are not enough. Structured note-taking has the agent write state to a file outside the window and read it back later, which is how long-running agents keep progress across dozens of tool calls. Sub-agent architectures push the expensive exploration into a clean window and return only a condensed summary, often 1,000 to 2,000 tokens.[^5]
+
+Measure before you cut. Track input tokens per turn and cost per session for a normal run, then look at a failing one. If the failing run's token curve is climbing steeply while a healthy run's flattens, the problem is bloat and no amount of prompt editing will fix it. If the curves match, go back and read the tool results again.
+
+## Worked example: the refund agent that stopped finishing
+
+A support agent handles refund requests. It looks up the order, checks the refund policy, drafts a response, and either sends it or routes it to a human. It had been averaging four turns per request. Over three days it started averaging fourteen, and the failure rate moved from under one percent to eleven percent. The alert that fired was a p95 latency breach, which is the wrong thing to chase, so the first move is to ignore the alert and open one failing trace.
+
+**Step one, read for repetition.** The trace shows the agent calling `lookup_order(customer_id=..., order_ref="SO-88213")` at turns 4, 5, 6, 7, and 8, then again at 10 through 14, with the loop broken only by a policy check that returns the same answer every time. Byte-identical arguments. That is the loop signature, and the first repeat is at turn 5.
+
+**Step two, read the tool result at that turn.** The result is `{}`, delivered with a success status. The order exists but is soft-deleted, and the lookup tool's wrapper dropped the `deleted_at` field and returned an empty object instead of an error. From the agent's point of view, the lookup returned no data, so the reasonable next action was to try again.
+
+**Step three, confirm with the token curve.** Input tokens climb from 4,200 at turn 1 to 61,000 at turn 14. Bloat is present, and it is a consequence of the loop rather than its cause. Fix the loop first.
+
+**Step four, fix the tool.** The lookup now returns an error result when the order is soft-deleted, with an actionable message naming the state. The agent stops retrying and escalates, because the prompt now says a deleted order should be routed to a human rather than re-queried.
+
+**Step five, fix the class, not the instance.** Add a no-progress detector that halts a run after two identical tool signatures and returns a partial answer with a reason. Then audit every other tool wrapper for the same pattern, meaning any code path that swallowed an exception and returned an empty success. We found two more in the same agent.
+
+**Step six, keep it fixed.** Add the deleted-order case to the regression eval set from Lesson 21 and the SLO for correct escalation in Lesson 38. A failure that is not in the eval suite will return.
+
+The whole investigation took about thirty minutes, and twenty of those were step five. That ratio is normal. The diagnostic is quick once you know the order; the durable fix is a sweep of the class.
+
+## The triage table
+
+| What you see | First artifact to open | Most likely cause | First fix |
+| --- | --- | --- | --- |
+| Timeout, or turn limit reached | Trace, looking for a repeated tool signature | Agent cannot recognize completion, or a tool returns empty success | No-progress detector plus explicit stop condition |
+| Confident wrong answer | The last tool result before the answer | Silent truncation or an unmarked soft failure | Honest error status and actionable message |
+| Retries that never converge | Tool error text and payload | Error says nothing the model can act on | Specific error text, `is_error` set, bounded retries |
+| Cost per session spike | Tokens per turn in one trace | Context bloat, usually from retained tool results | Tool result clearing, then compaction |
+| Wrong tool chosen | The loaded tool list for that run | Too many similar tools in context | Curate the tool set, or load on demand |
+| Quality drop late in long runs | Token curve versus a healthy run | Attention budget spent on low-signal tokens | Trim, summarize, or move work to a sub-agent |
+
+## Try it
+
+1. **Instrument the signature log.** Add one line to your agent loop that records the tool name and its canonicalized arguments on every call, in order, for each run. Then take the last failing production run and find the first repeated signature. Write down the turn number and the arguments. That number is your answer to the first question in the triage order.[^9]
+2. **Audit your tool wrappers for empty successes.** Grep for every place a wrapper catches an exception, checks for a missing field, or handles a not-found case, and confirm each one returns an error status or an explicit "not found" payload rather than an empty object. Fix at least one and note how the agent's behavior changes on the next run.[^7]
+3. **Draw the token curve.** Pull input token counts per turn for one healthy run and one failing run of the same task, and plot both. If the failing run's curve is materially steeper, you have bloat, and your next action is clearing or compaction rather than prompt work. If the curves match, your problem is not context and you should go back to reading tool results.[^4]
+
+## Summary
+
+Production troubleshooting is a reading discipline before it is a coding one. Open one failing trace, check for repetition, then check the last tool result, then check the token curve. Repetition means a loop, and loops come from an unrecognized completion condition, a tool that returns empty success, or retries with nothing to learn from. A tool result that does not match its stated status means a broken contract, and the fix is truthful statuses with actionable error text. A climbing token curve means context bloat, and the levers run from clearing old tool results, through compaction, to note-taking and sub-agents. The framework step caps, 25 steps in LangGraph and 10 turns in the OpenAI Agents SDK by default, are seatbelts that stop the bleeding while you diagnose. They are not the diagnosis.[^1] [^2] [^3]
+
+The part worth internalizing is that these three classes are design problems, not model problems. The MAST study of over a thousand annotated failure traces concluded that its identified failures often stem from system design issues rather than plain model limitations, and that they require structural fixes rather than surface patches.[^9] When your refund agent loops fourteen turns, the model is doing something reasonable with what you gave it. You gave it a tool that reported success while returning nothing.
+
+## What's next
+
+You now have the debugging loop: detect, diagnose by class, fix the class, and add the case to the eval suite. Lesson 40 puts all of it together as a case study of a customer support agent architecture, from intent classification and retrieval through tool boundaries, escalation rules, and the observability layer that watches it. The patterns you have collected across this path are about to appear in one system, with the tradeoffs of each choice made explicit.
+
+[^1]: LangChain. [GRAPH_RECURSION_LIMIT](https://docs.langchain.com/oss/python/langgraph/errors/GRAPH_RECURSION_LIMIT)
+[^2]: LangChain Reference. [recursion_limit (RunnableConfig)](https://reference.langchain.com/python/langchain-core/runnables/config/RunnableConfig/recursion_limit)
+[^3]: OpenAI. [Running agents, OpenAI Agents SDK](https://openai.github.io/openai-agents-python/running_agents/)
+[^4]: Chroma. [Context Rot: How Increasing Input Tokens Impacts LLM Performance](https://www.trychroma.com/research/context-rot)
+[^5]: Anthropic. [Effective context engineering for AI agents](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
+[^6]: Anthropic. [Introducing advanced tool use on the Claude Developer Platform](https://www.anthropic.com/engineering/advanced-tool-use)
+[^7]: Anthropic. [Writing effective tools for agents](https://www.anthropic.com/engineering/writing-tools-for-agents)
+[^8]: Claude Platform docs. [Handle tool calls](https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls)
+[^9]: arXiv. [Why Do Multi-Agent LLM Systems Fail?](https://arxiv.org/abs/2503.13657)
+[^10]: LangChain. [AI Agent Observability: Tracing, Testing, and Improving Agents](https://www.langchain.com/resources/agent-observability)
+[^11]: Claude Platform cookbook. [Context engineering: memory, compaction, and tool clearing](https://platform.claude.com/cookbook/tool-use-context-engineering-context-engineering-tools)

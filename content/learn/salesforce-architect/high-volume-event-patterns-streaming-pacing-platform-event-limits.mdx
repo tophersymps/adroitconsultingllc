@@ -1,0 +1,99 @@
+---
+title: "Lesson 28: High-Volume Event Patterns: Streaming, Pacing, and Platform Event Limits"
+slug: high-volume-event-patterns-streaming-pacing-platform-event-limits
+series: "salesforce-architect"
+lesson: 28
+excerpt: "What changes when event volume stops being a trickle and becomes a flood: streaming with the Pub/Sub API, pacing publish rates against rolling limits, and the platform event allocations that decide whether your bus survives the day."
+date: "September 1, 2026"
+author: "Adroit Consulting"
+readTime: "11 min read"
+tags: [Salesforce, Architecture, Integration, Web Development, Project Management]
+---
+
+# Lesson 28: High-Volume Event Patterns: Streaming, Pacing, and Platform Event Limits
+
+Lesson 7 taught you the two vehicles on the Salesforce event bus: Platform Events for business intent and Change Data Capture for record state. Lesson 27 locked down the security around integrations. This lesson is about what happens when the volume stops being a trickle. A few hundred events a day is a design problem you solve with a trigger and a Flow. A few hundred thousand an hour is a different animal. The event bus is a shared, multitenant resource with hard allocations, and the architect's job at that scale is to keep the flood from becoming a failure. That means three disciplines: streaming, pacing, and knowing the limits cold.
+
+## Define the terms
+
+- **Streaming**: delivering event messages to subscribers as they are published, rather than having subscribers poll for changes. The subscriber holds an open connection and receives messages in near real time. [^1]
+- **Pacing**: deliberately controlling the rate at which events are published and consumed so the system stays inside its allocations and its subscribers can keep up. [^2]
+- **Backpressure**: the signal a downstream system sends when it cannot keep up, so the producer slows down instead of piling on more work. [^3]
+- **Platform event allocation**: a hard cap on how many event messages an org can publish or deliver in a given window, enforced to protect the multitenant service. [^2]
+- **Replay ID**: a value Salesforce assigns to each received event message and persists in the event bus, so a subscriber can resume from a stored position after a disconnect. [^1]
+
+## Streaming: the connection that never closes
+
+The older way to get data out of Salesforce is polling: your integration asks "anything new?" on a schedule. Streaming replaces that with a push model. The subscriber subscribes to a channel, and Salesforce delivers messages as they arrive. The two client families are CometD (the Bayeux protocol used by the Streaming API and the `empApi` Lightning component) and the Pub/Sub API. [^2]
+
+The Pub/Sub API is the modern choice for high-volume work. It is a gRPC and HTTP/2 interface that delivers binary Avro messages, and it is the recommended way to stream platform events, Change Data Capture events, and Real-Time Event Monitoring events to your own infrastructure. [^4] It matters at scale for a concrete reason: gRPC multiplexes many requests over one connection, which is far more efficient than the long-polling model CometD uses. When you are moving tens of thousands of messages, the transport overhead is not a footnote, it is the difference between a client that keeps up and one that falls behind.
+
+The streaming model also changes how you think about delivery. A subscriber that is connected receives messages as they are published. A subscriber that is disconnected does not lose them, because high-volume event messages are stored in the event bus for 72 hours. [^1] When the subscriber reconnects, it can resume from its last Replay ID and catch up on everything it missed within that window. [^2] That durability is what makes streaming safe to build on: the bus holds the messages while your consumer is down, and replay closes the gap.
+
+## Pacing: matching the rate to the road
+
+Pacing is the discipline that keeps a high-volume design alive. The event bus has two rolling limits, an hourly publishing limit and a 24-hour delivery limit, and both are enforced. [^2] Pacing means you design the publish rate so you never trip them, and you design the consumer so it can absorb what the bus sends.
+
+Start with the publishing side. High-volume platform events are published asynchronously. When a publish call returns success, the request is queued in Salesforce, and the system saves the event message to the bus when resources are available. [^1] That async handoff is what lets you publish at high rates without blocking the caller, but it also means the publish call succeeding is not the same as the event being on the bus. The system publishes using an at-least-once model, so a queued event that fails is retried. [^1] Your code should treat a successful publish as "accepted for delivery," not "delivered."
+
+The ordering rules are the part that bites. If you publish multiple events in one publish call, the order of events in that batch is guaranteed, and the order stored and delivered matches the order you passed in. [^1] But across different publish requests, order is not guaranteed, because requests can be processed by different Salesforce application servers, and a later request can be processed faster than an earlier one. [^1] The practical rule: if downstream correctness depends on order, put the ordering information in the payload or use a single batched publish, never assume that request order equals delivery order.
+
+On the consumption side, pacing is about not letting the subscriber fall behind. Even though Apex triggers, flows, and Process Builder processes do not count against the delivery allocation, their processing rate depends on how long each event takes to handle and how many arrive. [^2] A slow subscriber on a fast stream falls behind, and the gap between the tip of the stream and where the subscriber is processing grows. The fix is to keep subscriber work small, batch where you can, and treat the stream as a queue you drain rather than a firehose you try to drink from.
+
+## Platform event limits: the numbers that decide the design
+
+The limits are the load-bearing wall of any high-volume design, so an architect needs them exact. The default allocations are enforced to ensure fair sharing of resources in the multitenant environment and to protect the service. [^2]
+
+**Publishing allocation.** This is the maximum number of event messages you can send to the event bus per hour, using any method: Apex, Pub/Sub API, REST, SOAP, Bulk, flows, or processes. [^2] The default is 250,000 per hour on Performance and Unlimited editions and on Enterprise and Professional (with the API add-on), and 50,000 on Developer Edition. A platform event add-on raises the hourly publishing to 275,000. [^2] If you publish with REST, SOAP, or Bulk API, those calls also consume your daily API request allocations; publishing with Pub/Sub API, Apex, flows, or processes does not. [^2]
+
+**Delivery allocation.** This is the maximum number of event messages delivered in a rolling 24-hour period to Pub/Sub API and CometD subscribers, `empApi` components, and event relays. [^2] It is 50,000 on Performance and Unlimited, 25,000 on Enterprise, and 10,000 on Developer. [^2] Two details matter. First, the delivery allocation is shared between high-volume platform events and Change Data Capture events, so a CDC-heavy org and a platform-event-heavy org draw from the same pool. [^2] Second, the delivery allocation does not apply to Apex triggers, flows, or Process Builder processes, so an event consumed on-platform does not count against it. [^2]
+
+The delivery allocation is where architects get surprised, because it is counted per subscriber. The number of delivered events is counted for each subscribed client, and if you have multiple subscribers, your usage is added across all of them. [^2] An Unlimited org with a 50,000 allocation that delivers 20,000 events to each of two clients has consumed 40,000, not 20,000. [^2] Every subscriber multiplies your delivery usage, so an unnecessary subscriber is not free, it is a second charge against the same pool.
+
+**What happens when you exceed them.** The two limits fail differently. If you exceed the hourly publishing allocation, the publish call fails with a `LIMIT_EXCEEDED` error, the events are not published or queued, and you must wait for the rolling usage to decrease and then republish. [^2] If you exceed the delivery allocation, the subscription is disconnected. A CometD client gets `403::Organization total events daily limit exceeded` on the Bayeux `/meta/connect` channel, and a Pub/Sub API client gets `sfdc.platform.eventbus.grpc.subscription.limit.exceeded` with the message "You have exceeded the event delivery limit for your org." [^2]
+
+The recovery path is built on the rolling window and replay. When a subscriber hits the delivery limit, you can keep it disconnected for a while; the usage for the last 24 hours decreases as time passes, and the events received during the disconnect are stored for the 72-hour retention period. [^2] Once usage drops, the subscriber resumes from where it left off using its Replay ID. [^2] That is the whole design in miniature: the bus holds the messages, the rolling window frees the allocation, and replay closes the gap.
+
+**The other limits.** Two more numbers shape the design. The maximum event message size is 1 MB, and an event object with hundreds of custom fields or many long text area fields can hit it, in which case the publishing call gets an error. [^2] And the maximum number of concurrent CometD clients across all channels and event types is 2,000 on Performance and Unlimited, 1,000 on Enterprise, and 20 on Developer. [^2] The `empApi` component consumes this allocation like any CometD client, and each logged-in user counts as one client, though multiple browser tabs for one user share a single connection. [^2]
+
+## The concrete pattern: filter, batch, monitor
+
+Three habits keep a high-volume design inside its limits.
+
+**Filter before you deliver.** Stream filtering with custom channels reduces the number of events delivered to a subscriber, so subscribers receive only the events that match a predefined filter. [^2] Fewer delivered events means more efficient use of the delivery allocation. [^2] If a subscriber only cares about orders in a certain region, do not deliver every order event to it; filter at the channel and let the allocation stretch.
+
+**Batch your publishes.** Because order is guaranteed within a single publish call, batching related events into one call both preserves their order and reduces the number of publish operations. [^1] Use the Apex `EventBus.publish` method or the REST API composite resource to publish multiple events together. [^1]
+
+**Monitor against the allocation.** Proactively monitor event usage rather than discovering a limit breach at 3 a.m. You can check publishing and delivery usage in Setup, via the REST API, or by querying `PlatformEventUsageMetric`. [^2] With enhanced usage metrics you can break usage down by event name, client ID, event type, and usage type, and get data by daily, hourly, and 15-minute segments. [^2] Monitoring is what turns a limit from a surprise into a number you watch.
+
+## Worked example: a telemetry flood on an Unlimited org
+
+A connected-device company streams telemetry from Salesforce to a data warehouse. Each device reports state changes, and the org publishes a `Device_State_Change__e` platform event for every change. The architect designs for a peak of 200,000 events an hour.
+
+1. **Choose the transport.** The warehouse subscribes through the Pub/Sub API, because gRPC multiplexing handles the volume efficiently and the client can replay after disconnects. [^4]
+2. **Size the publishing.** At 200,000 events an hour, the org sits under the 250,000 hourly publishing allocation on Unlimited, with headroom for spikes. [^2]
+3. **Watch the delivery pool.** The delivery allocation is 50,000 per 24 hours on Unlimited, and it is shared with CDC. The warehouse is the only external subscriber, but the org also enables CDC on `Device__c` for a separate sync. Both draw from the same 50,000 pool. [^2]
+4. **Filter the stream.** The warehouse only needs state changes for devices in production, not staging. A custom channel with a filter delivers only production events, cutting the delivered count and stretching the allocation. [^2]
+5. **Batch the publishes.** A device that changes several fields in one save publishes all its events in a single `EventBus.publish` call, preserving their order and reducing publish operations. [^1]
+6. **Plan the recovery.** When the warehouse disconnects for maintenance, it stores its last Replay ID. The events it missed stay in the bus for 72 hours, and on reconnect it resumes from that ID and catches up. [^1] [^2]
+7. **Monitor the usage.** A scheduled check of `PlatformEventUsageMetric` watches both publishing and delivery usage, so the team sees the delivery pool approaching 50,000 before the subscription disconnects. [^2]
+
+## The pitfall to avoid
+
+**Treating the delivery allocation as a per-event budget instead of a per-subscriber budget.** The classic failure is an org that adds a second subscriber "because it is just one more consumer" and then watches the delivery limit trip, because every event delivered to every subscriber counts against the same pool. [^2] The second classic failure is assuming request order equals delivery order across separate publish calls, which breaks any consumer that applies events in arrival order. [^1] The fixes are the pattern above: filter streams so each subscriber only gets what it needs, batch related publishes to preserve order, and monitor usage against the allocation so a breach is a watched number, not a surprise.
+
+## Try it
+
+1. A subscriber is disconnected for two hours and misses 5,000 events. How does it recover without losing any? *(Answer: it stored its last Replay ID before disconnecting; the events remain in the bus for the 72-hour retention window, and on reconnect it resumes from that ID and catches up.)* [^1] [^2]
+2. Your Unlimited org publishes 60,000 events an hour and delivers them to two external subscribers. Which allocation is at risk, and why? *(Answer: the delivery allocation, because it is 50,000 per 24 hours and is counted per subscriber, so two subscribers double the usage against the same pool.)* [^2]
+3. You publish three events in one call and three more in a second call a second later. Can you rely on all six arriving in order? *(Answer: no. Order is guaranteed within each publish call, but not across separate requests, because different application servers can process them at different speeds.)* [^1]
+4. A nightly ETL publishes 300,000 events in one hour on an Enterprise org. What happens, and what is the fix? *(Answer: the publish call fails with `LIMIT_EXCEEDED` because the hourly publishing allocation is 250,000; the events are not queued. Fix: spread the load across hours, filter what is published, or purchase an add-on.)* [^2]
+
+## What's next
+
+You can now design a high-volume event stream that stays inside its allocations: streaming with the Pub/Sub API, pacing publish rates against rolling limits, and replay-based recovery when a subscriber falls behind. The next lesson turns from building integrations to proving they work. It covers testing integrations, including mocking external systems, a sandbox test strategy, and integration test suites, which is how you verify that the event-driven and API designs from these lessons actually behave the way you designed them before they reach production.
+
+[^1]: developer.salesforce.com. [Enterprise Messaging Platform Events](https://developer.salesforce.com/docs/atlas.en-us.platform_events.meta/platform_events/platform_events_intro_emp.htm)
+[^2]: developer.salesforce.com. [Platform Event Allocations](https://developer.salesforce.com/docs/atlas.en-us.platform_events.meta/platform_events/platform_event_limits.htm)
+[^3]: architect.salesforce.com. [Event-Driven Architecture Decision Guide](https://architect.salesforce.com/docs/architect/decision-guides/guide/event-driven.html)
+[^4]: developer.salesforce.com. [Pub/Sub API Overview](https://developer.salesforce.com/docs/platform/pub-sub-api/overview)

@@ -1,0 +1,120 @@
+---
+title: "OmniStudio DM-6: Formulas in Data Mappers"
+slug: day-35-dm-6-formulas-in-data-mappers
+series: omni-studio-cert
+lesson: 35
+excerpt: "Configure formulas to create or modify values within Data Mappers across the Transform, Extract, and Load interface types. Learn how formulas compute values at the data layer through string concatenation, arithmetic, and date formatting, walk through adding and mapping a formula step by step, handle the null cases and evaluation-order traps, and see why computing once in the mapper beats doing the same work in the UI or down the line in a consumer."
+date: "September 13, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [OmniStudio, DataMappers]
+---
+
+Lesson 34 ended the Data Mapper domain with Transform, the interface that reshapes data into a required output structure without reading from or writing to the org. [^1] This lesson stays in the Data Mapper family but moves to the mechanism behind many of those reshaped values. Requirement DM-6 asks you to configure formulas to create or modify values within Data Mappers, across the Transform, Extract, and Load interface types, for downstream use. [^1][^2]
+
+A formula is the piece of a Data Mapper that does not just move data, it makes it. Extract and Turbo Extract pull fields out of Salesforce. Load pushes them into Salesforce. Transform reshapes structures. Formulas are where you take the values those interfaces carry and compute something new: a full name joined from separate first and last fields, a line total multiplied from a quantity and a price, a date reformatted from ISO to MM/DD/YYYY. [^2][^3] Define the formula once in the mapper, and every consumer that reads the mapper output receives a ready-to-use value instead of raw data it has to transform itself. [^1][^2]
+
+Three facts anchor the whole requirement, and each one maps to a quiz question. A formula is how you compute a value in a mapper output, which is why building a full name from first and last requires a formula that performs concatenation. [^1][^2] Formulas are supported across Extract, Transform, and Load, so the answer to which interfaces support them is not a single kind of mapper but all three. [^1] And date formatting is a formula concern at the data-mapping layer, which is where a date must be rendered to a consumer's expected token. [^1][^3] Hold onto those three and the DM-6 questions are nearly free.
+
+## Deep Dive
+
+### What a formula is, and why it belongs in the mapper
+
+Start with the definition. In an Omnistudio Data Mapper, a formula is a way to add data to the mapper output by computing it. For the managed package runtime, to add data to the output of a Data Mapper you define formulas. [^1] That wording matters. Extract fields come from the database. Formula results come from an expression you write. The expression can combine input fields, constants, and other formula outputs, and the platform evaluates it when the mapper runs. [^1][^2]
+
+The second half of the definition is where the exam lives: several types of Data Mapper (Extract, Transform, and Load) support formulas. [^1] This is not a feature of one interface. It is available everywhere a mapper produces output. When you define a formula, you map its output to the output JSON for extracts and transforms, or to a Salesforce object field for loads. [^1] So the same formula idea works whether the mapper is reading, reshaping, or writing.
+
+The reasons it belongs in the data layer, rather than in the UI, are practical. When the mapper computes a value, every consumer of that mapper receives it in the output, already formed. [^1][^2] Cards, scripts, APIs, and document generators all read the same computed value. If instead you let each consumer compute it, you repeat the logic in every place that needs it, and every copy is another place to drift. [^2] The requirement calls this out as the reason formulas exist: consumers receive ready-to-display values instead of raw data needing client-side logic. [^1][^2]
+
+### What a formula can compute
+
+The platform documents a broad set of functions a formula can use, grouped by what they operate on. [^2] Walking through the groups gives you a mental catalog of what is possible, and it covers the exam's list of concatenate, arithmetic, and date formatting.
+
+String functions build text. `CONCAT(string...)` joins the arguments into one string, which is exactly what you want for a full name from a first and a last field plus a space. [^2] `JOIN(string..., token)` joins a list of strings around a separator, useful for turning an array of values into a delimited string. [^2] `TOSTRING(data)` converts a value to its string form, `SPLIT` splits a string on a token, and `SUBSTRING` pulls part of a string out by its indices. [^2] These are the tools for any text assembly a mapper output needs.
+
+Mathematical functions compute on numbers. `ABS` returns the absolute value, `ROUND(expression, precision, direction)` rounds to a precision, and `SQRT` returns a square root. [^2] Where the arithmetic really happens, though, is with the operators you can put inside an expression, like multiplying a quantity by a price. [^2] List and array functions extend into collections: `SUM(list)`, `AVG(list)`, `MAX`, and `MIN` all aggregate a list of numbers. [^2] The classic mapper example is exactly this, a formula `SUM(Products:Price)` that accepts a list of prices and computes the total. [^4]
+
+Date and time functions handle anything calendar-shaped. `ADDDAY(date, days)`, `ADDMONTH(date, months)`, and `ADDYEAR(date, years)` shift a date. [^2] `TODAY()` returns the current date, `DATEDIFF(firstDate, secondDate)` computes a difference, and `AGE(birthDate)` derives an age. [^2] For formatting, the pair that matters most is `FORMATDATETIME(datetime, format, timezone)` and its GMT sibling, which render a date-time into a chosen format string. [^2][^3]
+
+Conditional functions give formulas decision power. `IF(expression, trueResult, falseResult)` returns one value when the condition holds and another when it does not. [^2] `ISBLANK(expression)` and `ISNOTBLANK(expression)` test whether a value is empty. [^2] These three are the backbone of null handling, which the requirement treats as a classic failure mode. [^2] When a field might be blank, you wrap the value in an `IF(ISBLANK(...), default, ...)` pattern so the output never carries a blank toward a consumer that cannot handle one. [^2]
+
+The JSON and invocation groups round out the catalog. JSON functions such as `SERIALIZE`, `DESERIALIZE`, and `VALUELOOKUP` operate on JSON objects, and invocation functions like `QUERY` and `COUNTQUERY` reach into the platform. [^2] You rarely need every group in one mapper, but knowing they exist tells you what a formula can do when a question describes one. [^2]
+
+### Formula evaluation order and the single-operation rule
+
+Two constraints shape how you write formulas, and both are worth knowing for the exam and for real builds.
+
+First, a formula can reference other formulas and input fields, so the order in which the mapper evaluates them matters. [^1][^2] The platform resolves dependencies, so a formula that consumes another formula's output uses the computed value, not the raw input. [^2] Plan the chain from inputs upward: start with formulas that only use input fields, then build the formulas that reference those results. A value that feeds three downstream formulas should be its own formula so the compute happens once. [^2]
+
+Second, there is a strict rule about structure. A formula can include only a single operation. [^2] It can contain nested functions and operators, each on its own line, and parameters and arguments can wrap across lines. But it cannot contain two independent operations, and the formula editor does not support line-continuation characters like a backslash or termination characters like a semicolon between independent ops. [^2] Practice writing each formula as one root operation, with the work pushed into nested functions, and you avoid the invalid-syntax failures this rule causes. [^2]
+
+### Null handling is the classic failure
+
+The requirement flags null handling as a classic failure, and it deserves direct treatment. [^1] A formula on a null field can produce a blank output or an error, depending on the function. [^1] A concatenation where one side is null can return the non-null side alone, an empty string, or a null, depending on how the function treats the missing value. Arithmetic on a null treats the missing number as zero in some contexts and fails in others. [^2]
+
+The fix is to design a default wherever the output must not be blank. [^1] The conditional functions are your tool: `IF(ISBLANK(Phone), "No phone on file", Phone)` returns a placeholder when the field is empty and the real value otherwise. [^2] This is the coalesce-style pattern the requirement names. [^1] You check for blank, supply a default, and use the value when it exists. Build that guard into any formula whose output feeds a card, an API field, or a document placeholder, because those consumers read the output literally. [^2]
+
+### Why computing once matters downstream
+
+The closing point of the requirement is the downstream benefit, and it is the reason to care about any of this. [^1] When the mapper computes a value, cards, scripts, and APIs all receive a ready-to-dis-play value instead of raw data that needs client-side logic. [^1][^2] An API gets a `fullName` field already joined, not separate first and last fields it must assemble. A document template gets a `MM/DD/YYYY` date already formatted, not an ISO string it must reformat. [^1][^3] A card gets a pre-computed total, not a list of prices it must sum. [^4]
+
+Computing once in the mapper also removes duplication, and duplication is where bugs hide. [^2] If three consumers each reformat the same date, and one of them does it slightly wrong, you have a data-quality problem that is hard to trace to its source. If the mapper does it once, there is one place to get it right and one place to fix it. [^2] This is the answer to the exam trap about computing in the UI when the mapper can do it: the mapper is the single, correct location for a value every consumer needs. [^1][^2]
+
+## Configuration Walkthrough
+
+Build a concrete case so the steps stick: a Data Mapper Transform that produces a customer payload with a full name, a computed line total, and a formatted date. Walk through the numbered steps.
+
+1. **Create the Data Mapper.** Open the OmniStudio Data Mapper Designer tab, click New, and in the Create dialog give the mapper a name and set Interface Type to Transform, Input Type to JSON, and Output Type to JSON. [^4] Save to open the Data Mapper Interface page. [^4] Transform is the right interface because this mapper reshapes an incoming payload without reading from or writing to the org. [^1]
+
+2. **Go to the Formulas tab and add a formula.** On the Data Mapper Interface page, open the Formulas tab and click Add Formula. An empty formula appears in the list. [^1][^4] This tab is where every formula in the mapper is defined, across Extract, Transform, and Load mappers. [^1]
+
+3. **Write the concatenation and map its result.** In the Formula field, enter the expression that joins the fields. For a full name built from `FirstName` and `LastName`, that is `CONCAT(FirstName, " ", LastName)`. [^2] In the Formula Result Path field, enter the JSON node that will hold the result, for example `fullName`. [^1][^4] Then, on the Transforms tab, map the `fullName` result into the output structure so it lands in the payload. [^1] Use colon delimiters for levels in input and output paths when mapping. [^1]
+
+4. **Add an arithmetic formula.** Add another formula for the line total. If the input carries `Quantity` and `UnitPrice`, enter `Quantity * UnitPrice` in the Formula field. [^2] Give it a Formula Result Path of `lineTotal` and map it to the output structure. [^4] Save and run the preview to confirm the multiplication happens on the live values. [^4]
+
+5. **Add a date-formatting formula.** Add a formula that renders the date the way the consumer expects. If the input has an ISO date and the output must be `MM/DD/YYYY`, use `FORMATDATETIME(OrderDate, "MM/DD/YYYY", "America/New_York")`. [^2][^3] Note the token rule: `MM/DD/YYYY` resets the time to 00:00:00, while `YYYY-MM-DD` preserves the input time, so choose the token to match what the output truly needs. [^3] Map the result to a `orderDateFormatted` node in the output.
+
+6. **Test with nulls and edge values.** Open the Preview tab, paste a sample input, and click Execute. [^4] First try a normal input and confirm `fullName`, `lineTotal`, and `orderDateFormatted` all appear in the Response. [^4] Then change the price and click Execute again to watch `lineTotal` change. [^4] Finally, feed an input with a blank `LastName` and a null `OrderDate` to see exactly what the mapper outputs, then add `IF(ISBLANK(...), default, ...)` guards so those blank cases render a sane value instead of an empty field. [^2]
+
+That is the full build. The steps worth re-reading are three, five, and six. The formulas hold the compute, the format token decides the date shape the consumer sees, and the null test is what separates a working mapper from one that silently blanks out on real data. [^1][^3][^2] Get those three right and the same mapper feeds a card, an API, and a document with the same computed values. [^1][^2]
+
+## Exam Traps
+
+- **No null handling.** A formula on a null field can produce blank output or an error, and a consumer that reads the output literally passes that blank along. [^1] Guard your formulas with `IF(ISBLANK(...), default, ...)` so missing data renders a sensible value. [^2] Quiz questions about blanks across a mapper output are pointing at this.
+
+- **Wrong date format token.** The format token decides the output. `MM/DD/YYYY` resets time to 00:00:00, while `YYYY-MM-DD` preserves input time, so pick the token the consumer expects and not the one that "looks close." [^3] A date that must render `MM/DD/YYYY` fails if the formula emits ISO, and that failure is a data-layer mismatch. [^1][^3]
+
+- **Computing in the UI when the mapper can do it.** If the mapper can compute a value every consumer needs, compute it once there instead of reimplenting the logic in each card or script. [^1][^2] Duplication is where logic drifts apart. The mapper is the single source of truth for a computed field. [^2]
+
+- **Forgetting formulas work across all three interfaces.** Extract, Transform, and Load all support formulas, so a question that pairs a formula with any of them is valid. [^1] The mapping target differs (output JSON for extracts and transforms, a Salesforce object field for loads), but the formula mechanism is the same. [^1]
+
+- **Writing two independent operations in one formula.** A formula supports a single operation with nested functions, not two independent statements, and no line continuation or termination characters. [^2] Write one root operation and push work into nesting, or an invalid-syntax error blocks the mapper. [^2]
+
+## Exam Tip
+
+Compress DM-6 into a short chain. Formulas add computed values to Data Mapper output, and Extract, Transform, and Load all support them. [^1][^2] Use string functions like `CONCAT` for concatenation, arithmetic for math, and date functions like `FORMATDATETIME` with the right token for formatted dates. [^2][^3] Mind the dependency order and the single-operation rule when you write them. [^2] Handle nulls with `IF(ISBLANK(...), default, ...)` so no blank reaches a consumer. [^1][^2] And compute once in the mapper so cards, scripts, and APIs all receive a ready-to-use value instead of raw data needing client-side work. [^1] When a question asks how a full name gets built, a date gets formatted, or a total gets summed, the answer is a formula at the data-mapping layer. [^1][^2][^4]
+
+## Try It
+
+Open the Data Mapper Designer in a sandbox and build a Transform mapper with the exact shape from the walkthrough. [^4] Add a concatenation formula for a full name, an arithmetic formula for a line total, and a date-formatting formula that outputs `MM/DD/YYYY`. [^2][^3] Map each formula result into the output JSON and run the preview with a normal input. [^1][^4]
+
+Then break it on purpose. Change `MM/DD/YYYY` to ISO and confirm the output no longer matches the consumer's token, so you feel why the format string is the contract. [^3] Feed a blank `LastName` and watch what the concatenation does before you add the `IF(ISBLANK(...))` guard. [^2] Re-add the guard and re-run to see the default appear. [^2] That deliberate break makes the null and format traps memorable.
+
+Finally, open the same Formulas tab in an Extract mapper and a Load mapper you already have, and confirm the identical formula mechanism is available there. [^1] That comparison is the difference between knowing `Extract, Transform, and Load` as an answer and knowing it as a fact your hands have verified. [^1]
+
+## What's Next
+
+You have now covered how Data Mappers compute values at the data layer: formulas across Extract, Transform, and Load that concatenate, do arithmetic, and format dates for any downstream consumer. [^1][^2][^3] Lesson 36 turns to Mapping Source & Target Structures (DM-7), where you will move from the values being computed to the structure those values land in. You will work through how a mapper's source fields and target output fields connect, how mappings are configured across the interface types, and how the source and target shape drives what a mapper can output. [^1]
+
+## Related Requirements
+
+- Transform Interface & Document Generation, lesson 34 of 46 (DM-5)
+- Mapping Source & Target Structures, lesson 36 of 46 (DM-7)
+- Output Issues front (DM-6 domain family, day 40)
+
+## References
+
+[^1]: [Use Formulas in Omnistudio Data Mappers (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_use_formulas_in_dataraptors.htm&type=5)
+[^2]: [Supported Data Mapper and Integration Procedure Functions, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_omnistudio_data_mapper_and_integration_procedure_functions.htm&type=5)
+[^3]: [Omnistudio Date and Time Functions, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_omnistudio_date_and_time_functions.htm&language=en_US&type=5)
+[^4]: [Create an Omnistudio Data Mapper Example with a Formula (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_create_a_dataraptor_example_with_a_formula.htm&language=en_US&type=5)

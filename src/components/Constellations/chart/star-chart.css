@@ -1,0 +1,763 @@
+/* Readable constellation course map — stick figures, no glow blobs. */
+
+/*
+ * A wide sky band (not a card). The SVG's `preserveAspectRatio` is the default
+ * xMidYMid *meet*, and the viewBox is authored to the same aspect ratio the box
+ * here declares (16:8.5 = 1882×1000), so the frame fills exactly — no
+ * letterboxing, no square plate. The background starfield is generated across
+ * the full viewBox width, so the galaxy reaches every edge; the constellation
+ * content stays centred on top. `max-width` keeps a very wide viewport from
+ * stretching the hero absurdly wide — it is a centred band, not a full-bleed
+ * sheet.
+ */
+.cxc {
+  position: relative;
+  width: 100%;
+  max-width: 1500px;
+  margin-inline: auto;
+  aspect-ratio: 16 / 8.5;
+  overflow: hidden;
+  border-radius: 16px; /* rounded-2xl — matches the profile hero's stat cards */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 12px 40px -12px rgba(2, 4, 10, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  color: #e8dfd0;
+  background:
+    radial-gradient(58% 46% at 24% 26%, rgba(53, 96, 184, 0.3), transparent 68%),
+    radial-gradient(52% 44% at 77% 40%, rgba(102, 64, 168, 0.26), transparent 68%),
+    radial-gradient(64% 40% at 52% 76%, rgba(31, 122, 144, 0.2), transparent 68%),
+    radial-gradient(44% 38% at 86% 84%, rgba(148, 71, 110, 0.18), transparent 68%),
+    radial-gradient(96% 84% at 50% 45%, #101c3c 0%, #0a1128 48%, #05080f 78%, #02040a 100%);
+}
+
+/*
+ * The lab printed a title and explanatory paragraph here. In production the
+ * page owns that chrome as a sibling, so this corner keeps only the legend —
+ * the thing a newcomer needs in order to read the plate.
+ */
+.cxc-legend {
+  position: absolute;
+  z-index: 2;
+  top: 18px;
+  left: 20px;
+  max-width: 300px;
+  pointer-events: none;
+}
+
+.cxc-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  min-height: 44px; /* WCAG 2.5.8 target-size floor — tap target, not just text */
+  padding: 0 10px;
+  pointer-events: auto;
+  font-size: 11.5px;
+  color: rgba(190, 180, 160, 0.65);
+  cursor: pointer;
+}
+
+.cxc-toggle input {
+  accent-color: #c9a95e;
+  cursor: pointer;
+}
+
+.cxc-svg {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ---------------------------------------------------------------- backdrop */
+
+/*
+ * Parallax. Depth is expressed as how far each band tracks the pointer: the
+ * nebulae barely move, the courses move most. Driven by --cxc-px / --cxc-py,
+ * written directly to the root node so pointer moves never re-render React.
+ */
+.cxc-par {
+  transition: transform 0.45s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.cxc-par-far {
+  transform: translate(
+    calc(var(--cxc-px, 0) * 7px),
+    calc(var(--cxc-py, 0) * 7px)
+  );
+}
+
+.cxc-par-mid {
+  transform: translate(
+    calc(var(--cxc-px, 0) * 16px),
+    calc(var(--cxc-py, 0) * 16px)
+  );
+}
+
+.cxc-par-near {
+  transform: translate(
+    calc(var(--cxc-px, 0) * 28px),
+    calc(var(--cxc-py, 0) * 28px)
+  );
+}
+
+.cxc-neb {
+  animation: cxc-drift 80s ease-in-out infinite alternate;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes cxc-drift {
+  from {
+    transform: translate(-14px, 8px) scale(1);
+  }
+  to {
+    transform: translate(16px, -10px) scale(1.08);
+  }
+}
+
+.cxc-bg-star {
+  fill: #dce8ff;
+}
+
+.cxc-bg-star.is-near {
+  fill: #fff6e2;
+}
+
+.cxc-bg-star.is-twinkle {
+  animation: cxc-twinkle 4s ease-in-out infinite;
+}
+
+/*
+ * Twinkle animates fill-opacity, not opacity: each star's base brightness is
+ * already on the `opacity` attribute, and the two multiply. Animating opacity
+ * directly would flatten every star to the same value.
+ */
+@keyframes cxc-twinkle {
+  0%,
+  100% {
+    fill-opacity: 1;
+  }
+  50% {
+    fill-opacity: 0.25;
+  }
+}
+
+.cxc-graticule {
+  pointer-events: none;
+}
+
+.cxc-grat-ring {
+  stroke: rgba(165, 190, 240, 0.13);
+  stroke-width: 1;
+}
+
+.cxc-spoke {
+  stroke: rgba(165, 190, 240, 0.07);
+  stroke-width: 1;
+}
+
+.cxc-spoke.is-major {
+  stroke: rgba(180, 205, 250, 0.15);
+}
+
+.cxc-vignette {
+  pointer-events: none;
+}
+
+/* Meteors — long gaps, short streaks. Presence, not a fireworks show. */
+.cxc-shooters {
+  pointer-events: none;
+}
+
+.cxc-shoot {
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  opacity: 0;
+  animation: cxc-shoot 17s linear infinite;
+}
+
+.cxc-shoot.is-b {
+  animation-duration: 23s;
+  animation-delay: -11s;
+}
+
+@keyframes cxc-shoot {
+  0% {
+    opacity: 0;
+    transform: translate(120px, 60px) rotate(28deg);
+  }
+  3% {
+    opacity: 0.85;
+  }
+  9% {
+    opacity: 0;
+    transform: translate(760px, 400px) rotate(28deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(760px, 400px) rotate(28deg);
+  }
+}
+
+.cxc-plate {
+  stroke: rgba(150, 135, 100, 0.12);
+  stroke-width: 1;
+}
+
+/*
+ * Mythic apparition behind each constellation. Two passes: a wide halo for
+ * atmosphere and depth, then the keyed linework on top. Both stay well back
+ * of the star lines — the drawing says "this is a swan", it doesn't become
+ * the chart.
+ */
+/*
+ * The pocket is the figure's hit target. Art, labels and decorative strokes
+ * stay `pointer-events: none` so they don't steal the click; without this the
+ * only painted pixels that receive one are 1.25px rails and pinprick dots,
+ * and a click in the middle of the figure misses.
+ */
+.cxc-pocket {
+  pointer-events: fill;
+}
+
+.cxc-art-group {
+  pointer-events: none;
+}
+
+.cxc-art-halo {
+  opacity: 0.3;
+  transition: opacity 0.4s ease;
+}
+
+.cxc-art {
+  opacity: 0.3;
+  transition: opacity 0.4s ease;
+}
+
+.cxc-figure.is-complete .cxc-art-halo {
+  opacity: 0.42;
+}
+
+.cxc-figure.is-complete .cxc-art {
+  opacity: 0.44;
+}
+
+.cxc-figure.is-focused .cxc-art-halo {
+  opacity: 0.55;
+}
+
+.cxc-figure.is-focused .cxc-art {
+  opacity: 0.66;
+}
+
+.cxc-figure.is-complete.is-focused .cxc-art-halo {
+  opacity: 0.68;
+}
+
+.cxc-figure.is-complete.is-focused .cxc-art {
+  opacity: 0.8;
+}
+
+/* Slow breathing keeps the apparitions from feeling like pasted stickers. */
+.cxc-art-group {
+  animation: cxc-breathe 11s ease-in-out infinite;
+}
+
+@keyframes cxc-breathe {
+  0%,
+  100% {
+    opacity: 0.82;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Achievement ring — only a finished course earns the closed circle. */
+.cxc-ring {
+  stroke: rgba(240, 208, 144, 0.28);
+  stroke-width: 1;
+  stroke-dasharray: 2 7;
+  stroke-linecap: round;
+  pointer-events: none;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cxc-spin 90s linear infinite;
+}
+
+.cxc-figure.is-focused .cxc-ring {
+  stroke: rgba(245, 220, 160, 0.5);
+}
+
+@keyframes cxc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/*
+ * A spark running the completed path. pathLength=100 on each rail normalises
+ * the dash units, so every segment carries the spark at the same speed
+ * regardless of its actual length.
+ */
+.cxc-line-flow {
+  stroke: #fff3d4;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  fill: none;
+  stroke-dasharray: 7 93;
+  animation: cxc-flow 4.5s linear infinite;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.cxc-figure.is-focused .cxc-line-flow {
+  opacity: 0.9;
+}
+
+@keyframes cxc-flow {
+  from {
+    stroke-dashoffset: 100;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Finished exam star breathes out a ring. */
+.cxc-exam-pulse {
+  stroke: rgba(255, 226, 160, 0.7);
+  stroke-width: 1.2;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cxc-pulse 3.6s ease-out infinite;
+  pointer-events: none;
+}
+
+@keyframes cxc-pulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.75;
+  }
+  70%,
+  100% {
+    transform: scale(2.9);
+    opacity: 0;
+  }
+}
+
+/*
+ * Cartographic casing: a dark stroke under every rail so the constellation
+ * stays sharp where it crosses the bright parts of the artwork.
+ */
+.cxc-line-case {
+  stroke: rgba(4, 6, 12, 0.85);
+  stroke-width: 4;
+  stroke-linecap: round;
+  fill: none;
+}
+
+/* Hover lift, so the plate answers the pointer before you even click. */
+.cxc-figure:hover .cxc-art {
+  opacity: 0.52;
+}
+
+.cxc-figure:hover .cxc-art-halo {
+  opacity: 0.46;
+}
+
+.cxc-figure:hover .cxc-line {
+  stroke: rgba(205, 190, 160, 0.6);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cxc-par,
+  .cxc-art,
+  .cxc-art-halo {
+    transition: none;
+  }
+
+  .cxc-neb,
+  .cxc-bg-star.is-twinkle,
+  .cxc-shoot,
+  .cxc-art-group,
+  .cxc-ring,
+  .cxc-line-flow,
+  .cxc-exam-pulse {
+    animation: none;
+  }
+
+  .cxc-line-flow {
+    display: none;
+  }
+}
+
+.cxc-figure {
+  cursor: pointer;
+  outline: none;
+  transition: opacity 0.25s ease;
+}
+
+.cxc-figure.is-dimmed {
+  opacity: 0.2;
+}
+
+/*
+ * Recolouring a 1.25px line is not a focus indicator you can find. The pocket
+ * ellipse is already the figure's bounding shape, so outlining it gives keyboard
+ * users the same target the pointer gets, at a size that is actually visible
+ * against the nebulae.
+ */
+.cxc-figure:focus-visible .cxc-pocket {
+  stroke: #f2d692;
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+}
+
+.cxc-figure:focus-visible .cxc-line {
+  stroke: rgba(220, 190, 130, 0.55);
+}
+
+/* A focused figure must not be dimmed out from under the keyboard. */
+.cxc-figure.is-dimmed:focus-visible {
+  opacity: 1;
+}
+
+/* Stick-figure lines — thin, sharp */
+.cxc-line {
+  stroke: rgba(160, 150, 130, 0.4);
+  stroke-width: 1.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+.cxc-figure.is-focused .cxc-line {
+  stroke: rgba(190, 175, 145, 0.55);
+  stroke-width: 1.4;
+}
+
+.cxc-line-lit {
+  stroke: #e2c57a;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+.cxc-figure.is-focused .cxc-line-lit {
+  stroke: #f0d090;
+  stroke-width: 2;
+}
+
+.cxc-figure.is-complete .cxc-line-lit {
+  stroke: #f5dca0;
+}
+
+/* Joint dots — pinpricks */
+.cxc-dot {
+  fill: #c8b890;
+  stroke: rgba(4, 6, 12, 0.85);
+  stroke-width: 1.6;
+  paint-order: stroke;
+}
+
+.cxc-figure.is-focused .cxc-dot {
+  fill: #ead9a8;
+}
+
+/*
+ /* A member whose share of the course is done. Faint on its own — the rails
+  * carry progress; this only keeps the joints from looking dead behind them.
+  */
+ .cxc-dot.is-lit {
+   fill: #ecdcaa;
+ }
+
+ /* Lesson-path nodes — the fine per-lesson progress strung between main stars.
+    Smaller than the joint dots, so the constellation's anchors stay prominent. */
+ .cxc-path-node {
+   fill: #6b6a66;
+   stroke: rgba(4, 6, 12, 0.85);
+   stroke-width: 0.9;
+   paint-order: stroke;
+ }
+
+ .cxc-path-node.is-lit {
+   fill: #f7e8b8;
+   stroke: rgba(4, 6, 12, 0.6);
+ }
+
+ /* Dense-segment rails — a thin path that fills as lessons land. */
+ .cxc-path-rail {
+   stroke: rgba(200, 184, 144, 0.22);
+   stroke-width: 2;
+   stroke-linecap: round;
+ }
+
+ .cxc-path-rail-lit {
+   stroke: rgba(247, 232, 184, 0.6);
+   stroke-width: 2;
+   stroke-linecap: round;
+ }
+
+ .cxc-figure.is-complete .cxc-path-rail-lit {
+   stroke: rgba(255, 241, 216, 0.9);
+ }
+
+/* Exam — ring + core, no haze */
+.cxc-exam-ring {
+  stroke: rgba(200, 175, 120, 0.5);
+  stroke-width: 1.4;
+  fill: rgba(6, 9, 18, 0.55);
+}
+
+.cxc-exam-dot {
+  fill: rgba(160, 145, 110, 0.6);
+  stroke: rgba(4, 6, 12, 0.8);
+  stroke-width: 1.4;
+  paint-order: stroke;
+}
+
+.cxc-exam.is-on .cxc-exam-ring {
+  stroke: #f0d090;
+  stroke-width: 1.5;
+}
+
+.cxc-exam.is-on .cxc-exam-dot {
+  fill: #fff0c8;
+}
+
+.cxc-label {
+  fill: rgba(220, 205, 175, 0.85);
+  font-family: "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: 15px;
+  font-weight: 600;
+  text-anchor: middle;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+}
+
+.cxc-figure.is-focused .cxc-label {
+  fill: #f5ecd8;
+  font-size: 16px;
+}
+
+.cxc-course {
+  fill: rgba(170, 160, 145, 0.55);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 9.5px;
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+.cxc-pct {
+  fill: rgba(180, 155, 95, 0.55);
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  text-anchor: middle;
+  letter-spacing: 0.06em;
+  pointer-events: none;
+}
+
+/* Coming-soon caption on the single-course tracker — a plain line under the
+   figure telling the learner how many curriculum lessons are still owed. */
+.cxc-coming-soon {
+  margin: -4px 0 0;
+  text-align: center;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: rgba(150, 150, 170, 0.75);
+}
+
+.cxc-inspect {
+  position: absolute;
+  z-index: 2;
+  left: 20px;
+  bottom: 20px;
+  max-width: 300px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: rgba(6, 8, 16, 0.92);
+  border: 1px solid rgba(140, 120, 80, 0.2);
+}
+
+.cxc-kicker {
+  margin: 0 0 4px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(180, 150, 95, 0.65);
+}
+
+.cxc-title {
+  margin: 0 0 8px;
+  font-family: "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: 17px;
+  font-weight: 600;
+  color: #efe6d4;
+}
+
+.cxc-meta,
+.cxc-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(175, 165, 150, 0.6);
+}
+
+.cxc-meta strong {
+  color: rgba(220, 200, 160, 0.85);
+  font-weight: 600;
+}
+
+.cxc-hint {
+  margin-top: 8px;
+}
+
+.cxc-howto {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: rgba(180, 170, 155, 0.65);
+}
+
+.cxc-howto li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 7px 0;
+}
+
+.cxc-howto i {
+  flex-shrink: 0;
+  display: block;
+}
+
+.cxc-ico-line {
+  width: 16px;
+  height: 1.5px;
+  background: rgba(160, 150, 130, 0.7);
+}
+
+.cxc-ico-lit {
+  width: 16px;
+  height: 2px;
+  background: #e2c57a;
+}
+
+.cxc-ico-exam {
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid #f0d090;
+  border-radius: 50%;
+  box-sizing: border-box;
+  background: #fff0c8;
+  background-clip: content-box;
+  padding: 1.5px;
+}
+
+/* The only navigation egress out of the chart. */
+.cxc-cta {
+  display: block;
+  width: 100%;
+  margin-top: 14px;
+  padding: 9px 14px;
+  border: 1px solid rgba(200, 170, 105, 0.45);
+  border-radius: 8px;
+  background: linear-gradient(
+    180deg,
+    rgba(226, 197, 122, 0.18),
+    rgba(226, 197, 122, 0.08)
+  );
+  color: #f2e2b8;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.cxc-cta:hover,
+.cxc-cta:focus-visible {
+  background: linear-gradient(
+    180deg,
+    rgba(226, 197, 122, 0.3),
+    rgba(226, 197, 122, 0.14)
+  );
+  border-color: rgba(226, 197, 122, 0.7);
+}
+
+.cxc-clear {
+  margin-top: 10px;
+  padding: 6px 0;
+  border: none;
+  background: none;
+  color: rgba(180, 150, 95, 0.75);
+  font: inherit;
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/*
+ * Single-figure mode (/learn/[series]): one constellation, no legend, no
+ * inspect panel. Same wide-band treatment as the profile hero — the galaxy
+ * fills the whole frame and the constellation is centred. No card corner; it
+ * is a sheet of sky, not a boxed panel. Max-width keeps a wide desktop from
+ * stretching the tracker absurdly wide.
+ */
+.cxc.is-single {
+  width: 100%;
+  max-width: 1200px;
+  aspect-ratio: 16 / 9;
+  /* The course page is themed light/dark, so use its surface tokens for the
+     card edge rather than the profile sky's fixed white border. */
+  border-color: var(--border-default, rgba(255, 255, 255, 0.1));
+  box-shadow: 0 12px 40px -16px rgba(2, 4, 10, 0.5);
+}
+
+/*
+ * Reduced motion, bound to the real hook rather than only the media query, so
+ * a preference the media query misses still lands. Mirrors the
+ * `prefers-reduced-motion` block above.
+ */
+.cxc.is-static .cxc-par,
+.cxc.is-static .cxc-art,
+.cxc.is-static .cxc-art-halo {
+  transition: none;
+  transform: none;
+}
+
+.cxc.is-static .cxc-neb,
+.cxc.is-static .cxc-bg-star.is-twinkle,
+.cxc.is-static .cxc-shoot,
+.cxc.is-static .cxc-art-group,
+.cxc.is-static .cxc-ring,
+.cxc.is-static .cxc-line-flow,
+.cxc.is-static .cxc-exam-pulse {
+  animation: none;
+}
+
+.cxc.is-static .cxc-line-flow {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .cxc-legend {
+    max-width: none;
+    right: 20px;
+  }
+  .cxc-inspect {
+    left: 12px;
+    right: 12px;
+    max-width: none;
+  }
+}

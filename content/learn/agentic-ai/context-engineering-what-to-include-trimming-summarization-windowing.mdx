@@ -1,0 +1,108 @@
+---
+title: "Lesson 15: Context Engineering: What to Include, Trim, Summarize, and Window"
+slug: context-engineering-what-to-include-trimming-summarization-windowing
+series: "agentic-ai"
+lesson: 15
+excerpt: "The context window is finite and filling it sloppily degrades your agent before it ever fails. This lesson covers the four ways to keep a long-running loop coherent: deciding what to include, trimming what stops earning its keep, summarizing what still matters, and windowing what you can drop. With real numbers from JetBrains on which approach actually pays."
+date: "August 18, 2026"
+author: "Adroit Consulting"
+readTime: "10 min read"
+tags: [LLMs, AI Agents, Prompt Engineering]
+---
+
+# Lesson 15: Context Engineering: What to Include, Trim, Summarize, and Window
+
+Lesson 4 taught you that context engineering replaced prompt engineering as the real job. Lesson 5 priced the tokens. This lesson is the mechanics: the four operations that keep a long-running loop coherent. **What to include, what to trim, what to summarize, and what to window.**
+
+Anthropic's framing is the north star: good context engineering means finding "the smallest possible set of high-signal tokens that maximize the likelihood of some desired outcome." [^1] The whole discipline is deciding which tokens deserve to be in the window at any given step, and the cost of getting it wrong is silent. Agents don't crash when context degrades. They keep working, less accurately, until you notice.
+
+## Why you can't just buy a bigger window
+
+The temptation is always to throw more memory at it. That instinct is wrong for a structural reason. Anthropic spells it out: every token can attend to every other token, producing n² pairwise relationships, and "as its context length increases, a model's ability to capture these pairwise relationships gets stretched thin." [^1] There is a finite attention budget, and every token you add depletes it.
+
+The practical result is **context rot**. As token count grows, a model's ability to recall information from its context drops, and this shows up across all models, not just weak ones. [^1] The Chroma research that named context rot found the same thing: longer contexts degrade recall. [^5] JetBrains' researchers are blunter: an agent's *effective* context size is much smaller than the advertised window, which means "agent-generated context actually quickly turns into noise instead of being useful information." [^3]
+
+So the answer to "should I buy a 200K window" is usually "no, learn to curate the 10K you actually need." Anthropic's position is that context engineering beats raw context maximization. [^1]
+
+## Operation 1: Decide what to include
+
+Before you trim anything, get the inclusion side right, because a well-chosen initial context needs far less maintenance later. Context breaks into three families per LangChain: **instructions** (prompts, memories, few-shot examples, tool descriptions), **knowledge** (facts, memories), and **tools** (feedback from tool calls). [^2] Your inclusion decision is which members of each family earn a slot in the window for this step.
+
+Three rules that hold across all of them:
+
+1. **Hit the right altitude.** A system prompt that hardcodes brittle if-else logic is fragile; one that's vague and assumes shared context is useless. Aim for "specific enough to guide behavior effectively, yet flexible enough to provide the model with strong heuristics." [^1]
+2. **Keep a minimal tool loadout.** Drew Breunig's tool-loadout tactic is blunt: in DeepSeek-v3 testing, once you have more than 30 tools the descriptions start to overlap and confuse the model; past 100 tools the model was "virtually guaranteed to fail." A small model failed a benchmark with 46 tools but passed with 19. [^4] Trim the tool set to what this task actually needs, and consider fetching only relevant tool definitions rather than shipping all of them.
+3. **Curate examples, don't enumerate edge cases.** Few-shot works, but a laundry list of edge cases dilutes it. Keep a small set of diverse, canonical examples. "For an LLM, examples are the 'pictures' worth a thousand words." [^1]
+
+The inclusion decision is also where the **static-first, variable-last** rule lives: stable prefix (system prompt, tool schemas, examples) at the top, task-specific data at the bottom, so the shared prefix stays identical and caching works.
+
+## Operation 2: Trim what stops earning its keep
+
+Trimming, or pruning, is removing content rather than rewriting it. Breunig defines **context pruning** as "the act of removing irrelevant or otherwise unneeded information from the context," and notes it can be as simple as hard-coded heuristics like dropping older messages from a list. [^4] No LLM call involved, no synthesis, just deletion.
+
+The production form of trimming is what JetBrains calls **observation masking**: replace older, low-value observations with placeholders, while keeping the agent's reasoning and actions intact. In their words, it tells the model "some details omitted for brevity" rather than feeding it stale tool output. [^3] Because a typical software-engineering agent's turn skews heavily toward observations (test logs, full file reads), masking only that part removes most of the bloat while preserving the decisions that drove the run. [^3]
+
+More sophisticated trimming exists, like Provence, a trained context pruner that cut a Wikipedia article down by 95% in Breunig's test. [^4] But the lesson from the research is that the simple version works. JetBrains found observation masking "matched or even slightly beat LLM summarization in solving benchmark tasks" while being cheaper. [^3]
+
+## Operation 3: Summarize what still matters
+
+Summarization compresses the past into a condensed form instead of deleting it. Anthropic calls the long-horizon version **compaction**: when a conversation nears the window limit, summarize its contents and reinitiate a new context window with the summary, so the agent keeps continuity without the window filling. [^1] Claude Code does this automatically once you pass 95% of the window. [^2]
+
+Summarization can be applied at different boundaries:
+
+- **Whole-trajectory compaction** for long-running loops. [^1]
+- **At tool-call boundaries**, to post-process token-heavy results like a large search response. [^2]
+- **At agent-to-agent handoffs**, to reduce tokens when knowledge passes between subagents. [^2]
+
+The design principle is deciding *what the summary must preserve*. Breunig: "Knowing what information should be preserved, and detailing that to an LLM-powered compression step, is critical for agent builders." [^4] Your original user intent is the thing you can never let a summary drop.
+
+The honest caveat: summarization has real costs. JetBrains found LLM-summarized agents tend to run longer (about 15% more turns on average), because a summary can smooth over the signs that the agent should stop. [^3] Each summary call also fires a costly API request, and because each one processes a unique slice of history there is "very little cache reuse"; those calls sometimes make up more than 7% of total cost per instance. [^3]
+
+## Operation 4: Window what you can drop
+
+Windowing is the rolling-window version of trimming: keep the most recent N turns, drop everything older than that, and lock the core instructions at the top. [^3] JetBrains' experiments kept a window of the latest 10 turns for observation masking and found that a good balance between performance and efficiency. [^3]
+
+The subtle failure is window sizing. Different agent scaffolds keep history differently: SWE-agent skips failed retry turns, OpenHands keeps them all. With a window of 10, an agent that failed all 10 turns in a row would feed only erroneous observations into its context. [^3] JetBrains' conclusion is that the masking window is a hyperparameter you tune per agent, not a constant you copy. [^3]
+
+## The hybrid pattern that wins
+
+JetBrains tested three strategies head to head on SWE-bench Verified with 500 instances each, across models from 32B to 480B: a raw agent with unmanaged memory, observation masking, and LLM summarization. Their findings are unusually clean:
+
+- Both managed approaches **cut costs by over 50%** versus doing nothing, without hurting solve rates. [^3]
+- The simple approach (masking) was often as good as or better than summarization, at lower cost. With Qwen3-Coder 480B, masking boosted solve rates by 2.6% while being 52% cheaper. [^3]
+- Their **hybrid** (masking as the first line of defense, summarization only as a last resort for very long runs) beat pure masking by 7% on cost and pure summarization by 11%, while nudging solve rates up about 2.6 points. [^3]
+
+The pattern to copy: **mask early and often, summarize rarely and late.** Let cheap deletion handle the steady accumulation, and reserve the expensive LLM summary for the runs that genuinely threaten the window.
+
+## Worked example: a diagnostic agent that stays sharp
+
+Take an agent that investigates a failing production service. It reads logs, runs queries, tests hypotheses. Each step appends reasoning, an action, and an observation. Left unmanaged, after 30 steps the window is a wall of old log output and the model is re-reading stale text.
+
+The engineered version:
+
+1. **Include** a tight system prompt (the run's goal, the investigation protocol, the two tools it's allowed), a minimal loadout of exactly three tools, and a static-first layout so the prefix caches.
+2. **Trim** as it goes: every observation that isn't the latest relevant result gets masked to a placeholder. The model keeps its full reasoning trail and the current evidence, not the entire log history.
+3. **Summarize** only when the window crosses a threshold: compact the early turns into a short recap that preserves the original failure report and the hypotheses already ruled out.
+4. **Window** the last N turns so nothing older than the current investigation thread stays in full.
+
+The result is a loop that can run for hundreds of turns at roughly half the cost of the naive version, with the same or better solve rate. That is the entire payoff of this lesson.
+
+## The pitfall to avoid
+
+**Treating every context operation as "just summarize it."** Summarization is the most expensive and the most likely to distort. It smooths over stop signals, it costs API calls with poor cache reuse, and it can quietly drop the one fact that mattered. Reach for trimming and windowing first. Use the LLM summary as the last line of defense, and structure the summary prompt so it is forced to preserve what the run can't lose. Breunig's closing question is the right checklist item before any change: "Is everything in this context earning its keep?" [^4]
+
+## Try it
+
+1. **Audit one of your agents' contexts.** Log a real run's tokens by source: system prompt, tool schemas, reasoning, observations. Which family is the largest? That is your first trimming target. [^2]
+2. **Apply masking by hand.** Take the longest tool observation in the run and replace it with a one-line placeholder that keeps only the decision-relevant facts. Run the task again. Did quality hold? That is the JetBrains experiment, on your own data. [^3]
+3. **Window before you summarize.** Set a rolling window of the latest 10 turns with core instructions locked at the top. Measure cost and solve rate versus the unmanaged baseline. Only after that, add a compaction step for the runs that still threaten the limit, and verify the summary preserves the original goal. [^3]
+
+## What's next
+
+You can now curate a context window and keep it coherent. Lesson 16 turns that into conversation: multi-turn agents, managing sessions and state so an agent can resume where it left off across turns, reloads, and even outages. Curating context keeps each turn clean; sessions and state are what make a chain of turns feel like one continuous agent.
+
+[^1]: anthropic.com. [anthropic.com](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
+[^2]: langchain.com. [langchain.com](https://www.langchain.com/blog/context-engineering-for-agents)
+[^3]: blog.jetbrains.com. [blog.jetbrains.com](https://blog.jetbrains.com/research/2025/12/efficient-context-management/)
+[^4]: dbreunig.com. [dbreunig.com](https://www.dbreunig.com/2025/06/26/how-to-fix-your-context.html)
+[^5]: research.trychroma.com. [research.trychroma.com](https://research.trychroma.com/context-rot)

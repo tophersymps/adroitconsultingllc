@@ -1,0 +1,86 @@
+---
+title: "eBPF Already Runs in Your Kernel. Stop Paying for It Twice."
+slug: ebpf-kubernetes-observability-security-2026
+excerpt: "Cilium is already the default CNI on EKS, GKE, and AKS. Most teams still run sidecars and iptables policies alongside it. How to switch the legacy stack off."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "August 28, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "10 min read"
+tags: [DevOps, Observability, Security, Kubernetes, Platform Engineering]
+bannerImage: /banners/ebpf-kubernetes-observability-security-2026.png
+---
+
+If you provisioned a cluster on EKS, GKE, or AKS in the last year, Cilium, an eBPF-based container network interface, is already running on your nodes as the default[^1]. The cloud provider made that call for you, no ticket in your backlog. The survey data shows how quietly it happened: 67 percent of teams running Kubernetes at scale have adopted at least one eBPF-based observability tool in production, according to the 2026 CNCF Observability TAG survey[^1]. It's a practitioner survey, not a vendor marketing sheet. But the more useful number sits right behind it: most of those teams adopted eBPF without ever deciding to.
+
+Many of those same teams still run the older stack in parallel: iptables-based policy engines, Envoy sidecar proxies, and userspace audit daemons. Two security stacks at once. One costs you in compute and operational overhead. The other is already sitting in the kernel, waiting to be used deliberately.
+
+This article is the consolidation story: what eBPF replaced, the four-tool stack, the limitations nobody mentions up front, and a three-phase path to switching off the legacy tax without breaking production. It builds on the infrastructure delivery patterns we covered in [control-plane infrastructure delivery](/field-notes/control-planes-infrastructure-delivery-2026) and [serving production workloads on Kubernetes](/field-notes/kubernetes-llm-serving-2026).
+
+## Why eBPF won: the kernel became the instrumentation layer
+
+eBPF, extended Berkeley Packet Filter, lets you run sandboxed programs inside the Linux kernel that intercept any syscall, network packet, or file operation, without modifying kernel source, loading a module, or rebooting. The kernel's verifier inspects every program before it loads and refuses anything that could crash the system, loop forever, or touch arbitrary memory[^1]. That safety guarantee is why eBPF suits production security tooling at scale, not just as a kernel trick.
+
+The practical difference is one sentence: collect telemetry directly from the kernel, with zero code changes and zero sidecars. The old model embedded an SDK in every language or injected a proxy into every pod. The eBPF model installs a single agent per node and observes every pod on it at once, one DaemonSet instead of a hundred sidecars.
+
+The economics decide it. A traditional sidecar proxy costs roughly 3 to 8 percent of CPU per pod and 50 to 120 megabytes of memory per sidecar. An eBPF agent costs under 1 percent of CPU per node and 40 to 80 megabytes for the DaemonSet[^2]. Multiply by hundreds of pods and the gap is node capacity you are literally buying twice. The memory story is starkest on a 500-service cluster, where the sidecar model can add 25 to 50 gigabytes of consumption compared to a sidecar-free alternative[^1].
+
+Networking tells the same story. Traditional Kubernetes policy walks iptables rule chains sequentially, and the cost grows with every rule, pod, and service. On a 500-service cluster a single connection can make the kernel evaluate thousands of rules before deciding. eBPF replaces that with hash-map lookups that stay constant regardless of how many entries exist[^1]. Measured against a sidecar mesh like Istio, Cilium reports 40 to 60 percent lower latency and 50 to 70 percent less memory overhead[^1], and eBPF data paths deliver an estimated 30 to 40 percent higher throughput than iptables networking[^3].
+
+That is why eBPF went mainstream. Cilium graduated from the CNCF, its eBPF features stabilized in kernel 6.x, and the managed platforms built it into their defaults[^3]. The bottleneck is no longer whether the software works. It is whether your team knows how to use what is already installed.
+
+![Sidecar versus eBPF: per-pod proxies and SDKs cost 3-8 percent CPU and 50-120MB memory each, while a single per-node eBPF agent observes every pod at under 1 percent CPU and 40-80MB total.](</diagrams/ebpf-kubernetes-observability-security-2026/1-sidecar-vs-ebpf.png>)
+
+## The 2026 stack, tool by tool
+
+Four tools now form the standard production stack, each with a clear job that does not overlap the others. All are CNCF projects[^2].
+
+**Cilium and Hubble for the network layer.** Cilium is the eBPF CNI that replaces iptables with L3, L4, and L7 policies, and its current stable line is 1.19.x, which brought Network Policy enhancements and moved Multi Pool IPAM to stable[^1]. Hubble is the observability layer on top of it: flow visibility across every connection in the cluster, no application changes, no sidecars, no instrumentation library. You can see which services talk to which, which connections policy drops, and which patterns look wrong, all from the kernel[^1]. When a packet disappears and tcpdump shows you nothing, Hubble is often the only tool that explains why.
+
+**Falco for detection.** Falco is a CNCF graduated project and the most widely deployed eBPF runtime security tool in Kubernetes. Its current stable release is 0.44.1, and the 0.44 line made three decisions before upgrading: it dropped the legacy BPF probe in favor of the modern eBPF driver, dropped gVisor engine support, and dropped gRPC output[^1]. Falco attaches probes at syscall boundaries and raises an alert when a process's behavior matches a rule. A shell spawned inside a container, an outbound connection from a pod that never makes them, a write to /etc/passwd from a process with no business touching it. It sees all of it at the syscall level, before the action completes and before any log line is written. That is the critical distinction from a traditional HIDS, which reads audit logs in userspace after the attacker has already finished.
+
+Falco is detection-focused. It raises an alert and what you do about it is up to you. It does not block or terminate. That is the design, and it is exactly where Tetragon comes in.
+
+**Tetragon for enforcement.** Tetragon is where you close the gap Falco deliberately leaves open. Its 1.7 release, dated May 2026, brought what the project calls precision filtering, richer context, and better performance[^1]. When a TracingPolicy blocks an action, the action never occurs. Not occurred and logged, not occurred and alerted on. The syscall does not complete. The file is never written. The connection is never established. The process is terminated in kernel space, in microseconds, before the request reaches userspace[^1].
+
+Tetragon's policies are Kubernetes custom resources, so a GitOps-minded team can version and review them like application code. A representative rule stops any container process from writing to /etc/passwd and kills the offender at the kernel level. This is a fundamentally different posture from detect-and-alert, and it is what slots Tetragon into the enforcement layer of a production stack.
+
+**OBI and Beyla for application tracing.** The newest piece is OpenTelemetry eBPF Instrumentation, or OBI, which Splunk announced in beta at KubeCon EU 2026. Built by Grafana as Beyla and donated to OpenTelemetry, it is now co-developed by Grafana, Splunk, Coralogix, and Odigos[^2]. OBI generates distributed traces and RED metrics from network traffic, no code changes, for every major language including Go, Java, Python, Node.js, and Rust[^2]. It is the zero-code answer to the last reason teams kept embedding SDKs.
+
+The Falco versus Tetragon question comes up constantly, and the honest answer is that most production environments run both[^1]. Falco, cluster-wide, for broad rules-driven detection. Tetragon, on your most sensitive workloads, the databases, secret managers, and control plane components, where enforcement matters more than breadth. The teams moving fastest in 2026 are not choosing. They are layering[^1].
+
+![The four-tool eBPF stack: Cilium and Hubble for networking, Falco for cluster-wide detection, Tetragon for in-kernel enforcement on sensitive workloads, and OBI or Beyla for zero-code tracing, all feeding an OpenTelemetry collector.](</diagrams/ebpf-kubernetes-observability-security-2026/2-stack-and-phases.png>)
+
+## The honest limitations
+
+Any article on eBPF that skips the operational costs is selling you the marketing version. There are five constraints you will hit in production.
+
+**Kernel version is a hard blocker for some environments.** The minimum is Linux kernel 5.10 LTS, and the recommended baseline for 2026 production is 6.1 or above. Check every node with `uname -r` first[^2]. CO-RE, Compile Once, Run Everywhere, is why the same tool runs across nodes with different kernels, but it depends on BTF type info in the kernel, so very old distributions are out. CentOS 7 and RHEL 7 are unsupported[^1]. If you run on-prem on old kernels or a managed offering stuck behind one, part of the stack is unavailable without an upgrade.
+
+**Privilege creates a security tension you need to model.** eBPF programs typically need CAP_BPF or CAP_SYS_ADMIN, so you are granting elevated kernel privileges to your security tooling. That is the correct trade, the alternative is userspace tooling with no kernel visibility, but it belongs in your threat model. A compromised Falco or Tetragon agent holding CAP_SYS_ADMIN is a serious incident[^1].
+
+**Alert volume at scale is expensive.** A 4,200-node fleet can produce roughly 180 gigabytes of Tetragon events per day after deduplication[^1]. Logging everything and figuring it out later is a bill you will regret. Plan filtering and SIEM ingestion costs before you deploy cluster-wide, and route events through something like Vector for deduplication and enrichment.
+
+**Ecosystem fragmentation is not fully resolved.** Cilium, Calico, Falco, and Tetragon each have their own eBPF implementations, and functional overlap and incompatibilities exist. Running Cilium alongside Calico in eBPF mode is not supported[^1]. Pick your CNI before committing to a security tool that assumes a specific network architecture.
+
+**Debugging is a different skill set.** When an eBPF program drops a packet or blocks a process unexpectedly, tcpdump and strace will not explain why. Hubble helps with network issues and bpftool handles lower-level inspection, but the operational model is genuinely different. Plan for a learning curve before you enable enforcement policies in production[^1].
+
+## A three-phase adoption path
+
+The teams that fail make one of two mistakes: they deploy everything at once with enforcement enabled and break production, or they stay in observe-only mode forever and never get the security value. The three-phase sequence avoids both.
+
+**Phase one: observe only, target one sprint.** Verify every node's kernel version first. If you are building a new cluster, deploy Cilium 1.19.x as the CNI from day one; otherwise leave your existing CNI alone. Deploy Falco 0.44.x with the modern eBPF driver, not the legacy kernel module, and connect Falcosidekick to your alerting channel. Then do nothing but watch for two weeks, no rule tuning, no enforcement, and understand your baseline noise before deciding what to suppress and what to escalate[^1].
+
+**Phase two: selective enforcement, target one sprint.** After the baseline, deploy Tetragon on your highest-sensitivity workloads only: databases, anything holding secrets or certificates, and control plane components. Start with three or four TracingPolicies for your top scenarios: blocking shell execution inside database containers, unexpected outbound connections from certificate workloads, and writes to critical system paths. Run in audit mode first, and promote to enforcement only after confirming the blast radius of a false positive, because a TracingPolicy that kills processes on match will break a workload you did not anticipate[^1].
+
+**Phase three: replace legacy tooling, target one quarter.** Once the stack is stable, audit what you still run in parallel: iptables-based network policy alongside Cilium, sidecar monitoring agents alongside Hubble, userspace audit daemons and auditd alongside Tetragon. Each overlap is compute you are purchasing for coverage you already have at the kernel layer. Removing it is not just cost optimization, it shrinks the attack surface of your security tooling itself[^1].
+
+## The decision was made for you
+
+The 33 percent of Kubernetes teams not yet running any eBPF tooling in production will be smaller by the time you read this. Not because of conference talks or vendor marketing, but because the cloud providers made an architectural choice and baked it into their default clusters[^1]. On a major managed Kubernetes platform, Cilium is already in your kernel. The question is no longer whether to adopt eBPF. It is whether you use it deliberately, with Falco providing detection and Tetragon providing enforcement where it matters most, or accidentally, with Cilium running quietly while you keep paying for the legacy tools it was designed to replace.
+
+[^1]: CareerByteCode, "How eBPF Became the Cloud Native Security Stack". [medium.com](https://medium.com/careerbytecode/how-ebpf-became-the-cloud-native-security-stack-0c5306a3fd33)
+[^2]: x4nent, "Building a Production eBPF Observability & Security Stack for Kubernetes in 2026". [dev.to](https://dev.to/x4nent/building-a-production-ebpf-observability-security-stack-for-kubernetes-in-2026-5051)
+[^3]: linou518, "eBPF in 2026: The Kernel Revolution Powering Cloud-Native Security and Observability". [dev.to](https://dev.to/linou518/ebpf-in-2026-the-kernel-revolution-powering-cloud-native-security-and-observability-22jd)

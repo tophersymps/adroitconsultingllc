@@ -1,0 +1,133 @@
+---
+title: "OmniStudio DM-4: Load Interface: Multi-Object Writes"
+slug: day-33-dm-4-load-interface-multi-object-writes
+series: omni-studio-cert
+lesson: 33
+excerpt: "Configure and import data to multiple objects using the Load Interface. Learn how Load maps input JSON to Salesforce records for insert, update, and delete, how lookups by Id or external ID link child records to parents in a single multi-object write, how external-ID upserts make Load idempotent so repeated integration runs do not create duplicates, and how rollback-on-error keeps a failed write from leaving partial data."
+date: "September 11, 2026"
+author: "Adroit Consulting"
+readTime: "15 min read"
+tags: [OmniStudio, DataMappers]
+---
+
+Lessons 30 through 32 built the read side of the Data Mapper domain. Lesson 30 gave you the fundamentals and the four interface types, lesson 31 built the multi-object Extract, and lesson 32 covered Turbo Extract, the optimized single-object reader. [^1] Each of those interfaces moves data out of Salesforce. This lesson reverses the direction. Requirement DM-4 asks you to configure and import data to multiple objects using the Load Interface. [^1] Where Extract and Turbo Extract read, Load writes. It takes an incoming JSON or XML payload, maps its fields onto one or more Salesforce objects, and performs inserts, updates, or deletes against them. [^2] This is the interface that saves what an OmniScript collects, commits what an Integration Procedure assembles, and lets an external system hand a full batch of records to Salesforce in a single call. [^2]
+
+Three facts about Load anchor the entire requirement, and each one maps to a quiz question. Load is the interface that creates or updates records from input JSON. Load links a child record to its parent through lookup or relationship mapping by Id or external ID, not through Apex triggers and not automatically. And Load prevents duplicate records on repeated integration runs through upsert semantics driven by external IDs. [^2] Hold onto those three and the DM-4 questions are nearly free.
+
+## Deep Dive
+
+### What Load actually is, and where it sits in the data flow
+
+Start with the platform definition. A Data Mapper Load accepts data in JSON, XML, or custom input formats and writes that data to Salesforce objects. Formulas and attributes are supported. [^2] The managed package documentation describes the typical flow explicitly: an OmniScript calls a Data Mapper Extract to read data from Salesforce, the user interacts to capture changed and new data, then the OmniScript calls a Data Mapper Load to write that data back to Salesforce. [^1] Read, interact, write. Load is the write step, and it is the natural counterpart to the Extract family you have already built.
+
+That flow matters for the exam because it explains why Load exists as a separate interface rather than an extra feature bolted onto Extract. Reads and writes have different needs. A read defines what to pull and how to shape it. A write defines what to push, which records to touch, how records relate to one another, and what to do when the payload contradicts existing data. Those needs do not fit cleanly into one interface, so OmniStudio splits them: Extract and Turbo Extract read, Load writes. [^1][^2]
+
+Load also carries a couple of capabilities that matter beyond the raw write. It supports formulas, so you can compute a value at write time and map it onto a target field rather than trusting the inbound payload. [^2][^3] It can work with custom input formats as well as the default JSON and XML. [^1] And it is not limited to standard objects. Data Mappers can access external objects and custom metadata alongside sObjects, with no special syntax or additional configuration. [^1] For a cert-prep mental model, the load-bearing idea is simpler: Load is the interface that takes input and changes records in the org.
+
+### The input JSON is the driver
+
+The single most important shift when you move from Extract to Load is who is in charge. In an Extract, Salesforce data is the source and you decide what to read. In a Load, the inbound JSON is the driver. [^2] You map fields from that payload onto target object fields, and the payload's structure determines what gets written, to which objects, and with what relationships. [^2]
+
+Read that carefully, because it changes how you reason about errors. If the payload has a key you did not map, that key goes nowhere. If the payload is missing a key the target field expects, that field stays null (or fails validation, depending on the org's field configuration). [^2] Load does not invent values. It writes what you tell it to write, so the mapping defines the contract between the incoming data and the Salesforce records. Get the mapping right and the payload flows through cleanly. Get it wrong and records land with missing or misrouted values.
+
+The payload also drives the operation itself. The same Load can insert new records, update existing ones, or delete them, and which one happens is determined by how you configure the mapper and, for upserts, by the keys in the incoming data. [^2][^4] That is the "multi-object" and "multi-operation" reach of the requirement. One mapper can write an Account, its related Contacts, and its related Opportunities in a single run, each with the operation the data calls for.
+
+### Insert, update, and delete across multiple objects
+
+The requirement name is "Multi-Object Writes," and the word multi does real work. Load is not limited to one sObject per mapper. You can define target objects for several types in a single Load and write a parent and its children together. [^1][^2] The canonical example the documentation leans on is an Account plus its Contacts, but the pattern generalizes: any parent object with child records that arrive together in one payload can be written by one Load. [^1]
+
+This is where the operation choice comes in. Load can insert new records, update existing ones, or delete them, and you configure which per target object. [^2][^4] For an insert, the mapper creates new records. For an update, it needs to know which existing records to touch, which is where Ids and external IDs come in. [^4] For a delete, it removes records, again keyed by the identifiers you map. [^4] The multi-object part means these can all happen in the same mapper and the same run, so a single payload can, say, insert a new Account, update two of its existing Contacts, and delete a stale one, all in one call.
+
+The reason this matters for the exam is that a wrong answer will try to narrow Load's reach. Quiz Q1 asks which interface creates or updates records from input JSON, and the correct answer is Load. [^2] Extract and Turbo Extract read, they do not write, and Transform reshapes without touching the org at all. [^1][^2] Only Load performs insert, update, and delete against objects. [^2] If a question describes writing records, the interface is Load.
+
+### How relationships work: lookups by Id or external ID
+
+Writing a parent and its children is only useful if the children actually point at their parent when they land. That linking is the relationship mapping, and it is where quiz Q2 lives.
+
+When Load writes a child record, it does not guess its parent. You map the relationship explicitly. [^1][^2] You tell the mapper which lookup field on the child points to the parent, and how the parent is identified: by its Salesforce Id, or by an external ID. [^4] If the parent already exists and you know its Id, you map that Id into the child's lookup. If the parent is being created in the same Load run, or if you are matching on a business key rather than a Salesforce Id, you use the parent's external ID and map it into the lookup so the child finds its parent by that value. [^4]
+
+Quiz Q2 asks how Load links a child record to its parent, and the correct answer is lookup or relationship mapping by Id or external ID. [^4] The wrong answers are instructive. "Automatically" is false because Load never invents a parent-child tie on its own. "Via Apex triggers only" is false because the linkage is configured in the mapping, not written in code, and Data Mappers are the declarative alternative to Apex for exactly this reason. [^1] And "it can't create relationships" is false because creating relationships is one of Load's core jobs. [^1][^4]
+
+The relationship mapping is also the failure point the exam traps on. Map it wrong and children either land with no parent, which orphans them, or point at the wrong parent, which mislinks them. Both are silent data-integrity problems, because Load returns success for records it wrote, even if a lookup resolved to nothing. [^2] The discipline is to confirm the relationship key exists in the payload for every child that depends on a parent, and to test with a real payload before trusting the mapping.
+
+### Idempotency: external-ID upserts prevent duplicates
+
+Quiz Q3 is the most practically important question in the lesson, because it describes the exact failure mode integrations hit in production. The question: how do you prevent duplicate records on repeated integration runs? The correct answer is upsert semantics via external IDs. [^4]
+
+Here is the problem that answer solves. If a Load inserts records and the integration runs again with the same data, a plain insert creates a second, identical record. Run a nightly sync for a month and you get thirty copies of every Account unless something stops it. [^4] The something is the external ID and the upsert behavior it enables. When you map a standard external ID field on the target object, Load can use it as the matching key: if a record with that external ID already exists, Load updates it; if it does not, Load inserts it. [^4] That upsert-by-external-ID semantics makes Load idempotent, meaning running it twice with the same input produces the same end state instead of stacking duplicates. [^4]
+
+This is the safe pattern for integrations for a reason. Real integrations re-send data, retry failed runs, and overlap schedules. If every run is an insert, retries multiply records. If every run keys on an external ID, retries reconcile instead of duplicate. [^4] That is why the requirement calls external-ID upsert the safe pattern, and why the exam wants you to know it cold.
+
+The wrong answers to Q3 reinforce the point. "Delete everything first" is destructive and brittle, it removes legitimate records you then have to re-create, and it risks losing related data. "Manual cleanup" is not an integration strategy at all, it is a human chasing bugs the automation could have prevented. And "you can't" is simply false, because external-ID upserts do exactly this. [^4] When a question describes preventing duplicates across runs, reach for the external ID.
+
+### Rollback: keep a failed write from leaving partial data
+
+Multi-object writes introduce a risk that single-record writes do not: partial success. A Load that writes an Account, two Contacts, and an Opportunity can fail halfway, with the Account committed and the children not, leaving an incomplete set behind. Load supports rollback-on-error so a failed multi-object write does not leave that partial state. [^1][^5]
+
+The way to hold rollback in your head is to connect it to what you learned about exception handling in lesson 27. There, the Integration Procedure's Try/Catch pattern treats rollback as the safety net for orchestrated writes: when a step fails, the transaction rolls back so nothing partial is committed. [^5] Load's rollback-on-error is the same instinct applied inside the write itself. If any record in the Load fails, the whole write is rolled back rather than committing the records that succeeded. [^1][^5]
+
+The exam trap here is the failure path without rollback. If you configure a Load inside a failure path or omit rollback-on-error, a mid-run failure leaves partial data, and the next run has to reconcile whatever half-finished state the previous run left. [^5] Rollback is not decoration, it is the control that keeps a multi-object write atomic in practice. When the requirement says Load supports rollback-on-error, treat that as a feature the exam will test as both a correct configuration and a missing configuration.
+
+## Configuration Walkthrough
+
+Build a Load on a concrete case: an integration that writes an Account and its Contacts in one call, keyed by external IDs so it is safe to re-run. Walk through the numbered steps.
+
+1. **Create a Load Data Mapper.** In the OmniStudio Data Mapper designer, create a new mapper and pick Load as the interface. [^2] Name it for what it writes, for example `UpsertAccountWithContacts`. Because this operation writes records to the org rather than reading them, Load is the correct interface, not Extract, Turbo Extract, or Transform. [^1][^2]
+
+2. **Define the input JSON structure.** The input is the driver, so define the JSON shape the caller will send. For this case it holds an Account object and a Contacts array, with each contact carrying the fields to write and the external IDs that make the run idempotent. [^2] The input structure should match what the caller actually produces, because the mapper maps from these keys and a mismatch means fields go unmapped or null.
+
+3. **Map input fields to the target sObjects.** Add Account as the first target object and map the incoming Account fields to its fields. Then add Contact as a second target object and map the contact fields. [^2] This is where multi-object writes take shape: two object types, both fed from one payload, both written in the same Load run. [^1][^2] Keep the mappings explicit and confirm each inbound key has a real target field.
+
+4. **Configure the relationship mapping.** This step answers the "how does the child find its parent" question. Map the Contact's lookup field to the Account through an external ID, so each contact resolves its parent by the Account external ID present in the payload. [^4] If the Account is being created in the same run, or if you match on a business key rather than a Salesforce Id, the external-ID lookup is what lets the children attach to the correct parent. [^4] A lookup by Salesforce Id works too when the parent already exists and the caller knows its Id, but for this integration the external ID is the safer key.
+
+5. **Configure the operation and choose upsert.** Set the write operation for both target objects. For idempotency, use the external ID as the matching key so Load inserts when a record with that external ID is new and updates when it already exists. [^4] This is the upsert-by-external-ID pattern that keeps repeated runs from stacking duplicates. [^4] If you used a plain insert instead, every re-run of the integration would create a fresh set of records.
+
+6. **Enable rollback-on-error.** Turn on rollback so that if any record in the multi-object write fails, the whole Load rolls back instead of committing a partial set. [^1][^5] This keeps the Account and its Contacts atomic: either all of them land or none of them do.
+
+7. **Test with sample input and verify the records.** Open the preview, paste a sample payload that includes an Account and its Contacts with external IDs, and run the Load. [^2] Then open the org and verify the records: the Account exists, each Contact exists, and each Contact's lookup points at the correct Account. [^2] Run the same sample again and confirm no new records appear, which proves the external-ID upsert is idempotent. [^4] A second run that stacks duplicates is your signal that the external ID is not actually driving the match.
+
+That is the full build, and the two steps worth re-reading are four and five. Relationship mapping decides whether children land attached to the right parent, and external-ID upsert decides whether re-runs reconcile or duplicate. [^4] Get both right and the Load is safe to run on a schedule. Get either wrong and you either orphan or duplicate data silently.
+
+## Exam Traps
+
+- **No external ID mapping, so repeated runs create duplicates.** This is the trap the requirement is built around. A Load configured as a plain insert re-creates records every time it runs, so a nightly sync stacks copies. [^4] Map an external ID as the matching key to get upsert behavior, where re-runs update instead of insert. [^4] When a question describes preventing duplicates across integration runs, the answer is external-ID upsert. [^4]
+
+- **Wrong relationship mapping, so children are orphaned or mislinked.** Load resolves parent-child links through lookup mapping by Id or external ID, and it never invents the relationship for you. [^1][^4] Map the child's lookup to the wrong field or omit the key and children land with no parent or the wrong parent, both silently. [^2] Confirm the relationship key exists in the payload and test with a real payload before trusting the mapping. [^4]
+
+- **Load in a failure path without rollback, leaving partial writes.** A multi-object write can fail partway, committing some records and not others. Without rollback-on-error that partial state is left behind and the next run has to reconcile it. [^1][^5] Enable rollback so a failed write stays atomic, the same protection the Integration Procedure Try/Catch pattern gives you. [^5]
+
+- **Confusing Load with the read interfaces.** Quiz Q1 exists to catch this. Load is the interface that creates or updates records from input JSON. Extract and Turbo Extract read, and Transform reshapes without touching the org. [^1][^2] If the question describes writing records, the interface is Load. [^2]
+
+- **Believing relationships happen automatically or via Apex.** Quiz Q2 exists to catch this. Load links a child to its parent through lookup/relationship mapping by Id or external ID, not automatically and not through Apex triggers. [^1][^4] The linkage is a configured mapping, and using it is the whole point of a declarative Load over hand-written Apex. [^1][^4]
+
+- **Choosing a destructive or manual fix for duplicate avoidance.** "Delete everything first" and "manual cleanup" are not integration strategies. [^4] The idempotent answer is external-ID upsert, which reconciles re-runs instead of deleting and re-creating or asking a human to clean up. [^4]
+
+## Exam Tip
+
+Compress DM-4 into a short chain: Load is write, input JSON drives it, external IDs make it idempotent, lookup mapping links children to parents, rollback keeps it atomic. [^1][^2][^4][^5] When a question asks which interface creates or updates records, the answer is Load. [^2] When it asks how a child finds its parent, the answer is lookup/relationship mapping by Id or external ID. [^4] When it asks how to stop duplicates on re-run, the answer is external-ID upsert. [^4] Load maps the payload onto Salesforce records, writes across objects, and the external ID is what keeps a repeated run honest.
+
+## Try It
+
+Open the Data Mapper designer in a sandbox and build the `UpsertAccountWithContacts` Load from the walkthrough. Define an input JSON with an Account and a Contacts array, map the fields to both target objects, set the relationship mapping so each Contact resolves its Account by external ID, and choose the external-ID upsert operation. [^2][^4] Run it with a sample payload and verify the records in the org, then run the same payload again and confirm no duplicates appear, which proves the upsert is doing its job. [^2][^4]
+
+Now break it on purpose to feel the traps. First, remove the external ID from the mapping and re-run, watching the second run stack duplicate records. [^4] Then break the relationship mapping so a Contact cannot resolve its parent, and observe how the child lands without a parent rather than failing loudly. [^2] Finally, disable rollback and make one record in the payload fail, then check which subset of the write committed, to see the partial state rollback would have prevented. [^1][^5] Each deliberate break makes the correct configuration memorable, and each one is a quiz question you will not miss.
+
+## What's Next
+
+You have now covered the write side of the Data Mapper domain: Load takes an incoming JSON payload, maps it onto one or more objects, writes across them with upsert and rollback, and links children to parents by lookup. [^1][^2][^4][^5] Lesson 34 turns to the Transform Interface and Document Generation (DM-5), where a mapper reshapes input data into a required output structure without reading from or writing to the org, the intermediate step that prepares data for APIs, documents, and other consumers. [^1]
+
+## Related Requirements
+
+- Data Mapper Fundamentals & Source/Target Types, lesson 30 of 46 (DM-1)
+- Extract Interface: Multi-Object, Filters & Parameters, lesson 31 of 46 (DM-2)
+- Turbo Extract Interface, lesson 32 of 46 (DM-3)
+- Transform Interface & Document Generation, lesson 34 of 46 (DM-5)
+- Data Mapper Best Practices, lesson 37 of 46 (DM-8)
+
+## References
+
+[^1]: [Omnistudio Data Mappers (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_dataraptors.htm&type=5)
+[^2]: [Omnistudio Data Mapper Load Overview (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_dataraptor_load_overview.htm&type=5)
+[^3]: [Use Formulas in Omnistudio Data Mappers (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_use_formulas_in_dataraptors.htm&type=5)
+[^4]: [Omnistudio Data Mapper Best Practices (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_dataraptor_best_practices.htm&type=5)
+[^5]: [Omnistudio Data Mapper and Integration Procedure Security Settings, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_and_integration_procedure_security_settings_56587.htm&language=en_US&type=5)

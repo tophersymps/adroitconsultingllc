@@ -1,0 +1,91 @@
+---
+title: "GitHub Actions Is Getting a Lockfile: The 2026 Roadmap"
+slug: github-actions-supply-chain-security-2026
+excerpt: "GitHub's 2026 Actions roadmap promises workflow dependency locking, scoped secrets, and a native egress firewall, with parts already shipping."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "August 6, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "8 min read"
+tags: [DevOps, CI/CD, Security]
+bannerImage: "/banners/github-actions-supply-chain-security-2026.png"
+---
+
+In March 2025, an attacker moved a few tags in the `tj-actions/changed-files` repository and thousands of workflows suddenly ran malicious code. The payload dumped CI runner memory, including secrets, into workflow logs on public repositories [^1]. It wasn't a novel technique. Move a mutable tag, and every workflow that references `@v44` silently starts executing something its maintainers never reviewed.
+
+That incident is the reason GitHub published its **Actions 2026 security roadmap** in March, and the reason parts of it are already shipping by August [^2]. The roadmap is a blunt admission that CI/CD infrastructure has become a first-class attack surface: runners execute untrusted code, hold sensitive credentials, and have unrestricted outbound network access [^2]. If you run GitHub Actions in production, or inherit a repo that does, this changes your threat model this year.
+
+## The problem: what you review is not what runs
+
+Today, Actions resolves dependencies at runtime. A workflow that says `uses: actions/checkout@v4` or `@main` executes whatever that ref points to *at the moment of the run*, not what a reviewer approved. There is no lockfile, no deterministic resolver, and no committed record of which commits actually executed [^3]. Composite actions make it worse: they embed nested `uses:` steps that only surface after the runner downloads them, so transitive dependencies are effectively invisible to the workflow author [^3].
+
+![The gap that makes review insufficient: the PR shows the workflow file, but what actually runs is whatever each ref resolves to at the moment of the run, exploited by mutable tag hijacks like tj-actions/changed-files (CVE-2025-30066), hidden transitive dependencies in composite actions, and poisoned pull_request_target triggers](</diagrams/github-actions-supply-chain-security-2026/2-review-vs-runs-gap.png>)
+
+GitHub's own framing is honest: npm, Cargo, Go modules, Bundler, and NuGet all have a manifest + lockfile + deterministic resolver. Actions has none of them [^3]. The roadmap fixes that gap, then keeps going.
+
+## The three layers of the roadmap
+
+GitHub organizes the work into three layers: the **ecosystem** (deterministic dependencies, safer publishing), the **attack surface** (policies, secure defaults, scoped credentials), and the **infrastructure** (observability and network control for runners) [^2]. Three capabilities matter most for teams running real pipelines.
+
+![GitHub's 2026 Actions security roadmap has three layers: workflow dependency locking (technical preview since late June 2026), policy-driven execution (public preview since June 18, 2026), and scoped secrets with the native egress firewall (early access in audit mode via the ubuntu-24.04-firewall runner label)](</diagrams/github-actions-supply-chain-security-2026/1-roadmap-three-layers.png>)
+
+### 1. Workflow dependency locking: the lockfile
+
+The headline item is a `dependencies:` section in workflow YAML that locks every direct **and transitive** dependency to an exact commit SHA ("Go's `go.mod` + `go.sum`, but for your workflow") [^2]. The runner verifies those exact resolutions before any job executes; a hash mismatch stops the run before it starts [^3].
+
+The design is a `gh actions pin` CLI command (RFC in progress) that walks every `uses:` reference, recurses into composite `action.yml` files, and writes the locked graph back into the workflow file [^3]. Floating refs like `@v4.3.1` are preserved next to the resolved SHA, so reviewers see both what was asked for and what it resolved to [^3]. Updates become PR diffs instead of silent runtime behavior changes, and Dependabot integration is on the roadmap so pinning doesn't become manual maintenance [^3].
+
+Status: dependency lock files entered **technical preview** in late June 2026, with public preview targeted at roughly 3–6 months after the March announcement and GA at ~6 months [^4] [^2].
+
+### 2. Policy-driven execution: already in public preview
+
+Locking dependencies doesn't stop an attacker who can *trigger* a workflow. The second layer is **workflow execution protections** built on the ruleset framework, and this one is live. As of June 18, 2026, it's in public preview for enterprises, organizations, and repositories [^5].
+
+Two rule types ship first: **actor rules** (who can trigger workflows: users, roles, GitHub Apps, Copilot, Dependabot) and **event rules** (which events are permitted, e.g. `push`, `pull_request`, `workflow_dispatch`) [^5]. This directly disrupts the attacks that keep showing up in incident write-ups: poisoned `pull_request_target` executions in public repos, `workflow_dispatch` abuse by untrusted identities, and misconfigured workflow files that bypass review [^5]. Rules run in **evaluate mode** first, so you can see what a policy would block before enforcing it, the same shadow-mode rollout rulesets already offer [^5].
+
+### 3. Scoped secrets and the egress firewall
+
+Secrets today are scoped to repo or org, which means a compromised step in any workflow can read everything. The roadmap's **scoped secrets** bind credentials to explicit execution contexts: specific workflows, paths, branches, environments, or trusted reusable workflows, with reusable-workflow inheritance changed so callers no longer pass credentials implicitly [^2]. The permission model also changes: write access to a repository will no longer grant secret-management permissions; that moves to a dedicated custom role plus admin roles [^2].
+
+The infrastructure layer is the **native egress firewall** for GitHub-hosted runners: a Layer 7 firewall that operates *outside* the runner VM, so it stays immutable even if an attacker gets root inside the runner [^2]. It ships in two modes: **monitor** (audit every outbound request, correlated to workflow/job/step) and **enforce** (block anything not on an allowlist of domains, IP ranges, methods, and TLS requirements) [^2]. Early access is already open via the `ubuntu-24.04-firewall` runner label in audit mode [^6].
+
+## What already shipped while everyone was reading the roadmap
+
+Two pieces of the roadmap are in production right now, no config required:
+
+- **Potentially malicious workflows are held for approval** (July 28, 2026): GitHub now detects workflows pushed with compromised credentials and blocks execution until a collaborator with write access approves via an authenticated session. It applies automatically to public repositories [^7].
+- **Actions Data Stream** delivers near-real-time execution telemetry (workflow/job details, dependency resolution, action usage) to Amazon S3 or Azure Event Hub / Data Explorer, with at-least-once delivery and a common schema for correlation [^2].
+
+## What you can do today, without waiting for GA
+
+Every mature practice in this roadmap has a manual equivalent that works right now:
+
+- **Pin actions to full commit SHAs** (`actions/checkout@<40-char-sha>`) instead of tags, and let Dependabot manage the updates so pinning doesn't stall your upgrades [^8] [^3]. Remember the honest caveat the community keeps raising: SHA pinning gives immutability, not provenance, so verify the SHA actually exists in the named repository, not an attacker-controlled fork [^4]. The same gate-first instinct, blocking on secrets and static checks before anything ships, runs through our [CI/CD guardrails for AI-generated code](/field-notes/ai-generated-code-cicd-guardrails).
+- **Set `permissions:` to minimum:** `contents: read` by default, escalate per-job [^8].
+- **Stop using `secrets: inherit`** on reusable workflows; pass secrets explicitly so credentials don't flow into every execution path [^9].
+- **Audit your dangerous triggers** (`pull_request_target`, `workflow_dispatch`, `workflow_run`, `release`) and justify each one. These are the Pwn-Requests-style primitives the new execution policies target [^10].
+- **Separate secrets by environment trust level** and use required reviewers on production environments [^10] [^8].
+- **Turn on evaluate mode** for execution protection rules before enforcing; it shows you what would break before anything does [^5].
+
+## Adroit on the Ground
+
+Our own publish pipeline is deliberately simple (MDX, build script, commit, push, Vercel auto-deploy), and our verification discipline is the transferable part: we confirm a deploy with layered checks (live URL status, slug in the feed, local HEAD matching origin) rather than trusting the push's self-report, the layered-verification pattern our internal live-app-verification runbook prescribes for our build-posts.js publish flow. That's the same instinct the Actions roadmap is industrializing: verify what actually ran, not what was supposed to run. For client pipelines, the roadmap is a forcing function to get the fundamentals in place now (SHA pinning, minimal permissions, scoped secrets, trigger audits) so the platform-level controls are a reinforcement, not a rescue.
+
+## The bottom line
+
+The 2026 roadmap is GitHub conceding that "secure by convention" failed. Mutable refs, implicit secret inheritance, and unrestricted egress are exactly the primitives the tj-actions, Nx, and trivy-action incidents exploited, and the fixes (lockfiles, execution policies, scoped secrets, egress control) are landing in preview through 2026 [^2]. Teams that adopt the manual equivalents now will be ahead of the enforcement wave instead of catching up to it. Start with the lockfile mindset: know exactly what your CI runs, and make any change to it a reviewed diff.
+
+[^1]: GitHub Action tj-actions/changed-files supply chain attack (CVE-2025-30066). [wiz.io](https://www.wiz.io/blog/github-action-tj-actions-changed-files-supply-chain-attack-cve-2025-30066)
+[^2]: What's coming to our GitHub Actions 2026 security roadmap. [github.blog](https://github.blog/news-insights/product-news/whats-coming-to-our-github-actions-2026-security-roadmap/)
+[^3]: Help Shape Workflow Dependency Locking. [github.com](https://github.com/orgs/community/discussions/194494)
+[^4]: What's coming to our GitHub Actions 2026 security roadmap (community discussion). [github.com](https://github.com/orgs/community/discussions/190621)
+[^5]: Control who and what triggers GitHub Actions workflows (public preview). [github.blog](https://github.blog/changelog/2026-06-18-control-who-and-what-triggers-github-actions-workflows/)
+[^6]: Actions Native Egress Firewall: Early Access. [github.com](https://github.com/github-early-access/actions-native-egress-firewall)
+[^7]: GitHub Actions holds potentially malicious workflows for approval. [github.blog](https://github.blog/changelog/2026-07-28-github-actions-holds-potentially-malicious-workflows-for-approval)
+[^8]: Security hardening for GitHub Actions. [docs.github.com](https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions)
+[^9]: Complete Guide to GitHub Actions 2026 Security Roadmap. [dev.to](https://dev.to/x4nent/complete-guide-to-github-actions-2026-security-roadmap-dependency-locking-native-egress-5aap)
+[^10]: GitHub Actions 2026: what the new security roadmap really changes. [blog.stephane-robert.info](https://blog.stephane-robert.info/en/post/github-actions-2026-security-roadmap/)
+**Further reading:**
+- RFC: `gh actions pin`: [github.com](https://github.com/cli/cli/issues/13314)

@@ -1,0 +1,77 @@
+---
+title: "MCP Goes Stateless: The 2026-07-28 Spec in Practice"
+slug: mcp-stateless-2026-07-28-production-agents
+excerpt: "MCP went stateless in the 2026-07-28 spec. That unlocks scaling, but the reliability and security data say the real work is still in how you run it."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "August 13, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "8 min read"
+tags: [MCP, AI Agents, Reliability]
+bannerImage: /banners/mcp-stateless-2026-07-28-production-agents.png
+---
+
+The Model Context Protocol hit its biggest release since remote MCP first shipped. The 2026-07-28 specification turns MCP from a stateful, bidirectional protocol into a stateless request/response one[^1]. No more `initialize` handshake, no more `Mcp-Session-Id` header, no more held-open streams. Each request carries its own protocol version, client identity, and capabilities, and any request can land on any server instance behind a plain round-robin load balancer[^1].
+
+That matters because MCP stopped being a niche developer nicety a while ago. The Tier 1 SDKs (TypeScript, Python, Go, C#) track close to half a billion downloads a month, and both the TypeScript and Python SDKs have crossed one billion total downloads[^1]. Anthropic's December 2025 update counted more than 10,000 active public MCP servers and 97 million plus monthly SDK downloads across the Python and TypeScript SDKs, with ChatGPT, Cursor, Gemini, Microsoft Copilot, and Visual Studio Code adopting the protocol[^2]. The protocol is now the integration surface that lets a team build one server and reuse it across many AI clients.
+
+But here is the uncomfortable part. The spec change fixes scaling. It does not fix the two things that actually burn production teams: server reliability and tool security. The newest data on both is blunt, and it should shape how you adopt MCP, not whether you do.
+
+## What the stateless core actually changes
+
+The old MCP model looked like a connection. A client ran an `initialize`/`initialized` exchange, got back an `Mcp-Session-Id`, and kept that session open over streamable HTTP. That design had a real cost: to scale an MCP server you had to manage sessions, sticky connections, and shared state, exactly the operational complexity most teams did not want on their agent infrastructure.
+
+The new spec retires the handshake and the session header entirely[^1]. Every request is self-describing. The method and tool name travel in the `Mcp-Method` and `Mcp-Name` HTTP headers, so a gateway, rate limiter, or WAF can route and meter on the headers instead of parsing JSON bodies[^1]. List responses from `tools/list`, `prompts/list`, and `resources/list` now carry cache hints (`ttlMs` and `cacheScope`) and a deterministic order, so clients can cache tool catalogs and keep upstream prompt caches stable across reconnects[^1]. If a server genuinely needs to carry state across calls, the recommended pattern is to mint an explicit handle from a tool and have the model pass it back as an argument, which the maintainers argue works better than session state hidden in the transport because the model can see it[^1].
+
+![MCP 2026-07-28 went stateless: the old design kept an initialize handshake, session ID, and a held-open bidirectional stream, while the new design sends each self-describing request with Mcp-Method and Mcp-Name headers, cacheable list results, and no session, so any request can hit any instance behind a load balancer](</diagrams/mcp-stateless-2026-07-28-production-agents/1-stateful-to-stateless.png>)
+
+The knock-on effect is a new extension framework. Tasks move out of the experimental core into a proper `io.modelcontextprotocol/tasks` extension with a poll-based `tasks/get` and a new `tasks/update`, contributed by AWS for long-running agents[^1]. Server-to-client requests like sampling and elicitation were redesigned as Multi Round-Trip Requests (MRTR): a server that needs a confirmation or a missing parameter mid-call returns `resultType: "input_required"` with the requests it needs answered, and the client retries the original call with the answers attached in `inputResponses`[^1]. That is a big deal for safe tool use, because it means a tool can stop and ask before doing something destructive, even over a stateless protocol. Supabase's MCP, which runs stateless, said MRTR finally lets it confirm the cost of a new project or a query that would delete data before acting[^1].
+
+There is also a twelve-month deprecation window worth planning around. Roots, Sampling, and Logging are deprecated, and the legacy HTTP+SSE transport is officially on a one-year offramp[^1]. The security posture got hardened too: authorization servers must return the `iss` parameter per RFC 9207 and clients must validate it before redeeming a code, and Dynamic Client Registration is deprecated in favor of Client ID Metadata Documents (CIMD)[^1].
+
+The vendors lined up on day zero. Amazon Bedrock AgentCore, Cloudflare's Agents SDK, Google Cloud, Microsoft Foundry, Netlify, and Figma all announced support, which tells you the stateless core is not a theory, it is what the big platforms were waiting for[^1].
+
+But here is the thing nobody on the launch page mentions. Scaling the protocol does not make the tools reliable. The protocol can route a million calls to a server that fails forty percent of them.
+
+## The reliability reality the spec does not fix
+
+In the first comprehensive study of MCP ecosystem reliability, Digital Applied stress-tested 100 production MCP servers across 12 task families and 12,000 trials between February and April 2026[^3]. The median server passed only 71 percent of tasks. The top decile cleared 95 percent or better. The bottom decile sat at 38 percent. The distribution is bimodal, not a smooth curve, and the gap is structural, not luck[^3].
+
+The single largest failure cause, 38 percent of all failures, was schema mismatch, a request or response that failed validation against the server's declared schema. That is almost always a hand-rolled wrapper around a third-party API that never validated its inputs against a typed schema[^3]. Latency is tail-dominated: the median tool call is 320ms, but P95 jumps to 1,840ms and P99 reaches 6,200ms, and chains of ten or more calls almost always hit a P95 event[^3]. Tool category predicts reliability too: file-system tools pass at a median 89 percent, while browser-automation tools, which depend on DOM stability, pass at just 47 percent[^3].
+
+Compose that. An agent chain with five tool calls, each at the 71 percent median, succeeds end to end only about 18 percent of the time[^3]. The reliability of your weakest tool is effectively the reliability of the whole agent. That number should scare anyone standing up a production agent: the protocol upgrade fixes your infrastructure, and your tool chain is still what drags your pass rate down.
+
+![MCP server reliability is bimodal: the median server passes 71% of trials, the top decile clears 95%, and the bottom decile sits at 38%, with 38% of failures caused by schema mismatches and browser tools the least reliable category at 47%](</diagrams/mcp-stateless-2026-07-28-production-agents/2-reliability-distribution.png>)
+
+The study's four-stage hardening playbook is the practical takeaway, in order: typed schemas first (they catch most bugs at the boundary), idempotency second (makes retries safe), cancellation third (bounds tail latency so a slow call does not hang the whole agent), and per-tool quotas fourth (protects the upstream APIs you wrap)[^3]. Every top-decile server in the sample shipped all four. Nearly every bottom-decile server shipped none.
+
+## The security reality, straight from the NSA
+
+The spec's move to stateless and the auth hardening are welcome, but the security picture in early 2026 was genuinely bad, and it comes with a government audit attached. Between January and February 2026, researchers filed over 30 CVEs against MCP servers, clients, and infrastructure. The highest-severity finding, CVE-2025-6514 in the widely used mcp-remote proxy, carried a CVSS score of 9.6 and affected more than 437,000 installed environments. By early 2026 researchers had catalogued nearly 7,000 internet-exposed MCP servers, with roughly half operating without any authentication[^4].
+
+The National Security Agency published a dedicated cybersecurity information sheet in May 2026 laying out the design concerns[^5]. The core message: MCP reverses a familiar interaction pattern. Instead of clients requesting data from servers, MCP servers often query and sometimes execute actions for connected clients, and that inversion creates attack paths traditional security tooling was not built to see[^5]. The protocol itself falls short on authentication, authorization, and input validation, and it relies on OAuth-style bearer tokens with no protocol-level token lifecycle management for refresh, revocation, or reuse control[^5].
+
+The attack classes are concrete. Indirect prompt injection, the number one OWASP vulnerability for LLM applications, takes a different character when an agent can act: a malicious instruction embedded in a PDF the agent is asked to summarize can trigger real operations, sending emails, calling APIs, modifying records[^6]. Tool poisoning succeeds because tool descriptions are implicitly trusted, and the GitHub MCP prompt injection succeeded because of an overly broad personal access token[^4]. MCP servers can execute arbitrary code too (the inspector tool CVE-2025-49596 is a remote code execution via crafted messages, fixed in 0.14.1)[^5].
+
+The NSA's recommendations read like classic web security discipline applied to agents. Define trust boundaries between agents, plugins, models, and end users. Validate every tool invocation against well-defined schemas, expected ranges, and the intended execution context. Constrain and sandbox tool execution with seccomp, AppArmor, or SELinux, and follow least privilege so a server that does not need sensitive filesystems or networks is denied them at runtime. Filter and monitor output pipelines, treating every tool's output as untrusted input to the next stage. Instrument for logging and detection, tracking exact parameters, identities, and hashes of results. Track MCP CVEs and keep a versioned inventory of every deployed server. And scan your network for open or unauthenticated MCP servers, since they are often deployed without hardening[^5].
+
+The practical security floor for anyone adopting MCP is tool-level role-based access control, not server-level. A customer support agent should invoke read operations on a CRM server but not delete operations, and a finance agent should query payment records but not trigger outbound transfers[^6]. That distinction cannot be expressed at the server level. Combine that with deny-by-default and explicit per-tool allowlists, and require human approval for irreversible actions, deleting records, modifying access controls, sending external communications, committing financial transactions[^6]. The 2026 spec's incremental scope consent and MRTR elicitation give you the machinery to request only the minimum access each operation needs and to stop and confirm before it acts[^1][^6].
+
+## How we'd adopt it, and how we already run on it
+
+Stepping back, the 2026-07-28 release is a maturation milestone: it makes MCP behave like the rest of the web, stateless, cacheable, routable, and globally scalable[^1]. That is a genuinely good direction, and the tool-integration standard itself was always the right bet. But two years of production experience, ours included, says the protocol is the easy 20 percent.
+
+Our own [agent tooling at scale](/field-notes/multi-agent-orchestration-production-lessons) runs on a registry of tools defined by JSON schema, with structured handoff contracts between stages and a [QA phase gate](/field-notes/ai-generated-code-cicd-guardrails) that blocks and loops work back, per our internal kanban roster. The discipline that keeps our chain accurate is exactly what the reliability study found separates the top decile of MCP servers from the bottom: typed schemas at every boundary, idempotent operations, explicit cancellation, and per-tool limits. MCP does not give you those; it gives you a clean way to expose tools that have them.
+
+For a team adopting MCP today, the sequence we'd recommend is: pick maintained servers over archived ones and apply your code-audit process at the strictest profile[^5]; put an allowlist and tool-level RBAC in front of everything[^6]; treat browser automation as inherently brittle and pair it with retries and error budgets[^3]; require human sign-off on destructive actions[^6]; and wire logging and alerting so you can see a tool call misbehave before a customer does[^5]. Then let the stateless core do its job behind a load balancer, and plan the twelve-month deprecation offramp for HTTP+SSE and the legacy primitives[^1].
+
+MCP is not speculative infrastructure anymore. It is the standard, and the spec finally caught up to what production hosting needs. The teams that win with it will be the ones who remember that the protocol routes calls, and the reliability and security of those calls is still a server-by-server engineering problem.
+
+[^1]: MCP Blog, "The 2026-07-28 Specification," July 28, 2026. [blog.modelcontextprotocol.io](https://blog.modelcontextprotocol.io/posts/2026-07-28/)
+[^2]: Anthropic, "Donating the Model Context Protocol and establishing the Agentic AI Foundation," December 9, 2025. [anthropic.com](https://www.anthropic.com/news/donating-the-model-context-protocol-and-establishing-of-the-agentic-ai-foundation)
+[^3]: Digital Applied, "100 MCP Servers Stress-Tested: Reliability Findings," April 26, 2026. [digitalapplied.com](https://www.digitalapplied.com/blog/mcp-server-reliability-100-server-stress-test-study)
+[^4]: Cloud Security Alliance, "Agentic MCP Security Best Practices Guide v1," March 2026. [labs.cloudsecurityalliance.org](https://labs.cloudsecurityalliance.org/agentic/agentic-mcp-security-best-practices-v1/)
+[^5]: NSA, "Model Context Protocol (MCP): Security Design Considerations for AI-Driven Automation," May 2026. [media.defense.gov](https://media.defense.gov/2026/Jun/02/2003943289/-1/-1/0/CSI_MCP_SECURITY.PDF)
+[^6]: TrueFoundry, "MCP Security Risks & Best Practices: Enterprise Guide," 2026. [truefoundry.com](https://www.truefoundry.com/blog/mcp-security-risks-best-practices)
