@@ -9,40 +9,59 @@
  * Locked decisions (plan 2026-09-14_232914-audio-article-player.md):
  *   - engine Kokoro-82M, ONE narrator (default voice "af_heart")
  *   - audio is a FREE, AUTH-GATED sign-up benefit
- *   - audio lives in a PRIVATE Supabase Storage bucket, streamed through the
- *     authenticated GET /api/audio/[slug] route
+ *   - audio blobs live in a PRIVATE Cloudflare R2 bucket (`adroit-audio`,
+ *     reached over its S3 API) and are served through the authenticated
+ *     GET /api/audio/[slug] route. The Supabase Storage `audio` bucket is the
+ *     generation-side SOURCE bucket (generator + migration tool) only — see
+ *     AUDIO_BUCKET below.
  *   - narration reads each Figure's markdown alt text as the spoken diagram
  *     description (alt IS the accessible figure description already)
  *   - pilot on the 5 most recent articles, backfill separately
  *
- * NO public storage URL is ever emitted. `articles.audioUrl` does not exist;
- * the player always fetches `/api/audio/<slug>` and the route serves the
- * private object server-side after an authenticated session check.
+ * NO public URL and NO signed URL is EVER emitted — not by the route, not as a
+ * fallback (read-path amendment by brainiac, t_61815573, after the R2 migration
+ * in t_f11780b8 / commit 7ada82c). `articles.audioUrl` does not exist; the
+ * player always fetches `/api/audio/<slug>`, and the route reads the private
+ * object server-side with the bucket-scoped R2 credentials after an
+ * authenticated session check.
  */
 
 /* ------------------------------------------------------------------ */
 /*  Storage layout                                                     */
 /* ------------------------------------------------------------------ */
 
-/** Private Supabase Storage bucket that holds narrated article audio. */
+/**
+ * Supabase Storage SOURCE bucket for narrated article audio.
+ *
+ * The GENERATOR (scripts/build-audio.js) uploads here, and
+ * scripts/migrate-audio-to-r2.cjs copies from here into the R2 bucket. This is
+ * NOT the read path: neither /api/audio/[slug] nor its /timings twin touches
+ * Supabase Storage — both read the same keys from Cloudflare R2 with
+ * getR2Object() (src/lib/r2/client.ts). The object bytes are deliberately
+ * retained here only so a rollback stays a config revert.
+ */
 export const AUDIO_BUCKET = "audio" as const;
 
 /** Default (and only) narrator voice for the pilot. Single voice, no selector. */
 export const DEFAULT_VOICE = "af_heart" as const;
 
 /**
- * Object key of one article narration relative to the AUDIO_BUCKET root.
+ * Object key of one article narration, relative to a store root.
  * Scheme: blog/<slug>/<voice>.mp3  (example: blog/agent-eval-infrastructure-2026/af_heart.mp3)
  * One mp3 per published article, keyed by the post slug from src/data/posts.ts.
+ * The SAME key resolves in both stores (Supabase source bucket + R2), which is
+ * why the storage migration needed no change to src/data/audio.ts.
  */
 export type AudioStorageKey = `blog/${string}/${string}.mp3`;
 
 /**
- * Object key of one article's segment-timing manifest relative to the
- * AUDIO_BUCKET root. Scheme: blog/<slug>/<voice>.timing.json
+ * Object key of one article's segment-timing manifest, relative to a store
+ * root. Scheme: blog/<slug>/<voice>.timing.json
  * (example: blog/agent-eval-infrastructure-2026/af_heart.timing.json).
- * Written by engine_kokoro.py + uploaded by build-audio.js so the client can
- * snap a scrolled article to the exact spoken paragraph (Tier C).
+ * Written by engine_kokoro.py + uploaded by build-audio.js (Supabase source
+ * bucket), mirrored to the same key in R2, and read from R2 by the server so
+ * the client can snap a scrolled article to the exact spoken paragraph
+ * (Tier C).
  */
 export type AudioTimingStorageKey = `blog/${string}/${string}.timing.json`;
 
@@ -53,23 +72,25 @@ export type AudioTimingStorageKey = `blog/${string}/${string}.timing.json`;
  *     export const articleAudio: ArticleAudio[] = [...];
  *
  * The page resolves the player via articleAudio.find((a) => a.slug === slug).
- * `storagePath` is the private-bucket key, used ONLY by the /api/audio route
- * when streaming server-side. Public URLs are never constructed from it.
+ * `storagePath` is the private-store key, used ONLY by the /api/audio route
+ * when reading the object server-side. No public URL and no signed URL is ever
+ * constructed from it.
  */
 export interface ArticleAudio {
   /** Article slug; must match a slug in src/data/posts.ts and content/blog/<slug>.mdx. */
   slug: string;
   /** Kokoro voice id of the narration. Single narrator; DEFAULT_VOICE for the pilot. */
   voice: string;
-  /** Object key in the PRIVATE 'audio' bucket: blog/<slug>/<voice>.mp3. */
+  /** Object key of the narration: blog/<slug>/<voice>.mp3 (same key in the Supabase source bucket and in R2). */
   storagePath: AudioStorageKey;
   /**
    * Optional object key of the segment-timing manifest (Tier C exact
    * paragraph scroll-sync): blog/<slug>/<voice>.timing.json.
    * Absent for articles generated before timing capture landed; the client
    * degrades gracefully (no Follow-along) when it is missing. Like storagePath
-   * it is a bucket key ONLY — never serialized to the client; the manifest is
-   * served by the authed GET /api/audio/<slug>/timings route.
+   * it is a private-store key ONLY — never serialized to the client; the
+   * manifest is read from R2 and served by the authed GET /api/audio/<slug>/timings
+   * route.
    */
   timingsStoragePath?: AudioTimingStorageKey;
 }
@@ -104,8 +125,8 @@ export interface AudioRouteContext {
 
 /**
  * Response matrix for GET /api/audio/<slug>. The route is DYNAMIC (it depends
- * on the visitor's session), does NOT emit a public URL, and streams the
- * private object back as audio/mpeg with a private cache control:
+ * on the visitor's session), does NOT emit a public or signed URL, and streams
+ * the private object back as audio/mpeg with a private cache control:
  *
  *   200  audio/mpeg, "Cache-Control: private, max-age=3600"
  *        signed-in + slug present in articleAudio + object retrievable.
@@ -113,11 +134,28 @@ export interface AudioRouteContext {
  *   404  unknown slug (not in articleAudio) OR private object missing.
  *
  * Auth resolution: getSupabaseServerClient().auth.getUser() (HttpOnly cookie,
- * same mechanism as every other authed route). Authorized-bucket read uses
- * getSupabaseServiceClient().storage.from(AUDIO_BUCKET).download(storagePath).
- * Preferred body path streams the ArrayBuffer; if a buffered response is
- * impractical on this Next release, fall back to a server-minted short-lived
- * signed download URL (accessible only because the authed server minted it).
+ * same mechanism as every other authed route).
+ *
+ * Object read: getR2Object(storagePath) from src/lib/r2/client.ts — an S3
+ * GetObject against the PRIVATE Cloudflare R2 bucket `adroit-audio` (env
+ * R2_BUCKET), with bucket-scoped credentials (Object Read on that one bucket,
+ * ListBuckets denied by design), path-style addressing and region "auto". The
+ * bytes are fetched INSIDE the handler and returned as fixed `audio/mpeg`; the
+ * object never leaves the server as a URL. `getR2Object` returns null for a
+ * missing key (→ 404) and throws on any other failure (→ the handler fails
+ * closed to 401).
+ *
+ * NO public URL AND NO SIGNED URL, EVER — including as a fallback. The
+ * migration-era note that allowed a server-minted short-lived signed download
+ * URL is REVOKED: a signed URL puts the blob behind a bearer token that
+ * outlives the session check, so the buffered server-side read is the only
+ * sanctioned body path. Do not add getPublicUrl / presign anywhere.
+ *
+ * Range: the route additionally honors a single HTTP byte range and answers
+ * 206 + Content-Range (416 for an unsatisfiable range) — see the route header
+ * for the exact rules (If-Range and malformed ranges degrade to a full 200).
+ * This type enumerates the auth/presence outcomes the player depends on; 206
+ * and 416 are transport-level details of a successful read.
  */
 export type AudioRouteResponse =
   | { status: 200; contentType: "audio/mpeg"; cacheControl: "private, max-age=3600" }
