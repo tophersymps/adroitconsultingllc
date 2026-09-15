@@ -1,0 +1,126 @@
+---
+title: "OmniStudio DM-8: Data Mapper Best Practices"
+slug: day-37-dm-8-data-mapper-best-practices
+series: omni-studio-cert
+lesson: 37
+excerpt: "Distill the Data Mapper domain into the five habits that separate a fragile mapper from a dependable one: secure it first (field-level security, required permission, and avoiding raw SOQL where FLS matters), parameterize inputs so a mapper becomes a reusable artifact, shape outputs deliberately so the output mapping is the contract, test with sample JSON before any consumer depends on it, and optimize for performance and reuse across OmniScripts, Integration Procedures, and FlexCards. Learn why a targeted, well-named, security-checked mapper beats a Swiss Army knife, work a full build of a reusable case lookup, and sidestep the exam traps where security is skipped, inputs are hardcoded, or sample-JSON testing never happens."
+date: "September 15, 2026"
+author: "Adroit Consulting"
+readTime: "17 min read"
+tags: [OmniStudio, DataMappers]
+---
+
+Every lesson in this domain has added one piece of the Data Mapper picture. Lesson 30 named the four interface types. Lesson 31 filtered, lesson 32 hit the fast path, lesson 33 wrote, lesson 34 transformed, lesson 35 computed, and lesson 36 turned the output mapping into a contract. [^1][^2][^7] Requirement DM-8 asks you to step back and describe best practices for Data Mappers. [^1] That is not another mechanic. It is a judgment lens over all the mechanics you already know. [^1][^3]
+
+Best practices exist because the mechanics are easy to misuse. A Data Mapper that reads a record and writes a payload is child's play to build. A Data Mapper that is secure, reusable, correctly shaped, tested, and fast is a different artifact, and it is the one the exam wants you to recognize. [^1][^3] The requirement's phrasing, "describe best practices," means you should be able to state, in a few habits, what makes a mapper dependable and why each habit matters. [^1][^4]
+
+Compress the domain into five habits and the whole requirement fits in a hand. Keep security first, so a mapper only ever hands out what the caller is allowed to see. [^1][^4] Parameterize inputs, so a mapper is a reusable tool and not a hardcoded one-off. [^1][^5] Shape outputs deliberately, so the output mapping is the contract every consumer binds against. [^1][^3][^7] Test with sample JSON, so a mapping bug dies in the designer instead of in production. [^7] And keep performance and reuse in view, so one well-built mapper serves many callers without dragging the server down. [^2][^3] Hold those five and the DM-8 questions are nearly free. [^1]
+
+## Deep Dive
+
+### Security first: respect FLS and CRUD, and prefer a mapper over raw SOQL
+
+Start with the definition. Field-level security, FLS, is the platform rule that limits which fields an individual user can read or edit. [^4] CRUD, for create, read, update, and delete, is the set of record-level operations a user may perform. [^1] Together they are the access boundary that decides whether a caller may see a sensitive field and whether they may write to a record at all. [^4]
+
+The best practice is to make that boundary a first-class design concern, not an afterthought. Data Mappers have explicit security settings, and the exam's point is that you lean on them rather than bypassing them. [^1][^4] Three settings anchor the story. The Required Permission field controls who can run a Data Mapper; leave it blank and all users can run it unless a default applies, which is rarely what you want. [^7][^4] The DefaultRequiredPermission setting sets that default at the org level when the field is blank. [^4] And the EnforceDMFLSAndDataEncryption setting, when enabled in the Omni Interaction Configuration, automatically enforces field-level security for all Data Mappers. [^4] A fourth setting, CheckCachedMetadataRecordSecurity, performs a record-level security check on cached metadata, at a small cost to the caching benefit, and is off by default. [^4]
+
+Two claims follow and both are exam material. Field-level security for Data Mappers is something you deliberately enable and verify, not something that magically holds everywhere. [^4] And the reason to prefer a Data Mapper over raw SOQL wherever FLS matters is that raw SOQL, issued without request, does not apply sharing rules or field-level security the way a configured mapper does. [^1][^4] When a quiz asks which tool to prefer when field-level security or transformation is required, the answer is the Data Mapper: it is the component built to respect those controls and reshape the data at the same time. [^1][^4][^7]
+
+The "why it matters" is concrete. A service rep looking up a case must not see a protected field on the account behind it unless their profile allows that field. [^1][^2] A Load that writes an Opportunity must not create a record the caller has no right to create. [^8] You get that protection by choosing the mapped path and by checking its security settings before you ship it, not by writing a query that runs in an unchecked context. [^1][^4] Security first means the mapper is the secure choice, and the careful reading is that you verify the enforcement switch is on. [^4]
+
+### Parameterize inputs: filters and keys come from parameters, not literals
+
+The second habit is about how a mapper gets its filter values. An Extract needs a way to say which records to return. [^2][^5] The wasteful version bakes a specific value into the mapper: it filters on a literal account Id, so the mapper only ever works for that one record and a new mapper is needed for every other account. [^1][^5] The reusable version names an input parameter instead. [^1][^5] The calling component, an OmniScript or an Integration Procedure, supplies the value at run time, and the mapper applies it as the filter. [^2]
+
+That shift is the heart of the reuse habit. Input parameters for filters and keys turn a one-off into an artifact that any caller can drive. [^1][^5] The classic example is the case lookup. A service rep enters a case number on a screen, and an OmniScript calls an Extract that filters on `inputCaseNumber`, an input parameter, rather than on a literal `5000`. [^2] The same mapper serves an edit form and a read-only details view because neither one is tied to a fixed value. [^2][^7] Add a Load and the pattern extends: lookup values that resolve an existing record come from the input JSON path, set by the caller, not from a hardcoded Id. [^8]
+
+Two failure modes come straight from the exam traps and they both live here. A mapper with a hardcoded Id is not reusable, so the answer to any question about making an Extract reusable across callers is input parameters for filters and keys. [^1][^5] And a query that must page is best driven by values, paging by an account Id or a contact last name from the caller, again so the page boundary is a parameter, not a re-write. [^2] If you remember one line from this habit it is this: the parameter is the seam that makes a mapper a tool instead of a one-off. [^1][^2][^5]
+
+### Shape outputs deliberately: the output mapping is the contract
+
+Lesson 36 built this habit in full, so here it is as a habit rather than a mechanism. Design the output mapping as the contract: rename, nest, and compute in the mapper, not in consumers. [^1][^7] The mapper is the one place that decides which keys exist, what type each holds, how nested the structure is, and how lists are formed. [^1][^3] A FlexCard that binds to `customer.firstName` must receive that key spelled exactly that way, and renaming it in the output mapping is the single fix that lands across every caller at once. [^1][^7]
+
+The temptation is to shape the output like the source object, every field carrying its Salesforce name and its source nesting. [^1] Resist it. The consumer built against its own expected shape, and the mapping exists to bridge the gap. [^1][^3] Name the output path deliberately, set the output data type so a currency stays a currency and a list stays a list, and hold the name stable once it is published. [^3][^7] A deliberately shaped mapper is a stable contract; an accidentally shaped mapper is a series of bindings fighting the source. [^1][^7]
+
+### Test with sample JSON: verify before you wire a consumer
+
+The third distinct best practice is testing, and it is the one the exam traps most want you to honor. [^7] A mapping bug rarely announces itself as a bug. It surfaces as a FlexCard field that renders empty, a document template with a missing section, or a Load that writes an unexpected value. [^1][^7] All of those failures share a root cause: nobody exercised the mapper with realistic input before the consumer depended on it. [^7]
+
+The mechanism is the Preview tab in the Data Mapper Designer. [^7] You select Preview, paste sample JSON into the input pane, execute, and read the response. [^5][^7] The discipline is to test more than the happy path. Paste a well-formed record and confirm the output matches the expected structure exactly, key for key. [^7] Paste a minimized payload that is missing optional fields and confirm the mapper handles the nulls without erroring. [^5][^7] Throw edge values at it, boundary dates, decimal formats, empty lists, and check what comes back. [^7] Compare the response to your expected template and fix discrepancies in the mapping before any OmniScript or FlexCard ever calls it. [^1][^7]
+
+Skipping this step is a trap the exam names directly: without sample-JSON testing, mapping bugs reach production. [^7] The preview is fast and it runs in the designer, so the cost of testing is small and the cost of skipping is a defect in the hands of a user. Test with sample JSON before you wire consumers, and you remove an entire class of late, confusing failures. [^1][^7]
+
+### Performance: filter early, select only what you need, and prefer the fast path
+
+Performance in Data Mappers is a set of small, deliberate choices, and the exam wants you to recognize the good ones. [^1][^3][^7] The vector runs backward through the data: filter early so the mapper returns fewer records, and select only the fields the operation actually needs. [^2][^7] Salesforce states the reuse rule directly: create targeted Data Mappers that extract or load only the data needed for one operation. [^3][^7] A mega-mapper that pulls every field of every object is easy to justify and costly to run, and it blurs into the consumer-shape problem of lesson 36. [^1][^3]
+
+Three concrete performance facts are likely exam material. Keep the number of Salesforce objects a mapper processes to three or fewer, because each additional object adds server work. [^3][^7] Make sure filtering and sorting operations run on indexed fields, and note that Id and Name are always indexed, so those are safe filter and sort keys. [^3] And for single-object reads, prefer a Turbo Extract, which has the advantages of simpler configuration and better runtime performance over a standard Extract because it skips the heavier mapping machinery. [^2][^6] When a question offers Turbo Extract for a simple single-object read, that is the performant, exam-preferred choice. [^2][^6]
+
+Caching is the last performance tool. Store frequently accessed, infrequently updated data in the mapper cache so repeated calls do not re-run the same query. [^3] That is exactly the "cache expensive results" habit from the deep dive: it spends a little storage to save a lot of repeated work, and it is a documented best practice. [^3] Order the habits by impact: filter early, select only what you need, keep objects few, filter and sort on indexed fields, use the fast path for single objects, and cache what changes slowly. [^2][^3][^7]
+
+### Reuse: one well-built mapper serves many callers
+
+The last habit ties the others together. A well-built mapper is a shared artifact: the same Data Mapper supplies data to OmniScripts and FlexCards, typically through Integration Procedures, and it is reused rather than rewritten per caller. [^2][^7] Reuse is the payoff for parameterizing inputs and shaping outputs deliberately, and it is the antidote to duplicating data logic across five components. [^2][^3]
+
+The documentation's naming rule protects reuse. Use unique names for Data Mapper response nodes so a piece of data can be precisely referenced across components without ambiguity. [^3] When two mappers both emit a node called `Customer` with different meanings, a caller that references `Customer` cannot be sure what it will get. [^3][^7] Unique, deliberate names keep the contract unambiguous and prevent a data overwrite or merge error downstream. [^3] One targeted mapper per operation, named with a clear prefixVerbObjectDetail pattern, describes itself and slots cleanly into the service layer that Integration Procedures orchestrate. [^3][^7]
+
+Reuse is also a correctness argument. The data logic of a domain, which fields a case lookup returns, how an account array is shaped, where a total is computed, lives in one place. [^2][^3] A consumer change does not fork the logic; it calls the same mapper, and every caller receives the same corrected contract at once. [^1][^2] When the exam asks why one well-built mapper beats several copied ones, the answer is that duplication multiplies bugs, while reuse concentrates the definition and the fix. [^2][^3][^7]
+
+## Configuration Walkthrough
+
+Build one concrete, reusable mapper and let the habits do the speaking. The case: a case-lookup Extract that an edit OmniScript and a read-only FlexCard both call, returning a consumer-shaped payload, tested before a single caller is wired. [^1][^2][^7] The numbered steps are the best practice checklist in action.
+
+1. **Set security before anything else.** Create the Extract and immediately set its Required Permission field to the roles, profiles, permission sets, or custom permissions allowed to run it, so it does not fall open to every user. [^7][^4] Check that the org-level DefaultRequiredPermission provides a sensible fallback and that EnforceDMFLSAndDataEncryption is enabled so field-level security applies automatically. [^4] This is security first: spend the first minute of the build deciding who can run the mapper and whether FLS is on, not the last. [^4]
+
+2. **Parameterize the filter.** The consumer needs a case by its number, so define an input parameter, say `inputCaseNumber`, and filter on it. [^2][^5] Do not type `5000` as a literal. [^5] When the OmniScript and the FlexCard call the mapper, each supplies its own case number, and the same mapper serves both without a re-write. [^2][^7] This is the seam that makes the mapper reusable. [^1][^5]
+
+3. **Shape the output deliberately.** Write the target payload before mapping: `{"caseNumber": "...", "subject": "...", "account": {"name": "...", "site": "..."}, "priority": "..."}`. [^1][^7] Map each source field into that structure, renaming and nesting in the Output tab so the FlexCard binds to `account.name`, not to a source-named field. [^1][^7] Give every output node a unique, deliberate name and a compatible output data type, currency where currency is expected, a date type where a date is returned. [^3][^7] This is the contract, set once. [^1][^7]
+
+4. **Test with sample JSON before wiring consumers.** Open the Preview tab, paste a full case payload, execute, and confirm the response matches the template from step three, key for key. [^7] Paste a payload with missing optional fields and confirm the nulls come back clean instead of erroring. [^5][^7] Paste an edge value, a case with no account or with a long subject, and check the output still holds. [^7] Fix anything the mappings got wrong right here, in the designer, before the OmniScript or FlexCard ever calls it. [^1][^7]
+
+5. **Apply the performance and reuse habits.** The mapper reads one object, a single-object read, so a Turbo Extract would be the faster choice if formulas and complex output mappings were off the table; here, where the output nests and renames, stay with the standard Extract and accept the trade. [^2][^6] Filter on the indexed Id-backed lookup, and if the response is read often and changes rarely, turn on caching to store the frequently accessed result. [^3] Keep the mapper to one operation and name it with the prefixVerbObjectDetail pattern, so it reads as the reusable artifact it is. [^3][^7]
+
+That is the full build. The steps worth re-reading are one, two, and four. Security is the boundary you set first, the parameter is the seam that makes the mapper reusable, and preview testing is the gate that keeps mapping bugs out of production. [^1][^4][^5][^7] Build a mapper this way and it earns its place as a component that OmniScripts, Integration Procedures, and FlexCards all trust. [^2][^7]
+
+## Exam Traps
+
+- **Using SOQL where field-level security matters.** Raw SOQL does not apply sharing rules and field-level security the way a configured Data Mapper does, and components built on unchecked queries have leaked protected fields. [^1][^4] Where FLS matters, choose the Data Mapper with its security settings verified, not a raw query running in an unchecked context. [^1][^4][^7]
+
+- **Hardcoded inputs make a mapper a one-off.** A filter or lookup key baked in as a literal only ever works for that value, so the mapper cannot be reused by another caller. [^1][^5] Use input parameters for filters and keys so the mapper becomes a reusable artifact any caller can drive. [^1][^2][^5]
+
+- **Skipping sample-JSON testing.** A mapper shipped without a preview pass carries its mapping bugs to production, where they surface as an empty FlexCard field, a broken document template, or a wrong write. [^1][^7] Test happy path, nulls, and edge values in the Preview tab before any consumer depends on the output. [^5][^7]
+
+## Exam Tip
+
+Compress DM-8 into the five habits of good Data Mappers. Secure them first: respect FLS and CRUD, verify Required Permission and EnforceDMFLSAndDataEncryption, and prefer a Data Mapper over raw SOQL wherever field-level security matters. [^1][^4][^7] Parameterize inputs so filters and keys come from parameters, making the mapper reusable. [^1][^5] Shape outputs deliberately so the output mapping is the contract. [^1][^7] Test with sample JSON, happy path, nulls, and edge values, in the Preview tab before wiring consumers. [^5][^7] Then keep performance and reuse in view: filter early, select only what you need, keep objects to three or fewer, filter and sort on indexed fields, prefer Turbo Extract for single-object reads, cache what changes infrequently, and let one well-built mapper serve every OmniScript, Integration Procedure, and FlexCard. [^2][^3][^6][^7] Secure, parameterized, contract-shaped, tested, reused. That phrase is the five-part answer, and each part ties to one of the deep-dive habits the exam questions probe. [^1][^4]
+
+## Try It
+
+Open the Data Mapper Designer in a sandbox and rebuild the case lookup from the walkthrough, but make it fail before you make it work. [^7] First create an Extract with no Required Permission and a literal Id in the filter, run it, and note both problems at once: any user could run it, and it only ever returns that one case. [^4][^5] Then convert the literal to an input parameter named `inputCaseNumber`, call the Extract from two throwaway callers each passing a different case number, and watch the same mapper serve both. [^2][^5] That is the parameterization habit made physical. [^1][^5]
+
+Then test with real stakes. Map an output that nests an account under `account` and run the Preview with a payload that has no account, and an edge case with a long subject and an unusual priority value, and read what comes back for each. [^7] Confirm the happy path matches your template exactly and the null and edge cases come back clean. [^5][^7] Finally, look at the security settings for the mapper you just built and say out loud who is allowed to run it, what the org default is, and whether FLS enforcement is on. [^4] If you had to reset that mapper to remove a security hole you would know exactly which fields to change. [^4]
+
+## What's Next
+
+You have now compressed the Data Mapper domain into its best practices: security first with FLS and required permission verified, input parameters for filters and keys, the output mapping as the contract, sample-JSON testing before consumers, and performance and reuse as steady habits. [^1][^3][^4][^5][^7] Lesson 38 leaves the Data Mapper family and moves into the FlexCard domain. That lesson, Resolve FlexCard Display & State Issues, turns to the read-only cards that surface Salesforce data on record pages: how to diagnose and fix a FlexCard that renders wrong, fails to maintain its state, or binds a value that does not display as expected. [^2] The contract-shaping and testing habits you just built are exactly the tools that hunt down a FlexCard display defect, which is why they are worth keeping close. [^1][^2][^7]
+
+## Related Requirements
+
+- Data Mapper Fundamentals & Source/Target Types, lesson 30 of 46 (DM-1)
+- Extract Interface: Multi-Object, Filters & Parameters, lesson 31 of 46 (DM-2)
+- Turbo Extract Interface, lesson 32 of 46 (DM-3)
+- Load Interface: Multi-Object Writes, lesson 33 of 46 (DM-4)
+- Transform Interface & Document Generation, lesson 34 of 46 (DM-5)
+- Formulas in Data Mappers, lesson 35 of 46 (DM-6)
+- Mapping Source & Target Structures, lesson 36 of 46 (DM-7)
+
+## References
+
+[^1]: [Omnistudio Data Mappers (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_dataraptors.htm&type=5)
+[^2]: [Discover Data Mapper Types and Functions, Trailhead (Omnistudio DataRaptors module)](https://trailhead.salesforce.com/content/learn/modules/omnistudio-dataraptors/discover-dataraptor-types)
+[^3]: [Omnistudio Data Mapper Best Practices (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_dataraptor_best_practices.htm&type=5)
+[^4]: [Omnistudio Data Mapper and Integration Procedure Security Settings, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_and_integration_procedure_security_settings_56587.htm&language=en_US&type=5)
+[^5]: [Omnistudio Data Mapper Extract Overview (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_extract_overview.htm&language=en_US&type=5)
+[^6]: [Omnistudio Data Mapper Turbo Extract Overview (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_turbo_extract_overview.htm&language=en_US&type=5)
+[^7]: [Designing Data Mappers for Optimal Performance, Salesforce Trailhead](https://trailhead.salesforce.com/content/learn/modules/omnistudio-data-mapper-fundamentals/design-data-mappers-for-performance)
+[^8]: [Omnistudio Data Mapper Load Overview (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_load_overview.htm&language=en_US&type=5)

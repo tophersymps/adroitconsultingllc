@@ -8,6 +8,1250 @@ import { LearnLesson, LearningSeries } from "./types";
 /** All series, sorted by newest lesson date DESC (ties → slug asc). Empty dirs included with lessons: []. */
 export const learnSeries: LearningSeries[] = [
   {
+    "slug": "omni-studio-cert",
+    "name": "OmniStudio Developer Certification",
+    "description": "A deep dive for the Salesforce Certified OmniStudio Developer exam. One official exam-guide requirement per day, with config walkthroughs, exam traps, and practice questions.",
+    "gradient": "from-red to-rose-600",
+    "lessons": [
+      {
+        "slug": "day-01-f1-omnistudio-solution-and-industry-use-cases",
+        "title": "OmniStudio F-1: OmniStudio Solution & Industry Use Cases",
+        "series": "omni-studio-cert",
+        "lesson": 1,
+        "excerpt": "Describe the OmniStudio solution as it applies to common customer use case scenarios in different industries (telco, energy, healthcare, public sector, etc.). Day 1 of the OmniStudio Developer exam prep.",
+        "date": "August 03, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "6 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-02-f2-project-needs-requirements-assumptions-risks-const",
+        "title": "OmniStudio F-2: Project Needs: Requirements, Assumptions, Risks, Constraints",
+        "series": "omni-studio-cert",
+        "lesson": 2,
+        "excerpt": "Determine a project's needs by evaluating a customer's requirements, assumptions, risks, and constraints. Day 2 of the OmniStudio Developer exam prep.",
+        "date": "August 04, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "6 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-03-f3-managed-package-vs-standard-runtime-upgrades",
+        "title": "OmniStudio F-3: Managed Package vs Standard Runtime; Upgrades",
+        "series": "omni-studio-cert",
+        "lesson": 3,
+        "excerpt": "Explain Managed Package Runtime vs. Standard Runtime, Automatic Upgrades, and Manual Intervention Upgrade. Day 3 of the OmniStudio Developer exam prep.",
+        "date": "August 05, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "6 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-04-f4-licensing-permission-set-licenses-permission-sets",
+        "title": "OmniStudio F-4: Licensing, Permission Set Licenses & Permission Sets",
+        "series": "omni-studio-cert",
+        "lesson": 4,
+        "excerpt": "Explain OmniStudio license requirements, Permission Set licenses and Permission Sets. Day 4 of the OmniStudio Developer exam prep.",
+        "date": "August 06, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "6 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-05-f5-implementation-toolchain-sfcli-vbt-migration",
+        "title": "OmniStudio F-5: Implementation Toolchain: SFCLI, VBT, Migration",
+        "series": "omni-studio-cert",
+        "lesson": 5,
+        "excerpt": "Describe the tools required to complete the end-to-end implementation process (SFCLI, VBT, Migration, etc.). Day 5 of the OmniStudio Developer exam prep.",
+        "date": "August 07, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "6 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-06-f-6-testing-versioning-cloning",
+        "title": "OmniStudio F-6: Testing, Versioning & Cloning Components",
+        "series": "omni-studio-cert",
+        "lesson": 6,
+        "excerpt": "Explain testing, versioning, and cloning through OmniStudio components. This covers save vs. publish, cloning workflows, and version snapshots for deployment.",
+        "date": "August 8, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-07-fc-1-flexcard-data-sources-testing-json",
+        "title": "OmniStudio FC-1: FlexCard Data Sources & Testing JSON",
+        "series": "omni-studio-cert",
+        "lesson": 7,
+        "excerpt": "Configure data sources such as SOQL, Data Mapper, Integration Procedure, Custom, etc. and test resulting JSON structure.",
+        "date": "August 9, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "8 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-08-fc-2-single-multi-level-cards-layouts-repeaters",
+        "title": "OmniStudio FC-2: Single/Multi-Level Cards, Layouts & Repeaters",
+        "series": "omni-studio-cert",
+        "lesson": 8,
+        "excerpt": "Construct single and multi-level FlexCards, organizing data using layouts, and repeaters.",
+        "date": "August 10, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "6 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-09-fc-3-binding-components-configuring-properties",
+        "title": "OmniStudio FC-3: Binding Components & Configuring Properties",
+        "series": "omni-studio-cert",
+        "lesson": 9,
+        "excerpt": "Bind essential components to construct FlexCards and configure their properties.",
+        "date": "August 11, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "6 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-10-fc-4-complex-card-actions-launch-fire-update",
+        "title": "OmniStudio FC-4: Complex Card Actions (Launch, Fire, Update)",
+        "series": "omni-studio-cert",
+        "lesson": 10,
+        "excerpt": "Define and implement complex card actions, including launching OmniScripts, firing events, and updating other components.",
+        "date": "August 12, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "6 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-11-fc-5-advanced-flexcard-properties",
+        "title": "OmniStudio FC-5: Advanced FlexCard Properties",
+        "series": "omni-studio-cert",
+        "lesson": 11,
+        "excerpt": "Configure advanced FlexCard properties: Event Listeners, Session Variables, Public Attributes, multi-language, child FlexCards, and custom LWC integration.",
+        "date": "August 13, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "6 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-12-fc-6-flexcard-styling-themes",
+        "title": "OmniStudio FC-6: FlexCard Styling & Themes",
+        "series": "omni-studio-cert",
+        "lesson": 12,
+        "excerpt": "Control FlexCard appearance two ways: element-level inline styling for one-off tweaks and shared themes for consistent branding.",
+        "date": "August 14, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "5 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-13-fc-7-conditional-rendering-with-states",
+        "title": "OmniStudio FC-7: Conditional Rendering with States",
+        "series": "omni-studio-cert",
+        "lesson": 13,
+        "excerpt": "Use FlexCard states and element-level conditions to show, hide, or restyle content when expressions against card data evaluate true.",
+        "date": "August 15, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "5 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-14-fc-8-embedding-flexcards-across-channels",
+        "title": "OmniStudio FC-8: Embedding FlexCards Across Channels",
+        "series": "omni-studio-cert",
+        "lesson": 14,
+        "excerpt": "Embed one FlexCard definition across Lightning pages, Experience Cloud sites, OmniScripts, and mobile, and design it for reuse with public attributes.",
+        "date": "August 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "5 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-15-fc-9-flexcard-best-practices",
+        "title": "OmniStudio FC-9: FlexCard Best Practices",
+        "series": "omni-studio-cert",
+        "lesson": 15,
+        "excerpt": "Validate your JSON, keep data sources lean, test every state and channel, and respect FLS. That combination is what separates a card that survives production from one that goes blank.",
+        "date": "August 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "5 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-16-os-1-omniscript-elements-dynamic-interactions",
+        "title": "OmniStudio OS-1: OmniScript Elements & Dynamic Interactions",
+        "series": "omni-studio-cert",
+        "lesson": 16,
+        "excerpt": "OmniScripts are guided journeys built from named elements that all land in one data JSON. If you understand that JSON contract, formulas, actions, and debugging all follow. If you don't, nothing else works.",
+        "date": "August 18, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "6 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-17-os-2-child-omniscripts-flexcards-custom-lwcs",
+        "title": "OmniStudio OS-2: Child OmniScripts, FlexCards & Custom LWCs",
+        "series": "omni-studio-cert",
+        "lesson": 17,
+        "excerpt": "Child OmniScripts handle reuse, FlexCards handle display, and custom LWCs handle custom UI. Pick the right embed for the job, wire its data back into the script JSON, and complex flows compose cleanly.",
+        "date": "August 19, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "5 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-18-os-3-omniscript-styling-themes",
+        "title": "OmniStudio OS-3: OmniScript Styling & Themes",
+        "series": "omni-studio-cert",
+        "lesson": 18,
+        "excerpt": "Themes define the design system across OmniScripts; element-level styling handles one-off exceptions. Use the theme as the source of truth, override sparingly, and verify responsive widths on desktop and mobile.",
+        "date": "August 20, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "5 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-19-os-4-advanced-omniscript-properties",
+        "title": "OmniStudio OS-4: Advanced OmniScript Properties",
+        "series": "omni-studio-cert",
+        "lesson": 19,
+        "excerpt": "Configure the advanced properties that carry an OmniScript beyond a bare flow: multi-language translations, Save Options for draft-and-resume, Knowledge Articles for in-flow help, and the Messaging Framework for SMS and email. Match the property to the scenario.",
+        "date": "August 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "5 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-20-os-5-embedding-omniscripts-across-channels",
+        "title": "OmniStudio OS-5: Embedding OmniScripts Across Channels",
+        "series": "omni-studio-cert",
+        "lesson": 20,
+        "excerpt": "One OmniScript definition embeds across Lightning pages, Experience Cloud, mobile, and web. Pass record context so it opens pre-populated, drop it in via the auto-generated LWC wrapper, and verify context per channel.",
+        "date": "August 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "5 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-21-os-6-omniscript-best-practices",
+        "title": "OmniStudio OS-6: OmniScript Best Practices",
+        "series": "omni-studio-cert",
+        "lesson": 21,
+        "excerpt": "Build OmniScripts that survive contact with users and production. Compose from child scripts instead of one giant flow, name elements as if they were JSON keys (because they are), test every branch in debug mode before publish, and push heavy orchestration into Integration Procedures.",
+        "date": "August 30, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-22-ip-1-ip-design-server-side-orchestration",
+        "title": "OmniStudio IP-1: IP Design, Server-Side Orchestration",
+        "series": "omni-studio-cert",
+        "lesson": 22,
+        "excerpt": "Learn what an Integration Procedure actually is: a declarative, server-side process that runs many actions in one server call. Design the input and output JSON contracts before you add a single action, order actions so output feeds input, and know why this one-call design is what makes IPs the right data source for FlexCards and OmniScripts.",
+        "date": "August 31, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-23-ip-2-ip-action-types-groups-data-mapper-http-remote-sub",
+        "title": "OmniStudio IP-2: IP Action Types: Groups, Data Mapper, HTTP, Remote, Sub-IP",
+        "series": "omni-studio-cert",
+        "lesson": 23,
+        "excerpt": "Learn the building blocks you place inside an Integration Procedure: Groups for structure and conditional execution, Data Mapper actions for the data layer, HTTP actions for REST callouts, Remote actions for Apex logic, and Sub-IPs for composition. Map each action to its job, wire outputs to inputs with JSON paths, and avoid the auth, reuse, and mapping traps the exam tests.",
+        "date": "September 1, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-24-ip-3-conditional-logic-loops-branching-in-ips",
+        "title": "OmniStudio IP-3: Conditional Logic, Loops, and Branching in Integration Procedures",
+        "series": "omni-studio-cert",
+        "lesson": 24,
+        "excerpt": "Control the execution path of an Integration Procedure. Use Execution Conditional Formulas to gate individual actions, Loop Blocks to iterate over arrays so per-item work repeats, and Conditional Blocks to route between distinct input states. Read the IP's data JSON, shape it so conditions stay simple, and test every branch with representative input. This is requirement IP-3, one of two pattern-heavy requirements in the Integration Procedures domain.",
+        "date": "September 2, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-25-ip-4-chainable-integration-procedures",
+        "title": "OmniStudio IP-4: Chainable Integration Procedures",
+        "series": "omni-studio-cert",
+        "lesson": 25,
+        "excerpt": "Split long-running Integration Procedures into multiple transactions with chaining. Learn why one synchronous transaction blows governor limits, how the Chainable, Queueable Chainable, and Chain On Step settings decide when a step continues in a fresh transaction, and why every link in a chain needs its own error handling because rollback does not carry across transactions. This is requirement IP-4 in the Integration Procedures domain.",
+        "date": "September 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-26-ip-5-caching-in-integration-procedures",
+        "title": "OmniStudio IP-5: Caching in Integration Procedures",
+        "series": "omni-studio-cert",
+        "lesson": 26,
+        "excerpt": "Determine and configure caching mechanisms within Integration Procedures to maximize performance. Learn what OmniStudio actually caches (metadata versus data), how Org Cache and Session Cache split shared versus per-user scope, how Time To Live controls freshness, and why cache keys decide whether a repeated request gets the right stored answer. This is requirement IP-5 in the Integration Procedures domain.",
+        "date": "September 4, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-27-ip-6-exception-handling-try-catch-rollback",
+        "title": "OmniStudio IP-6: Exception Handling: Try/Catch & Rollback",
+        "series": "omni-studio-cert",
+        "lesson": 27,
+        "excerpt": "Implement robust exception handling in Integration Procedures with Try/Catch blocks and proper rollback. Learn how a Try/Catch Block wraps risky work, what the Catch branch must do, why Load and write actions belong after risky calls, and how the Response Action returns a controlled error shape to callers. This is requirement IP-6 in the Integration Procedures domain.",
+        "date": "September 5, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-28-ip-7-response-action-the-ip-output-contract",
+        "title": "OmniStudio IP-7: Response Action: The IP Output Contract",
+        "series": "omni-studio-cert",
+        "lesson": 28,
+        "excerpt": "Configure the Response Action to return specific data and control every byte an Integration Procedure sends back. Learn why the Response Action is the contract every caller depends on, how to map success data, computed fields, and a consistent error branch, why only what you map gets returned, and how to test the response shape before any FlexCard or OmniScript is wired to it. This is requirement IP-7 in the Integration Procedures domain.",
+        "date": "September 6, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-29-ip-8-integration-procedure-best-practices",
+        "title": "OmniStudio IP-8: Integration Procedure Best Practices",
+        "series": "omni-studio-cert",
+        "lesson": 29,
+        "excerpt": "Describe the best practices that turn a working Integration Procedure into a reliable, maintainable one. Learn why focused, well-named IPs beat monolithic ones, how stable contracts with error branches make IPs dependable building blocks, where reusable data logic belongs, when chaining is the right call, and why testing each action before you promote it prevents the failures that slip into production. This is the final requirement in the Integration Procedures domain.",
+        "date": "September 7, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-30-dm-1-data-mapper-fundamentals-source-target-types",
+        "title": "OmniStudio DM-1: Data Mapper Fundamentals & Source/Target Types",
+        "series": "omni-studio-cert",
+        "lesson": 30,
+        "excerpt": "Define and configure the four Data Mapper types that extract, transform, load, and map data between Salesforce and outside systems. Learn what a Data Mapper is, why the four interfaces exist, which sources and targets a mapper can bridge, why field-level security makes mappers a safer data path than raw SOQL, and how to configure and test a mapper step by step. This lesson opens the Data Mappers domain and names the artifact that the whole exam keeps coming back to.",
+        "date": "September 8, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "OmniStudio",
+          "DataMappers"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-31-dm-2-extract-interface-multi-object-filters-parameters",
+        "title": "OmniStudio DM-2: Extract Interface: Multi-Object, Filters & Parameters",
+        "series": "omni-studio-cert",
+        "lesson": 31,
+        "excerpt": "Configure and retrieve data from multiple objects with various filter options using the Data Mapper Extract Interface. Learn how a single Extract pulls related records across objects in one definition, how WHERE clauses and input parameters make filters reusable, how the output mapping shapes the exact JSON callers receive, why filtering early and selecting only needed fields keeps queries fast, and how Extract respects field-level security. This lesson turns the full-featured reader you met in DM-1 into a real, parameterized query tool.",
+        "date": "September 9, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "OmniStudio",
+          "DataMappers"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-32-dm-3-turbo-extract-interface",
+        "title": "OmniStudio DM-3: Turbo Extract Interface",
+        "series": "omni-studio-cert",
+        "lesson": 32,
+        "excerpt": "Configure and retrieve data from a single object and its related fields using the Turbo Extract Interface. Learn why Turbo Extract is the performance-optimized reader for the common case, how related fields come back through an object's lookups and child relationships in one optimized pass, where the single-object ceiling sits, when to choose Turbo Extract over the full Extract, and how to build one for pre-filling an OmniScript, sourcing a FlexCard, or doing a quick lookup by Id.",
+        "date": "September 10, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "OmniStudio",
+          "DataMappers"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-33-dm-4-load-interface-multi-object-writes",
+        "title": "OmniStudio DM-4: Load Interface: Multi-Object Writes",
+        "series": "omni-studio-cert",
+        "lesson": 33,
+        "excerpt": "Configure and import data to multiple objects using the Load Interface. Learn how Load maps input JSON to Salesforce records for insert, update, and delete, how lookups by Id or external ID link child records to parents in a single multi-object write, how external-ID upserts make Load idempotent so repeated integration runs do not create duplicates, and how rollback-on-error keeps a failed write from leaving partial data.",
+        "date": "September 11, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "OmniStudio",
+          "DataMappers"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-34-dm-5-transform-interface-document-generation",
+        "title": "OmniStudio DM-5: Transform Interface & Document Generation",
+        "series": "omni-studio-cert",
+        "lesson": 34,
+        "excerpt": "Configure the Transform Data Mapper to prepare data for downstream use and document generation. Learn how Transform reshapes input into a required output structure without reading from or writing to the org, how the output JSON template drives the shape, how field mappings and formulas satisfy an API contract, and how the same output feeds PDF and DocuSign templates as the data model for the document.",
+        "date": "September 12, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "OmniStudio",
+          "DataMappers"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-35-dm-6-formulas-in-data-mappers",
+        "title": "OmniStudio DM-6: Formulas in Data Mappers",
+        "series": "omni-studio-cert",
+        "lesson": 35,
+        "excerpt": "Configure formulas to create or modify values within Data Mappers across the Transform, Extract, and Load interface types. Learn how formulas compute values at the data layer through string concatenation, arithmetic, and date formatting, walk through adding and mapping a formula step by step, handle the null cases and evaluation-order traps, and see why computing once in the mapper beats doing the same work in the UI or down the line in a consumer.",
+        "date": "September 13, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "OmniStudio",
+          "DataMappers"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-36-dm-7-mapping-source-target-structures",
+        "title": "OmniStudio DM-7: Mapping Source & Target Structures",
+        "series": "omni-studio-cert",
+        "lesson": 36,
+        "excerpt": "Map source fields, formulas, and constants to the exact JSON structure consumers receive in the Data Mapper output. Learn why the output mapping is the contract, how each output key resolves to a source path or a formula, how array and list maps produce repeatable structures for line items and related records, how name collisions and casing break downstream bindings, and how to design the output for the consumer instead of the source. Walk through defining a target template, mapping every output field, wiring list maps, and comparing actual output to the expected structure, then sidestep the exam traps where output is shaped like the source or array mappings go missing.",
+        "date": "September 14, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "OmniStudio",
+          "DataMappers"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-37-dm-8-data-mapper-best-practices",
+        "title": "OmniStudio DM-8: Data Mapper Best Practices",
+        "series": "omni-studio-cert",
+        "lesson": 37,
+        "excerpt": "Distill the Data Mapper domain into the five habits that separate a fragile mapper from a dependable one: secure it first (field-level security, required permission, and avoiding raw SOQL where FLS matters), parameterize inputs so a mapper becomes a reusable artifact, shape outputs deliberately so the output mapping is the contract, test with sample JSON before any consumer depends on it, and optimize for performance and reuse across OmniScripts, Integration Procedures, and FlexCards. Learn why a targeted, well-named, security-checked mapper beats a Swiss Army knife, work a full build of a reusable case lookup, and sidestep the exam traps where security is skipped, inputs are hardcoded, or sample-JSON testing never happens.",
+        "date": "September 15, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "OmniStudio",
+          "DataMappers"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 37,
+    "curriculumLessons": 46
+  },
+  {
+    "slug": "salesforce-architect",
+    "name": "Salesforce System Architect Primer",
+    "description": "A practical deep dive into Flow design, Apex patterns, and platform architecture for teams scaling on Salesforce.",
+    "gradient": "from-sky to-blue-600",
+    "lessons": [
+      {
+        "slug": "what-salesforce-system-architect-does",
+        "title": "Lesson 1: What a Salesforce System Architect Actually Does: Role, Cert Track, CTA Endgame",
+        "series": "salesforce-architect",
+        "lesson": 1,
+        "excerpt": "The Salesforce architect arc in one lesson: what System vs Application vs Technical Architects actually do, the certification ladder, and the CTA endgame.",
+        "date": "August 04, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "8 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "multi-tenant-platform-architecture",
+        "title": "Lesson 2: Multi-Tenant Platform Architecture: Orgs, Environments, and the Instance Model",
+        "series": "salesforce-architect",
+        "lesson": 2,
+        "excerpt": "Why every Salesforce org rents a slice of a shared platform: multi-tenancy, metadata-driven design, the instance model, and the sandbox environments that keep Dev/QA/UAT/Prod safe.",
+        "date": "August 05, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "8 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "core-building-blocks-objects-fields-relationships",
+        "title": "Lesson 3: Core Building Blocks: Objects, Fields, Relationships, Record Types, and Formula vs Roll-Up",
+        "series": "salesforce-architect",
+        "lesson": 3,
+        "excerpt": "The architect's canvas: standard and custom objects, field types, lookup vs master-detail relationships, record types for process variation, and when to compute with a formula field vs a roll-up summary.",
+        "date": "August 06, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "8 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Data"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "integration-fundamentals-rest-soap-bulk-apis",
+        "title": "Lesson 4: Integration Fundamentals: REST, SOAP, Bulk APIs, and Picking the Right One",
+        "series": "salesforce-architect",
+        "lesson": 4,
+        "excerpt": "The System Architect's home turf: when to call Salesforce with REST, when to reach for SOAP, when to hand it a CSV via Bulk API 2.0, and the request limits that make the choice matter.",
+        "date": "August 07, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "systems-architecture-what-it-means-ai-patterns",
+        "title": "Lesson 5: General Systems Architecture: What 'Architecture' Means and Why AI Systems Reuse the Same Patterns",
+        "series": "salesforce-architect",
+        "lesson": 5,
+        "excerpt": "The foundational concepts of systems architecture (components, interfaces, and design principles) and why every AI agent pattern (sequential, parallel, hierarchical) is a remix of patterns engineers have known for decades.",
+        "date": "August 08, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "Architecture",
+          "AI at Work"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "integration-patterns-request-reply-fire-forget-batch",
+        "title": "Lesson 6: Integration Patterns: Request-Reply, Fire-and-Forget, and Batch (Inbound & Outbound)",
+        "series": "salesforce-architect",
+        "lesson": 6,
+        "excerpt": "The three archetype integration patterns every Salesforce architect must recognize (request-reply, fire-and-forget, and batch data synchronization), plus the selection matrix, the limits that shape each choice, and a worked example that combines all three.",
+        "date": "August 09, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "event-driven-integration-platform-events-change-data-capture",
+        "title": "Lesson 7: Event-Driven Integration: Platform Events + Change Data Capture",
+        "series": "salesforce-architect",
+        "lesson": 7,
+        "excerpt": "The Salesforce event bus, Platform Events vs. Change Data Capture: when to publish business intent vs. record state, how to consume on- and off-platform, and the hard truth about ordering, replay, and allocations.",
+        "date": "August 10, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "8 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Integration",
+          "Data"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "middleware-tradeoffs-mulesoft-boomi-custom-salesforce-hub",
+        "title": "Lesson 8: Middleware Tradeoffs: MuleSoft vs Boomi vs Custom (and When Salesforce Is the Hub)",
+        "series": "salesforce-architect",
+        "lesson": 8,
+        "excerpt": "How to choose the integration layer: MuleSoft's API-led pro-code platform, Boomi's low-code iPaaS, hand-rolled custom code, and the decision matrix for when Salesforce itself should be the hub instead of any middleware at all.",
+        "date": "August 11, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Integration",
+          "Platform Engineering"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "integration-reliability-idempotency-retries-error-handling-dead-letter-design",
+        "title": "Lesson 9: Integration Reliability: Idempotency, Retries, Error Handling, and Dead-Letter Design",
+        "series": "salesforce-architect",
+        "lesson": 9,
+        "excerpt": "The reliability toolkit every integration needs: idempotency keys and message IDs so retries are safe, the transient vs. poisoned error taxonomy, bounded retry policies with backoff, per-pattern error handling, and dead-letter design with error tables so nothing is silently lost.",
+        "date": "August 12, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Integration",
+          "Reliability"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "sync-async-queues-eventual-consistency-agent-pipelines",
+        "title": "Lesson 10: Sync vs Async, Queues, and Eventual Consistency: The Laws That Shape Agent Pipelines",
+        "series": "salesforce-architect",
+        "lesson": 10,
+        "excerpt": "The three operating laws that govern any pipeline spanning more than one system: synchronous calls block, asynchronous calls decouple, and distributed systems settle into eventual consistency. Queues are the buffer that makes async safe. And the same laws that drive Salesforce governor limits now shape multi-agent AI pipelines.",
+        "date": "August 13, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "Architecture",
+          "Integration",
+          "Reliability",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "security-architecture-sharing-model-owd-role-hierarchy-sharing-rules",
+        "title": "Lesson 11: Security Architecture: The Sharing Model, OWD, Role Hierarchy, Sharing Rules, and Manual Sharing",
+        "series": "salesforce-architect",
+        "lesson": 11,
+        "excerpt": "Who can see a given record? The four record-level controls that answer it: org-wide defaults, the role hierarchy, sharing rules, and manual sharing. How they layer, how they only ever open access, and why 'most permissive wins' is the whole game.",
+        "date": "August 14, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "security-profiles-permission-sets-permission-set-groups-mfa-session-policies",
+        "title": "Lesson 12: Security, Part 2: Profiles, Permission Sets, Permission Set Groups, MFA, and Session Policies",
+        "series": "salesforce-architect",
+        "lesson": 12,
+        "excerpt": "Who can do what in an org. The move from profile-led to permission-set-led access, what a permission set group bundles together, the 2026 MFA enforcement that now touches every login, and the session policies that decide how long a session lives.",
+        "date": "August 15, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "security-external-access-oauth-saml-connected-apps-communities",
+        "title": "Lesson 13: Security, Part 3: External Access, OAuth, SAML/SSO, Connected Apps, and Communities",
+        "series": "salesforce-architect",
+        "lesson": 13,
+        "excerpt": "How outside systems and outside people get in. OAuth flows for machine access, SAML single sign-on for employee logins, connected apps as the doorway, and Experience Cloud communities as the portal where customers and partners authenticate without touching your internal identity system.",
+        "date": "August 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "data-architecture-data-model-design-patterns-data-skew",
+        "title": "Lesson 14: Data Architecture: Data Model Design, Common Data Model Patterns, and Data Skew",
+        "series": "salesforce-architect",
+        "lesson": 14,
+        "excerpt": "Data is the load-bearing wall of every org. Designing a data model that scales means deciding where each relationship lives, recognizing the recurring shapes that solve real problems, and keeping the load off any single parent record or owner. This lesson covers data model design, the common patterns (one-to-many, many-to-many, hierarchical, and data tiering), and the three data skews that quietly break performance.",
+        "date": "August 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Data"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "data-architecture-for-ai-vector-databases-embeddings",
+        "title": "Lesson 15: Data Architecture for AI: Databases, Vector DBs, Embeddings, and the Same Modeling Discipline",
+        "series": "salesforce-architect",
+        "lesson": 15,
+        "excerpt": "The data side of AI systems. Embeddings, vector databases, chunking, and why the modeling discipline from a Salesforce data model (records, relationships, source of truth, scale) carries over unchanged when the storage engine becomes a vector store. Includes a worked example of a RAG knowledge base, a pgvector walkthrough, and the Data Cloud vector database connection.",
+        "date": "August 18, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "Architecture",
+          "Data",
+          "LLMs",
+          "RAG"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "data-migration-strategy-etl-elt-tools-validation-cutover-rollback",
+        "title": "Lesson 16: Data Migration Strategy: ETL vs ELT, Tools, Validation, Cutover, and Rollback",
+        "series": "salesforce-architect",
+        "lesson": 16,
+        "excerpt": "The full migration lifecycle: ETL vs ELT, the Salesforce tool options (Data Import Wizard vs Data Loader vs enterprise ETL), dependency-ordered loading with external IDs, validation by record count and spot check, and the cutover and rollback plan that keeps a bad load from becoming a disaster.",
+        "date": "August 19, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Data"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "large-data-volumes-archiving-big-objects-skinny-tables-indexing",
+        "title": "Lesson 17: Large Data Volumes: Archiving, Big Objects, Skinny Tables, and Indexing Strategy",
+        "series": "salesforce-architect",
+        "lesson": 17,
+        "excerpt": "How an org stays fast and inside its storage as volume grows: selectivity and custom indexes, skinny tables for read-heavy hot data, big objects for bulk historical storage, and archiving as the tier that sheds cold data before it drags everything down.",
+        "date": "August 20, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Data",
+          "RAG"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "system-limits-governor-api-storage-planning",
+        "title": "Lesson 18: System Limits: Governor, API, and Storage Limits, and Planning Around Them",
+        "series": "salesforce-architect",
+        "lesson": 18,
+        "excerpt": "Governors exist to keep a multitenant platform fair. Learn the limits, then bulkify, batch, and monitor so they never fire on your watch.",
+        "date": "August 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "environment-release-strategy-sandboxes-change-sets-devops",
+        "title": "Lesson 19: Environment and Release Strategy: Sandbox Types, Change Sets vs DevOps (sf/sfdx)",
+        "series": "salesforce-architect",
+        "lesson": 19,
+        "excerpt": "Where work happens and how it moves to production. The four sandbox types (Developer, Developer Pro, Partial Copy, Full), what each copies and how often it refreshes, then the release-mechanism fork: click-based change sets versus source-driven deployment with the sf CLI and a Git-based source of truth, including Salesforce DX and DevOps Center.",
+        "date": "August 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Delivery",
+          "DevOps"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "environments-cicd-in-ml-ai-pipelines",
+        "title": "Lesson 20: General Systems Architecture: Environments and CI/CD in ML and AI Pipelines",
+        "series": "salesforce-architect",
+        "lesson": 20,
+        "excerpt": "The same environment-and-release discipline from Lesson 19, applied to machine learning and AI systems. Why the ML artifact is more than code (code, data, and model all change), the continuous X's (CI, CD, CT, CM), the MLOps maturity levels, how a model promotes from a development environment to production, and what changes when the artifact is a nondeterministic agent that needs eval gates instead of unit tests.",
+        "date": "August 23, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Architecture",
+          "AI Infrastructure",
+          "CI/CD",
+          "Delivery",
+          "AI Agents"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "solution-design-requirement-to-architecture-doc-nfrs-tradeoffs",
+        "title": "Lesson 21: Solution Design: Turning a Requirement Into an Architecture Document (NFRs and Tradeoffs)",
+        "series": "salesforce-architect",
+        "lesson": 21,
+        "excerpt": "How a requirement becomes an architecture document: separating the business why from the what and the how, writing measurable non-functional requirements using the Salesforce Well-Architected framework (Trusted, Easy, Adaptable), resolving design tradeoffs explicitly, and recording each decision with its rationale so the delivery team can build without re-litigating every choice.",
+        "date": "August 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "architecture-review-design-reviews-decision-records-saying-no",
+        "title": "Lesson 22: Architecture Review: Design Reviews, Decision Records, and How to Say No",
+        "series": "salesforce-architect",
+        "lesson": 22,
+        "excerpt": "The review discipline that keeps architecture coherent as the org grows: design review as a forum, not a gate, the ADR as durable decision memory, and how to decline a bad how without rejecting the person behind it.",
+        "date": "August 25, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "error-handling-monitoring-debug-logs-event-monitoring-health-checks-alerts",
+        "title": "Lesson 23: Error Handling and Monitoring: Debug Logs, Event Monitoring, Health Checks, and Alerts",
+        "series": "salesforce-architect",
+        "lesson": 23,
+        "excerpt": "The observability layer of a Salesforce org: debug logs and trace flags when a transaction misbehaves, Event Monitoring when you need who, what, and when across the whole org, health checks for the security baseline and the platform status, and the alerting that turns all of it into action instead of archaeology.",
+        "date": "August 26, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Observability",
+          "Reliability"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "performance-query-optimization-selective-soql-indexes-caching",
+        "title": "Lesson 24: Performance: Query Optimization, Selective SOQL, Indexes, and Caching",
+        "series": "salesforce-architect",
+        "lesson": 24,
+        "excerpt": "How a query becomes fast: the selectivity thresholds the optimizer uses to decide whether an index is worth it, how to write SOQL that the optimizer will actually treat well, how to measure and index, and Platform Cache as the lever that skips the query entirely.",
+        "date": "August 27, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Performance",
+          "RAG"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "performance-engineering-ai-latency-caching-throughput-batching",
+        "title": "Lesson 25: Performance Engineering for AI: Latency Budgets, Caching, Throughput, and Batching",
+        "series": "salesforce-architect",
+        "lesson": 25,
+        "excerpt": "Performance stops being about one query and becomes a system-wide budget the moment AI is in the path. This lesson covers latency budgets, the difference between throughput and latency, the batch that makes LLM inference affordable, and the caches that skip work entirely.",
+        "date": "August 28, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Architecture",
+          "Performance",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "enterprise-rest-api-design-versioning-pagination-bulk-best-practices",
+        "title": "Lesson 26: Enterprise REST API Design: Versioning, Pagination, Bulk, and Best Practices",
+        "series": "salesforce-architect",
+        "lesson": 26,
+        "excerpt": "The design layer under every REST integration: how Salesforce versions its API, how to page through large result sets without breaking, when bulk writes beat synchronous calls, and the habits that keep an integration alive for years.",
+        "date": "August 30, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "integration-security-named-credentials-jwt-certificates-ip-allowlisting",
+        "title": "Lesson 27: Integration Security: Named Credentials, JWT, Certificates, and IP Allowlisting",
+        "series": "salesforce-architect",
+        "lesson": 27,
+        "excerpt": "The security layer under every integration: named credentials that keep endpoints and secrets out of code, JWT bearer for server-to-server auth, certificates for signing and mutual TLS, and IP allowlisting as the last fence that says who is even allowed to knock.",
+        "date": "August 31, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Integration",
+          "Security",
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "high-volume-event-patterns-streaming-pacing-platform-event-limits",
+        "title": "Lesson 28: High-Volume Event Patterns: Streaming, Pacing, and Platform Event Limits",
+        "series": "salesforce-architect",
+        "lesson": 28,
+        "excerpt": "What changes when event volume stops being a trickle and becomes a flood: streaming with the Pub/Sub API, pacing publish rates against rolling limits, and the platform event allocations that decide whether your bus survives the day.",
+        "date": "September 1, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Integration",
+          "Web Development",
+          "Project Management"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "testing-integrations-mocking-sandbox-test-strategy-integration-suites",
+        "title": "Lesson 29: Testing Integrations: Mocking, Sandbox Test Strategy, and Integration Test Suites",
+        "series": "salesforce-architect",
+        "lesson": 29,
+        "excerpt": "Testing an integration is not the same as testing the code on one side of it. You have to fake the external system to unit test your Apex, pick the right sandbox to test against real data, and build suites that prove the pieces work together before they reach production. This lesson covers each layer: mocking callouts, a sandbox strategy, and integration test suites.",
+        "date": "September 2, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Architecture",
+          "Testing",
+          "Integrations"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "testing-ai-systems-evals-golden-sets-canaries-regression",
+        "title": "Lesson 30: General Systems Architecture: Testing AI Systems: Evals, Golden Sets, Canaries, and Regression",
+        "series": "salesforce-architect",
+        "lesson": 30,
+        "excerpt": "A model is not a method you can pin to a single expected output. This lesson covers the testing discipline that replaces the unit test for AI systems: evals as structured tests, golden sets as the regression anchor, and canary deployments as the production safety net, with the Salesforce tools that already ship this discipline.",
+        "date": "September 03, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Architecture",
+          "AI Infrastructure",
+          "Testing",
+          "AI Agents"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "apex-architecture-service-layer-domain-selector-patterns",
+        "title": "Lesson 31: Apex Architecture: Service Layer, Domain, and Selector Patterns",
+        "series": "salesforce-architect",
+        "lesson": 31,
+        "excerpt": "Apex triggers and classes are where business logic actually lives, and how you organize that code decides whether a solution stays maintainable for five years or turns into spaghetti the first time a requirement changes. This lesson covers the three enterprise patterns that keep Apex code organized: the service layer for orchestrating processes, the domain layer for object behavior, and the selector layer for all your SOQL. It covers why they matter, how they fit together, and a worked example of all three in action.",
+        "date": "September 4, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Architecture",
+          "Apex",
+          "Patterns"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "flow-architecture-flow-vs-apex-vs-external-automation",
+        "title": "Lesson 32: Flow Architecture: Flow vs Apex vs External Automation, Decision Framework",
+        "series": "salesforce-architect",
+        "lesson": 32,
+        "excerpt": "A repeatable framework for choosing where a process runs: Record-Triggered Flow for low-density automation, the hybrid Flow plus invocable Apex pattern for medium density, Apex triggers for high density, and the boundary where automation should leave the org entirely for external, agentic, or cross-system work.",
+        "date": "September 5, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Flow",
+          "Apex"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "bulkification-trigger-frameworks-limits-aware-design",
+        "title": "Lesson 33: Bulkification & Trigger Frameworks: Limits-Aware Design That Scales",
+        "series": "salesforce-architect",
+        "lesson": 33,
+        "excerpt": "The reason a trigger that works on one record fails on a data load. Governor limits put a hard ceiling on SOQL, DML, heap, and CPU per transaction. Bulkification keeps every layer working on collections, and a trigger framework keeps one handler in charge of the object so the code that touches the platform is tiny and the logic is testable.",
+        "date": "September 6, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Apex",
+          "Triggers"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "data-model-design-inheritance-polymorphic-denormalization",
+        "title": "Lesson 34: Data Model Design: Inheritance, Polymorphic Relationships, and Denormalization Tradeoffs",
+        "series": "salesforce-architect",
+        "lesson": 34,
+        "excerpt": "Three data modeling tools that people reach for when records stop being uniform: inheritance for records that are kinds of a common thing, polymorphic relationships for a single field that must point at several object types, and denormalization for precomputing data so reads get fast. Each solves a real problem, and each hides a cost. This lesson defines them precisely, shows how Salesforce represents each one, and walks a worked example that forces you to use all three at once.",
+        "date": "September 7, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Data"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "domain-modeling-entities-aggregates-bounded-contexts-agent-design",
+        "title": "Lesson 35: Domain Modeling: Entities, Aggregates, and Bounded Contexts Applied to Agent Design",
+        "series": "salesforce-architect",
+        "lesson": 35,
+        "excerpt": "The strategic and tactical tools of domain modeling (entities, aggregates, bounded contexts, ubiquitous language) and how the same discipline that keeps a data model coherent also keeps a multi-agent system from collapsing into a tangle of overlapping prompts.",
+        "date": "September 08, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Architecture",
+          "AI at Work"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "sharing-architecture-deep-dive-recalculation-implicit-sharing-limits",
+        "title": "Lesson 36: Sharing Architecture Deep Dive: Recalculation, Implicit Sharing, and When Sharing Can't Do the Job",
+        "series": "salesforce-architect",
+        "lesson": 36,
+        "excerpt": "Sharing is not static, and it is not unlimited. When an org-wide default changes, the platform recalculates share records across the org, and on a big data volume that job can churn for hours. Implicit sharing hands out access automatically through parent-child relationships, whether you asked for it or not. And at a certain scale, declarative sharing stops being the right tool, which is when Apex managed sharing and restriction rules take over.",
+        "date": "September 9, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "asynchronous-apex-choosing-batch-queueable-scheduled-future",
+        "title": "Lesson 37: Asynchronous Apex: Batch, Queueable, Scheduled, and Future, and How to Choose",
+        "series": "salesforce-architect",
+        "lesson": 37,
+        "excerpt": "Four ways to move work out of the user's transaction, and they are not interchangeable. Future methods are fire-and-forget with primitive parameters only, queueable jobs carry real objects and hand back a job Id you can monitor, batch Apex trades immediacy for volume by running each chunk as its own transaction, and scheduled Apex is a timer that should do nothing but start one of the other three. Pick wrong and you either hit the synchronous ceiling you were escaping or you burn the org's shared async budget on work a single call could have done.",
+        "date": "September 10, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Apex",
+          "Asynchronous"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "governor-limit-aware-design-soql-sosl-dml-budgets",
+        "title": "Lesson 38: Governor-Limit-Aware Design: SOQL, SOSL, and DML Budgets",
+        "series": "salesforce-architect",
+        "lesson": 38,
+        "excerpt": "A transaction does not get a budget per trigger or per class. It gets 100 SOQL queries, 150 DML statements, 50,000 returned query rows, and 10,000 DML rows as one pool, and every trigger, record-triggered Flow, and uncertified package in that transaction spends from it. Designing limits-aware means knowing which calls consume a statement, which consume a row, and why the two meters fail at different batch sizes. This lesson covers the SQL and DML meters, where SOSL fits in the same budget, and the review habits that catch a limit exception before a data load does.",
+        "date": "September 11, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Apex",
+          "Limits",
+          "SOQL"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "transaction-lifecycle-state-save-order-trigger-contexts",
+        "title": "Lesson 39: Transaction Lifecycle: State, Save Order, and the 4 Trigger Contexts in One Transaction",
+        "series": "salesforce-architect",
+        "lesson": 39,
+        "excerpt": "A record save is not one moment. It is a transaction that walks a fixed sequence: the record loads, system validation runs, before-save Flows and before triggers fire, custom validation and duplicate rules run, the record writes to the database but does not commit, after triggers fire, then assignment, workflow, escalation, roll-up, and sharing logic run, and only then does the transaction commit. Each phase sees the record in a different state, and that state difference is what before-save logic exploits and after-save logic must respect. This lesson walks a single save through that lifecycle, defines the four trigger contexts (before insert, before update, after insert, after update) that one transaction can run, and shows why a workflow field update re-fires triggers while a validation failure rolls everything back.",
+        "date": "September 12, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "Salesforce",
+          "Apex",
+          "Triggers",
+          "Transaction",
+          "Architecture"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "stateful-vs-stateless-agents-context-memory-tool-state",
+        "title": "Lesson 40: Stateful vs Stateless Agents: Context, Memory, and Tool State",
+        "series": "salesforce-architect",
+        "lesson": 40,
+        "excerpt": "Why a language model remembers almost nothing and knows a great deal, what it costs to ship a purely stateless agent, and how context, memory, and tool state become the architecture that decides whether an agent is useful on day one or day thirty.",
+        "date": "September 13, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "Architecture",
+          "AI at Work",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "experience-cloud-architecture-sites-communities-licensing-sharing",
+        "title": "Lesson 41: Experience Cloud Architecture: Sites, Communities, Licensing, and Sharing",
+        "series": "salesforce-architect",
+        "lesson": 41,
+        "excerpt": "Experience Cloud as architecture: what a site actually is, why the framework you build it on (LWR versus Aura) changes your whole subsystem design, how licensing attaches to users rather than pages, and the external sharing architecture that keeps an outsider's window exactly the right size.",
+        "date": "September 14, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Experience Cloud"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "lightning-web-components-architecture-composition-wire-data-services",
+        "title": "Lesson 42: Lightning Web Components Architecture: Composition, Wire Service, and Data Services",
+        "series": "salesforce-architect",
+        "lesson": 42,
+        "excerpt": "How Lightning Web Components are built from smaller pieces and fed data: component composition and the data-down/events-up contract, the wire service and its reactivity, and the Lightning Data Service cache that shares one version of a record across every component that renders it.",
+        "date": "September 15, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Lightning Web Components"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 42,
+    "curriculumLessons": 90
+  },
+  {
     "slug": "ai-at-work",
     "name": "AI at Work",
     "description": "A vendor-agnostic primer for using AI in day-to-day work: foundations, prompting, productivity, small automations, and team adoption. Company-wide training that works for any team and any AI tool.",
@@ -1460,1219 +2704,6 @@ export const learnSeries: LearningSeries[] = [
     "curriculumLessons": 25
   },
   {
-    "slug": "omni-studio-cert",
-    "name": "OmniStudio Developer Certification",
-    "description": "A deep dive for the Salesforce Certified OmniStudio Developer exam. One official exam-guide requirement per day, with config walkthroughs, exam traps, and practice questions.",
-    "gradient": "from-red to-rose-600",
-    "lessons": [
-      {
-        "slug": "day-01-f1-omnistudio-solution-and-industry-use-cases",
-        "title": "OmniStudio F-1: OmniStudio Solution & Industry Use Cases",
-        "series": "omni-studio-cert",
-        "lesson": 1,
-        "excerpt": "Describe the OmniStudio solution as it applies to common customer use case scenarios in different industries (telco, energy, healthcare, public sector, etc.). Day 1 of the OmniStudio Developer exam prep.",
-        "date": "August 03, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "6 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-02-f2-project-needs-requirements-assumptions-risks-const",
-        "title": "OmniStudio F-2: Project Needs: Requirements, Assumptions, Risks, Constraints",
-        "series": "omni-studio-cert",
-        "lesson": 2,
-        "excerpt": "Determine a project's needs by evaluating a customer's requirements, assumptions, risks, and constraints. Day 2 of the OmniStudio Developer exam prep.",
-        "date": "August 04, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "6 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-03-f3-managed-package-vs-standard-runtime-upgrades",
-        "title": "OmniStudio F-3: Managed Package vs Standard Runtime; Upgrades",
-        "series": "omni-studio-cert",
-        "lesson": 3,
-        "excerpt": "Explain Managed Package Runtime vs. Standard Runtime, Automatic Upgrades, and Manual Intervention Upgrade. Day 3 of the OmniStudio Developer exam prep.",
-        "date": "August 05, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "6 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-04-f4-licensing-permission-set-licenses-permission-sets",
-        "title": "OmniStudio F-4: Licensing, Permission Set Licenses & Permission Sets",
-        "series": "omni-studio-cert",
-        "lesson": 4,
-        "excerpt": "Explain OmniStudio license requirements, Permission Set licenses and Permission Sets. Day 4 of the OmniStudio Developer exam prep.",
-        "date": "August 06, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "6 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-05-f5-implementation-toolchain-sfcli-vbt-migration",
-        "title": "OmniStudio F-5: Implementation Toolchain: SFCLI, VBT, Migration",
-        "series": "omni-studio-cert",
-        "lesson": 5,
-        "excerpt": "Describe the tools required to complete the end-to-end implementation process (SFCLI, VBT, Migration, etc.). Day 5 of the OmniStudio Developer exam prep.",
-        "date": "August 07, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "6 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-06-f-6-testing-versioning-cloning",
-        "title": "OmniStudio F-6: Testing, Versioning & Cloning Components",
-        "series": "omni-studio-cert",
-        "lesson": 6,
-        "excerpt": "Explain testing, versioning, and cloning through OmniStudio components. This covers save vs. publish, cloning workflows, and version snapshots for deployment.",
-        "date": "August 8, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-07-fc-1-flexcard-data-sources-testing-json",
-        "title": "OmniStudio FC-1: FlexCard Data Sources & Testing JSON",
-        "series": "omni-studio-cert",
-        "lesson": 7,
-        "excerpt": "Configure data sources such as SOQL, Data Mapper, Integration Procedure, Custom, etc. and test resulting JSON structure.",
-        "date": "August 9, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "8 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-08-fc-2-single-multi-level-cards-layouts-repeaters",
-        "title": "OmniStudio FC-2: Single/Multi-Level Cards, Layouts & Repeaters",
-        "series": "omni-studio-cert",
-        "lesson": 8,
-        "excerpt": "Construct single and multi-level FlexCards, organizing data using layouts, and repeaters.",
-        "date": "August 10, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "6 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-09-fc-3-binding-components-configuring-properties",
-        "title": "OmniStudio FC-3: Binding Components & Configuring Properties",
-        "series": "omni-studio-cert",
-        "lesson": 9,
-        "excerpt": "Bind essential components to construct FlexCards and configure their properties.",
-        "date": "August 11, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "6 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-10-fc-4-complex-card-actions-launch-fire-update",
-        "title": "OmniStudio FC-4: Complex Card Actions (Launch, Fire, Update)",
-        "series": "omni-studio-cert",
-        "lesson": 10,
-        "excerpt": "Define and implement complex card actions, including launching OmniScripts, firing events, and updating other components.",
-        "date": "August 12, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "6 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-11-fc-5-advanced-flexcard-properties",
-        "title": "OmniStudio FC-5: Advanced FlexCard Properties",
-        "series": "omni-studio-cert",
-        "lesson": 11,
-        "excerpt": "Configure advanced FlexCard properties: Event Listeners, Session Variables, Public Attributes, multi-language, child FlexCards, and custom LWC integration.",
-        "date": "August 13, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "6 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-12-fc-6-flexcard-styling-themes",
-        "title": "OmniStudio FC-6: FlexCard Styling & Themes",
-        "series": "omni-studio-cert",
-        "lesson": 12,
-        "excerpt": "Control FlexCard appearance two ways: element-level inline styling for one-off tweaks and shared themes for consistent branding.",
-        "date": "August 14, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "5 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-13-fc-7-conditional-rendering-with-states",
-        "title": "OmniStudio FC-7: Conditional Rendering with States",
-        "series": "omni-studio-cert",
-        "lesson": 13,
-        "excerpt": "Use FlexCard states and element-level conditions to show, hide, or restyle content when expressions against card data evaluate true.",
-        "date": "August 15, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "5 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-14-fc-8-embedding-flexcards-across-channels",
-        "title": "OmniStudio FC-8: Embedding FlexCards Across Channels",
-        "series": "omni-studio-cert",
-        "lesson": 14,
-        "excerpt": "Embed one FlexCard definition across Lightning pages, Experience Cloud sites, OmniScripts, and mobile, and design it for reuse with public attributes.",
-        "date": "August 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "5 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-15-fc-9-flexcard-best-practices",
-        "title": "OmniStudio FC-9: FlexCard Best Practices",
-        "series": "omni-studio-cert",
-        "lesson": 15,
-        "excerpt": "Validate your JSON, keep data sources lean, test every state and channel, and respect FLS. That combination is what separates a card that survives production from one that goes blank.",
-        "date": "August 17, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "5 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-16-os-1-omniscript-elements-dynamic-interactions",
-        "title": "OmniStudio OS-1: OmniScript Elements & Dynamic Interactions",
-        "series": "omni-studio-cert",
-        "lesson": 16,
-        "excerpt": "OmniScripts are guided journeys built from named elements that all land in one data JSON. If you understand that JSON contract, formulas, actions, and debugging all follow. If you don't, nothing else works.",
-        "date": "August 18, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "6 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-17-os-2-child-omniscripts-flexcards-custom-lwcs",
-        "title": "OmniStudio OS-2: Child OmniScripts, FlexCards & Custom LWCs",
-        "series": "omni-studio-cert",
-        "lesson": 17,
-        "excerpt": "Child OmniScripts handle reuse, FlexCards handle display, and custom LWCs handle custom UI. Pick the right embed for the job, wire its data back into the script JSON, and complex flows compose cleanly.",
-        "date": "August 19, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "5 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-18-os-3-omniscript-styling-themes",
-        "title": "OmniStudio OS-3: OmniScript Styling & Themes",
-        "series": "omni-studio-cert",
-        "lesson": 18,
-        "excerpt": "Themes define the design system across OmniScripts; element-level styling handles one-off exceptions. Use the theme as the source of truth, override sparingly, and verify responsive widths on desktop and mobile.",
-        "date": "August 20, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "5 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-19-os-4-advanced-omniscript-properties",
-        "title": "OmniStudio OS-4: Advanced OmniScript Properties",
-        "series": "omni-studio-cert",
-        "lesson": 19,
-        "excerpt": "Configure the advanced properties that carry an OmniScript beyond a bare flow: multi-language translations, Save Options for draft-and-resume, Knowledge Articles for in-flow help, and the Messaging Framework for SMS and email. Match the property to the scenario.",
-        "date": "August 21, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "5 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-20-os-5-embedding-omniscripts-across-channels",
-        "title": "OmniStudio OS-5: Embedding OmniScripts Across Channels",
-        "series": "omni-studio-cert",
-        "lesson": 20,
-        "excerpt": "One OmniScript definition embeds across Lightning pages, Experience Cloud, mobile, and web. Pass record context so it opens pre-populated, drop it in via the auto-generated LWC wrapper, and verify context per channel.",
-        "date": "August 22, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "5 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-21-os-6-omniscript-best-practices",
-        "title": "OmniStudio OS-6: OmniScript Best Practices",
-        "series": "omni-studio-cert",
-        "lesson": 21,
-        "excerpt": "Build OmniScripts that survive contact with users and production. Compose from child scripts instead of one giant flow, name elements as if they were JSON keys (because they are), test every branch in debug mode before publish, and push heavy orchestration into Integration Procedures.",
-        "date": "August 30, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-22-ip-1-ip-design-server-side-orchestration",
-        "title": "OmniStudio IP-1: IP Design, Server-Side Orchestration",
-        "series": "omni-studio-cert",
-        "lesson": 22,
-        "excerpt": "Learn what an Integration Procedure actually is: a declarative, server-side process that runs many actions in one server call. Design the input and output JSON contracts before you add a single action, order actions so output feeds input, and know why this one-call design is what makes IPs the right data source for FlexCards and OmniScripts.",
-        "date": "August 31, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "OmniStudio",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-23-ip-2-ip-action-types-groups-data-mapper-http-remote-sub",
-        "title": "OmniStudio IP-2: IP Action Types: Groups, Data Mapper, HTTP, Remote, Sub-IP",
-        "series": "omni-studio-cert",
-        "lesson": 23,
-        "excerpt": "Learn the building blocks you place inside an Integration Procedure: Groups for structure and conditional execution, Data Mapper actions for the data layer, HTTP actions for REST callouts, Remote actions for Apex logic, and Sub-IPs for composition. Map each action to its job, wire outputs to inputs with JSON paths, and avoid the auth, reuse, and mapping traps the exam tests.",
-        "date": "September 1, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "OmniStudio",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-24-ip-3-conditional-logic-loops-branching-in-ips",
-        "title": "OmniStudio IP-3: Conditional Logic, Loops, and Branching in Integration Procedures",
-        "series": "omni-studio-cert",
-        "lesson": 24,
-        "excerpt": "Control the execution path of an Integration Procedure. Use Execution Conditional Formulas to gate individual actions, Loop Blocks to iterate over arrays so per-item work repeats, and Conditional Blocks to route between distinct input states. Read the IP's data JSON, shape it so conditions stay simple, and test every branch with representative input. This is requirement IP-3, one of two pattern-heavy requirements in the Integration Procedures domain.",
-        "date": "September 2, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "OmniStudio",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-25-ip-4-chainable-integration-procedures",
-        "title": "OmniStudio IP-4: Chainable Integration Procedures",
-        "series": "omni-studio-cert",
-        "lesson": 25,
-        "excerpt": "Split long-running Integration Procedures into multiple transactions with chaining. Learn why one synchronous transaction blows governor limits, how the Chainable, Queueable Chainable, and Chain On Step settings decide when a step continues in a fresh transaction, and why every link in a chain needs its own error handling because rollback does not carry across transactions. This is requirement IP-4 in the Integration Procedures domain.",
-        "date": "September 3, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "OmniStudio",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-26-ip-5-caching-in-integration-procedures",
-        "title": "OmniStudio IP-5: Caching in Integration Procedures",
-        "series": "omni-studio-cert",
-        "lesson": 26,
-        "excerpt": "Determine and configure caching mechanisms within Integration Procedures to maximize performance. Learn what OmniStudio actually caches (metadata versus data), how Org Cache and Session Cache split shared versus per-user scope, how Time To Live controls freshness, and why cache keys decide whether a repeated request gets the right stored answer. This is requirement IP-5 in the Integration Procedures domain.",
-        "date": "September 4, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "OmniStudio",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-27-ip-6-exception-handling-try-catch-rollback",
-        "title": "OmniStudio IP-6: Exception Handling: Try/Catch & Rollback",
-        "series": "omni-studio-cert",
-        "lesson": 27,
-        "excerpt": "Implement robust exception handling in Integration Procedures with Try/Catch blocks and proper rollback. Learn how a Try/Catch Block wraps risky work, what the Catch branch must do, why Load and write actions belong after risky calls, and how the Response Action returns a controlled error shape to callers. This is requirement IP-6 in the Integration Procedures domain.",
-        "date": "September 5, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "OmniStudio",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-28-ip-7-response-action-the-ip-output-contract",
-        "title": "OmniStudio IP-7: Response Action: The IP Output Contract",
-        "series": "omni-studio-cert",
-        "lesson": 28,
-        "excerpt": "Configure the Response Action to return specific data and control every byte an Integration Procedure sends back. Learn why the Response Action is the contract every caller depends on, how to map success data, computed fields, and a consistent error branch, why only what you map gets returned, and how to test the response shape before any FlexCard or OmniScript is wired to it. This is requirement IP-7 in the Integration Procedures domain.",
-        "date": "September 6, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "OmniStudio",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-29-ip-8-integration-procedure-best-practices",
-        "title": "OmniStudio IP-8: Integration Procedure Best Practices",
-        "series": "omni-studio-cert",
-        "lesson": 29,
-        "excerpt": "Describe the best practices that turn a working Integration Procedure into a reliable, maintainable one. Learn why focused, well-named IPs beat monolithic ones, how stable contracts with error branches make IPs dependable building blocks, where reusable data logic belongs, when chaining is the right call, and why testing each action before you promote it prevents the failures that slip into production. This is the final requirement in the Integration Procedures domain.",
-        "date": "September 7, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "OmniStudio",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-30-dm-1-data-mapper-fundamentals-source-target-types",
-        "title": "OmniStudio DM-1: Data Mapper Fundamentals & Source/Target Types",
-        "series": "omni-studio-cert",
-        "lesson": 30,
-        "excerpt": "Define and configure the four Data Mapper types that extract, transform, load, and map data between Salesforce and outside systems. Learn what a Data Mapper is, why the four interfaces exist, which sources and targets a mapper can bridge, why field-level security makes mappers a safer data path than raw SOQL, and how to configure and test a mapper step by step. This lesson opens the Data Mappers domain and names the artifact that the whole exam keeps coming back to.",
-        "date": "September 8, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "OmniStudio",
-          "DataMappers"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-31-dm-2-extract-interface-multi-object-filters-parameters",
-        "title": "OmniStudio DM-2: Extract Interface: Multi-Object, Filters & Parameters",
-        "series": "omni-studio-cert",
-        "lesson": 31,
-        "excerpt": "Configure and retrieve data from multiple objects with various filter options using the Data Mapper Extract Interface. Learn how a single Extract pulls related records across objects in one definition, how WHERE clauses and input parameters make filters reusable, how the output mapping shapes the exact JSON callers receive, why filtering early and selecting only needed fields keeps queries fast, and how Extract respects field-level security. This lesson turns the full-featured reader you met in DM-1 into a real, parameterized query tool.",
-        "date": "September 9, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "OmniStudio",
-          "DataMappers"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-32-dm-3-turbo-extract-interface",
-        "title": "OmniStudio DM-3: Turbo Extract Interface",
-        "series": "omni-studio-cert",
-        "lesson": 32,
-        "excerpt": "Configure and retrieve data from a single object and its related fields using the Turbo Extract Interface. Learn why Turbo Extract is the performance-optimized reader for the common case, how related fields come back through an object's lookups and child relationships in one optimized pass, where the single-object ceiling sits, when to choose Turbo Extract over the full Extract, and how to build one for pre-filling an OmniScript, sourcing a FlexCard, or doing a quick lookup by Id.",
-        "date": "September 10, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "OmniStudio",
-          "DataMappers"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-33-dm-4-load-interface-multi-object-writes",
-        "title": "OmniStudio DM-4: Load Interface: Multi-Object Writes",
-        "series": "omni-studio-cert",
-        "lesson": 33,
-        "excerpt": "Configure and import data to multiple objects using the Load Interface. Learn how Load maps input JSON to Salesforce records for insert, update, and delete, how lookups by Id or external ID link child records to parents in a single multi-object write, how external-ID upserts make Load idempotent so repeated integration runs do not create duplicates, and how rollback-on-error keeps a failed write from leaving partial data.",
-        "date": "September 11, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "OmniStudio",
-          "DataMappers"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-34-dm-5-transform-interface-document-generation",
-        "title": "OmniStudio DM-5: Transform Interface & Document Generation",
-        "series": "omni-studio-cert",
-        "lesson": 34,
-        "excerpt": "Configure the Transform Data Mapper to prepare data for downstream use and document generation. Learn how Transform reshapes input into a required output structure without reading from or writing to the org, how the output JSON template drives the shape, how field mappings and formulas satisfy an API contract, and how the same output feeds PDF and DocuSign templates as the data model for the document.",
-        "date": "September 12, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "OmniStudio",
-          "DataMappers"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-35-dm-6-formulas-in-data-mappers",
-        "title": "OmniStudio DM-6: Formulas in Data Mappers",
-        "series": "omni-studio-cert",
-        "lesson": 35,
-        "excerpt": "Configure formulas to create or modify values within Data Mappers across the Transform, Extract, and Load interface types. Learn how formulas compute values at the data layer through string concatenation, arithmetic, and date formatting, walk through adding and mapping a formula step by step, handle the null cases and evaluation-order traps, and see why computing once in the mapper beats doing the same work in the UI or down the line in a consumer.",
-        "date": "September 13, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "OmniStudio",
-          "DataMappers"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-36-dm-7-mapping-source-target-structures",
-        "title": "OmniStudio DM-7: Mapping Source & Target Structures",
-        "series": "omni-studio-cert",
-        "lesson": 36,
-        "excerpt": "Map source fields, formulas, and constants to the exact JSON structure consumers receive in the Data Mapper output. Learn why the output mapping is the contract, how each output key resolves to a source path or a formula, how array and list maps produce repeatable structures for line items and related records, how name collisions and casing break downstream bindings, and how to design the output for the consumer instead of the source. Walk through defining a target template, mapping every output field, wiring list maps, and comparing actual output to the expected structure, then sidestep the exam traps where output is shaped like the source or array mappings go missing.",
-        "date": "September 14, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "OmniStudio",
-          "DataMappers"
-        ],
-        "status": "published"
-      }
-    ],
-    "totalLessons": 36,
-    "curriculumLessons": 46
-  },
-  {
-    "slug": "salesforce-architect",
-    "name": "Salesforce System Architect Primer",
-    "description": "A practical deep dive into Flow design, Apex patterns, and platform architecture for teams scaling on Salesforce.",
-    "gradient": "from-sky to-blue-600",
-    "lessons": [
-      {
-        "slug": "what-salesforce-system-architect-does",
-        "title": "Lesson 1: What a Salesforce System Architect Actually Does: Role, Cert Track, CTA Endgame",
-        "series": "salesforce-architect",
-        "lesson": 1,
-        "excerpt": "The Salesforce architect arc in one lesson: what System vs Application vs Technical Architects actually do, the certification ladder, and the CTA endgame.",
-        "date": "August 04, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "8 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "multi-tenant-platform-architecture",
-        "title": "Lesson 2: Multi-Tenant Platform Architecture: Orgs, Environments, and the Instance Model",
-        "series": "salesforce-architect",
-        "lesson": 2,
-        "excerpt": "Why every Salesforce org rents a slice of a shared platform: multi-tenancy, metadata-driven design, the instance model, and the sandbox environments that keep Dev/QA/UAT/Prod safe.",
-        "date": "August 05, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "8 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "core-building-blocks-objects-fields-relationships",
-        "title": "Lesson 3: Core Building Blocks: Objects, Fields, Relationships, Record Types, and Formula vs Roll-Up",
-        "series": "salesforce-architect",
-        "lesson": 3,
-        "excerpt": "The architect's canvas: standard and custom objects, field types, lookup vs master-detail relationships, record types for process variation, and when to compute with a formula field vs a roll-up summary.",
-        "date": "August 06, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "8 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Data"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "integration-fundamentals-rest-soap-bulk-apis",
-        "title": "Lesson 4: Integration Fundamentals: REST, SOAP, Bulk APIs, and Picking the Right One",
-        "series": "salesforce-architect",
-        "lesson": 4,
-        "excerpt": "The System Architect's home turf: when to call Salesforce with REST, when to reach for SOAP, when to hand it a CSV via Bulk API 2.0, and the request limits that make the choice matter.",
-        "date": "August 07, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "systems-architecture-what-it-means-ai-patterns",
-        "title": "Lesson 5: General Systems Architecture: What 'Architecture' Means and Why AI Systems Reuse the Same Patterns",
-        "series": "salesforce-architect",
-        "lesson": 5,
-        "excerpt": "The foundational concepts of systems architecture (components, interfaces, and design principles) and why every AI agent pattern (sequential, parallel, hierarchical) is a remix of patterns engineers have known for decades.",
-        "date": "August 08, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "Architecture",
-          "AI at Work"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "integration-patterns-request-reply-fire-forget-batch",
-        "title": "Lesson 6: Integration Patterns: Request-Reply, Fire-and-Forget, and Batch (Inbound & Outbound)",
-        "series": "salesforce-architect",
-        "lesson": 6,
-        "excerpt": "The three archetype integration patterns every Salesforce architect must recognize (request-reply, fire-and-forget, and batch data synchronization), plus the selection matrix, the limits that shape each choice, and a worked example that combines all three.",
-        "date": "August 09, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "event-driven-integration-platform-events-change-data-capture",
-        "title": "Lesson 7: Event-Driven Integration: Platform Events + Change Data Capture",
-        "series": "salesforce-architect",
-        "lesson": 7,
-        "excerpt": "The Salesforce event bus, Platform Events vs. Change Data Capture: when to publish business intent vs. record state, how to consume on- and off-platform, and the hard truth about ordering, replay, and allocations.",
-        "date": "August 10, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "8 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Integration",
-          "Data"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "middleware-tradeoffs-mulesoft-boomi-custom-salesforce-hub",
-        "title": "Lesson 8: Middleware Tradeoffs: MuleSoft vs Boomi vs Custom (and When Salesforce Is the Hub)",
-        "series": "salesforce-architect",
-        "lesson": 8,
-        "excerpt": "How to choose the integration layer: MuleSoft's API-led pro-code platform, Boomi's low-code iPaaS, hand-rolled custom code, and the decision matrix for when Salesforce itself should be the hub instead of any middleware at all.",
-        "date": "August 11, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Integration",
-          "Platform Engineering"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "integration-reliability-idempotency-retries-error-handling-dead-letter-design",
-        "title": "Lesson 9: Integration Reliability: Idempotency, Retries, Error Handling, and Dead-Letter Design",
-        "series": "salesforce-architect",
-        "lesson": 9,
-        "excerpt": "The reliability toolkit every integration needs: idempotency keys and message IDs so retries are safe, the transient vs. poisoned error taxonomy, bounded retry policies with backoff, per-pattern error handling, and dead-letter design with error tables so nothing is silently lost.",
-        "date": "August 12, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Integration",
-          "Reliability"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "sync-async-queues-eventual-consistency-agent-pipelines",
-        "title": "Lesson 10: Sync vs Async, Queues, and Eventual Consistency: The Laws That Shape Agent Pipelines",
-        "series": "salesforce-architect",
-        "lesson": 10,
-        "excerpt": "The three operating laws that govern any pipeline spanning more than one system: synchronous calls block, asynchronous calls decouple, and distributed systems settle into eventual consistency. Queues are the buffer that makes async safe. And the same laws that drive Salesforce governor limits now shape multi-agent AI pipelines.",
-        "date": "August 13, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "Architecture",
-          "Integration",
-          "Reliability",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "security-architecture-sharing-model-owd-role-hierarchy-sharing-rules",
-        "title": "Lesson 11: Security Architecture: The Sharing Model, OWD, Role Hierarchy, Sharing Rules, and Manual Sharing",
-        "series": "salesforce-architect",
-        "lesson": 11,
-        "excerpt": "Who can see a given record? The four record-level controls that answer it: org-wide defaults, the role hierarchy, sharing rules, and manual sharing. How they layer, how they only ever open access, and why 'most permissive wins' is the whole game.",
-        "date": "August 14, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Security"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "security-profiles-permission-sets-permission-set-groups-mfa-session-policies",
-        "title": "Lesson 12: Security, Part 2: Profiles, Permission Sets, Permission Set Groups, MFA, and Session Policies",
-        "series": "salesforce-architect",
-        "lesson": 12,
-        "excerpt": "Who can do what in an org. The move from profile-led to permission-set-led access, what a permission set group bundles together, the 2026 MFA enforcement that now touches every login, and the session policies that decide how long a session lives.",
-        "date": "August 15, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Security"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "security-external-access-oauth-saml-connected-apps-communities",
-        "title": "Lesson 13: Security, Part 3: External Access, OAuth, SAML/SSO, Connected Apps, and Communities",
-        "series": "salesforce-architect",
-        "lesson": 13,
-        "excerpt": "How outside systems and outside people get in. OAuth flows for machine access, SAML single sign-on for employee logins, connected apps as the doorway, and Experience Cloud communities as the portal where customers and partners authenticate without touching your internal identity system.",
-        "date": "August 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Security"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "data-architecture-data-model-design-patterns-data-skew",
-        "title": "Lesson 14: Data Architecture: Data Model Design, Common Data Model Patterns, and Data Skew",
-        "series": "salesforce-architect",
-        "lesson": 14,
-        "excerpt": "Data is the load-bearing wall of every org. Designing a data model that scales means deciding where each relationship lives, recognizing the recurring shapes that solve real problems, and keeping the load off any single parent record or owner. This lesson covers data model design, the common patterns (one-to-many, many-to-many, hierarchical, and data tiering), and the three data skews that quietly break performance.",
-        "date": "August 17, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Data"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "data-architecture-for-ai-vector-databases-embeddings",
-        "title": "Lesson 15: Data Architecture for AI: Databases, Vector DBs, Embeddings, and the Same Modeling Discipline",
-        "series": "salesforce-architect",
-        "lesson": 15,
-        "excerpt": "The data side of AI systems. Embeddings, vector databases, chunking, and why the modeling discipline from a Salesforce data model (records, relationships, source of truth, scale) carries over unchanged when the storage engine becomes a vector store. Includes a worked example of a RAG knowledge base, a pgvector walkthrough, and the Data Cloud vector database connection.",
-        "date": "August 18, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "Architecture",
-          "Data",
-          "LLMs",
-          "RAG"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "data-migration-strategy-etl-elt-tools-validation-cutover-rollback",
-        "title": "Lesson 16: Data Migration Strategy: ETL vs ELT, Tools, Validation, Cutover, and Rollback",
-        "series": "salesforce-architect",
-        "lesson": 16,
-        "excerpt": "The full migration lifecycle: ETL vs ELT, the Salesforce tool options (Data Import Wizard vs Data Loader vs enterprise ETL), dependency-ordered loading with external IDs, validation by record count and spot check, and the cutover and rollback plan that keeps a bad load from becoming a disaster.",
-        "date": "August 19, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Data"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "large-data-volumes-archiving-big-objects-skinny-tables-indexing",
-        "title": "Lesson 17: Large Data Volumes: Archiving, Big Objects, Skinny Tables, and Indexing Strategy",
-        "series": "salesforce-architect",
-        "lesson": 17,
-        "excerpt": "How an org stays fast and inside its storage as volume grows: selectivity and custom indexes, skinny tables for read-heavy hot data, big objects for bulk historical storage, and archiving as the tier that sheds cold data before it drags everything down.",
-        "date": "August 20, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Data",
-          "RAG"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "system-limits-governor-api-storage-planning",
-        "title": "Lesson 18: System Limits: Governor, API, and Storage Limits, and Planning Around Them",
-        "series": "salesforce-architect",
-        "lesson": 18,
-        "excerpt": "Governors exist to keep a multitenant platform fair. Learn the limits, then bulkify, batch, and monitor so they never fire on your watch.",
-        "date": "August 21, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "environment-release-strategy-sandboxes-change-sets-devops",
-        "title": "Lesson 19: Environment and Release Strategy: Sandbox Types, Change Sets vs DevOps (sf/sfdx)",
-        "series": "salesforce-architect",
-        "lesson": 19,
-        "excerpt": "Where work happens and how it moves to production. The four sandbox types (Developer, Developer Pro, Partial Copy, Full), what each copies and how often it refreshes, then the release-mechanism fork: click-based change sets versus source-driven deployment with the sf CLI and a Git-based source of truth, including Salesforce DX and DevOps Center.",
-        "date": "August 22, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Delivery",
-          "DevOps"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "environments-cicd-in-ml-ai-pipelines",
-        "title": "Lesson 20: General Systems Architecture: Environments and CI/CD in ML and AI Pipelines",
-        "series": "salesforce-architect",
-        "lesson": 20,
-        "excerpt": "The same environment-and-release discipline from Lesson 19, applied to machine learning and AI systems. Why the ML artifact is more than code (code, data, and model all change), the continuous X's (CI, CD, CT, CM), the MLOps maturity levels, how a model promotes from a development environment to production, and what changes when the artifact is a nondeterministic agent that needs eval gates instead of unit tests.",
-        "date": "August 23, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "Architecture",
-          "AI Infrastructure",
-          "CI/CD",
-          "Delivery",
-          "AI Agents"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "solution-design-requirement-to-architecture-doc-nfrs-tradeoffs",
-        "title": "Lesson 21: Solution Design: Turning a Requirement Into an Architecture Document (NFRs and Tradeoffs)",
-        "series": "salesforce-architect",
-        "lesson": 21,
-        "excerpt": "How a requirement becomes an architecture document: separating the business why from the what and the how, writing measurable non-functional requirements using the Salesforce Well-Architected framework (Trusted, Easy, Adaptable), resolving design tradeoffs explicitly, and recording each decision with its rationale so the delivery team can build without re-litigating every choice.",
-        "date": "August 24, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "architecture-review-design-reviews-decision-records-saying-no",
-        "title": "Lesson 22: Architecture Review: Design Reviews, Decision Records, and How to Say No",
-        "series": "salesforce-architect",
-        "lesson": 22,
-        "excerpt": "The review discipline that keeps architecture coherent as the org grows: design review as a forum, not a gate, the ADR as durable decision memory, and how to decline a bad how without rejecting the person behind it.",
-        "date": "August 25, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Governance"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "error-handling-monitoring-debug-logs-event-monitoring-health-checks-alerts",
-        "title": "Lesson 23: Error Handling and Monitoring: Debug Logs, Event Monitoring, Health Checks, and Alerts",
-        "series": "salesforce-architect",
-        "lesson": 23,
-        "excerpt": "The observability layer of a Salesforce org: debug logs and trace flags when a transaction misbehaves, Event Monitoring when you need who, what, and when across the whole org, health checks for the security baseline and the platform status, and the alerting that turns all of it into action instead of archaeology.",
-        "date": "August 26, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Observability",
-          "Reliability"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "performance-query-optimization-selective-soql-indexes-caching",
-        "title": "Lesson 24: Performance: Query Optimization, Selective SOQL, Indexes, and Caching",
-        "series": "salesforce-architect",
-        "lesson": 24,
-        "excerpt": "How a query becomes fast: the selectivity thresholds the optimizer uses to decide whether an index is worth it, how to write SOQL that the optimizer will actually treat well, how to measure and index, and Platform Cache as the lever that skips the query entirely.",
-        "date": "August 27, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Performance",
-          "RAG"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "performance-engineering-ai-latency-caching-throughput-batching",
-        "title": "Lesson 25: Performance Engineering for AI: Latency Budgets, Caching, Throughput, and Batching",
-        "series": "salesforce-architect",
-        "lesson": 25,
-        "excerpt": "Performance stops being about one query and becomes a system-wide budget the moment AI is in the path. This lesson covers latency budgets, the difference between throughput and latency, the batch that makes LLM inference affordable, and the caches that skip work entirely.",
-        "date": "August 28, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "Architecture",
-          "Performance",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "enterprise-rest-api-design-versioning-pagination-bulk-best-practices",
-        "title": "Lesson 26: Enterprise REST API Design: Versioning, Pagination, Bulk, and Best Practices",
-        "series": "salesforce-architect",
-        "lesson": 26,
-        "excerpt": "The design layer under every REST integration: how Salesforce versions its API, how to page through large result sets without breaking, when bulk writes beat synchronous calls, and the habits that keep an integration alive for years.",
-        "date": "August 30, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "integration-security-named-credentials-jwt-certificates-ip-allowlisting",
-        "title": "Lesson 27: Integration Security: Named Credentials, JWT, Certificates, and IP Allowlisting",
-        "series": "salesforce-architect",
-        "lesson": 27,
-        "excerpt": "The security layer under every integration: named credentials that keep endpoints and secrets out of code, JWT bearer for server-to-server auth, certificates for signing and mutual TLS, and IP allowlisting as the last fence that says who is even allowed to knock.",
-        "date": "August 31, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Integration",
-          "Security",
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "high-volume-event-patterns-streaming-pacing-platform-event-limits",
-        "title": "Lesson 28: High-Volume Event Patterns: Streaming, Pacing, and Platform Event Limits",
-        "series": "salesforce-architect",
-        "lesson": 28,
-        "excerpt": "What changes when event volume stops being a trickle and becomes a flood: streaming with the Pub/Sub API, pacing publish rates against rolling limits, and the platform event allocations that decide whether your bus survives the day.",
-        "date": "September 1, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Integration",
-          "Web Development",
-          "Project Management"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "testing-integrations-mocking-sandbox-test-strategy-integration-suites",
-        "title": "Lesson 29: Testing Integrations: Mocking, Sandbox Test Strategy, and Integration Test Suites",
-        "series": "salesforce-architect",
-        "lesson": 29,
-        "excerpt": "Testing an integration is not the same as testing the code on one side of it. You have to fake the external system to unit test your Apex, pick the right sandbox to test against real data, and build suites that prove the pieces work together before they reach production. This lesson covers each layer: mocking callouts, a sandbox strategy, and integration test suites.",
-        "date": "September 2, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Architecture",
-          "Testing",
-          "Integrations"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "testing-ai-systems-evals-golden-sets-canaries-regression",
-        "title": "Lesson 30: General Systems Architecture: Testing AI Systems: Evals, Golden Sets, Canaries, and Regression",
-        "series": "salesforce-architect",
-        "lesson": 30,
-        "excerpt": "A model is not a method you can pin to a single expected output. This lesson covers the testing discipline that replaces the unit test for AI systems: evals as structured tests, golden sets as the regression anchor, and canary deployments as the production safety net, with the Salesforce tools that already ship this discipline.",
-        "date": "September 03, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "Architecture",
-          "AI Infrastructure",
-          "Testing",
-          "AI Agents"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "apex-architecture-service-layer-domain-selector-patterns",
-        "title": "Lesson 31: Apex Architecture: Service Layer, Domain, and Selector Patterns",
-        "series": "salesforce-architect",
-        "lesson": 31,
-        "excerpt": "Apex triggers and classes are where business logic actually lives, and how you organize that code decides whether a solution stays maintainable for five years or turns into spaghetti the first time a requirement changes. This lesson covers the three enterprise patterns that keep Apex code organized: the service layer for orchestrating processes, the domain layer for object behavior, and the selector layer for all your SOQL. It covers why they matter, how they fit together, and a worked example of all three in action.",
-        "date": "September 4, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "Architecture",
-          "Apex",
-          "Patterns"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "flow-architecture-flow-vs-apex-vs-external-automation",
-        "title": "Lesson 32: Flow Architecture: Flow vs Apex vs External Automation, Decision Framework",
-        "series": "salesforce-architect",
-        "lesson": 32,
-        "excerpt": "A repeatable framework for choosing where a process runs: Record-Triggered Flow for low-density automation, the hybrid Flow plus invocable Apex pattern for medium density, Apex triggers for high density, and the boundary where automation should leave the org entirely for external, agentic, or cross-system work.",
-        "date": "September 5, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Flow",
-          "Apex"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "bulkification-trigger-frameworks-limits-aware-design",
-        "title": "Lesson 33: Bulkification & Trigger Frameworks: Limits-Aware Design That Scales",
-        "series": "salesforce-architect",
-        "lesson": 33,
-        "excerpt": "The reason a trigger that works on one record fails on a data load. Governor limits put a hard ceiling on SOQL, DML, heap, and CPU per transaction. Bulkification keeps every layer working on collections, and a trigger framework keeps one handler in charge of the object so the code that touches the platform is tiny and the logic is testable.",
-        "date": "September 6, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Apex",
-          "Triggers"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "data-model-design-inheritance-polymorphic-denormalization",
-        "title": "Lesson 34: Data Model Design: Inheritance, Polymorphic Relationships, and Denormalization Tradeoffs",
-        "series": "salesforce-architect",
-        "lesson": 34,
-        "excerpt": "Three data modeling tools that people reach for when records stop being uniform: inheritance for records that are kinds of a common thing, polymorphic relationships for a single field that must point at several object types, and denormalization for precomputing data so reads get fast. Each solves a real problem, and each hides a cost. This lesson defines them precisely, shows how Salesforce represents each one, and walks a worked example that forces you to use all three at once.",
-        "date": "September 7, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Data"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "domain-modeling-entities-aggregates-bounded-contexts-agent-design",
-        "title": "Lesson 35: Domain Modeling: Entities, Aggregates, and Bounded Contexts Applied to Agent Design",
-        "series": "salesforce-architect",
-        "lesson": 35,
-        "excerpt": "The strategic and tactical tools of domain modeling (entities, aggregates, bounded contexts, ubiquitous language) and how the same discipline that keeps a data model coherent also keeps a multi-agent system from collapsing into a tangle of overlapping prompts.",
-        "date": "September 08, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "Architecture",
-          "AI at Work"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "sharing-architecture-deep-dive-recalculation-implicit-sharing-limits",
-        "title": "Lesson 36: Sharing Architecture Deep Dive: Recalculation, Implicit Sharing, and When Sharing Can't Do the Job",
-        "series": "salesforce-architect",
-        "lesson": 36,
-        "excerpt": "Sharing is not static, and it is not unlimited. When an org-wide default changes, the platform recalculates share records across the org, and on a big data volume that job can churn for hours. Implicit sharing hands out access automatically through parent-child relationships, whether you asked for it or not. And at a certain scale, declarative sharing stops being the right tool, which is when Apex managed sharing and restriction rules take over.",
-        "date": "September 9, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Security"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "asynchronous-apex-choosing-batch-queueable-scheduled-future",
-        "title": "Lesson 37: Asynchronous Apex: Batch, Queueable, Scheduled, and Future, and How to Choose",
-        "series": "salesforce-architect",
-        "lesson": 37,
-        "excerpt": "Four ways to move work out of the user's transaction, and they are not interchangeable. Future methods are fire-and-forget with primitive parameters only, queueable jobs carry real objects and hand back a job Id you can monitor, batch Apex trades immediacy for volume by running each chunk as its own transaction, and scheduled Apex is a timer that should do nothing but start one of the other three. Pick wrong and you either hit the synchronous ceiling you were escaping or you burn the org's shared async budget on work a single call could have done.",
-        "date": "September 10, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Apex",
-          "Asynchronous"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "governor-limit-aware-design-soql-sosl-dml-budgets",
-        "title": "Lesson 38: Governor-Limit-Aware Design: SOQL, SOSL, and DML Budgets",
-        "series": "salesforce-architect",
-        "lesson": 38,
-        "excerpt": "A transaction does not get a budget per trigger or per class. It gets 100 SOQL queries, 150 DML statements, 50,000 returned query rows, and 10,000 DML rows as one pool, and every trigger, record-triggered Flow, and uncertified package in that transaction spends from it. Designing limits-aware means knowing which calls consume a statement, which consume a row, and why the two meters fail at different batch sizes. This lesson covers the SQL and DML meters, where SOSL fits in the same budget, and the review habits that catch a limit exception before a data load does.",
-        "date": "September 11, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Apex",
-          "Limits",
-          "SOQL"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "transaction-lifecycle-state-save-order-trigger-contexts",
-        "title": "Lesson 39: Transaction Lifecycle: State, Save Order, and the 4 Trigger Contexts in One Transaction",
-        "series": "salesforce-architect",
-        "lesson": 39,
-        "excerpt": "A record save is not one moment. It is a transaction that walks a fixed sequence: the record loads, system validation runs, before-save Flows and before triggers fire, custom validation and duplicate rules run, the record writes to the database but does not commit, after triggers fire, then assignment, workflow, escalation, roll-up, and sharing logic run, and only then does the transaction commit. Each phase sees the record in a different state, and that state difference is what before-save logic exploits and after-save logic must respect. This lesson walks a single save through that lifecycle, defines the four trigger contexts (before insert, before update, after insert, after update) that one transaction can run, and shows why a workflow field update re-fires triggers while a validation failure rolls everything back.",
-        "date": "September 12, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "Salesforce",
-          "Apex",
-          "Triggers",
-          "Transaction",
-          "Architecture"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "stateful-vs-stateless-agents-context-memory-tool-state",
-        "title": "Lesson 40: Stateful vs Stateless Agents: Context, Memory, and Tool State",
-        "series": "salesforce-architect",
-        "lesson": 40,
-        "excerpt": "Why a language model remembers almost nothing and knows a great deal, what it costs to ship a purely stateless agent, and how context, memory, and tool state become the architecture that decides whether an agent is useful on day one or day thirty.",
-        "date": "September 13, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "Architecture",
-          "AI at Work",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "experience-cloud-architecture-sites-communities-licensing-sharing",
-        "title": "Lesson 41: Experience Cloud Architecture: Sites, Communities, Licensing, and Sharing",
-        "series": "salesforce-architect",
-        "lesson": 41,
-        "excerpt": "Experience Cloud as architecture: what a site actually is, why the framework you build it on (LWR versus Aura) changes your whole subsystem design, how licensing attaches to users rather than pages, and the external sharing architecture that keeps an outsider's window exactly the right size.",
-        "date": "September 14, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Experience Cloud"
-        ],
-        "status": "published"
-      }
-    ],
-    "totalLessons": 41,
-    "curriculumLessons": 90
-  },
-  {
     "slug": "agentic-ai",
     "name": "Agentic AI Implementation Path",
     "description": "From single-agent prototypes to multi-agent orchestration, a practitioner's curriculum for shipping agentic systems.",
@@ -3350,6 +3381,37 @@ export const learnSeries: LearningSeries[] = [
 
 /** Flat list of every lesson, NEWEST FIRST (for sitemap, nav, flat lookups). */
 export const learnLessons: LearnLesson[] = [
+  {
+    "slug": "day-37-dm-8-data-mapper-best-practices",
+    "title": "OmniStudio DM-8: Data Mapper Best Practices",
+    "series": "omni-studio-cert",
+    "lesson": 37,
+    "excerpt": "Distill the Data Mapper domain into the five habits that separate a fragile mapper from a dependable one: secure it first (field-level security, required permission, and avoiding raw SOQL where FLS matters), parameterize inputs so a mapper becomes a reusable artifact, shape outputs deliberately so the output mapping is the contract, test with sample JSON before any consumer depends on it, and optimize for performance and reuse across OmniScripts, Integration Procedures, and FlexCards. Learn why a targeted, well-named, security-checked mapper beats a Swiss Army knife, work a full build of a reusable case lookup, and sidestep the exam traps where security is skipped, inputs are hardcoded, or sample-JSON testing never happens.",
+    "date": "September 15, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "17 min read",
+    "tags": [
+      "OmniStudio",
+      "DataMappers"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "lightning-web-components-architecture-composition-wire-data-services",
+    "title": "Lesson 42: Lightning Web Components Architecture: Composition, Wire Service, and Data Services",
+    "series": "salesforce-architect",
+    "lesson": 42,
+    "excerpt": "How Lightning Web Components are built from smaller pieces and fed data: component composition and the data-down/events-up contract, the wire service and its reactivity, and the Lightning Data Service cache that shares one version of a record across every component that renders it.",
+    "date": "September 15, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Salesforce",
+      "Architecture",
+      "Lightning Web Components"
+    ],
+    "status": "published"
+  },
   {
     "slug": "keeping-the-skill-sharp-staying-current-as-tools-change",
     "title": "Lesson 30: Keeping the Skill Sharp: Staying Current as Tools Change",
