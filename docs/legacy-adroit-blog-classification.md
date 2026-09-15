@@ -5,26 +5,34 @@ Scope: every case-insensitive occurrence of `adroit-blog` in the tracked files o
 (base `origin/main` at the time of the sweep).
 
 Method: a script walks every tracked file, counts occurrences, and rewrites the tree with
-git. Nothing historical was rewritten: `design/**`, `discovery/**`, `requirements/**`,
-`docs/**` (implementation and architecture records) and `CHANGELOG.md` are unchanged.
+git. Nothing historical was rewritten: `design/**`, `discovery/**`, `requirements/**` and
+the `docs/**` implementation and architecture records are unchanged, and not one
+pre-existing occurrence in `CHANGELOG.md` was edited (this card only appends a new entry to
+it, and that entry quotes the string 10 more times).
 
 ## Counts
 
-| scope | before | after |
+| scope | before (base) | after (this commit) |
 |---|---|---|
-| tracked occurrences | 251 | 206 |
+| tracked occurrences | 251 | 216 |
 | tracked files | 130 | 111 |
-| occurrences fixed in this card | | 45 in 20 files |
+| occurrences removed by this card | | 45 in 20 files |
+| occurrences added by this card | | 10 in 1 file (`CHANGELOG.md`, this card's own entry) |
+
+The 216 occurrences in the tree at this commit are the 206 carried over from the sweep plus
+the 10 quoted by this card's own `CHANGELOG.md` entry. The classification below covers the
+206 carried-over occurrences; the 10 new ones are the changelog entry for this card, need
+no verdict, and are excluded from the 206 figure on purpose.
 
 This document is the one file in the repo that quotes the string by necessity (it is the
-classification), so it is excluded from both counts. To reproduce them:
+classification), so it is excluded from all of the counts above. To reproduce them:
 `grep -ril adroit-blog --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.next .`
-then drop `docs/legacy-adroit-blog-classification.md` from the file list.
+then drop `docs/legacy-adroit-blog-classification.md` from the file list; on the base commit
+that yields 251 occurrences in 130 files, on this commit 216 in 111.
 
-The remaining 206 occurrences are classified below. Every one of the
-251 original occurrences is accounted for: 45 removed by this
-card plus 206 kept (31 code identifiers, 137 historical
-records, 38 dead artifacts).
+Every one of the 251 occurrences that predate this card is accounted for: 45 removed by this
+card plus 206 kept (31 code identifiers, 137 historical records, 38 dead artifacts), and the
+10 added by this card's own `CHANGELOG.md` entry bring the tree to 216.
 
 ## 1. live-doc, fixed (45 occurrences, 20 files)
 
@@ -79,16 +87,19 @@ its own tests, so both are left alone here and listed as follow-ups.
 | 2 | `src/lib/hooks/useReadProgress.ts` | runtime identifier (localStorage key or custom event namespace) or CSRF allowlist value; changing it would orphan stored reader progress or a shipped test |
 | 8 | `src/lib/progress.ts` | runtime identifier (localStorage key or custom event namespace) or CSRF allowlist value; changing it would orphan stored reader progress or a shipped test |
 
-## 3. legacy-doc, kept verbatim (137 occurrences, 65 files)
+## 3. legacy-doc, kept verbatim (137 occurrences carried over, 65 files)
 
 Verdict: historical record of a past decision (design briefs, discovery notes, requirement
 and architecture records, dated release notes). AC-5 requires these to be preserved, and a
 sweep that edits them would be rewriting history rather than cleaning up current-facing
 docs.
 
+The 137 below are the pre-existing occurrences. `CHANGELOG.md` sits at 30 occurrences in the
+tree at this commit: its 20 historical ones plus the 10 quoted by this card's own entry.
+
 | occ | file | verdict |
 |---|---|---|
-| 20 | `CHANGELOG.md` | historical design, discovery, requirements or release record of a past decision; AC-5 keeps these verbatim |
+| 20 | `CHANGELOG.md` | historical design, discovery, requirements or release record of a past decision; AC-5 keeps these verbatim. The 20 pre-existing occurrences are untouched — the file reads 30 at this commit only because this card appends its own entry, which quotes the string 10 more times |
 | 1 | `deliverables/dark-mode-token-spec.md` | historical design, discovery, requirements or release record of a past decision; AC-5 keeps these verbatim |
 | 1 | `design/arch/admin-experience-arch.md` | historical design, discovery, requirements or release record of a past decision; AC-5 keeps these verbatim |
 | 1 | `design/architecture-content.html` | historical design, discovery, requirements or release record of a past decision; AC-5 keeps these verbatim |
