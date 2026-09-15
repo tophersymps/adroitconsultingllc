@@ -11,13 +11,15 @@ Feature: a single-narrator (voice `af_heart`) audio player on every article, wit
 
 ## Component map
 
-- `AudioPlayer` (new, client, `src/components/BlogPost/AudioPlayer.tsx`) — renders three states from `audio + isAuthed`:
-  1. no `ArticleAudio` for slug → `null`.
+- `AudioPlayer` (new, client, `src/components/BlogPost/AudioPlayer.tsx`) — renders three states from `hasAudio + isAuthed`:
+  1. `!hasAudio` (no `ArticleAudio` for slug) → `null`.
   2. logged-out (`!isAuthed`) → compact locked card, "Sign up to listen", NO `<audio>`.
-  3. signed-in → native `<audio controls src={/api/audio/<slug>}>` + 1x/1.25x/1.5x speed select, `aria-label="Article audio player"`.
+  3. signed-in → native `<audio controls preload="none" src={/api/audio/<slug>}>` + 1x/1.25x/1.5x speed select, `aria-label="Article audio player"`.
+  - Props: `AudioPlayerProps = { slug: string; hasAudio?: boolean }` (`AudioPlayer.tsx:32-46`). There is NO `audio` prop — only the boolean crosses the boundary, so the private `ArticleAudio` (`storagePath` / `timingsStoragePath`) is never serialized to the client (DoD-4).
   - Auth resolved via existing `useAuth()` hook (`src/lib/hooks/useAuth.ts`, `user !== null` after `!isLoading`), not a prop.
+- `AudioPlayerLazy` (new, client, `src/components/BlogPost/AudioPlayerLazy.tsx`) — the lazy client boundary: `next/dynamic(() => import("@/components/BlogPost/AudioPlayer"), { ssr: false })` re-exported as `<AudioPlayerLazy slug={…} hasAudio />`. `ssr:false` must live in a client component because the article page is a Server Component (same pattern as `HubbleFieldLabClient`). This keeps the ~6 KB `AudioPlayer` client chunk out of the JS bundle of the ~86 article pages with no narration — see "Read-path performance" below.
 - `MDXArticle` / `Figure` (existing) — markdown `alt` is the accessible diagram description the narration reads (AC-2 source). No Figure change required.
-- Article page `src/app/field-notes/[slug]/page.tsx` (existing SSG) — mount `<AudioPlayer slug={post.slug} audio={articleAudio.find(a => a.slug === post.slug)} />` just above the `<article className="article-body …">` block.
+- Article page `src/app/field-notes/[slug]/page.tsx` (existing SSG) — resolves `const audio = articleAudio.find((a) => a.slug === slug)` server-side (`page.tsx:68`) and, only when that is truthy, renders the Tier C FLOAT wrapper `<div className="sticky top-16 z-40 max-w-[920px] mx-auto px-6 my-6">` containing `<AudioPlayerLazy slug={post.slug} hasAudio />` (`page.tsx:173-177`), just above the `<article className="article-body …">` block. The wrapper is a DIRECT child of `<main>` so its sticky range covers the whole article scroll; it docks at `top-16` (64 px, immediately below the `sticky top-0 z-50` h-16 Header) at `z-40` so it never covers the header.
 
 ## Data & API
 
@@ -32,10 +34,22 @@ Feature: a single-narrator (voice `af_heart`) audio player on every article, wit
 | Condition | Status | Body / headers |
 |---|---|---|
 | Unknown slug (absent from `articleAudio`) | 404 | no body |
-| Authenticated + object retrievable | 200 | `audio/mpeg`, `Cache-Control: private, max-age=3600` |
+| Authenticated + object retrievable | 200 | `audio/mpeg`, `Cache-Control: private, max-age=3600`, `Accept-Ranges: bytes`, `Content-Length` |
+| Authenticated + object retrievable + a single byte `Range` honored | 206 | the requested slice, `Content-Range: bytes <start>-<end>/<total>`, `Content-Length`, `Accept-Ranges: bytes` |
+| `Range` unsatisfiable (start beyond the end of the object) | 416 | no body, `Content-Range: bytes */<total>` |
 | Unauthenticated / invalid session | 401 | no body |
 
+**Range rules** (`route.ts:64-119`; mirrored in `contracts.ts:154-158`): the route honors a SINGLE HTTP byte range — `bytes=start-end`, `bytes=start-` or `bytes=-suffix` — and answers `206` + `Content-Range`; an unsatisfiable range is `416` with a `Content-Range: bytes */<total>` hint. Every servable response advertises `Accept-Ranges: bytes`. Everything else degrades to a full `200`: a malformed or multi-range header, and ANY request carrying `If-Range` (the route emits no ETag / Last-Modified, so by RFC 7233 the validator cannot be confirmed to match and the Range is ignored — the cheap, correct If-Range fallback for a streamed resource). `AudioRouteResponse` in `contracts.ts` enumerates only the auth/presence outcomes the player depends on — `200 | 401 | 404`; `206` and `416` are transport-level details of a successful read.
+
 Flow: `getSupabaseServerClient().auth.getUser()` → 401 if no user → resolve `storagePath` from `articleAudio` → 404 if absent → `getR2Object(storagePath)` (`src/lib/r2/client.ts`, an S3 GetObject against the private R2 bucket `adroit-audio`, bucket-scoped credentials, path-style addressing, region `auto`) → stream the bytes back as fixed `audio/mpeg`. The object is fetched INSIDE the handler and never leaves the server as a URL: NO public URL and NO signed URL is ever emitted, as a fallback included. `getR2Object` returns `null` for a missing key (→ 404) and throws on any other failure (→ the handler fails closed to 401). NEVER `storage.getPublicUrl`.
+
+### Read-path performance
+
+Three mechanisms keep the read path from costing anything until the reader asks for it, and from re-transferring a blob the browser already has:
+
+- **`preload="none"` on the player** (`AudioPlayer.tsx:313`) — no audio bytes cross the wire until Play. The `<audio>` element issues no metadata or media request on mount; everything starts from the user's interaction.
+- **Range/206 passthrough** (`route.ts`, contract note at `contracts.ts:154-158`) — the browser's `<audio>` element probes and seeks with byte-Range requests; the route forwards the requested slice and answers `206` + `Content-Range`, so a seek does not re-transfer the whole 1–3 MB MP3. This is the transport half of the same read path the 200/401/404 matrix describes.
+- **Lazy client boundary `AudioPlayerLazy`** (`AudioPlayerLazy.tsx`, `next/dynamic` + `ssr:false`) — the ~6 KB `AudioPlayer` chunk (plus the `useAuth()` session fetch it triggers) is only fetched on articles that actually carry a narration. The gate is server-side: `page.tsx:159-175` renders the sticky wrapper + `<AudioPlayerLazy …>` only when `audio` (the `articleAudio.find` at `page.tsx:68`) is truthy, so the ~86 articles without audio ship none of this JS and make no extra `/api/auth/session` call.
 
 ### Storage key scheme (AC-1)
 
