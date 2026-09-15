@@ -34,7 +34,7 @@ count — that grows daily and would reshuffle the sky.
 Run the pool command to see what's available and what size fits:
 
 ```bash
-cd ~/Documents/Fortress-of-Solitude/adroit-blog
+cd ~/.hermes/kanban/workspaces/adroit-site-copy
 npm run constellation:pool
 ```
 

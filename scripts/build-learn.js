@@ -143,7 +143,7 @@ function assertNoLessonCountOverpromise(series) {
   if (claimed !== null && claimed > published) {
     throw new Error(
       `[B-04] ${series.slug} description overpromises lessons: claims ${claimed}, only ${published} published. ` +
-        `Fix the copy (adroit-blog discovery/consolidated-backlog.md B-04).`,
+        `Fix the copy (discovery/consolidated-backlog.md B-04).`,
     );
   }
   for (const l of series.lessons) {

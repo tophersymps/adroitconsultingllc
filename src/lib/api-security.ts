@@ -182,10 +182,11 @@ export function getClientIp(req: NextRequest): string {
 const ALLOWED_ORIGINS = new Set([
   "https://adroit.io",
   "https://www.adroit.io",
-  // Live deployed blog origin. NOTE: the deploy is on the "-two" subdomain —
-  // adroit.io / www.adroit.io 404 the blog. Keep the stale adroit-blog entry
-  // for any legacy first-party links that still reference it; it does not
-  // resolve to a live deploy but is harmless to keep.
+  // Retired pre-merger Vercel origins. Both projects were deleted on
+  // 2026-09-15 and their URLs 404 today. They are kept so any first-party
+  // page or bookmark still posting from them keeps working: an `Origin`
+  // header cannot be forged cross-site, so a stale entry here is not a
+  // bypass, it is dead weight. Removing them is a cleanup follow-up.
   "https://adroit-blog-two.vercel.app",
   "https://adroit-blog.vercel.app",
   "http://localhost:3000",

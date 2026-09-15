@@ -3,7 +3,7 @@ import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
 /**
- * Vitest config for the adroit-blog repo (QA F-3).
+ * Vitest config for the adroitconsultingllc repo (QA F-3).
  *
  * - jsdom environment so localStorage / DOM APIs are available.
  * - `@` alias mirrors tsconfig paths (Next.js convention).
