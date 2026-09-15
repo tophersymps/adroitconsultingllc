@@ -75,6 +75,7 @@ export const articleAudio: ArticleAudio[] = [
   { slug: "salesforce-summer-26-three-things", voice: "af_heart", storagePath: "blog/salesforce-summer-26-three-things/af_heart.mp3" },
   { slug: "scalable-react-2026", voice: "af_heart", storagePath: "blog/scalable-react-2026/af_heart.mp3", timingsStoragePath: "blog/scalable-react-2026/af_heart.timing.json" },
   { slug: "scrum-ceremonies-ai-agents-2026", voice: "af_heart", storagePath: "blog/scrum-ceremonies-ai-agents-2026/af_heart.mp3", timingsStoragePath: "blog/scrum-ceremonies-ai-agents-2026/af_heart.timing.json" },
+  { slug: "sprint-planning-routing-review-2026", voice: "af_heart", storagePath: "blog/sprint-planning-routing-review-2026/af_heart.mp3", timingsStoragePath: "blog/sprint-planning-routing-review-2026/af_heart.timing.json" },
   { slug: "sse-vs-websockets-2026", voice: "af_heart", storagePath: "blog/sse-vs-websockets-2026/af_heart.mp3" },
   { slug: "stakeholder-management-delivery-bottleneck-2026", voice: "af_heart", storagePath: "blog/stakeholder-management-delivery-bottleneck-2026/af_heart.mp3", timingsStoragePath: "blog/stakeholder-management-delivery-bottleneck-2026/af_heart.timing.json" },
   { slug: "state-of-the-stack-august-2026", voice: "af_heart", storagePath: "blog/state-of-the-stack-august-2026/af_heart.mp3", timingsStoragePath: "blog/state-of-the-stack-august-2026/af_heart.timing.json" },
