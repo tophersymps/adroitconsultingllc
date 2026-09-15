@@ -1,6 +1,54 @@
 # Changelog
 
 All notable changes to the Adroit Consulting Blog project will be documented in this file.
+
+## [Unreleased]
+
+### Audio: article audio — authed player, streaming route, narration, pilot (t_0ddd606c)
+
+**What** - Shipped the article-audio feature: an in-page `AudioPlayer`
+(`src/components/BlogPost/AudioPlayer.tsx`) on every `/field-notes/<slug>` that
+shows a locked "Sign up to listen" card to logged-out visitors (no working
+`<audio>`, no audio fetch) and a native `<audio controls src=/api/audio/<slug>>`
+player with a 1x/1.25x/1.5x speed select to signed-in readers. New
+`GET /api/audio/[slug]` route streams each narration from the PRIVATE Supabase
+`audio` bucket: `200 audio/mpeg` + `Cache-Control: private, max-age=3600` for
+authenticated requests, `401` unauthenticated, `404` unknown slug. Narration
+comes from `src/lib/audio-narration.ts` (`mdxToNarration`), which reads each
+Figure's markdown alt as a spoken `Diagram: <alt>.` line (the Figure component
+already uses alt as the accessible caption), supports an optional
+`description::` per-figure override, renders headings as section cues, reads
+inline code literally, and drops the verbatim `Sources` list. `scripts/build-audio.js`
+generates the audio, uploads to the private bucket (service-role), and emits the
+generated `src/data/audio.ts`. Pilot: real `af_heart` audio for the 5 most
+recent articles, verified in the private `audio` bucket (anon read blocked).
+
+**Why** - Audio is a free, auth-gated sign-up perk per decision #4: logged-out
+visitors still read the article; the player is a benefit of a free account. The
+private bucket + authenticated route means no public MP3 URL exists at any hop.
+A single narrator (`af_heart`) keeps the brand voice consistent and the pilot
+small.
+
+**Verified** - `npm test` 92 files / 698 tests pass (was 672; +26 audio tests, one
+pre-existing suite count drift); `npm run lint` exit 0 (0 errors); `npm run build`
+exit 0 (every `/field-notes/<slug>` still SSG, no `fs` trap); `tsc --noEmit` clean.
+Live HTTP on the dev server: `/api/audio/<pilot>` → 401 unauthenticated, → 200
+`audio/mpeg` with a real 19.8MB MP3 (MPEG ADTS layer III, 128 kbps, 24 kHz) for an
+authenticated session, → 404 unknown slug; anonymous Supabase read of the private
+object returns 400 (not directly fetchable). Browser: logged-out shows the locked
+card (no `<audio>`), signed-in shows the native player with `src=/api/audio/<slug>`,
+`aria-label="Article audio player"`, and the speed select. Narration proof: each
+pilot article's `mdxToNarration` emits one spoken `Diagram:` line per `![alt]`
+image (agent-eval: 4 figures/4 diagrams, 2962 words; realtime-sub: 3/3; others
+4/4) — read into the uploaded audio.
+
+**Known Issues** - Supabase project `zrggxfdyptiahskogwnn` has no `.env.local` in
+the repo (git-ignored); pilots were run against a locally-recreated env from the
+project's management API, so a future backfill needs the same credentials.
+`src/data/audio.ts` covers only the 5 most recent articles (backfill is a separate
+follow-up). Full-suite count moved 672→698 (the +26 audio tests; one legacy suite's
+test count differs slightly from the prior write-up).
+
 ## [v1.0.0] — 2026-09-02
 
 ### Omni-Content-and-Constellation-Enhancement
