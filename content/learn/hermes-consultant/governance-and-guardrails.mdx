@@ -1,0 +1,110 @@
+---
+title: "Lesson 20: Governance and Guardrails: Acceptable Use, PII, and Responsible Automation"
+slug: governance-and-guardrails
+series: "hermes-consultant"
+lesson: 20
+excerpt: "An agent that can do anything is an agent your client should not trust. This lesson teaches the governance craft: writing a plain acceptable-use policy that says what the agent may and may not do, treating personal data as a bounded resource instead of something to hoard, and building guardrails that enforce the policy mechanically so automation stays inside the lines even when nobody is watching."
+date: "September 15, 2026"
+author: "Adroit Consulting"
+readTime: "13 min read"
+tags: [AI Agents, Consulting, LLMs]
+---
+
+# Lesson 20: Governance and Guardrails: Acceptable Use, PII, and Responsible Automation
+
+By now in this series you have built an agent that can do real work. It reads the client's ticketing system, it composes summaries, it fires reports on a schedule, and it has business context about the client's customers and operations. That is exactly the point where a different kind of question surfaces, and it is the question too many engagements never ask until something goes wrong. What are the rules for this thing? What is it allowed to do, what is it allowed to know, and who decided?
+
+The agent you built is capable, which means it is also risky. It has real access, it handles real data, and part of its value is that it runs unattended, doing work in the background of a business that is not going to watch every step. That combination of capability, reach, and unattended operation is what makes governance non-negotiable. Not as a compliance checkbox you fill at the end, but as a design decision you make up front, the same way you decided on scoping and security. This lesson gives you the craft: a plain-language acceptable-use policy, a disciplined approach to personal data, and mechanical guardrails that make the rules hold.
+
+Hermes Agent is the concrete vehicle because it lets you express all three: a policy you write, data handling you control, and guardrails that are enforced by the platform rather than by good intentions.
+
+## Define the terms: acceptable use, PII, and guardrails
+
+Start by naming the three ideas, because consultants who skip the definitions write vague rules that nobody can enforce.
+
+**Acceptable use** is a written statement of what an actor, human or agent, may and may not do, and with what limits. For a person it is an IT policy document. For an agent it is the set of boundaries that define the job: which systems it may touch, which actions it may take, what it may do with the data it reads, and what it must never do. The value of writing it down is not the paper. It is that written rules can be checked against, reviewed by the client, and turned into the guardrails that enforce them. A governance rule you cannot state has not actually been decided.
+
+**PII** stands for personally identifiable information: any data that can identify a living person. Names, email addresses, phone numbers, government IDs, medical records, location history, bank details. In the claims-intake engagement you have carried through this series, PII shows up constantly: the claimant's name, the case number tied to them, their contact details, the details of their claim. The discipline around PII is not the same as the discipline around secrets. A secret is a credential you hide so nobody steals it. PII is data that has a legitimate business purpose but also carries legal and ethical obligations, so the question is not just where you hide it but whether you should have it at all, and how long you keep it.
+
+**Guardrails** are the enforced limits that make the policy real even when nobody is watching. A guardrail does not rely on the agent deciding to behave. It mechanically refuses, the way a gate stops a car from driving off a cliff regardless of what the driver thinks they are doing. You set the rail, and the platform refuses to cross it. This distinction, between a rule you hope will be followed and a guardrail that cannot be crossed, is the entire difference between a compliant-looking engagement and one that is actually safe under unattended operation.
+
+## Write the acceptable-use policy before you configure anything
+
+The discipline of governance starts before you touch a setting. You write the acceptable-use policy first, on the engagement you are about to govern, and you write it in plain language that a non-technical client can read and approve. A policy nobody can understand is a policy nobody signed off on, and a policy nobody signed off on is a policy that disappears at the first dispute.
+
+The policy answers a short list of questions. What systems does the agent touch, and what can it do in each one? What should it do with the data it reads, and what should it never do with that data? What counts as out-of-bounds behavior, and who decides when it happens? What happens with the records of its work, and how long do they live? You write short, concrete answers, not a wall of legalese. "The summary agent reads claims from the intake queue and copies them into the weekly report. It does not modify or delete claims. It does not share claim data outside the client's channel." That is a policy a stakeholder can read in a minute and either approve or push back on.
+
+Writing it plainly has a second payoff. Ambiguous policy is where agents get into trouble, because an agent that does not know its limits will improvise them, and an improvised limit is usually wrong in the direction of doing more than it should. When you force yourself to state the boundaries out loud, you force the client to think about them too. The client discovers, in the signing session, that the agent you planned would have had the ability to edit tickets, and they say no. That is better than discovering it after the system is live. The policy is the artifact that makes the conversation happen before the damage does.
+
+## Treat personal data as a bounded resource
+
+The second pillar of governance is how you handle PII. The temptation with an agent is to give it all the context it could possibly use, on the theory that more context makes it smarter. That instinct is exactly backwards for personal data. The rule to internalize is this: collect and hold the minimum PII the work actually needs, and keep it only as long as the work needs it. PII you do not have cannot be breached, copied, or leaked. PII you deleted cannot be exfiltrated later. The safest personal data is the personal data that does not exist in your system.
+
+That discipline has a real technical shape because an agent has two different kinds of memory, and you need to know which one will hold what. Hermes has a small, curated persistent memory that stores durable facts about you and your engagements, two files with hard character limits, injected into the system prompt as a frozen snapshot at session start. It is the right place for stable facts: the client's conventions, the systems in use, the lessons learned. [^1] It is the wrong place for raw personal data. A claimant's full record, their medical details, their government ID number: none of that belongs in a note that persists and reloads into every future session. It belongs in the operational system, retrieved on demand when the work needs it, and held there under the client's existing retention rules, not duplicated into the agent's memory because that is easier. [^2]
+
+The distinction matters because of what the two stores do over time. Curated memory stays small and focused, so you can audit it. An external memory provider that runs alongside it can add richer cross-session recall, knowledge graphs, semantic search, which sounds useful until you ask what personal data just got copied into a third-party store you do not control. [^3] Before you switch one on, you decide whether the added recall is worth the added PII surface, and you get the client's sign-off on the answer. An engagement that copies customer data into an external memory service without asking is an engagement that just made a data-handling decision on the client's behalf, which is never your call to make alone.
+
+## Build guardrails that enforce the policy mechanically
+
+This is the section where governance becomes engineering, and it is where Hermes does most of the heavy lifting. Your job is to decide the boundaries and set the rails; the platform's job is to make them hold even when the agent, or a prompt, or an unattended schedule would otherwise cross them.
+
+The first rail is what the agent may run. Dangerous commands, recursive deletes, disk writes, service changes, get an approval gate. The important part for governance is the default for unattended work. In cron jobs, in one-shot sessions, and on other headless surfaces, the default is deny: a scheduled agent that hits a dangerous command is blocked rather than auto-approved. [^4] That single default is a governance decision you should keep, because it means the recurring agent you hand over cannot silently pick up the habit of running destructive commands with nobody watching. If the job genuinely needs a command the default blocks, you change the default deliberately and document why. You never rely on approve-everything as the lazy path forward.
+
+The second rail is what the agent may write. A write sandbox confines file operations to a directory root you choose, and a denylist blocks writes to credential stores and secret files no matter what other setting is on. [^5] This keeps the agent from writing into the client's `.ssh` directory or appending to a secret file, and it keeps an over-broad prompt from scattering files across the filesystem. You point the sandbox at the workspace, and the platform refuses anything outside it.
+
+The third rail is what the agent may reach, and it protects the client's internal surface. A blocklist restricts which domains the web and browser tools can access, and URL-capable tools refuse private network and loopback addresses by default, which stops an agent from using one server to probe the internal network behind it. [^6] If the client's admin panel is human-only, you add it to the blocklist and the agent cannot get there even if a prompt tries to send it.
+
+The fourth rail is about who can interact with the agent at all, which matters once you put the agent on a messaging platform the client actually uses. Hermes authorizes users against an ordered list: per-platform rules, approved pairing, platform allowlists, a global allowlist, then default deny. [^7] You populate the allowlist with the people who should talk to the agent, and the platform refuses everyone else. That is egress governance in reverse: not just what the agent may reach, but who may reach the agent.
+
+The fifth rail is the one that keeps the whole system honest against an enemy that does not look like one: a file the agent reads that tries to steer it. Context files, project readmes, and other input can contain instructions that look like commands to a model. Hermes scans context files for prompt injection before they enter the system prompt, and a file that triggers the scanner is blocked entirely. [^8] It also scans the prompts of scheduled jobs at creation and update time, blocking invisible Unicode tricks, SSH backdoor attempts, and obvious secret-exfiltration payloads. [^9] These are guardrails against the most common governance failure, which is not a malicious user but a careless one whose file happens to tell the agent the wrong thing.
+
+## Worked example: governing the claims-intake agent
+
+Put it together on the engagement you have carried through this series. In lesson 19 you got the client's intake team actually using the agent. This lesson is about the rules that make that use safe, and you establish them before you add anything else.
+
+Start with the policy. You write four plain sentences. The agent reads claims from the intake queue and composes the weekly summary. It does not modify or delete claims. It shares claim data only into the client's channel. It does not hold full claim records in its persistent notes. You send that to the client, they approve or edit it in five minutes, and now you have a signed boundary, which is the thing you enforce next.
+
+Then you handle the PII. You check what the agent's persistent memory actually contains. The client's ticketing conventions, the systems in use, the report schedule: those belong in curated memory and should stay. Full claim records, medical details, government IDs: those do not. You confirm the agent pulls personal data on demand from the operational system and does not copy it into its notes, and you leave any external memory provider off until the client has signed the data-handling decision. [^1][^3]
+
+Then you set the guardrails to match the policy, one rail per sentence. The agent reads and summarizes, so its dangerous commands default to deny in the unattended cron run, and you confirm the write sandbox confines it to the workspace so it cannot touch the client's system files or credential stores. [^4][^5] The agent shares only into the client's channel, so you check who can reach it on that channel and confirm the allowlist holds just the people who should. [^7] The agent stays out of the human-only surfaces, so you blocklist the internal admin host and rely on the platform's default SSRF protection to keep it out of the private network. [^6] And you trust that a hostile or careless context file cannot take the agent over, because the platform scans it before it reaches the model. [^8] When the weekly job's prompt goes in, you see it scanned for exfiltration and injection at creation time. [^9]
+
+The test of governance, like the test of security in lesson 13 and the test of finishing in lesson 15, is that you can demonstrate the rules hold rather than assert them. So you run the live check. You ask the agent to write a file outside the sandbox, and the platform refuses. You ask it to reach the admin panel, and the network guard refuses. You ask it to paste a secret from the env file, and it cannot. Each refusal is proof that the policy is real, and each one is something you can show the client rather than asking them to take your word for it.
+
+## The pitfalls to avoid
+
+**Writing the policy after the build.** If you configure the agent first and write the rules after it is live, the rules are describing what you already built, not governing it. Write the acceptable-use policy up front, get it approved, then build the guardrails to match.
+
+**Hoarding PII on the theory that context makes the agent smarter.** The agent does not need a customer's medical record or ID number sitting in its persistent memory to write a claims summary. Hold the minimum personal data the work needs, retrieve it on demand from the operational system, and keep the agent's memory clean of raw records.
+
+**Relying on the agent to stay in bounds.** An agent that can do anything is one prompt-injection or one over-broad instruction away from doing the wrong thing. Set the guardrails so the platform refuses, regardless of what the agent or its inputs decide.
+
+**Auto-approving unattended work because it is easier.** The deny default for cron jobs is a governance feature, not an inconvenience. If a job needs something the default blocks, change it deliberately and document why. Do not flip to approve-everything to save yourself configuration time.
+
+**Reaching the client's users before you know who should have access.** Put the agent on a channel, and you have just decided who can reach it. Set the allowlist to the people who should, and default everyone else to denied, before anyone starts typing at the agent.
+
+## Try it
+
+Take the engagement you have been carrying and run a governance review on paper:
+
+1. Write the acceptable-use policy in four plain sentences: what the agent does, what it does not do, what it may do with the data it reads, and what it must never do.
+2. List every piece of personal data the agent touches. For each one, name what business purpose it serves, then ask whether the agent truly needs it held in memory or whether it should be retrieved on demand.
+3. Check the persistent memory. What durable facts live there, and is any raw personal data in the store where it should not be?
+4. Name one guardrail for each sentence of your policy, and state exactly what mechanical mechanism enforces it in the platform.
+5. Name the decision you would never make alone. Which data-handling choice would you take to the client for sign-off before you made it?
+6. Name the proof. How would you demonstrate, live, that each guardrail holds rather than just asserting it?
+
+If you can answer all six with specific mechanisms, your agent is governed, not just capable. If you find yourself writing rules that describe what the agent already does after the fact, or leaning on careful behavior instead of a rail, that is the gap this lesson exists to close. Write the policy, then build the guardrails that make it hold.
+
+## What's next
+
+You can now write an acceptable-use policy, treat personal data as a bounded resource, and set guardrails that enforce the rules mechanically even when nobody is watching. Governance sets the boundaries, but there is a quieter failure that no guardrail catches on its own: the agent that seems to be working while it slowly, silently stops being right. The next lesson takes the discipline of knowing when the agent is quietly failing. It teaches monitoring and observability, the craft of watching an agent's work over time, noticing when a scheduled job produces nothing, when a report looks plausible but the numbers have gone stale, and when a process keeps running while the value it was supposed to produce has drifted. Where this lesson kept the agent inside the lines, the next one tells you when the agent has stopped drawing the lines correctly, by giving you the tools to watch it work instead of assuming it still does.
+
+[^1]: Hermes Agent Docs, Persistent Memory, the two bounded files (MEMORY.md and USER.md) with hard character limits, stored in `~/.hermes/memories/` and injected into the system prompt as a frozen snapshot at session start, plus the note that memory does not auto-compact. [hermes-agent.nousresearch.com/docs/user-guide/features/memory](https://hermes-agent.nousresearch.com/docs/user-guide/features/memory)
+[^2]: Hermes Agent Docs, Configuration, the directory layout showing that secrets live in `.env` and logs live under `logs/` with secrets auto-redacted, which is where you hold operational data rather than duplicating it into instructions. [hermes-agent.nousresearch.com/docs/user-guide/configuration](https://hermes-agent.nousresearch.com/docs/user-guide/configuration)
+[^3]: Hermes Agent Docs, Persistent Memory, the external memory provider plugins (Honcho, Mem0, and others) that run alongside built-in memory and add cross-session recall and semantic search, with the advice that they should be configured deliberately. [hermes-agent.nousresearch.com/docs/user-guide/features/memory](https://hermes-agent.nousresearch.com/docs/user-guide/features/memory)
+[^4]: Hermes Agent Docs, Security, the approval system and its deny defaults for cron jobs and one-shot sessions, where scheduled work is blocked on dangerous commands rather than auto-approved. [hermes-agent.nousresearch.com/docs/user-guide/security](https://hermes-agent.nousresearch.com/docs/user-guide/security)
+[^5]: Hermes Agent Docs, Security, file write safety: the denylist that always blocks credential and secret files, and the optional write sandbox that confines writes to a root you choose. [hermes-agent.nousresearch.com/docs/user-guide/security](https://hermes-agent.nousresearch.com/docs/user-guide/security)
+[^6]: Hermes Agent Docs, Security, the website access blocklist and SSRF protection that refuse private network and loopback addresses by default for URL-capable tools. [hermes-agent.nousresearch.com/docs/user-guide/security](https://hermes-agent.nousresearch.com/docs/user-guide/security)
+[^7]: Hermes Agent Docs, Security, the user authorization system for messaging, ordered from per-platform allow-all through approved pairing and platform allowlists to a global allowlist, then default deny. [hermes-agent.nousresearch.com/docs/user-guide/security](https://hermes-agent.nousresearch.com/docs/user-guide/security)
+[^8]: Hermes Agent Docs, Security, context file injection protection, which scans AGENTS.md and similar files for prompt injection before they enter the system prompt and blocks triggered files. [hermes-agent.nousresearch.com/docs/user-guide/security](https://hermes-agent.nousresearch.com/docs/user-guide/security)
+[^9]: Hermes Agent Docs, Scheduled Tasks (Cron), which scans scheduled task prompts for prompt-injection and credential-exfiltration patterns at creation and update time, blocking invisible Unicode tricks, SSH backdoor attempts, and obvious secret-exfiltration payloads. [hermes-agent.nousresearch.com/docs/user-guide/features/cron](https://hermes-agent.nousresearch.com/docs/user-guide/features/cron)
