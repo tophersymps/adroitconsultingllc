@@ -3,10 +3,10 @@
 /**
  * AudioPlayer — in-article article-audio player (plan Phase 5).
  *
- * Three render states from `audio` + auth (resolved via the existing useAuth
+ * Three render states from `hasAudio` + auth (resolved via the existing useAuth
  * hook, not a prop — mirrors the repo's other client components):
  *
- *   1. no `ArticleAudio` for this slug          -> renders null
+ *   1. no narration for this slug (hasAudio false)   -> renders null
  *   2. logged-out visitor                        -> locked "sign up to listen"
  *      card with a Link to /signup; NO <audio> (so no audio is ever fetched
  *      by a logged-out visitor) and NO working player.
@@ -21,17 +21,22 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/hooks/useAuth";
-import type { ArticleAudio } from "@/lib/audio/contracts";
 
 export interface AudioPlayerProps {
   slug: string;
-  /** Resolved from generated src/data/audio.ts — undefined when unpublished. */
-  audio?: ArticleAudio;
+  /**
+   * True when this article has a narration (resolved server-side from the
+   * generated src/data/audio.ts). The client only needs to know whether to
+   * render the player — we deliberately do NOT pass the ArticleAudio object
+   * (which carries the private storagePath) across the client boundary, so
+   * the internal bucket key is never serialized into the served HTML.
+   */
+  hasAudio?: boolean;
 }
 
 const SPEEDS = [1, 1.25, 1.5] as const;
 
-export default function AudioPlayer({ slug, audio }: AudioPlayerProps) {
+export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
   const { user, isLoading } = useAuth();
   const audioRef = useRef<HTMLAudioElement>(null);
   const [speed, setSpeed] = useState<number>(1);
@@ -41,7 +46,7 @@ export default function AudioPlayer({ slug, audio }: AudioPlayerProps) {
     if (audioRef.current) audioRef.current.playbackRate = speed;
   }, [speed]);
 
-  if (!audio) return null;
+  if (!hasAudio) return null;
 
   // Loading (or logged-out once resolved): show nothing until auth is known.
   // Only after `!isLoading` is `user` a definitive signed-in/out signal.

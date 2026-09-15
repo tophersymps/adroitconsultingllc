@@ -159,7 +159,7 @@ export default async function BlogPostPage({ params }: Props) {
             Gated on `audio` so the AudioPlayer client JS chunk + its useAuth()
             session fetch are NOT shipped/run on the 86/91 articles without a
             narration (avoids duplicating the Header's /api/auth/session call). */}
-        {audio && <AudioPlayer slug={post.slug} audio={audio} />}
+        {audio && <AudioPlayer slug={post.slug} hasAudio />}
 
         {/* Article Body — rendered from MDX content */}
         <article className="article-body max-w-[720px] mx-auto px-6 pb-16">

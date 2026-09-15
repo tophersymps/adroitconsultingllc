@@ -6,13 +6,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import AudioPlayer from "./AudioPlayer";
-import type { ArticleAudio } from "@/lib/audio/contracts";
 
-const fixture: ArticleAudio = {
-  slug: "agent-eval-infrastructure-2026",
-  voice: "af_heart",
-  storagePath: "blog/agent-eval-infrastructure-2026/af_heart.mp3",
-};
+const SLUG = "agent-eval-infrastructure-2026";
 
 let authState: { user: { id: string; email: string; isAdmin: boolean } | null; isLoading: boolean };
 
@@ -32,18 +27,18 @@ beforeEach(() => {
 
 describe("AudioPlayer", () => {
   it("renders nothing when the article has no narration", () => {
-    const { container } = render(<AudioPlayer slug="unpublished" />);
+    const { container } = render(<AudioPlayer slug="unpublished" hasAudio={false} />);
     expect(container).toBeEmptyDOMElement();
   });
 
   it("renders nothing while auth is still loading (no flash of the wrong state)", () => {
-    const { container } = render(<AudioPlayer slug={fixture.slug} audio={fixture} />);
+    const { container } = render(<AudioPlayer slug={SLUG} hasAudio />);
     expect(container).toBeEmptyDOMElement();
   });
 
   it("shows the locked sign-up card to a logged-out visitor, with NO working audio", () => {
     authState = { user: null, isLoading: false };
-    render(<AudioPlayer slug={fixture.slug} audio={fixture} />);
+    render(<AudioPlayer slug={SLUG} hasAudio />);
 
     expect(screen.getByText(/Listen to this article/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Sign up to listen/i })).toHaveAttribute(
@@ -60,11 +55,11 @@ describe("AudioPlayer", () => {
       user: { id: "u1", email: "a@b.c", isAdmin: false },
       isLoading: false,
     };
-    render(<AudioPlayer slug={fixture.slug} audio={fixture} />);
+    render(<AudioPlayer slug={SLUG} hasAudio />);
 
     const audio = document.querySelector("audio");
     expect(audio).not.toBeNull();
-    expect(audio!.getAttribute("src")).toBe(`/api/audio/${fixture.slug}`);
+    expect(audio!.getAttribute("src")).toBe(`/api/audio/${SLUG}`);
     expect(audio!).toHaveAttribute("aria-label", "Article audio player");
   });
 
@@ -73,7 +68,7 @@ describe("AudioPlayer", () => {
       user: { id: "u1", email: "a@b.c", isAdmin: false },
       isLoading: false,
     };
-    render(<AudioPlayer slug={fixture.slug} audio={fixture} />);
+    render(<AudioPlayer slug={SLUG} hasAudio />);
 
     // A labelled speed select is present with 1x / 1.25x / 1.5x options.
     const speed = screen.getByLabelText("Playback speed");

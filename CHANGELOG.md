@@ -4,6 +4,28 @@ All notable changes to the Adroit Consulting Blog project will be documented in 
 
 ## [Unreleased]
 
+### Security: stop leaking private audio storagePath into client HTML (t_3305e6ae)
+
+**What** - `AudioPlayer` no longer receives the full `ArticleAudio` object
+(which carries `storagePath`, the PRIVATE-bucket object key) across the
+Next.js client boundary. The prop is now a boolean `hasAudio`. The page
+(`src/app/field-notes/[slug]/page.tsx`) resolves presence server-side from the
+generated `src/data/audio.ts` and passes only `hasAudio`, so `storagePath` is
+never serialized into the inline RSC/Flight HTML payload (previously the served
+HTML contained `"storagePath":"blog/<slug>/<voice>.mp3"`). Client HTML for all
+5 pilot articles now contains 0 occurrences of `storagePath`. The `AudioPlayer`
+component behavior is unchanged: locked "Sign up to listen" card for anon, no
+`<audio>` / no `/api/audio` fetch for anon, working player for signed-in.
+
+**Why** - AC-3 forbids exposing the internal bucket key in client-side code/HTML.
+Severity is low (deterministic scheme + private bucket → no access leaked today),
+but defense-in-depth: don't ship a path that becomes a working URL the moment the
+bucket is ever misconfigured public. Trivial, no behavior change.
+
+**Known Issues** - None. `storagePath` remains in the generated `src/data/audio.ts`
+and the `/api/audio` route (both server-side only); `AudioPlayer.test.tsx` updated
+to assert on the `hasAudio` boolean contract.
+
 ### Audio: article audio — authed player, streaming route, narration, pilot (t_0ddd606c)
 
 **What** - Shipped the article-audio feature: an in-page `AudioPlayer`
