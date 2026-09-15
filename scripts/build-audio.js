@@ -8,9 +8,9 @@
  *      through a small transpile shim — see _import.mjs).
  *   2. calls the configured TTS engine CLI to synthesize an mp3. The emitted
  *      MP3 is ALWAYS mono / 24000 Hz / 48kbps (the lean storage profile, see
- *      --bitrate): the private bucket must hold a 91-article backfill inside
- *      the Supabase Free 1 GB storage tier (~5 MB/article at 48k vs ~13.3 MB
- *      at the old 128k, which measured ~1.19 GB for 91 and did not fit).
+ *      --bitrate): the private bucket must hold the whole narrated backfill
+ *      inside the Supabase Free 1 GB storage tier (~5 MB/article at 48k vs
+ *      ~13.3 MB at the old 128k, which at full catalogue does not fit).
  *   3. uploads it to the PRIVATE Cloudflare R2 bucket (adroit-audio, S3 API,
  *      bucket-scoped keys — src/lib/r2/client.ts putR2Object) at
  *      blog/<slug>/<voice>.mp3, and (while AUDIO_DUAL_WRITE_SUPABASE is not
