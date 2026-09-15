@@ -6,10 +6,14 @@
  *      endpoint derived from the account id (region "auto", path-style);
  *   2. error mapping — a missing object becomes null (route -> 404) while any
  *      other failure throws (route -> fail-closed 401); never a URL;
- *   3. server-side only read — a GetObject with the configured bucket and key.
+ *   3. server-side only read — a GetObject with the configured bucket and key;
+ *   4. streaming read — the body comes back as a stream (never buffered here),
+ *      an un-ranged read sends NO Range, and a ranged read passes the Range
+ *      through to the GetObjectCommand and reports R2's span length.
  * The AWS SDK itself is mocked: no network, no credentials.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { Readable } from "node:stream";
 
 const hoisted = vi.hoisted(() => ({
   send: vi.fn(),
@@ -39,7 +43,10 @@ vi.mock("@aws-sdk/client-s3", () => {
 
 import {
   contentTypeForKey,
+  formatRangeHeader,
   getR2Object,
+  getR2ObjectRange,
+  getR2ObjectStream,
   headR2Object,
   isMissingObjectError,
   putR2Object,
@@ -184,6 +191,126 @@ describe("getR2Object", () => {
   it("returns null when the response carries no body", async () => {
     hoisted.send.mockResolvedValue({ Body: undefined });
     expect(await getR2Object("blog/x/af_heart.mp3")).toBeNull();
+  });
+});
+
+/** A one-chunk Node Readable, which is what the SDK hands back at runtime. */
+function readableOf(bytes: Uint8Array) {
+  return Readable.from([bytes]);
+}
+
+describe("getR2ObjectStream / getR2ObjectRange", () => {
+  const saved = { ...process.env };
+  const mp3 = new Uint8Array([0x49, 0x44, 0x33, 0x04, 0x05]); // "ID3" + 2 bytes
+
+  beforeEach(() => {
+    resetR2Client();
+    hoisted.send.mockReset();
+    hoisted.commands.length = 0;
+    Object.assign(process.env, FULL_ENV);
+  });
+
+  afterEach(() => {
+    for (const key of Object.keys(FULL_ENV)) delete process.env[key];
+    Object.assign(process.env, saved);
+    resetR2Client();
+  });
+
+  it("streams the whole object without buffering and sends NO Range", async () => {
+    hoisted.send.mockResolvedValue({ Body: readableOf(mp3), ContentLength: mp3.byteLength });
+
+    const object = await getR2ObjectStream("blog/x/af_heart.mp3");
+
+    expect(object?.size).toBe(mp3.byteLength);
+    const received = new Uint8Array(await new Response(object!.stream).arrayBuffer());
+    expect(received).toEqual(mp3);
+    // The un-ranged read is byte-for-byte the GetObject input it always sent.
+    expect(hoisted.commands[0]).toEqual({
+      type: "GetObject",
+      input: { Bucket: "adroit-audio", Key: "blog/x/af_heart.mp3" },
+    });
+  });
+
+  it("passes the Range through to the S3 GetObject and streams only that span", async () => {
+    const span = mp3.subarray(1, 3);
+    hoisted.send.mockResolvedValue({ Body: readableOf(span), ContentLength: span.byteLength });
+
+    const object = await getR2ObjectRange("blog/x/af_heart.mp3", { start: 1, end: 2 });
+
+    expect(hoisted.commands[0]).toEqual({
+      type: "GetObject",
+      input: { Bucket: "adroit-audio", Key: "blog/x/af_heart.mp3", Range: "bytes=1-2" },
+    });
+    // Content-Length is R2's own span length: 2 bytes came back, not 5.
+    expect(object?.size).toBe(2);
+    const received = new Uint8Array(await new Response(object!.stream).arrayBuffer());
+    expect(received).toEqual(span);
+    expect(Array.from(received)).toEqual([0x44, 0x33]);
+  });
+
+  it("formats a single inclusive span as the HTTP Range R2 expects", () => {
+    expect(formatRangeHeader({ start: 0, end: 99 })).toBe("bytes=0-99");
+    expect(formatRangeHeader({ start: 7276555, end: 7276555 })).toBe("bytes=7276555-7276555");
+    expect(formatRangeHeader({ start: 1024, end: 2047 })).toBe("bytes=1024-2047");
+  });
+
+  it("falls back to the span length when R2 omits Content-Length on a ranged read", async () => {
+    hoisted.send.mockResolvedValue({ Body: readableOf(mp3.subarray(0, 3)) });
+    const object = await getR2ObjectRange("blog/x/af_heart.mp3", { start: 0, end: 2 });
+    expect(object?.size).toBe(3);
+  });
+
+  it("reports size 0 (no Content-Length header) when R2 omits it on a whole-object read", async () => {
+    hoisted.send.mockResolvedValue({ Body: readableOf(mp3) });
+    const object = await getR2ObjectStream("blog/x/af_heart.mp3");
+    expect(object?.size).toBe(0);
+  });
+
+  it("accepts a web ReadableStream body unchanged", async () => {
+    const web = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(mp3);
+        controller.close();
+      },
+    });
+    hoisted.send.mockResolvedValue({ Body: web, ContentLength: mp3.byteLength });
+    const object = await getR2ObjectStream("blog/x/af_heart.mp3");
+    expect(new Uint8Array(await new Response(object!.stream).arrayBuffer())).toEqual(mp3);
+  });
+
+  it("returns null for a missing key (route maps this to 404)", async () => {
+    hoisted.send.mockRejectedValue(Object.assign(new Error("nope"), { name: "NoSuchKey" }));
+    expect(await getR2ObjectStream("blog/missing/af_heart.mp3")).toBeNull();
+    expect(await getR2ObjectRange("blog/missing/af_heart.mp3", { start: 0, end: 9 })).toBeNull();
+  });
+
+  it("rethrows a non-404 failure so the route fails closed", async () => {
+    hoisted.send.mockRejectedValue(Object.assign(new Error("denied"), { name: "AccessDenied" }));
+    await expect(getR2ObjectStream("blog/x/af_heart.mp3")).rejects.toThrow("denied");
+    await expect(getR2ObjectRange("blog/x/af_heart.mp3", { start: 0, end: 9 })).rejects.toThrow(
+      "denied",
+    );
+  });
+
+  it("returns null when the response carries no body", async () => {
+    hoisted.send.mockResolvedValue({ Body: undefined });
+    expect(await getR2ObjectStream("blog/x/af_heart.mp3")).toBeNull();
+    expect(await getR2ObjectRange("blog/x/af_heart.mp3", { start: 0, end: 9 })).toBeNull();
+  });
+
+  it("throws (fail closed) when the R2 env is incomplete, and sends nothing", async () => {
+    const incomplete = { R2_BUCKET: "adroit-audio" } as unknown as NodeJS.ProcessEnv;
+    await expect(getR2ObjectStream("blog/x/af_heart.mp3", incomplete)).rejects.toThrow(/incomplete/);
+    await expect(
+      getR2ObjectRange("blog/x/af_heart.mp3", { start: 0, end: 9 }, incomplete),
+    ).rejects.toThrow(/incomplete/);
+    expect(hoisted.send).not.toHaveBeenCalled();
+  });
+
+  it("never returns a URL (the object stays server-side)", async () => {
+    hoisted.send.mockResolvedValue({ Body: readableOf(mp3), ContentLength: mp3.byteLength });
+    const object = await getR2ObjectRange("blog/x/af_heart.mp3", { start: 0, end: 1 });
+    expect(Object.keys(object!).sort()).toEqual(["size", "stream"]);
   });
 });
 

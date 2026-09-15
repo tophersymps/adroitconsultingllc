@@ -2,11 +2,13 @@
  * route.test.ts — GET /api/audio/[slug] auth gate (plan Phase 5A).
  *
  * Verifies the 200/401/404/206/416 matrix against a mocked Supabase server
- * client (auth) and a mocked R2 reader (object bytes). The R2 read path is
- * mocked at the src/lib/r2/client.ts seam, so no real S3 credentials or
- * network are needed. Also locks the contract: the 200 response is audio/mpeg
- * with a private cache control, the route reads the object SERVER-SIDE by key,
- * and there is never a public or signed URL in any branch.
+ * client (auth) and a mocked R2 reader (object bytes / object stream). The R2
+ * read path is mocked at the src/lib/r2/client.ts seam, so no real S3
+ * credentials or network are needed. Also locks the contract: the 200 response
+ * is audio/mpeg with a private cache control, the route reads the object
+ * SERVER-SIDE by key, the body is R2's own stream (never buffered here), a
+ * Range request asks R2 for EXACTLY the requested span, and there is never a
+ * public or signed URL in any branch.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
@@ -23,8 +25,10 @@ let r2Failure: { name: string; $metadata?: { httpStatusCode?: number } } | null 
 const fakeBytes = Buffer.from("fake-mp3-bytes");
 
 // Captured so the test can assert the route keyed the R2 read on the entry's
-// private storage path (and nothing else).
+// private storage path (and nothing else), and that a range request asked R2
+// for the exact span instead of the whole object.
 let requestedKeys: string[] = [];
+let requestedRanges: { key: string; start: number; end: number }[] = [];
 
 const serverClient = {
   auth: {
@@ -39,14 +43,41 @@ vi.mock("@/lib/supabase/server", () => ({
   getSupabaseServerClient: async () => serverClient,
 }));
 
+/** A one-chunk web stream, the shape the real client hands the route. */
+function streamOf(bytes: Uint8Array): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(bytes);
+      controller.close();
+    },
+  });
+}
+
 vi.mock("@/lib/r2/client", () => ({
-  // Mirrors getR2Object's real contract: null for a missing key, throw for a
-  // non-404 failure.
-  getR2Object: async (key: string) => {
+  // These mirror the real helpers' contract: null for a missing key, throw for
+  // a non-404 failure.
+  headR2Object: async (key: string) => {
     requestedKeys.push(key);
     if (r2Failure) throw r2Failure;
     if (!objectAvailable) return null;
-    return { bytes: new Uint8Array(fakeBytes), size: fakeBytes.length };
+    return { size: fakeBytes.length };
+  },
+  getR2ObjectStream: async (key: string) => {
+    requestedKeys.push(key);
+    if (r2Failure) throw r2Failure;
+    if (!objectAvailable) return null;
+    return { stream: streamOf(new Uint8Array(fakeBytes)), size: fakeBytes.length };
+  },
+  // Slices the fake object so a wrong span shows up as a wrong body.
+  getR2ObjectRange: async (key: string, range: { start: number; end: number }) => {
+    requestedKeys.push(key);
+    requestedRanges.push({ key, ...range });
+    if (r2Failure) throw r2Failure;
+    if (!objectAvailable) return null;
+    return {
+      stream: streamOf(new Uint8Array(fakeBytes.subarray(range.start, range.end + 1))),
+      size: range.end - range.start + 1,
+    };
   },
 }));
 
@@ -63,6 +94,7 @@ describe("GET /api/audio/[slug]", () => {
     objectAvailable = true;
     r2Failure = null;
     requestedKeys = [];
+    requestedRanges = [];
     vi.clearAllMocks();
   });
 
@@ -73,6 +105,7 @@ describe("GET /api/audio/[slug]", () => {
     // The auth gate runs BEFORE the object read — an anonymous request must
     // never touch storage.
     expect(requestedKeys).toEqual([]);
+    expect(requestedRanges).toEqual([]);
   });
 
   it("returns 404 for an unknown slug even when authenticated", async () => {
@@ -99,13 +132,16 @@ describe("GET /api/audio/[slug]", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toBe("audio/mpeg");
     expect(res.headers.get("Cache-Control")).toBe("private, max-age=3600");
+    expect(res.headers.get("Content-Length")).toBe(String(fakeBytes.length));
     const body = await res.arrayBuffer();
     expect(Buffer.from(body).toString()).toBe("fake-mp3-bytes");
-    // The private bucket key is used ONLY to key the server-side read.
+    // The private bucket key is used ONLY to key the server-side read, and the
+    // full body is streamed — no Range goes to R2 for an un-ranged request.
     expect(requestedKeys).toEqual([pilot.storagePath]);
+    expect(requestedRanges).toEqual([]);
   });
 
-  it("returns 206 + Content-Range for a single byte-range request", async () => {
+  it("returns 206 + Content-Range for a single byte-range request, asking R2 for ONLY that span", async () => {
     const res = await GET(makeGet(pilot.slug, { range: "bytes=0-4" }), {
       params: Promise.resolve({ slug: pilot.slug }),
     });
@@ -116,6 +152,8 @@ describe("GET /api/audio/[slug]", () => {
       `bytes 0-4/${fakeBytes.length}`,
     );
     expect(res.headers.get("Content-Length")).toBe("5");
+    // The span, not the object: this is the whole point of the card.
+    expect(requestedRanges).toEqual([{ key: pilot.storagePath, start: 0, end: 4 }]);
     const body = await res.arrayBuffer();
     // "fake-mp3-bytes" -> bytes 0..4 == "fake-"
     expect(Buffer.from(body).toString()).toBe("fake-");
@@ -129,6 +167,9 @@ describe("GET /api/audio/[slug]", () => {
     expect(res.headers.get("Content-Range")).toBe(
       `bytes ${fakeBytes.length - 4}-${fakeBytes.length - 1}/${fakeBytes.length}`,
     );
+    expect(requestedRanges).toEqual([
+      { key: pilot.storagePath, start: fakeBytes.length - 4, end: fakeBytes.length - 1 },
+    ]);
     const body = await res.arrayBuffer();
     expect(Buffer.from(body).toString()).toBe("ytes");
   });
@@ -141,6 +182,9 @@ describe("GET /api/audio/[slug]", () => {
     expect(res.headers.get("Content-Range")).toBe(
       `bytes 10-${fakeBytes.length - 1}/${fakeBytes.length}`,
     );
+    expect(requestedRanges).toEqual([
+      { key: pilot.storagePath, start: 10, end: fakeBytes.length - 1 },
+    ]);
   });
 
   it("serves a full-file range (bytes=0-) as 206 covering the whole object", async () => {
@@ -155,12 +199,15 @@ describe("GET /api/audio/[slug]", () => {
     expect(Buffer.from(body).toString()).toBe("fake-mp3-bytes");
   });
 
-  it("returns 416 with Content-Range hint when the requested start exceeds the file", async () => {
+  it("returns 416 with Content-Range hint when the requested start exceeds the file, and fetches no object bytes", async () => {
     const res = await GET(makeGet(pilot.slug, { range: "bytes=1000-" }), {
       params: Promise.resolve({ slug: pilot.slug }),
     });
     expect(res.status).toBe(416);
     expect(res.headers.get("Content-Range")).toBe(`bytes */${fakeBytes.length}`);
+    // Only the HEAD ran: an unsatisfiable range must not pull any bytes.
+    expect(requestedRanges).toEqual([]);
+    expect(res.body).toBeNull();
   });
 
   it("ignores a Range when If-Range is present (degrades to full 200)", async () => {
@@ -174,6 +221,7 @@ describe("GET /api/audio/[slug]", () => {
     const body = await res.arrayBuffer();
     expect(Buffer.from(body).toString()).toBe("fake-mp3-bytes");
     expect(res.headers.get("Content-Length")).toBe(String(fakeBytes.length));
+    expect(requestedRanges).toEqual([]);
   });
 
   it("degrades a malformed Range to a full 200", async () => {
@@ -183,6 +231,7 @@ describe("GET /api/audio/[slug]", () => {
     expect(res.status).toBe(200);
     const body = await res.arrayBuffer();
     expect(Buffer.from(body).toString()).toBe("fake-mp3-bytes");
+    expect(requestedRanges).toEqual([]);
   });
 
   it("fails closed with 401 when the R2 read throws a non-404 error", async () => {
@@ -191,6 +240,15 @@ describe("GET /api/audio/[slug]", () => {
       params: Promise.resolve({ slug: pilot.slug }),
     });
     expect(res.status).toBe(401);
+  });
+
+  it("fails closed with 401 when the R2 HEAD throws on a ranged request", async () => {
+    r2Failure = { name: "AccessDenied", $metadata: { httpStatusCode: 403 } };
+    const res = await GET(makeGet(pilot.slug, { range: "bytes=0-4" }), {
+      params: Promise.resolve({ slug: pilot.slug }),
+    });
+    expect(res.status).toBe(401);
+    expect(requestedRanges).toEqual([]);
   });
 
   it("does not emit a Location header or any URL for the object", async () => {

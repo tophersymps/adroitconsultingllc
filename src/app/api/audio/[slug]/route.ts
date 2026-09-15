@@ -20,14 +20,20 @@
  * the same mechanism every other authed route uses.
  *
  * Range/206: the browser's `<audio>` element issues byte-Range requests for
- * metadata and seeking. Serving a partial 206 avoids transferring the whole
- * 1-3MB file before playback, and `preload="none"` on the player means no
- * audio bytes cross the wire at all until the user presses Play.
+ * metadata and seeking, and `preload="none"` on the player means no audio bytes
+ * cross the wire at all until the user presses Play.
+ *
+ * STREAMING (perf, t_70ecf56b): the response body is R2's own object stream,
+ * piped straight through — the route never buffers the MP3, so peak server
+ * memory is a chunk rather than the whole 5-15 MB file. For a Range request the
+ * route resolves the span from a HeadObject (headers only) and then asks R2 for
+ * EXACTLY that span, so a `bytes=0-99` metadata probe or a seek transfers the
+ * requested bytes instead of the whole object.
  */
 import { NextRequest } from "next/server";
 import { articleAudio } from "@/data/audio";
 import { type AudioRouteContext } from "@/lib/audio/contracts";
-import { getR2Object } from "@/lib/r2/client";
+import { getR2ObjectRange, getR2ObjectStream, headR2Object } from "@/lib/r2/client";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -37,6 +43,21 @@ const BASE_HEADERS = {
   "Cache-Control": "private, max-age=3600",
   "Accept-Ranges": "bytes",
 } as const;
+
+/**
+ * A 200 carrying the whole object as a stream. Content-Length comes from R2's
+ * own header; if R2 did not report one the header is omitted (chunked) rather
+ * than sent as 0, which would truncate the stream.
+ */
+function fullBodyResponse(stream: ReadableStream<Uint8Array>, size: number): Response {
+  return new Response(stream, {
+    status: 200,
+    headers: {
+      ...BASE_HEADERS,
+      ...(size > 0 ? { "Content-Length": String(size) } : {}),
+    },
+  });
+}
 
 export async function GET(req: NextRequest, context: AudioRouteContext) {
   try {
@@ -53,37 +74,29 @@ export async function GET(req: NextRequest, context: AudioRouteContext) {
     const entry = articleAudio.find((a) => a.slug === slug);
     if (!entry) return new Response(null, { status: 404 });
 
-    // 3. Private read via the bucket-scoped R2 credentials. The object stays
-    //    server-side; the key is never returned to the client and no URL
-    //    (public or signed) is ever minted.
-    const object = await getR2Object(entry.storagePath);
-    if (!object) return new Response(null, { status: 404 });
-
-    const body = object.bytes;
-    const totalSize = object.size;
     const rangeHeader = req.headers.get("range");
     const ifRange = req.headers.get("if-range");
 
-    // Serve the whole file only when there is no Range, or the caller supplied
-    // an If-Range validator we cannot confirm matches (we emit no ETag /
-    // Last-Modified, so per RFC 7233 the Range must be ignored -> full 200).
-    // This is the cheap, correct If-Range fallback for a streamed resource.
-    if (!rangeHeader || ifRange) {
-      return new Response(new Uint8Array(body), {
-        status: 200,
-        headers: { ...BASE_HEADERS, "Content-Length": String(totalSize) },
-      });
+    // 3. Ranges we must NOT pass to R2 (so the whole object is served):
+    //      - no Range header at all;
+    //      - an If-Range validator we cannot confirm matches (we emit no ETag /
+    //        Last-Modified, so per RFC 7233 the Range must be ignored -> 200);
+    //      - a malformed / multi-range header we cannot express as one span.
+    //    Each degrades to the same full 200 as before, streamed.
+    const match = rangeHeader && !ifRange ? /^bytes=(\d*)-(\d*)$/.exec(rangeHeader.trim()) : null;
+    if (!match) {
+      const whole = await getR2ObjectStream(entry.storagePath);
+      if (!whole) return new Response(null, { status: 404 });
+      return fullBodyResponse(whole.stream, whole.size);
     }
 
-    // Parse a single byte range: bytes=start-end | bytes=start- | bytes=-suffix.
-    const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader.trim());
-    if (!match) {
-      // Malformed / multi-range (unsupported) -> degrade to full 200.
-      return new Response(new Uint8Array(body), {
-        status: 200,
-        headers: { ...BASE_HEADERS, "Content-Length": String(totalSize) },
-      });
-    }
+    // 4. A single byte range. HeadObject first: it returns the total size in
+    //    headers only (no body over the wire), which keeps the span math below
+    //    byte-identical to the previously buffered implementation while R2 is
+    //    asked for and transfers only the requested bytes.
+    const head = await headR2Object(entry.storagePath);
+    if (!head) return new Response(null, { status: 404 });
+    const totalSize = head.size;
 
     const startRaw = match[1] === "" ? undefined : parseInt(match[1], 10);
     const endRaw = match[2] === "" ? undefined : parseInt(match[2], 10);
@@ -100,7 +113,9 @@ export async function GET(req: NextRequest, context: AudioRouteContext) {
       end = endRaw === undefined ? totalSize - 1 : Math.min(endRaw, totalSize - 1);
     }
 
-    // Unsatisfiable range -> 416 with a Content-Range hint of the total.
+    // Unsatisfiable range -> 416 with a Content-Range hint of the total. No
+    // object bytes are fetched at all (the HEAD above already proved the
+    // object exists, so a missing key is still the 404 above).
     if (start > end || start >= totalSize) {
       return new Response(null, {
         status: 416,
@@ -108,8 +123,11 @@ export async function GET(req: NextRequest, context: AudioRouteContext) {
       });
     }
 
-    const partial = body.subarray(start, end + 1);
-    return new Response(new Uint8Array(partial), {
+    // 5. Ask R2 for ONLY this span and pipe its body straight to the client.
+    const span = await getR2ObjectRange(entry.storagePath, { start, end });
+    if (!span) return new Response(null, { status: 404 });
+
+    return new Response(span.stream, {
       status: 206,
       headers: {
         ...BASE_HEADERS,
