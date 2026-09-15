@@ -15,6 +15,8 @@ import { buildMetadata } from "@/lib/seo";
 import MarkAsRead from "@/components/Progress/MarkAsRead";
 import PostReadProgress from "@/components/Progress/PostReadProgress";
 import MDXArticle from "@/components/MDX/MDXArticle";
+import AudioPlayer from "@/components/BlogPost/AudioPlayer";
+import { articleAudio } from "@/data/audio";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -60,6 +62,10 @@ export default async function BlogPostPage({ params }: Props) {
   const prev = currentIdx > 0 ? posts[currentIdx - 1] : undefined;
   const next =
     currentIdx < posts.length - 1 ? posts[currentIdx + 1] : undefined;
+
+  // A narrated entry for this slug, resolved from the static (build-time)
+  // generated module — safe here (no fs) and used by the AudioPlayer.
+  const audio = articleAudio.find((a) => a.slug === slug);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -148,6 +154,9 @@ export default async function BlogPostPage({ params }: Props) {
             </div>
           </div>
         )}
+
+        {/* Article audio — auth-gated player (locked card for logged-out) */}
+        <AudioPlayer slug={post.slug} audio={audio} />
 
         {/* Article Body — rendered from MDX content */}
         <article className="article-body max-w-[720px] mx-auto px-6 pb-16">
