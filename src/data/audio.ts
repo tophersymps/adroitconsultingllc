@@ -6,6 +6,7 @@
 import type { ArticleAudio } from "@/lib/audio/contracts";
 
 export const articleAudio: ArticleAudio[] = [
+  { slug: "a2a-agent-coordination-2026", voice: "af_heart", storagePath: "blog/a2a-agent-coordination-2026/af_heart.mp3" },
   { slug: "agent-eval-infrastructure-2026", voice: "af_heart", storagePath: "blog/agent-eval-infrastructure-2026/af_heart.mp3" },
   { slug: "agent-framework-decision-2026", voice: "af_heart", storagePath: "blog/agent-framework-decision-2026/af_heart.mp3", timingsStoragePath: "blog/agent-framework-decision-2026/af_heart.timing.json" },
   { slug: "agent-memory-context-engineering-2026", voice: "af_heart", storagePath: "blog/agent-memory-context-engineering-2026/af_heart.mp3", timingsStoragePath: "blog/agent-memory-context-engineering-2026/af_heart.timing.json" },
