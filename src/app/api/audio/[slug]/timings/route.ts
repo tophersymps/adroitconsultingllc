@@ -4,9 +4,9 @@
  * Serves the per-segment timing manifest (SegmentTiming[] — [{text, startSec,
  * endSec}, ...]) captured at generation time, enabling the player's "Follow
  * along" exact-paragraph scroll-sync. Mirror of GET /api/audio/[slug]: the
- * manifest lives in the PRIVATE Supabase 'audio' bucket and is fetched
- * server-side with the service-role client — no public URL, no leaked bucket
- * key (DoD-4).
+ * manifest lives in the PRIVATE Cloudflare R2 bucket and is fetched
+ * server-side with the bucket-scoped R2 keys — no public or signed URL, no
+ * leaked bucket key (DoD-4).
  *
  *  200  application/json: {"segments": SegmentTiming[]}  (signed-in + known
  *       slug + entry carries timingsStoragePath + object retrievable)
@@ -14,14 +14,15 @@
  *  404  unknown slug, no timings manifest on the entry, or object missing.
  *
  * Auth: getSupabaseServerClient().auth.getUser() (HttpOnly cookie) — same
- * mechanism as the MP3 route. Fails CLOSED (any error -> 401) so a missing
+ * mechanism as the MP3 route; httpOnly enforced always, secure in production
+ * (see lib/supabase/cookie-options.ts). Fails CLOSED (any error -> 401) so a missing
  * manifest or env never leaks that the resource exists.
  */
 import { NextRequest } from "next/server";
 import { articleAudio } from "@/data/audio";
-import { AUDIO_BUCKET, type AudioRouteContext } from "@/lib/audio/contracts";
+import { type AudioRouteContext } from "@/lib/audio/contracts";
+import { getR2Object } from "@/lib/r2/client";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
 
@@ -49,13 +50,11 @@ export async function GET(req: NextRequest, context: AudioRouteContext) {
     const timingsStoragePath = entry.timingsStoragePath;
     if (!timingsStoragePath) return new Response(null, { status: 404 });
 
-    // 4. Private read via service-role client (server can read private blobs).
-    const { data, error } = await getSupabaseServiceClient()
-      .storage.from(AUDIO_BUCKET)
-      .download(timingsStoragePath);
-    if (error || !data) return new Response(null, { status: 404 });
+    // 4. Private read via the bucket-scoped R2 credentials (server-side only).
+    const object = await getR2Object(timingsStoragePath);
+    if (!object) return new Response(null, { status: 404 });
 
-    const text = await data.text();
+    const text = new TextDecoder().decode(object.bytes);
     let segments: unknown;
     try {
       segments = JSON.parse(text);

@@ -157,8 +157,11 @@ export default async function BlogPostPage({ params }: Props) {
 
         {/* Article audio — auth-gated player (locked card for logged-out).
             Gated on `audio` so the AudioPlayer client JS chunk + its useAuth()
-            session fetch are NOT shipped/run on the 86/91 articles without a
+            session fetch are NOT shipped/run on the articles without a
             narration (avoids duplicating the Header's /api/auth/session call).
+            No hard article count is stated here — `src/data/audio.ts` is
+            generated and the backfill cron grows the narrated set, so any
+            fixed figure goes stale by construction.
             Tier C FLOAT: the player is pinned sticky at the top of the article
             viewport, docked just BELOW the site header. The Header is
             `sticky top-0 z-50` (h-16 / 64px). This max-w-[920px] width wrapper

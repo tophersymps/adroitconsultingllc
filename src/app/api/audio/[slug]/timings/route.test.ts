@@ -1,9 +1,10 @@
 /**
  * timings route.test.ts — GET /api/audio/[slug]/timings auth gate + contract.
  *
- * Mirrors the MP3 route test: mocked Supabase clients, asserts the 200/401/404
- * matrix and locks the DoD-4 contract that the manifest is served as JSON from
- * the PRIVATE bucket via the entry's timingsStoragePath — never a public URL.
+ * Mirrors the MP3 route test: a mocked Supabase server client (auth) plus a
+ * mocked R2 reader (manifest bytes). Asserts the 200/401/404 matrix and locks
+ * the DoD-4 contract that the manifest is served as JSON from the PRIVATE R2
+ * bucket via the entry's timingsStoragePath — never a public or signed URL.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
@@ -14,8 +15,11 @@ const unknownSlug = "this-slug-does-not-exist-xyz";
 
 let authed = true;
 let objectAvailable = true;
-let timingDownloadError: { message: string } | null = null;
+let r2Failure: { name: string; $metadata?: { httpStatusCode?: number } } | null = null;
 let hasTimingsPath = true; // entry carries timingsStoragePath
+let requestedKeys: string[] = [];
+/** Overrides the bytes the mocked R2 reader returns (malformed-manifest cases). */
+let manifestBody: string | null = null;
 const fakeTimings = JSON.stringify([
   { text: "Section: Introduction.", startSec: 0, endSec: 3 },
   { text: "The architecture evolved significantly.", startSec: 3, endSec: 6 },
@@ -30,23 +34,19 @@ const serverClient = {
   },
 };
 
-const serviceClient = {
-  storage: {
-    from: () => ({
-      download: async () =>
-        objectAvailable
-          ? { data: new Blob([fakeTimings], { type: "application/json" }), error: null }
-          : { data: null, error: timingDownloadError },
-    }),
-  },
-};
-
 vi.mock("@/lib/supabase/server", () => ({
   getSupabaseServerClient: async () => serverClient,
 }));
 
-vi.mock("@/lib/supabase/service", () => ({
-  getSupabaseServiceClient: () => serviceClient,
+vi.mock("@/lib/r2/client", () => ({
+  getR2Object: async (key: string) => {
+    requestedKeys.push(key);
+    if (r2Failure) throw r2Failure;
+    if (!objectAvailable) return null;
+    const body = manifestBody ?? fakeTimings;
+    const bytes = new Uint8Array(Buffer.from(body, "utf-8"));
+    return { bytes, size: bytes.byteLength };
+  },
 }));
 
 const TIMINGS_KEY = "blog/agent-eval-infrastructure-2026/af_heart.timing.json";
@@ -72,8 +72,9 @@ describe("GET /api/audio/[slug]/timings", () => {
   beforeEach(() => {
     authed = true;
     objectAvailable = true;
-    timingDownloadError = null;
+    r2Failure = null;
     hasTimingsPath = true;
+    requestedKeys = [];
     vi.clearAllMocks();
   });
 
@@ -83,6 +84,7 @@ describe("GET /api/audio/[slug]/timings", () => {
       params: Promise.resolve({ slug: SLUG }),
     });
     expect(res.status).toBe(401);
+    expect(requestedKeys).toEqual([]);
   });
 
   it("returns 404 for an unknown slug even when authenticated", async () => {
@@ -90,6 +92,7 @@ describe("GET /api/audio/[slug]/timings", () => {
       params: Promise.resolve({ slug: unknownSlug }),
     });
     expect(res.status).toBe(404);
+    expect(requestedKeys).toEqual([]);
   });
 
   it("returns 404 when the entry has no timingsStoragePath (pre-Tier-C)", async () => {
@@ -98,15 +101,16 @@ describe("GET /api/audio/[slug]/timings", () => {
       params: Promise.resolve({ slug: SLUG }),
     });
     expect(res.status).toBe(404);
+    expect(requestedKeys).toEqual([]);
   });
 
-  it("returns 404 when the private manifest object is missing", async () => {
+  it("returns 404 when the R2 manifest object is missing", async () => {
     objectAvailable = false;
-    timingDownloadError = { message: "The resource was not found" };
     const res = await GET(makeGet(SLUG), {
       params: Promise.resolve({ slug: SLUG }),
     });
     expect(res.status).toBe(404);
+    expect(requestedKeys).toEqual([TIMINGS_KEY]);
   });
 
   it("returns 200 application/json {segments} for an authed, manifest-present request", async () => {
@@ -122,6 +126,32 @@ describe("GET /api/audio/[slug]/timings", () => {
       startSec: 0,
       endSec: 3,
     });
+    // The manifest is read from R2 by its private bucket key, server-side.
+    expect(requestedKeys).toEqual([TIMINGS_KEY]);
+  });
+
+  it("returns 404 when the R2 manifest is not valid JSON", async () => {
+    manifestBody = "{not json";
+    const res = await GET(makeGet(SLUG), {
+      params: Promise.resolve({ slug: SLUG }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 404 when the R2 manifest is JSON but not a segment array", async () => {
+    manifestBody = JSON.stringify({ segments: "not-an-array" });
+    const res = await GET(makeGet(SLUG), {
+      params: Promise.resolve({ slug: SLUG }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("fails closed with 401 when the R2 read throws a non-404 error", async () => {
+    r2Failure = { name: "AccessDenied", $metadata: { httpStatusCode: 403 } };
+    const res = await GET(makeGet(SLUG), {
+      params: Promise.resolve({ slug: SLUG }),
+    });
+    expect(res.status).toBe(401);
   });
 
   it("never emits a public URL or the raw bucket key in the body", async () => {
@@ -132,5 +162,6 @@ describe("GET /api/audio/[slug]/timings", () => {
     expect(body).not.toContain("https://");
     expect(body).not.toContain(TIMINGS_KEY);
     expect(TIMINGS_KEY).toMatch(/^blog\/.+\/.+\.timing\.json$/);
+    expect(res.headers.get("Location")).toBeNull();
   });
 });
