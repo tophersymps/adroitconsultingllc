@@ -18,6 +18,7 @@
  */
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { supabaseCookieOptions } from "./cookie-options";
 
 /** Create a cookie-aware Supabase client bound to the current request. */
 export async function getSupabaseServerClient() {
@@ -31,6 +32,8 @@ export async function getSupabaseServerClient() {
   const cookieStore = await cookies();
 
   return createServerClient(supabaseUrl, supabaseKey, {
+    // Hardened flags (CWE-1004): httpOnly always, secure in production.
+    cookieOptions: supabaseCookieOptions(),
     cookies: {
       getAll() {
         return cookieStore.getAll();

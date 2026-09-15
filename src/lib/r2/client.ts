@@ -27,10 +27,22 @@
  *    GetObject/PutObject/DeleteObject/HeadObject on this one bucket are granted.
  *    That is why this module wraps GetObject and the migration tool falls back
  *    to per-key HeadObject when ListObjectsV2 is refused.
+ *  - BOTH halves of the migration live here: `getR2Object` is the READ path
+ *    (the two /api/audio routes) and `putR2Object` / `headR2Object` are the
+ *    WRITE path (`scripts/build-audio.js` and `scripts/migrate-audio-to-r2.cjs`
+ *    share them instead of each building their own S3 client). One place owns
+ *    the endpoint, the credentials plumbing and the "verify the PUT by
+ *    re-reading R2" rule.
  *
  * Usage: const object = await getR2Object(entry.storagePath); // null == 404
+ *        await putR2Object({ key, body: mp3Buf, contentType: "audio/mpeg" });
  */
-import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  GetObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 
 /** R2 ignores the region for SigV4 but the SDK requires one; "auto" is R2's. */
 export const R2_REGION = "auto";
@@ -91,17 +103,26 @@ export function readR2Config(env: NodeJS.ProcessEnv = process.env): R2Config {
   };
 }
 
-let client: S3Client | undefined;
+let clients = new Map<string, S3Client>();
 
 /**
- * Lazily create the shared S3 client pointed at R2. Path-style addressing is
- * forced because the R2 S3 endpoint serves `<bucket>.r2.cloudflarestorage.com`
- * without a valid wildcard certificate for arbitrary bucket names.
+ * Lazily create (and memoize) the S3 client pointed at R2. Path-style
+ * addressing is forced because the R2 S3 endpoint serves
+ * `<bucket>.r2.cloudflarestorage.com` without a valid wildcard certificate for
+ * arbitrary bucket names.
+ *
+ * `env` is a parameter so the generator and the migration tool can hand over
+ * the env they loaded from `.env.local` themselves (scripts run outside Next,
+ * so nothing has populated `process.env` for them). The memo is keyed on the
+ * resolved endpoint + key id + bucket, so a caller with different credentials
+ * gets its own client instead of silently reusing another one's.
  */
-export function getR2Client(): S3Client {
-  if (!client) {
-    const config = readR2Config();
-    client = new S3Client({
+export function getR2Client(env: NodeJS.ProcessEnv = process.env): S3Client {
+  const config = readR2Config(env);
+  const cacheKey = `${config.endpoint}|${config.bucket}|${config.accessKeyId}`;
+  let cached = clients.get(cacheKey);
+  if (!cached) {
+    cached = new S3Client({
       region: R2_REGION,
       endpoint: config.endpoint,
       forcePathStyle: true,
@@ -110,13 +131,24 @@ export function getR2Client(): S3Client {
         secretAccessKey: config.secretAccessKey,
       },
     });
+    clients.set(cacheKey, cached);
   }
-  return client;
+  return cached;
 }
 
-/** Test seam: drop the memoized client (env changes between tests). */
+/** Test seam: drop the memoized clients (env changes between tests). */
 export function resetR2Client(): void {
-  client = undefined;
+  clients = new Map();
+}
+
+/**
+ * Content-Type by key extension. Shared by the write path (generator +
+ * migration tool) so a copied object keeps the header the reader's routes emit.
+ */
+export function contentTypeForKey(key: string): string {
+  if (key.endsWith(".mp3")) return "audio/mpeg";
+  if (key.endsWith(".json")) return "application/json";
+  return "application/octet-stream";
 }
 
 export interface R2Object {
@@ -155,12 +187,15 @@ export function isMissingObjectError(err: unknown): boolean {
  * Returns `null` when the key does not exist (the route maps that to 404).
  * Throws on any other failure. Never returns or emits a URL.
  */
-export async function getR2Object(key: string): Promise<R2Object | null> {
-  const { bucket } = readR2Config();
+export async function getR2Object(
+  key: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<R2Object | null> {
+  const { bucket } = readR2Config(env);
 
   let response;
   try {
-    response = await getR2Client().send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    response = await getR2Client(env).send(new GetObjectCommand({ Bucket: bucket, Key: key }));
   } catch (err) {
     if (isMissingObjectError(err)) return null;
     throw err;
@@ -176,4 +211,95 @@ export async function getR2Object(key: string): Promise<R2Object | null> {
     bytes,
     size: response.ContentLength ?? bytes.byteLength,
   };
+}
+
+/* ------------------------------------------------------------------ */
+/*  WRITE PATH — shared by scripts/build-audio.js and                   */
+/*  scripts/migrate-audio-to-r2.cjs. Never returns or emits a URL.      */
+/* ------------------------------------------------------------------ */
+
+export interface R2ObjectHead {
+  /** Object size in bytes (Content-Length). */
+  size: number;
+  /** R2's ETag for the stored object (an MD5 for a single-part PUT). */
+  etag?: string;
+  /** Content-Type stored with the object, when R2 reports one. */
+  contentType?: string;
+  /** User metadata set by putR2Object's caller (e.g. `sha256`). */
+  metadata?: Record<string, string>;
+}
+
+export interface PutR2ObjectInput {
+  /** Bucket-relative key — same layout as the reader uses. */
+  key: string;
+  /** Raw object bytes (a Buffer is fine; it is a Uint8Array). */
+  body: Uint8Array;
+  /** Defaults to `contentTypeForKey(key)`. */
+  contentType?: string;
+  /** Optional user metadata, e.g. `{ sha256: "<hex>" }`. */
+  metadata?: Record<string, string>;
+}
+
+/**
+ * Head one object. Returns `null` for a key R2 does not hold, and rethrows any
+ * other failure (auth, network) so a broken credential can never be mistaken
+ * for "the object is missing" — the migration tool's skip/verify logic depends
+ * on that distinction.
+ */
+export async function headR2Object(
+  key: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<R2ObjectHead | null> {
+  const { bucket } = readR2Config(env);
+
+  let response;
+  try {
+    response = await getR2Client(env).send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+  } catch (err) {
+    if (isMissingObjectError(err)) return null;
+    throw err;
+  }
+
+  return {
+    size: response.ContentLength ?? 0,
+    etag: response.ETag,
+    contentType: response.ContentType,
+    metadata: response.Metadata,
+  };
+}
+
+/**
+ * Write one object to the private R2 bucket, then VERIFY it by re-reading R2
+ * (HeadObject) instead of trusting the PUT response — the same rule the
+ * migration tool applies to every copy. Throws when the stored size differs
+ * from what was sent, so a truncated or silently-dropped upload aborts the
+ * caller rather than emitting an entry whose audio is unreadable.
+ */
+export async function putR2Object(
+  input: PutR2ObjectInput,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<R2ObjectHead> {
+  const { key, body } = input;
+  const { bucket } = readR2Config(env);
+
+  await getR2Client(env).send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: body,
+      ContentType: input.contentType ?? contentTypeForKey(key),
+      ContentLength: body.byteLength,
+      Metadata: input.metadata,
+    }),
+  );
+
+  const stored = await headR2Object(key, env);
+  if (!stored || stored.size !== body.byteLength) {
+    throw new Error(
+      `R2 put verification failed for ${key}: R2 reports ${
+        stored ? `${stored.size} bytes` : "no object"
+      }, expected ${body.byteLength}`,
+    );
+  }
+  return stored;
 }

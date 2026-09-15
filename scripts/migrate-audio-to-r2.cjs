@@ -25,6 +25,13 @@
  *   NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY   Supabase source
  *   R2_ACCOUNT_ID, R2_BUCKET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY   R2 dest
  *
+ * The R2 side of this tool uses the SAME helpers as the writer
+ * (src/lib/r2/client.ts: putR2Object / headR2Object / contentTypeForKey /
+ * getR2Client) instead of building its own S3 client, so the endpoint,
+ * credential plumbing, content types and the "verify every PUT by re-reading
+ * R2" rule stay in one place. The .cjs loader reaches that .ts module through
+ * Node's built-in type stripping (Node >= 22; this repo runs Node 26).
+ *
  * IDEMPOTENT: an object already present in R2 with a matching byte size is
  * skipped, so re-running after the audio backfill cron adds articles is cheap
  * and safe. Exit code is non-zero when the post-copy verification mismatches.
@@ -32,12 +39,15 @@
 "use strict";
 
 const crypto = require("node:crypto");
+const path = require("node:path");
+const { ListObjectsV2Command } = require("@aws-sdk/client-s3");
 const {
-  S3Client,
-  HeadObjectCommand,
-  PutObjectCommand,
-  ListObjectsV2Command,
-} = require("@aws-sdk/client-s3");
+  contentTypeForKey,
+  getR2Client,
+  headR2Object,
+  putR2Object,
+  readR2Config,
+} = require(path.join(__dirname, "..", "src", "lib", "r2", "client.ts"));
 
 /* ------------------------------------------------------------------ */
 /*  Config                                                             */
@@ -65,29 +75,17 @@ function requireEnv(name) {
 const SUPABASE_URL = requireEnv("NEXT_PUBLIC_SUPABASE_URL");
 const SUPABASE_KEY = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
 const SOURCE_BUCKET = "audio";
-const R2_ACCOUNT_ID = requireEnv("R2_ACCOUNT_ID");
-const R2_BUCKET = requireEnv("R2_BUCKET");
-const R2_ENDPOINT = `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
-
-const s3 = new S3Client({
-  region: "auto",
-  endpoint: R2_ENDPOINT,
-  forcePathStyle: true,
-  credentials: {
-    accessKeyId: requireEnv("R2_ACCESS_KEY_ID"),
-    secretAccessKey: requireEnv("R2_SECRET_ACCESS_KEY"),
-  },
-});
+/* Shared client/config — throws when an R2_* var is missing. */
+const R2_BUCKET = readR2Config(process.env).bucket;
+const s3 = getR2Client(process.env);
 
 const supaHeaders = {
   Authorization: `Bearer ${SUPABASE_KEY}`,
   apikey: SUPABASE_KEY,
 };
 
-function contentTypeFor(key) {
-  if (key.endsWith(".mp3")) return "audio/mpeg";
-  if (key.endsWith(".json")) return "application/json";
-  return "application/octet-stream";
+async function headR2(key) {
+  return headR2Object(key, process.env);
 }
 
 /* ------------------------------------------------------------------ */
@@ -140,18 +138,6 @@ async function downloadSupabase(key) {
 /* ------------------------------------------------------------------ */
 /*  R2 (destination)                                                   */
 /* ------------------------------------------------------------------ */
-
-/** HeadObject is granted by "Object Read"; ListBucket may not be. */
-async function headR2(key) {
-  try {
-    const res = await s3.send(new HeadObjectCommand({ Bucket: R2_BUCKET, Key: key }));
-    return { size: res.ContentLength, etag: res.ETag, metadata: res.Metadata };
-  } catch (err) {
-    const status = err?.$metadata?.httpStatusCode;
-    if (status === 404 || err?.name === "NotFound" || err?.name === "NoSuchKey") return null;
-    throw err;
-  }
-}
 
 /**
  * Enumerate R2. Prefers ListObjectsV2 (paginated); the provisioned keys are
@@ -212,24 +198,17 @@ async function copyOne(source) {
   }
   const sha256 = crypto.createHash("sha256").update(bytes).digest("hex");
 
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: R2_BUCKET,
-      Key: source.key,
-      Body: bytes,
-      ContentType: contentTypeFor(source.key),
-      ContentLength: bytes.byteLength,
-      Metadata: { sha256, source: `supabase:${SOURCE_BUCKET}` },
-    }),
+  /* Shared write path: PUT, then re-read R2 to confirm the stored size (the
+   * helper throws on a mismatch, so a short write can never look like a copy). */
+  const after = await putR2Object(
+    {
+      key: source.key,
+      body: bytes,
+      contentType: contentTypeForKey(source.key),
+      metadata: { sha256, source: `supabase:${SOURCE_BUCKET}` },
+    },
+    process.env,
   );
-
-  // Verify the stored object by re-reading R2, never by trusting the PUT.
-  const after = await headR2(source.key);
-  if (!after || after.size !== bytes.byteLength) {
-    throw new Error(
-      `put verification failed for ${source.key}: R2 reports ${after ? after.size : "missing"} bytes, expected ${bytes.byteLength}`,
-    );
-  }
   return {
     key: source.key,
     size: after.size,

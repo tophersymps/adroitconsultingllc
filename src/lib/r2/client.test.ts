@@ -14,26 +14,35 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 const hoisted = vi.hoisted(() => ({
   send: vi.fn(),
   constructorOptions: [] as unknown[],
-  commands: [] as { input: unknown }[],
+  commands: [] as { type: string; input: unknown }[],
 }));
 
-vi.mock("@aws-sdk/client-s3", () => ({
-  S3Client: class {
-    constructor(options: unknown) {
-      hoisted.constructorOptions.push(options);
-    }
-    send = hoisted.send;
-  },
-  GetObjectCommand: class {
-    constructor(public input: unknown) {
-      hoisted.commands.push(this as unknown as { input: unknown });
-    }
-  },
-}));
+vi.mock("@aws-sdk/client-s3", () => {
+  const command = (type: string) =>
+    class {
+      constructor(public input: unknown) {
+        hoisted.commands.push({ type, input });
+      }
+    };
+  return {
+    S3Client: class {
+      constructor(options: unknown) {
+        hoisted.constructorOptions.push(options);
+      }
+      send = hoisted.send;
+    },
+    GetObjectCommand: command("GetObject"),
+    HeadObjectCommand: command("HeadObject"),
+    PutObjectCommand: command("PutObject"),
+  };
+});
 
 import {
+  contentTypeForKey,
   getR2Object,
+  headR2Object,
   isMissingObjectError,
+  putR2Object,
   readR2Config,
   r2Endpoint,
   resetR2Client,
@@ -175,5 +184,154 @@ describe("getR2Object", () => {
   it("returns null when the response carries no body", async () => {
     hoisted.send.mockResolvedValue({ Body: undefined });
     expect(await getR2Object("blog/x/af_heart.mp3")).toBeNull();
+  });
+});
+
+describe("contentTypeForKey", () => {
+  it("maps the write-path key extensions the reader serves", () => {
+    expect(contentTypeForKey("blog/x/af_heart.mp3")).toBe("audio/mpeg");
+    expect(contentTypeForKey("blog/x/af_heart.timing.json")).toBe("application/json");
+    expect(contentTypeForKey("blog/x/narration.txt")).toBe("application/octet-stream");
+  });
+});
+
+describe("headR2Object", () => {
+  const env = FULL_ENV as unknown as NodeJS.ProcessEnv;
+
+  beforeEach(() => {
+    resetR2Client();
+    hoisted.send.mockReset();
+    hoisted.commands.length = 0;
+  });
+
+  it("heads the configured bucket/key and reports size, etag and metadata", async () => {
+    hoisted.send.mockResolvedValue({
+      ContentLength: 4096,
+      ETag: '"abc123"',
+      ContentType: "audio/mpeg",
+      Metadata: { sha256: "deadbeef" },
+    });
+
+    const head = await headR2Object("blog/x/af_heart.mp3", env);
+
+    expect(head).toEqual({
+      size: 4096,
+      etag: '"abc123"',
+      contentType: "audio/mpeg",
+      metadata: { sha256: "deadbeef" },
+    });
+    expect(hoisted.commands[0]).toEqual({
+      type: "HeadObject",
+      input: { Bucket: "adroit-audio", Key: "blog/x/af_heart.mp3" },
+    });
+  });
+
+  it("defaults a missing Content-Length to 0 instead of undefined", async () => {
+    hoisted.send.mockResolvedValue({});
+    const head = await headR2Object("blog/x/af_heart.mp3", env);
+    expect(head?.size).toBe(0);
+  });
+
+  it("returns null for a key R2 does not hold", async () => {
+    hoisted.send.mockRejectedValue(
+      Object.assign(new Error("nope"), { name: "NoSuchKey", $metadata: { httpStatusCode: 404 } }),
+    );
+    expect(await headR2Object("blog/missing/af_heart.mp3", env)).toBeNull();
+  });
+
+  it("rethrows a non-404 failure (a bad credential is not a missing object)", async () => {
+    hoisted.send.mockRejectedValue(Object.assign(new Error("denied"), { name: "AccessDenied" }));
+    await expect(headR2Object("blog/x/af_heart.mp3", env)).rejects.toThrow("denied");
+  });
+});
+
+describe("putR2Object", () => {
+  const env = FULL_ENV as unknown as NodeJS.ProcessEnv;
+  const body = new Uint8Array([0x49, 0x44, 0x33, 0x04]); // "ID3" + a byte
+
+  beforeEach(() => {
+    resetR2Client();
+    hoisted.send.mockReset();
+    hoisted.commands.length = 0;
+  });
+
+  it("PUTs the bytes to the configured bucket with the key's content type, then re-reads R2", async () => {
+    hoisted.send
+      .mockResolvedValueOnce({}) // PutObject
+      .mockResolvedValueOnce({ ContentLength: body.byteLength, ETag: '"etag"' }); // HeadObject
+
+    const head = await putR2Object({ key: "blog/x/af_heart.mp3", body }, env);
+
+    expect(hoisted.commands[0]).toEqual({
+      type: "PutObject",
+      input: {
+        Bucket: "adroit-audio",
+        Key: "blog/x/af_heart.mp3",
+        Body: body,
+        ContentType: "audio/mpeg",
+        ContentLength: body.byteLength,
+        Metadata: undefined,
+      },
+    });
+    // The verification is a second, independent read of R2 — never the PUT reply.
+    expect(hoisted.commands[1]).toEqual({
+      type: "HeadObject",
+      input: { Bucket: "adroit-audio", Key: "blog/x/af_heart.mp3" },
+    });
+    expect(hoisted.send).toHaveBeenCalledTimes(2);
+    expect(head.size).toBe(body.byteLength);
+    expect(head.etag).toBe('"etag"');
+  });
+
+  it("uses the timing-manifest content type and carries caller metadata", async () => {
+    hoisted.send.mockResolvedValueOnce({}).mockResolvedValueOnce({ ContentLength: body.byteLength });
+
+    await putR2Object(
+      {
+        key: "blog/x/af_heart.timing.json",
+        body,
+        metadata: { sha256: "cafe" },
+      },
+      env,
+    );
+
+    expect(hoisted.commands[0].input).toMatchObject({
+      ContentType: "application/json",
+      Metadata: { sha256: "cafe" },
+    });
+  });
+
+  it("honours an explicit contentType override", async () => {
+    hoisted.send.mockResolvedValueOnce({}).mockResolvedValueOnce({ ContentLength: body.byteLength });
+    await putR2Object({ key: "blog/x/blob.bin", body, contentType: "audio/mpeg" }, env);
+    expect(hoisted.commands[0].input).toMatchObject({ ContentType: "audio/mpeg" });
+  });
+
+  it("throws when R2 reports a different size after the PUT (a short write is not a success)", async () => {
+    hoisted.send
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ ContentLength: body.byteLength - 1 });
+
+    await expect(putR2Object({ key: "blog/x/af_heart.mp3", body }, env)).rejects.toThrow(
+      /put verification failed/,
+    );
+  });
+
+  it("throws when the object is absent right after the PUT", async () => {
+    hoisted.send
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(Object.assign(new Error("gone"), { name: "NoSuchKey" }));
+
+    await expect(putR2Object({ key: "blog/x/af_heart.mp3", body }, env)).rejects.toThrow(
+      /no object/,
+    );
+  });
+
+  it("fails closed when the R2 env is incomplete (no silent no-op write)", async () => {
+    const incomplete = { R2_BUCKET: "adroit-audio" } as unknown as NodeJS.ProcessEnv;
+    await expect(putR2Object({ key: "blog/x/af_heart.mp3", body }, incomplete)).rejects.toThrow(
+      /incomplete/,
+    );
+    expect(hoisted.send).not.toHaveBeenCalled();
   });
 });

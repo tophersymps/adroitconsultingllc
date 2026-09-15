@@ -11,11 +11,17 @@
  *      --bitrate): the private bucket must hold a 91-article backfill inside
  *      the Supabase Free 1 GB storage tier (~5 MB/article at 48k vs ~13.3 MB
  *      at the old 128k, which measured ~1.19 GB for 91 and did not fit).
- *   3. uploads it to the PRIVATE Supabase 'audio' bucket at
- *      audio/blog/<slug>/<voice>.mp3 using the service-role key.
+ *   3. uploads it to the PRIVATE Cloudflare R2 bucket (adroit-audio, S3 API,
+ *      bucket-scoped keys — src/lib/r2/client.ts putR2Object) at
+ *      blog/<slug>/<voice>.mp3, and (while AUDIO_DUAL_WRITE_SUPABASE is not
+ *      switched off) also to the private Supabase 'audio' bucket as the
+ *      rollback leg. Every PUT is verified by re-reading R2.
  *   4. emits src/data/audio.ts (slug / voice / storagePath) — the static
  *      module the AudioPlayer + /api/audio route consume. NO public URL is
  *      ever emitted; storagePath is the private-bucket key only.
+ *
+ * The timing manifest (blog/<slug>/<voice>.timing.json) is written to the same
+ * two stores with the MP3; the reader serves both from R2.
  *
  * Fails loudly on any missing dependency (no silent SKIP, no fabricated
  * upload): a missing engine, missing env, or failed upload aborts the run.
@@ -39,6 +45,13 @@
  *                           # (skips slugs already present with the target voice; use with
  *                           # --force to regenerate everything, --limit N to cap new synths).
  *                           # Used by the publish-time hook + nightly sweep automation.
+ *
+ * Write targets / rollback: R2 (adroit-audio) is the PRIMARY store — the
+ * reader serves from it. The private Supabase 'audio' bucket is still written
+ * as a DUAL WRITE while the transition window is open, so pointing the reader
+ * back at Supabase remains a config change. Set AUDIO_DUAL_WRITE_SUPABASE=false
+ * (or 0/no/off) in .env.local to drop the second upload. Nothing is ever
+ * deleted from either bucket.
  *
  * Encoding: every generated MP3 is mono / 24000 Hz / 48kbps. --bitrate (or the
  * AUDIO_BITRATE env var) overrides the bitrate; do not raise the DEFAULT for a
@@ -213,8 +226,50 @@ function readExistingEntries() {
   return out;
 }
 
-/* --- Supabase private-bucket upload (REST, service-role) --- */
-async function uploadMp3(env, storagePath, mp3Buf) {
+/* --- storage writes: Cloudflare R2 (primary) + optional Supabase dual write ---
+ *
+ * The READ path (src/app/api/audio/[slug]/route.ts and its /timings twin)
+ * serves objects out of the private R2 bucket, so the generator must WRITE
+ * there or a freshly generated article is unreadable until someone mirrors it.
+ *
+ * Both writers go through src/lib/r2/client.ts (putR2Object) instead of
+ * building an S3 client here: one place owns the endpoint, the four R2_* env
+ * vars, and the rule that every PUT is verified by re-reading R2.
+ *
+ * ROLLBACK: the Supabase Storage objects are deliberately NOT deleted. While
+ * AUDIO_DUAL_WRITE_SUPABASE is unset (default: ON, the transition window) each
+ * object is also uploaded to the private Supabase `audio` bucket, so reverting
+ * the reader to Supabase keeps working for objects generated during the
+ * window. Set AUDIO_DUAL_WRITE_SUPABASE=false (or 0/no/off) in .env.local to
+ * stop the extra uploads — no code change, no deploy.
+ */
+const R2_TYPE_STRIP_NODE_MAJOR = 22;
+async function loadR2Client() {
+  /* Node loads the .ts module by STRIPPING the types (default since Node 23.6;
+   * this repo runs Node 26). Same mechanism the narration import above uses.
+   * The suffix check turns a far-future "why is this a syntax error" into a
+   * named failure. */
+  const major = Number(process.versions.node.split(".")[0]);
+  if (!Number.isFinite(major) || major < R2_TYPE_STRIP_NODE_MAJOR) {
+    throw new Error(
+      `node >= ${R2_TYPE_STRIP_NODE_MAJOR} is required to import src/lib/r2/client.ts (running ${process.versions.node})`
+    );
+  }
+  return import(fileURLToPath(new URL("../src/lib/r2/client.ts", import.meta.url)));
+}
+
+/** True unless AUDIO_DUAL_WRITE_SUPABASE is explicitly switched off. */
+function dualWriteSupabaseEnabled(env) {
+  const raw = String(env.AUDIO_DUAL_WRITE_SUPABASE ?? "").trim();
+  if (!raw) return true; // unset == the transition window, dual write ON
+  return !/^(0|false|no|off)$/i.test(raw);
+}
+
+/**
+ * Supabase Storage upload (REST, service-role). Kept ONLY as the rollback
+ * dual-write leg — R2 is the store the reader serves from.
+ */
+async function uploadSupabase(env, storagePath, buf, contentType) {
   const url = env.NEXT_PUBLIC_SUPABASE_URL;
   const svc = env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !svc) {
@@ -225,40 +280,60 @@ async function uploadMp3(env, storagePath, mp3Buf) {
     headers: {
       Authorization: `Bearer ${svc}`,
       apikey: svc,
-      "Content-Type": "audio/mpeg",
+      "Content-Type": contentType,
       "x-upsert": "true",
     },
-    body: mp3Buf,
+    body: buf,
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`upload ${storagePath} -> HTTP ${res.status}: ${text.slice(0, 200)}`);
+    throw new Error(`supabase upload ${storagePath} -> HTTP ${res.status}: ${text.slice(0, 200)}`);
   }
   return res;
 }
 
-/** Upload an arbitrary UTF-8 JSON blob to the private bucket (timing manifest). */
-async function uploadJson(env, storagePath, jsonBuf) {
-  const url = env.NEXT_PUBLIC_SUPABASE_URL;
-  const svc = env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !svc) {
-    throw new Error("NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY required in .env.local");
-  }
-  const res = await fetch(`${url}/storage/v1/object/${BUCKET}/${storagePath}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${svc}`,
-      apikey: svc,
-      "Content-Type": "application/json",
-      "x-upsert": "true",
+/**
+ * Write one object (an MP3 or a timing manifest) to R2, verifying the stored
+ * size, then optionally to Supabase Storage. Returns the verified R2 size.
+ * Any failure throws — the caller aborts the run (no partial, silent success).
+ */
+async function writeObject({ env, storagePath, buf, dualWrite }) {
+  const r2 = await getR2();
+  const head = await r2.putR2Object(
+    {
+      key: storagePath,
+      body: buf,
+      contentType: r2.contentTypeForKey(storagePath),
     },
-    body: jsonBuf,
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`upload ${storagePath} -> HTTP ${res.status}: ${text.slice(0, 200)}`);
+    env
+  );
+  console.log(`OK ${storagePath} r2://${env.R2_BUCKET}/${storagePath} ${head.size} bytes (verified)`);
+  if (dualWrite) {
+    await uploadSupabase(env, storagePath, buf, r2.contentTypeForKey(storagePath));
+    console.log(`OK ${storagePath} supabase://${BUCKET}/${storagePath} ${buf.byteLength} bytes (dual write)`);
   }
-  return res;
+  return head.size;
+}
+
+/** @returns the R2_* vars that are absent from `env`. */
+function missingR2Env(env) {
+  return ["R2_ACCOUNT_ID", "R2_BUCKET", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"].filter(
+    (k) => !env[k]
+  );
+}
+
+let r2Module = null;
+
+/**
+ * Load (once) the shared R2 client module. Deferred to the first WRITE on
+ * purpose: a run that never uploads — `--metadata-only`, or one that aborts on
+ * a bad slug / failed TTS — needs no R2 env and no aws-sdk, exactly as it did
+ * before the write path moved. Completeness of the R2 env is reported at
+ * startup and enforced by the upload itself (putR2Object throws).
+ */
+async function getR2() {
+  if (!r2Module) r2Module = await loadR2Client();
+  return r2Module;
 }
 
 async function main() {
@@ -267,6 +342,20 @@ async function main() {
   assertSafeVoice(voice);
   assertSafeBitrate(bitrate);
   const env = loadEnv();
+  const dualWrite = dualWriteSupabaseEnabled(env);
+  if (!metadataOnly) {
+    console.log(
+      `write targets: r2${env.R2_BUCKET ? `:${env.R2_BUCKET}` : ""} (primary)${
+        dualWrite ? " + supabase:audio (dual write)" : " — supabase dual write OFF"
+      }`
+    );
+    const missing = missingR2Env(env);
+    if (missing.length) {
+      console.warn(
+        `WARNING: R2 configuration is incomplete: missing ${missing.join(", ")} — the first upload will fail. Add them to .env.local.`
+      );
+    }
+  }
   const mdxToNarration = await loadNarration();
 
   let slugs = allSlugs();
@@ -377,7 +466,12 @@ async function main() {
     }
     const mp3Buf = fs.readFileSync(out);
 
-    await uploadMp3(env, storagePath, mp3Buf);
+    try {
+      await writeObject({ env, storagePath, buf: mp3Buf, dualWrite });
+    } catch (e) {
+      console.error(`ERROR ${slug}: upload of ${storagePath} failed (${String(e.message).slice(0, 400)})`);
+      process.exit(1);
+    }
     const size = fs.statSync(out).size;
     console.log(`OK ${slug} ${voice} ${bitrate} ${size} bytes -> ${storagePath}`);
 
@@ -394,7 +488,14 @@ async function main() {
     }
     const timingsBuf = fs.readFileSync(timingPath);
     JSON.parse(timingsBuf.toString("utf-8")); // fail loudly on malformed manifest
-    await uploadJson(env, timingStoragePath, timingsBuf);
+    try {
+      await writeObject({ env, storagePath: timingStoragePath, buf: timingsBuf, dualWrite });
+    } catch (e) {
+      console.error(
+        `ERROR ${slug}: upload of ${timingStoragePath} failed (${String(e.message).slice(0, 400)})`
+      );
+      process.exit(1);
+    }
     console.log(`OK ${slug} timings ${timingsBuf.length} bytes -> ${timingStoragePath}`);
 
     putEntry({ slug, voice, storagePath, timingsStoragePath: timingStoragePath });
