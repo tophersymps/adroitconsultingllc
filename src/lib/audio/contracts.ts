@@ -16,7 +16,8 @@
  *     AUDIO_BUCKET below.
  *   - narration reads each Figure's markdown alt text as the spoken diagram
  *     description (alt IS the accessible figure description already)
- *   - pilot on the 5 most recent articles, backfill separately
+ *   - coverage is whatever the backfill cron has produced so far; there is no
+ *     fixed pilot count — the generated src/data/audio.ts grows over time
  *
  * NO public URL and NO signed URL is EVER emitted — not by the route, not as a
  * fallback (read-path amendment by brainiac, t_61815573, after the R2 migration

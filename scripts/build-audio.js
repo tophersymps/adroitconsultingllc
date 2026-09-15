@@ -42,7 +42,8 @@
  *
  * Encoding: every generated MP3 is mono / 24000 Hz / 48kbps. --bitrate (or the
  * AUDIO_BITRATE env var) overrides the bitrate; do not raise the DEFAULT for a
- * backfill — 91 articles at 128k do not fit the Supabase Free 1 GB tier.
+ * backfill — a full-catalogue 128k backfill does not fit the Supabase Free 1 GB
+ * tier.
  */
 import fs from "node:fs";
 import path from "node:path";
