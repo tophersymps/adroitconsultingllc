@@ -14,7 +14,8 @@
  *  404  unknown slug, no timings manifest on the entry, or object missing.
  *
  * Auth: getSupabaseServerClient().auth.getUser() (HttpOnly cookie) — same
- * mechanism as the MP3 route. Fails CLOSED (any error -> 401) so a missing
+ * mechanism as the MP3 route; httpOnly enforced always, secure in production
+ * (see lib/supabase/cookie-options.ts). Fails CLOSED (any error -> 401) so a missing
  * manifest or env never leaks that the resource exists.
  */
 import { NextRequest } from "next/server";

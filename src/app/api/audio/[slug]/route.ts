@@ -16,7 +16,8 @@
  *  416  Range start beyond the end of the file (unsatisfiable).
  *
  * Auth: getSupabaseServerClient().auth.getUser() from the HttpOnly cookie —
- * the same mechanism every other authed route uses.
+ * the same mechanism every other authed route uses; httpOnly enforced always,
+ * secure in production (see lib/supabase/cookie-options.ts).
  *
  * Range/206: the browser's `<audio>` element issues byte-Range requests for
  * metadata and seeking. Serving a partial 206 avoids transferring the whole

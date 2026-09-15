@@ -113,8 +113,9 @@ export interface AudioRouteContext {
  *   404  unknown slug (not in articleAudio) OR private object missing.
  *
  * Auth resolution: getSupabaseServerClient().auth.getUser() (HttpOnly cookie,
- * same mechanism as every other authed route). Authorized-bucket read uses
- * getSupabaseServiceClient().storage.from(AUDIO_BUCKET).download(storagePath).
+ * same mechanism as every other authed route; httpOnly enforced always,
+ * secure in production — see lib/supabase/cookie-options.ts). Authorized-bucket
+ * read uses getSupabaseServiceClient().storage.from(AUDIO_BUCKET).download(storagePath).
  * Preferred body path streams the ArrayBuffer; if a buffered response is
  * impractical on this Next release, fall back to a server-minted short-lived
  * signed download URL (accessible only because the authed server minted it).
