@@ -172,6 +172,30 @@ async function uploadMp3(env, storagePath, mp3Buf) {
   return res;
 }
 
+/** Upload an arbitrary UTF-8 JSON blob to the private bucket (timing manifest). */
+async function uploadJson(env, storagePath, jsonBuf) {
+  const url = env.NEXT_PUBLIC_SUPABASE_URL;
+  const svc = env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !svc) {
+    throw new Error("NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY required in .env.local");
+  }
+  const res = await fetch(`${url}/storage/v1/object/${BUCKET}/${storagePath}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${svc}`,
+      apikey: svc,
+      "Content-Type": "application/json",
+      "x-upsert": "true",
+    },
+    body: jsonBuf,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`upload ${storagePath} -> HTTP ${res.status}: ${text.slice(0, 200)}`);
+  }
+  return res;
+}
+
 async function main() {
   const env = loadEnv();
   const mdxToNarration = await loadNarration();
@@ -219,12 +243,13 @@ async function main() {
     // used JSON.stringify(narration), which turned real newlines into literal
     // backslash-n chars that Kokoro read aloud as "backslash n".)
     const out = path.join(ROOT, ".audio-out", `${slug}.mp3`);
+    const timingPath = path.join(ROOT, ".audio-out", `${slug}.timing.json`);
     fs.mkdirSync(path.dirname(out), { recursive: true });
     const textFile = path.join(ROOT, ".audio-out", `${slug}.narration.txt`);
     fs.writeFileSync(textFile, narration, "utf-8");
     const engine = path.join(ROOT, "scripts", "tts", "engines", "engine_kokoro.py");
     const venvPython = path.join(ROOT, "scripts", "tts", ".venv", "bin", "python");
-    const synthCmd = `${venvPython} ${engine} --text "$(cat ${JSON.stringify(textFile)})" --voice ${voice} --out ${JSON.stringify(out)}`;
+    const synthCmd = `${venvPython} ${engine} --text "$(cat ${JSON.stringify(textFile)})" --voice ${voice} --out ${JSON.stringify(out)} --timing ${JSON.stringify(timingPath)}`;
     try {
       execSync(synthCmd, { timeout: 120000, encoding: "utf-8" });
     } catch (e) {
@@ -247,8 +272,25 @@ async function main() {
     await uploadMp3(env, storagePath, mp3Buf);
     const size = fs.statSync(out).size;
     console.log(`OK ${slug} ${voice} ${size} bytes -> ${storagePath}`);
+
+    // Tier C exact paragraph scroll-sync: upload the per-segment timing
+    // manifest (emitted by engine_kokoro.py --timing) to the private bucket
+    // and record its key on the entry so the authed /api/audio/<slug>/timings
+    // route can serve it. A timing file is REQUIRED for a real generation:
+    // if the engine did not produce one, abort (do not emit an entry whose
+    // Follow-along would silently be wrong).
+    const timingStoragePath = `blog/${slug}/${voice}.timing.json`;
+    if (!fs.existsSync(timingPath)) {
+      console.error(`ERROR ${slug}: engine did not emit ${timingPath} (--timing missing?)`);
+      process.exit(1);
+    }
+    const timingsBuf = fs.readFileSync(timingPath);
+    JSON.parse(timingsBuf.toString("utf-8")); // fail loudly on malformed manifest
+    await uploadJson(env, timingStoragePath, timingsBuf);
+    console.log(`OK ${slug} timings ${timingsBuf.length} bytes -> ${timingStoragePath}`);
+
     entries = entries.filter((e) => !(e.slug === slug && e.voice === voice));
-    entries.push({ slug, voice, storagePath });
+    entries.push({ slug, voice, storagePath, timingsStoragePath: timingStoragePath });
     synthesized++;
   }
 

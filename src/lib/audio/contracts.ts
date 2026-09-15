@@ -38,6 +38,15 @@ export const DEFAULT_VOICE = "af_heart" as const;
 export type AudioStorageKey = `blog/${string}/${string}.mp3`;
 
 /**
+ * Object key of one article's segment-timing manifest relative to the
+ * AUDIO_BUCKET root. Scheme: blog/<slug>/<voice>.timing.json
+ * (example: blog/agent-eval-infrastructure-2026/af_heart.timing.json).
+ * Written by engine_kokoro.py + uploaded by build-audio.js so the client can
+ * snap a scrolled article to the exact spoken paragraph (Tier C).
+ */
+export type AudioTimingStorageKey = `blog/${string}/${string}.timing.json`;
+
+/**
  * A single narrated article. Generated as a static array by
  * scripts/build-audio.js and emitted to src/data/audio.ts:
  *
@@ -54,6 +63,31 @@ export interface ArticleAudio {
   voice: string;
   /** Object key in the PRIVATE 'audio' bucket: blog/<slug>/<voice>.mp3. */
   storagePath: AudioStorageKey;
+  /**
+   * Optional object key of the segment-timing manifest (Tier C exact
+   * paragraph scroll-sync): blog/<slug>/<voice>.timing.json.
+   * Absent for articles generated before timing capture landed; the client
+   * degrades gracefully (no Follow-along) when it is missing. Like storagePath
+   * it is a bucket key ONLY — never serialized to the client; the manifest is
+   * served by the authed GET /api/audio/<slug>/timings route.
+   */
+  timingsStoragePath?: AudioTimingStorageKey;
+}
+
+/**
+ * Exact per-segment timing for a narration. One entry per Kokoro output
+ * segment, captured at generation time from the segment sample boundaries
+ * (sample_rate-known, Kokoro SR 24000). `text` is the segment's leading
+ * phrase/graphemes — used to align the segment back to an article block.
+ * The manifest on disk is a plain array: SegmentTiming[].
+ */
+export interface SegmentTiming {
+  /** The spoken segment's leading phrase/graphemes. */
+  text: string;
+  /** Cumulative start time of this segment in the concatenated MP3 (seconds). */
+  startSec: number;
+  /** Cumulative end time of this segment (seconds). Last endSec ≈ MP3 duration. */
+  endSec: number;
 }
 
 /** Compile-time guard: every audio entry must resolve to a private-bucket key. */

@@ -158,10 +158,18 @@ export default async function BlogPostPage({ params }: Props) {
         {/* Article audio — auth-gated player (locked card for logged-out).
             Gated on `audio` so the AudioPlayer client JS chunk + its useAuth()
             session fetch are NOT shipped/run on the 86/91 articles without a
-            narration (avoids duplicating the Header's /api/auth/session call). */}
+            narration (avoids duplicating the Header's /api/auth/session call).
+            Tier C FLOAT: the player is pinned sticky at the top of the article
+            viewport, docked just BELOW the site header. The Header is
+            `sticky top-0 z-50`; this wrapper uses z-40 (header_z - 10) so the
+            player slides under the header, not over it. It stays NESTED inside
+            the max-w-[920px] width wrapper (width fix, t_f9646deb) — the width
+            card is NOT replaced or duplicated. */}
         {audio && (
           <div className="max-w-[920px] mx-auto px-6 my-6">
-            <AudioPlayerLazy slug={post.slug} hasAudio />
+            <div className="sticky top-0 z-40 my-0">
+              <AudioPlayerLazy slug={post.slug} hasAudio />
+            </div>
           </div>
         )}
 

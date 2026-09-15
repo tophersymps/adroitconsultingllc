@@ -43,4 +43,12 @@ describe("generated articleAudio (src/data/audio.ts)", () => {
       expect(postSlugs.has(a.slug), `audio slug ${a.slug} not in posts.ts`).toBe(true);
     }
   });
+
+  it("timingsStoragePath (when present) follows blog/<slug>/<voice>.timing.json", () => {
+    for (const a of articleAudio) {
+      if (!a.timingsStoragePath) continue;
+      expect(a.timingsStoragePath).toBe(`blog/${a.slug}/${a.voice}.timing.json`);
+      expect(a.timingsStoragePath).toMatch(/\.timing\.json$/);
+    }
+  });
 });
