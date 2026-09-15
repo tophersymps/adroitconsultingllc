@@ -6,7 +6,7 @@ Feature: a single-narrator (voice `af_heart`) audio player on every article, wit
 
 - Next.js 16.3.4 App Router (repo `adroit-site-copy`). Route handler for streaming; SSG article pages mount the player.
 - Cloudflare R2 (PRIVATE bucket `adroit-audio`, reached over its S3 API through `src/lib/r2/client.ts`) for MP3 blobs — the READ store. The Supabase Storage `audio` bucket is the GENERATION-SIDE SOURCE bucket only: `scripts/build-audio.js` uploads there and `scripts/migrate-audio-to-r2.cjs` mirrors each object to the same key in R2, so a rollback stays a config revert rather than a restore. Audio never enters git (repo size + Vercel Deployment Storage metering).
-- Kokoro-82M TTS (default engine), swappable CLI (Edge TTS alternate). Runs on the Fortress Mac, not the server.
+- Kokoro-82M TTS — a single engine, voice `af_heart`, invoked directly (no dispatcher, no alternate CLI; see `scripts/tts/**` below). Runs on the Fortress Mac, not the server.
 - Vitest 4 + Testing Library (mirror existing `src/**/*.test.ts(x)`).
 
 ## Component map
@@ -85,7 +85,7 @@ flowchart LR
 | ID | Title | Decision | Alternatives | Consequences |
 |----|-------|----------|--------------|--------------|
 | ADR-001 | Private bucket + authed route over public bucket | Private R2 bucket `adroit-audio`, read server-side by `GET /api/audio/[slug]` | Public bucket; public or signed URL | Auth gate preserved; server must stream; ~1MB responses well under Vercel function limit |
-| ADR-002 | Kokoro-82M default, single narrator | Engine CLI dispatch, voice `af_heart` | Edge TTS, ElevenLabs | No live cloning; one pass per article; on-brand consistent voice |
+| ADR-002 | Kokoro-82M default, single narrator | Single Kokoro engine, voice `af_heart` | Edge TTS, ElevenLabs | No live cloning; one pass per article; on-brand consistent voice |
 | ADR-003 | Alt text is the spoken diagram source | Narration reads Figure `alt`; optional `description::` override | Rewrite content | No content rewrite for pilot; terse alt yields thin narration |
 | ADR-004 | Generated `src/data/audio.ts` | Script → static module (like `posts.ts`/`learn.ts`) | DB query at request time | Zero runtime IO for the SSG page; rebuild to refresh |
 | ADR-005 | Cloudflare R2 over Supabase Storage for blobs | Read objects from the private R2 bucket `adroit-audio` (S3 API, bucket-scoped keys); Supabase `audio` stays the generation-side source bucket | Keep serving from Supabase (Free tier bills storage + 1 GB egress); public R2 bucket + URL | 10 GB with zero egress fees; rollback is a config revert; generator must mirror to R2 until it writes there directly |
@@ -93,7 +93,7 @@ flowchart LR
 ## Non-goals / explicit cut
 
 - No visitor voice selector (single narrator, locked `af_heart`).
-- No backfill beyond the 5 most recent articles in the pilot (separate follow-up).
+- No backfill guarantee: the generated `src/data/audio.ts` grows only as the backfill cron runs, so coverage is never site-wide or fixed at authoring time (site-wide backfill is a separate follow-up).
 - No public audio URL, no signed audio URL, no open bucket.
 - No audio in git (MP3 lives in R2, mirrored in the Supabase source bucket; `*.mp3` gitignored).
 
