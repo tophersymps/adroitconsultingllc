@@ -4,6 +4,16 @@ All notable changes to the Adroit Consulting Blog project will be documented in 
 
 ## [Unreleased]
 
+### Fix: re-reconcile the 5 Tier-C pilot timingsStoragePath in src/data/audio.ts + regression guard (t_ebba3564)
+
+**What** - The critical A11y finding on the Tier C review (`t_7816c21f`) is closed: the shared `src/data/audio.ts` in the `feat/audio-tier-c-t_1489ca98` worktree had lost `timingsStoragePath` for all 5 pilot articles (the audio-backfill cron re-emits that file from an origin/main merge-base that predates this feature). Re-ran the parent's own merge tool (`scripts/tmp_merge_timings.cjs`) so BOTH the 5 pilot timings keys AND the concurrent backfill's new entries are present (29 entries, no truncation), and committed it (`53d4c9e`) so the worktree is clean against HEAD. Added a named-pilot regression test in `src/lib/audio.test.ts` ("the 5 Tier C pilot articles keep their timingsStoragePath wiring") that fails loudly if any of the 5 pilots loses its key again — proven to bite by temporarily deleting one key (1 failed / 6 passed) then restoring it.
+
+**Why** - Without `timingsStoragePath`, `GET /api/audio/<slug>/timings` returns 404 at its step-3 guard, so the Follow-along toggle + exact paragraph scroll-sync (and their reduced-motion default-off handling) silently never render on the exact 5 articles the feature was built for. This regressed twice, so it is now locked by a test instead of relying on manual re-checks.
+
+**Verified** - `npx vitest run src/lib/audio.test.ts src/app/api/audio src/components/BlogPost` → 6 files / 38 tests pass. `git diff src/data/audio.ts` clean vs commit. Negative check: dropping the `prompt-caching-ai-infrastructure-2026` key fails the new test with the expected message.
+
+**Known Issues** - The low-severity a11y note (Follow-along checkbox 14x14px < 24px WCAG 2.5.8 target, `AudioPlayer.tsx` L283-288) remains open and non-blocking, unchanged by this fix. Only the 5 pilots carry timings; the other articles degrade gracefully without the toggle. The `src/data/learn.ts` / other dirty files in the shared worktree are unrelated concurrent work and were NOT touched.
+
 ### Audio Tier C: floating top player + exact paragraph scroll-sync via segment timings + 5 pilots regenerated (t_1489ca98)
 
 **What** - Tier C upgrade to the shipped article-audio feature: the player now FLOATS pinned at the top of the article viewport (docked just below the site header) while the article scrolls, and an exact paragraph scroll-sync ("Follow along") tracks the exact spoken paragraph using REAL generator-time segment timings rather than a proportional estimate.
