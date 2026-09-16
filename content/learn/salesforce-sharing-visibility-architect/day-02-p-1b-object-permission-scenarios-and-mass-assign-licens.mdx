@@ -1,0 +1,153 @@
+---
+title: "Sharing & Visibility Architect P-1b: Object-Permission Scenarios and Mass-Assign / License-Based Patterns"
+slug: day-02-p-1b-object-permission-scenarios-and-mass-assign-licens
+series: salesforce-sharing-visibility-architect
+lesson: 2
+excerpt: "How an object-permission grant scales from one user to a population: permission set groups as the packaging layer, dynamic assignment so joiners and leavers are covered without manual clicks, and the license rules that decide which object permissions an org can grant at all. Includes a worked 400-user scenario, a setup walkthrough, and the exam traps around mass assignment and license errors. Day 2 of the Platform Sharing and Visibility Architect exam prep."
+date: "September 16, 2026"
+author: "Adroit Consulting"
+readTime: "19 min read"
+tags: [Salesforce, Security, Sharing, Certification]
+---
+
+Lesson 1 ended with a rule that cannot be broken: a profile is the single baseline every user carries, permission sets add to it, and nothing subtracts. That rule answers the question "how do I give this one user more access", and it is why the object permissions editor looks so simple. Day 2 answers a harder question, and it is the question the exam actually asks: how do you give this same access to four hundred users, and keep giving it to the next hire without an admin touching anything?
+
+Permissions to Standard Objects, Custom Objects, and Fields is 27 percent of the Sharing and Visibility Architect exam, and this objective is scoped to scenario recommendation, not recall. The requirement asks you to recommend the right level of object permissions for a set of users, including mass-assignment and license-aware patterns. [^18] The phrase "set of users" is doing the heavy lifting. Nearly every distractor in this objective is a mechanism that would work for one user and collapse at population scale, or would quietly grant the permission to people the scenario never mentioned.
+
+There is a second dimension the exam layers on top, and it is the one that catches candidates who have only read about permission sets: licenses. A permission set is not a universal container. Which object permissions it can even expose depends on the permission set license it is associated with, and which permission set licenses a user can hold depends on the user license assigned to that user. [^11][^14] An architect who promises a grant without checking the license layer is an architect who discovers the gap during user acceptance testing.
+
+This lesson covers the composition rules for scale, the assignment mechanics that keep a population current, the license gating that limits the whole design, and the least-privilege judgment that separates View All Records from Modify All Records when the request is only "these users need to see more".
+
+## Deep Dive
+
+### The scenario is about a population, and that changes the mechanism
+
+The exam's unit of work is never a person. It is a cohort with a job function: 400 sales users, a handful of executives, a support team, a regional group. Object permissions in a profile are the correct tool when the access applies to everyone who holds that job by default. The moment the access is conditional on something that is not the profile, the profile stops being the right home for it.
+
+Three properties define a scalable grant. It should be packaged so one artifact can be reasoned about and deployed. It should be assigned by rule rather than by hand so membership tracks reality. And it should be scoped so that a new hire gets exactly the intended access on day one and a departing user loses it without a manual sweep.
+
+A profile fails all three at population scale. Salesforce disables editing standard object permissions on standard profiles, so the remediation path for a standard profile is clone and reassign, which means the entire population moves profiles. [^1][^4] Non-standard permissions placed in a profile are also invisible during a permission audit, because reviewers look at permission sets and groups and assume the profile is the boring baseline. The platform's own guidance points the same direction: build task-based permission sets, bundle them for personas, and assign the bundle. [^7]
+
+### Permission set groups are the packaging layer, not a permission set with a different name
+
+A permission set group collects permission sets and presents them as one assignable unit. [^5] That definition is short, and the behaviors underneath it are the exam content.
+
+A group has an included permission sets list, a status that must reach Updated before assignment succeeds, and a calculation step, because the group's effective permission set is computed from its members. [^5][^10] A group can also be muted in whole or in part through muting permission sets, which is the mechanism that lets one included permission set have its contribution removed without editing that permission set for everybody else who holds it directly. [^5]
+
+Two consequences follow. First, permission sets become reusable building blocks rather than persona-shaped artifacts. A Sales Read-Only permission set can live inside the Sales Representative group, the Sales Manager group, and a Support group that also needs account read access, and a change to that one permission set flows to all three. [^7] Second, the additive rule still governs everything. A group never subtracts from the profile, and a muting permission set only removes the contribution of specific permission sets inside that group. [^4][^5] There is no configuration on the platform that makes a group reduce a profile grant.
+
+For the exam, the group is the artifact that answers "bundle these permissions so one assignment covers the persona". It is the packaging half of the answer. The assignment half is the next section.
+
+### Assignment at scale: dynamic rules on user attributes
+
+Assigning a permission set group by clicking through four hundred users is not an architecture, it is a task that will be wrong by the end of the quarter. The population changes. People join, move departments, and leave. Any grant tied to a manual list decays from the day it is created.
+
+The platform's answer is assignment driven by user attributes rather than by admin memory. User access policies let you define a policy with criteria over user fields and have the platform assign or revoke permission sets and permission set group assignments automatically as users are created and edited. [^8] The criteria are ordinary field filters: Department equals Sales, or a custom Role__c field equals Field_Engineer. Where the criteria match, membership exists. Where they stop matching, membership is removed.
+
+This is the pattern the exam rewards for "a large, frequently-changing user population", and it is worth naming the properties that make it the right answer. Coverage is a function of data quality and not of admin effort. New hires are covered at creation when their user record carries the field values the policy filters on. Departures and transfers are handled by the same mechanism in reverse. The audit story is stronger, because the reason a user has the grant is a rule that can be read, not a memory of which admin clicked what in March.
+
+Two operational cautions belong in the same breath, because the exam uses them as distractors and real implementations get burned by them. First, dynamic assignment is triggered by the user record changing. A user whose attributes were already correct before the policy existed, or whose attributes change without a subsequent save, will not be swept up instantly. Second, the criteria depend on fields that must actually be populated. A policy filtering on Department is worthless in an org where Department is blank for sixty percent of users, and the fix is a data cleanup, not a bigger permission set.
+
+### License gating: the layer that decides what you are allowed to grant
+
+Everything above is about how to grant. The license layer decides whether the grant is possible, and it has two distinct pieces that candidates routinely merge into one.
+
+The user license is the primary entitlement on a user record, and it controls which features and standard objects that user can access at all. [^14][^15] The Salesforce Platform license, for example, is designed for users who need custom apps but not full standard CRM functionality, and those users are not entitled to certain standard apps and objects, including forecasts, leads, campaigns, and opportunities. [^15] A permission set cannot conjure an entitlement the user license does not carry. If the scenario grants opportunity access to a user on a Platform license, the scenario has a license problem, and no amount of permission set design fixes it.
+
+The permission set license is a separate, purchasable entitlement that unlocks specific features and is associated with a permission set. [^11] The association is what makes a permission set license-aware: you create the permission set and associate it with a permission set license, and from then on that permission set can carry the permissions the license unlocks. [^12] To hand that permission set to a user, the user must also hold the permission set license, which is assigned from the user record or from Company Information, depending on the edition. [^13]
+
+This produces the exact failure the exam tests as a scenario. A permission set exists to grant access to an object that comes from a paid or managed package. An admin tries to assign it and the assignment fails. The cause is not a page layout, a profile setting, or a sharing rule. The permission set is qualified for a permission set license that the user does not hold. [^11][^13] The remediation is to assign the permission set license first, confirm the user license supports it, and only then assign the permission set.
+
+### Object availability varies by license family, so confirm the object before you promise it
+
+The second license question is narrower and appears in design reviews more often than in exams, but the exam does test it: does this license expose this object at all?
+
+Custom objects are broadly available across the platform's internal license families, including the Salesforce Platform license, which the documentation describes as giving access to custom apps built in the org or installed from AppExchange along with core platform functionality such as accounts, contacts, reports, dashboards, documents, and custom tabs. [^15] Standard CRM objects are where the entitlement lines get drawn, and the Platform license documentation names forecasts, leads, campaigns, and opportunities as examples of what that license does not include. [^15]
+
+External and Experience licenses draw the line differently again, because they are designed for partner and customer audiences with a narrower object footprint. [^14] The practical architect's habit is to treat object selection as a licensing question first and a permission question second. When a requirement names an object and a user population, the two facts to confirm before sketching a permission set are which user license that population holds and whether that license carries the object. Only then does the CRUD conversation start.
+
+### Least privilege at population scale, and the View All Records line
+
+Copying "grant this permission set to everyone in the department" onto a large population multiplies every over-grant by the size of the cohort. Least privilege stops being a principle at scale and becomes the only thing preventing a routine request from becoming a standing exposure.
+
+The specific over-grant the exam returns to is the difference between reading everything and touching everything. View All Records grants the ability to view all records of the object regardless of sharing settings. Modify All Records grants read, edit, delete, transfer, and approval on all records of the object, plus the ability to manually share them. [^2] When a scenario asks for cross-division visibility, View All Records is the entire requirement. Modify All Records exceeds it on four axes. Both are object permissions rather than system permissions, so they are granted per object in the permission set grid, and both are the kind of grant that should carry an expiration date when the need is temporary. [^1][^2][^10]
+
+A related limit that keeps the design honest: View All Records on a parent object does not automatically extend to that parent's standard child records, though it does cover child records of custom objects. [^2] A team granted View All Records on Account to see every account will not automatically see every contact through that grant, and the permission set design has to say so explicitly.
+
+## Worked Scenario
+
+An admin must grant 400 sales users Edit access to a custom object called Pipeline Snapshot, while only a small group of executives should see the object at all. The organization already has a standard sales profile that everyone in the company shares, and no one wants to rebuild it.
+
+The profile is the wrong lever twice over. Editing the shared sales profile would grant Pipeline Snapshot access to every user on that profile, including marketing, finance, and support, which is the opposite of the constraint. Creating a separate profile per executive inverts the scale problem and multiplies the maintenance surface, because profiles are the artifact that has to be re-cloned when the platform changes them.
+
+The clean design is a permission set that carries Read, Create, and Edit on Pipeline Snapshot, names consistent with the job to be done. That permission set is added to a permission set group representing the Pipeline Snapshot Editor persona, so the grant can be reasoned about as one unit. The group is then assigned to the sales population by a user access policy whose criteria select the sales department, so new hires matching the criteria pick up the grant when their user record is created and departing users lose it when their record stops matching. [^8] The executives receive a separate, narrower permission set granting Read, assigned directly or through a small group of their own, which keeps the read-only audience visibly distinct from the editing audience in any future audit.
+
+Nothing in that design touches sharing. Pipeline Snapshot's organization-wide default stays where it is, the role hierarchy is unaffected, and the 400 users gain object-level ability to edit records they can already reach through the sharing model. That separation is the point. Object permissions decide what a user may do; the sharing model decides which records they may do it to. [^9]
+
+## Configuration Walkthrough
+
+Run this sequence in a sandbox with a custom object and a handful of test users.
+
+1. Create the task-based permission sets first, one per capability rather than one per person. In Setup, open Permission Sets and create Pipeline-Snapshot-Edit, then search for the object in the Find Settings box, select it, and click Edit. Check Read, Create, and Edit in the Object Permissions section, and leave Delete, View All Records, and Modify All Records unchecked unless the scenario demands them. [^3]
+2. Watch the parent dependency while you are in that grid. If the object sits on the detail side of a master-detail relationship, granting Read or View All Records on the child requires Read on the parent, and Setup repairs that on save. Deployments pushed through the Metadata API do not get that automatic repair, so a package can install a child grant that fails validation. [^3]
+3. Check the license association on each permission set before you build anything on top of it. Open the permission set and confirm whether it is associated with a permission set license. [^12] If it is, every user who will hold it needs that permission set license assigned, and their user license has to support it. [^13]
+4. Build the permission set group. Open Permission Set Groups in Setup and create one per persona, then add the task-based permission sets to it. Reuse any permission set that serves more than one persona rather than copying it. [^5]
+5. Wait for the group to finish calculating and confirm its status is Updated before you attempt assignment. Assigning against a group that has not finished calculating fails. [^10]
+6. Define the assignment by rule, not by hand. In Setup, open User Access Policies and create a policy whose criteria select the target population from user fields such as Department or a custom role field, then attach the permission set group assignment to that policy. [^8] For a temporary cohort, set an expiration on the assignment instead so it revokes itself. [^10]
+7. Verify from both directions. Open the object in Object Manager and click Object Access to see every profile, permission set, and permission set group that grants access and at what level. [^16] Then open a representative user, click View Summary, and use Access Granted By on a permission row to see which assignment produced it. Refresh the summary if a recent change has not appeared. [^17]
+8. Test the edge cases rather than the happy path. Log in as a user who matches the policy criteria and confirm the tab, the object buttons, and the edit capability. Then log in as a user who does not match and confirm the object is invisible. Finally, test a user whose license is the lowest in the population, because that is where a license-gated grant will fail first.
+
+## Exam Traps
+
+Trap one: answering a population requirement with a profile change or an org-wide default change. Both touch everyone. A profile change reaches every user on that profile, and an OWD change rewrites the baseline underneath every sharing rule in the org. When the scenario names a cohort, the answer is a permission set, a permission set group, and a rule-based assignment. [^4][^7]
+
+Trap two: treating a permission set as license-independent. A permission set qualified for a permission set license can only be assigned to users who hold that permission set license, and the user license underneath has to support it. [^11][^13] A license error in an exam scenario is almost always this, never a page layout or an existing View All grant.
+
+Trap three: assuming dynamic assignment covers a population instantly and completely. Rule-based assignment reacts to the user record. Users created before the policy existed, users whose qualifying fields are blank, and users whose records have not been touched since the policy was created can all sit outside the grant until something changes. [^8] The correct answer acknowledges propagation, not instant coverage.
+
+Trap four: granting Modify All Records when the scenario only asked for visibility. View All Records already ignores sharing and grants read access to every record of the object. Modify All Records adds edit, delete, transfer, and approval on top. [^2] An option that overshoots by four permissions is not "the safe choice".
+
+Trap five: forgetting that the granted object has to exist for that license. A user license that does not include a standard object cannot be given access to it by any permission set. [^15] Check the population's license before designing the grant.
+
+Trap six: bundling everything into one permission set and calling it a group. A permission set group is a bundle of permission sets, and the value comes from the permission sets being reusable across groups. [^5][^7] A single monolithic permission set inside a group is a profile with extra steps, and it forfeits the reuse and muting behavior that made the group worth building.
+
+## Try It
+
+Build the population mechanics and watch them behave differently from manual assignment.
+
+Create a custom object with a required Name field, then create a permission set granting Read and Edit on it. Create a permission set group, add the permission set, and wait until the group status reads Updated. [^5][^10] Now create a user access policy with a criterion on a field you control, such as Department equals Sales, and attach the group assignment. Create three test users: one matching the criterion, one not matching, and one matching but with a blank Department field. Only the first should end up with the grant. [^8]
+
+Then test the license layer where it bites. If your sandbox has a permission set license available, create a second permission set associated with it, and try to assign that permission set to a user who holds no such license. The assignment fails, and the failure message points at the license rather than at the object permissions. [^11][^13] That single experiment is the fastest way to internalize why license questions appear in the same objective as object permissions.
+
+Finish with the audit view. Open the object in Object Manager, click Object Access, and confirm your grant appears once and only once. [^16] Then open the matching test user and use Access Granted By on the Edit row to see the permission set group listed as the source. [^17] When you can trace a permission from the object to the assignment and back, you can debug any grant question an org throws at you.
+
+## What's Next
+
+You can now take an object-permission requirement apart into its three parts: the task-based permission sets that carry the permissions, the group that bundles them for a persona, and the rule-based assignment that keeps the population current. You have also seen the license layer that sits underneath all of it and decides what can be granted at all. Lesson 3, Field-Level Security Fundamentals: Field Permissions, Standard vs Custom Fields (p-2a), moves from what a user can do to records of an object down to what they can see and change on a single field, including the three field permission states, why Hidden is not the same as Read-Only, and the programmatic paths where field-level security is enforced and the ones where it is not.
+
+## Related Requirements
+
+- Lesson 1 of 36 (p-1a): Object permissions, CRUD, system versus object permissions, profiles versus permission sets
+- Lesson 3 of 36 (p-2a): Field-level security fundamentals, field permissions, standard versus custom fields
+- Lesson 34 of 36: License limitations and feature gating across the sharing model
+
+## References
+
+[^1]: Object Permissions. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.users_profiles_object_perms.htm&type=5)
+[^2]: "View All" and "Modify All" Permissions Overview. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.users_profiles_view_all_mod_all.htm&type=5)
+[^3]: Enable Object Permissions in Permission Sets. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.perm_sets_objects_and_fields.htm&type=5)
+[^4]: Permission Sets. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.perm_sets_overview.htm&type=5)
+[^5]: Permission Set Groups. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.perm_set_groups.htm&type=5)
+[^6]: Permission Set Considerations. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.perm_sets_considerations.htm&type=5)
+[^7]: Guidelines for Creating Permission Sets and Permission Set Groups. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.perm_sets_best_practices.htm&type=5)
+[^8]: User Access Policies. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.perm_user_access_policies.htm&type=5)
+[^9]: Comparing Security Models. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.users_sharing_vs_obj_level_perms.htm&type=5)
+[^10]: Assign Permission Set Groups to Users. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.perm_set_groups_assign.htm&type=5)
+[^11]: Permission Set Licenses. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.users_permissionset_licenses_overview.htm&language=en_US&type=5)
+[^12]: Create a Permission Set Associated with a Permission Set License. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.users_permissionset_licenses_and_perm_sets.htm&language=en_US&type=5)
+[^13]: Assign a Permission Set License to a User. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.users_permissionset_licenses_assign.htm&language=en_US&type=5)
+[^14]: User Licenses. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.users_understanding_license_types.htm&language=en_US&type=5)
+[^15]: Standard User Licenses. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.users_license_types_available.htm&language=en_US&type=5)
+[^16]: Manage Object Access in Object Manager. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.perm_object_access_summary.htm&type=5)
+[^17]: View a User's Access Summary. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.users_access_summary.htm&language=en_US&type=5)
+[^18]: Salesforce Certified Platform Sharing and Visibility Architect Exam Guide. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005298977&language=en_US&type=1)

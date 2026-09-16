@@ -1,0 +1,165 @@
+---
+title: "Sharing & Visibility Architect P-3a: UI-Level Hiding: Record Types, Page Layouts, Lightning Apps, Compact Layouts, Dynamic Forms"
+slug: day-05-p-3a-ui-level-hiding-record-types-page-layouts-lightnin
+series: salesforce-sharing-visibility-architect
+lesson: 5
+excerpt: "Every surface that renders a field, and what each one is actually capable of hiding: page layouts and where they stop, record types as the router between profiles, layouts, and picklists, Lightning app navigation and tab visibility, compact layouts and the highlights-panel leak, and dynamic forms as record-page variation beyond the classic layout model. Includes a worked report-leak scenario, a setup walkthrough, and the exam traps. Day 5 of the Platform Sharing and Visibility Architect exam prep."
+date: "September 16, 2026"
+author: "Adroit Consulting"
+readTime: "17 min read"
+tags: [Salesforce, Security, Sharing, Certification]
+---
+
+The user interface is the layer where security decisions become visible, and it is the layer most often mistaken for the security itself. Removing a field from a page layout feels like removing it from the system. Hiding a tab feels like denying access to the object. Trimming a compact layout feels like a tidy-up. Each of those changes the screen and none of them changes a permission, which is why the exam returns to this objective with variants of one question: what did that UI change actually protect, and what is still exposed?
+
+Objective p-3a asks you to recommend the appropriate mechanism to hide data at the user interface level. The mechanisms are page layouts, record types, Lightning apps and their navigation, compact layouts, and dynamic forms. The recommendation always has two halves: which UI mechanism produces the experience the requirement describes, and which real control (field-level security for fields, sharing for records) does the protecting underneath. An answer that names only the UI mechanism is half an answer, and on this exam half an answer is a wrong answer.
+
+This lesson takes each surface in turn, states exactly what it controls, names what it leaks, and then assembles them into a decision model you can apply to a scenario in the time the exam allows.
+
+## Deep Dive
+
+### The one rule that governs every question in this objective
+
+UI hiding changes what renders. It does not change what a user may read. Reports, list views, search, the API, and Apex all read field-level security and record sharing rather than page layouts and app configuration. [^10][^11] That is the entire thesis of this lesson, and every mechanism below is a variation on it.
+
+The consequence for recommendations is a two-line answer shape. First name the UI mechanism that creates the intended experience: a page layout for the record page, a record type for process-specific picklists and layouts, an app for navigation, a compact layout for the highlights panel, a dynamic form for a record-page arrangement per record type. Then name the control that makes it a security decision: hidden field permissions in FLS, or the share that governs which records the user can open at all. Both lines are required. "Remove it from the page layout" alone is the distractor, and it is the distractor the exam uses most.
+
+### Page layouts: exactly what they control
+
+A page layout decides what appears on a record page for a given combination of profile and record type: which fields, in which sections, with which required and read-only settings, which related lists, which buttons and actions. [^1][^2] Layouts are the primary mechanism for arranging a record page, and they remain the mechanism behind most record pages in production even where dynamic forms have replaced parts of them.
+
+The critical boundary is that the layout is scoped to the record page. Removing a field from a layout stops the page from showing it. It does not stop a list view from returning it, a report from grouping by it, search from matching it, or an integration from reading it. [^2][^10]
+
+Assignment is the other boundary architects have to hold in mind. A layout is assigned to a profile, and where record types are in play, to a profile in combination with a record type. Two different layouts cannot be shown to the same profile for the same record type. If a scenario asks for one group of sales users to see arrangement A and another group on the same profile to see arrangement B for the same type of record, the answer is not a second layout; it is a different profile or record type combination, or a dynamic form on a Lightning record page activated for the right profile. [^2][^6]
+
+### Record types: the router between profiles, layouts, and picklists
+
+Record types are the platform's mechanism for showing different users different versions of the same object, and they do it by routing three things: which page layout renders, which business process applies for opportunity, case, lead, and solution records, and which subset of the master picklist's values is selectable. [^3] The master picklist must contain every value any record type will use before the record type is created, because a record type can only offer values that already exist on the field. [^3]
+
+Two clarifications matter for this objective.
+
+First, assigning a record type to a profile does not grant visibility of records of that type. It makes the type available to that profile and optionally sets it as the default for new records. A record type is not a record-level security control, and it is not a substitute for a sharing rule. [^4] When a scenario wants one team to see only certain records, the answer is the sharing model, and the record type is either a presentation detail or a red herring.
+
+Second, record types plus page layouts are the right answer whenever the requirement is about different picklist values, different business processes, or different record page arrangements for the same object. [^3][^4] Recall the previous lesson's split: FLS answers which fields a user can see and edit on every record, and record types answer which version of the process a user works in. A question that describes two sales processes with different stages and different value sets is a record type question, and an answer that offers field-level security alone cannot express it.
+
+### Lightning apps, navigation items, and tab visibility
+
+Apps assemble the tabs and items a user navigates. The app creation wizard in App Manager lets you choose the navigation items for an app, and app assignment decides which profiles see the app in the App Launcher. [^8] Tab visibility settings add a per-profile layer: a tab can be default on, default off, or hidden, which removes it from the app's navigation and from the tab search experience for that profile.
+
+That is a real and useful amount of control, and it is not security. Tab visibility never grants object permissions and never denies record access. A user whose profile hides a tab can still reach the object through a report, a list view, a related list, a global search result, a quick action, or the API, provided their object and field permissions and their record access allow it. [^9][^11] Conversely, showing a tab to a user who lacks object permissions produces a tab that opens onto an empty or refused experience. Tab configuration controls discoverability; the permission model controls capability.
+
+The design rule that follows is simple. Use apps and tab visibility to shape the working environment and reduce clutter for a population, and rely on object permissions, FLS, and sharing for anything that must be denied. [^9][^11] When an exam scenario says a group must not interact with an object at all, the answer belongs in object permissions, not in an app's navigation list.
+
+### Compact layouts: the highlights panel leak
+
+Compact layouts choose the fields that appear in an object's highlights panel, in recent item lists, and in other condensed presentations of a record. Each object can have multiple compact layouts, and one is set as the primary compact layout for the object. [^5]
+
+The trap here is that the compact layout is a separate field selection from the page layout. A field removed from the page layout can remain in the compact layout, and it will still render in the highlights panel at the top of the same record page that supposedly stopped showing it. This is one of the most common real-world leaks in Lightning, and it survives review because reviewers look at the page layout section and not at the panel above it. [^5]
+
+The correct configuration is that the compact layout should be a subset of the fields the population is allowed to see. Where a field is hidden in field-level security, it does not render in the highlights panel for that user, because FLS governs all surfaces. Where a field is visible in FLS, a compact layout selection will surface it regardless of the page layout's field list. [^5][^10] Keep the two consistent, and treat any difference as a decision you made on purpose.
+
+### Dynamic forms: record-page variation beyond the classic layout model
+
+Dynamic forms move fields and sections out of the monolithic page layout and into individual components you place on a Lightning record page in Lightning App Builder. Once migrated, you configure each field component's properties, and you can control which of them render for which users through component visibility rules. [^6][^7]
+
+The architectural value is granularity. In the classic model, a profile plus record type pair maps to exactly one layout, so variation is limited to how many profile and record type combinations you are willing to create. With dynamic forms and Lightning page activation, a record page can be targeted by app, by profile, and by record type, so a single record type can present a different arrangement of fields to different profiles without a second layout. [^6][^7] For orgs with heavy profile counts, that reduces the number of layouts to maintain and makes the record page a composition decision rather than a layout decision.
+
+The limitation that keeps appearing on the exam is that dynamic forms are still a presentation mechanism. A field component that is hidden by a visibility rule is hidden on that page, and a user who has FLS access to the field can still read it through a list view, a report, search, or the API. [^10][^11] Dynamic forms replace the layout, not the field permission.
+
+### Choosing among the mechanisms
+
+Run the requirement through four questions in order.
+
+1. Is the requirement about the field itself, for every record? Use field-level security: hidden for never-seen, read-only for visible-but-locked. Nothing in the UI layer substitutes for this.
+2. Is the requirement about which records a user can reach? That is the sharing model: organization-wide defaults, role hierarchy, sharing rules, teams, and programmatic sharing. UI configuration does not restrict records.
+3. Is the requirement about which process version a user works in, with what picklist values and which page arrangement? Use record types, page layouts, and dynamic forms. [^3][^6]
+4. Is the requirement about what appears where, and does it need to vary by profile or by record type beyond what one layout allows? Use page layouts for the classic path, dynamic forms for per-record-type page composition, compact layouts for the condensed panels, and apps plus tab visibility for navigation. [^1][^5][^6][^8]
+
+Everything above the third question is presentation and belongs to this objective. Everything above the first two is security, and it belongs to the controls this course spends most of its lessons on.
+
+### Trade-offs you should be able to name
+
+Mechanism count is a real cost. Every record type multiplies the layout matrix, because a layout may be assigned per profile per record type, and every additional record type also adds picklist maintenance: adding a value to the master picklist does nothing until you add it to the record types that should offer it. [^3][^5] Dynamic forms reduce layout count but add page management, since each Lightning record page must be activated for the right app, profile, and record type combination. [^6]
+
+Inheritance and developer experience are the other trade-offs. Layout-driven pages are the classic path and are well understood by admins and by metadata deployment tooling, while dynamic forms put the record page in Lightning App Builder, where component visibility rules take over work that validation and permissions used to do implicitly. [^6][^7] Compact layouts are cheap to maintain and easy to forget, which is exactly why they are the leak this lesson keeps returning to. [^5]
+
+The number that never changes is the requirement. If the business needs a field invisible to a population, the cheapest correct answer is one field permission, and every layout, compact layout, app, and page conversation is downstream of that decision.
+
+## Worked example: the Compensation field that will not stay hidden
+
+The scenario is drawn from the quiz for this lesson and it is worth walking through slowly because it is the modal exam question for this objective.
+
+A company removes the Compensation custom field from the sales profile's page layout. A week later someone notices that a report still shows the compensation value for every account. The layout change appears to have failed.
+
+It did not fail. It worked exactly as designed, on the surface it governs. Removing a field from a page layout stops the record page from rendering it. Reports, list views, and search read field-level security, not the layout, so a field that remains visible in FLS keeps returning values in all three. [^2][^10] The record page and the report are answering different questions, and only one of them consulted the layout.
+
+The durable fix is a field permission change: set Compensation to Hidden in the field permissions for the sales profile, or in the sales permission set if the org follows the minimum-access pattern. [^10] Once the field is hidden in FLS, every surface follows: the record page, the highlights panel, list views, reports, search, and the value returned to user-mode code. [^10][^11] If the requirement instead was "sales must see compensation but not change it", the answer is read-only, and the report would still show the value because read-only is a visibility setting about editing, not a visibility setting about seeing.
+
+Now the variant, which is the third quiz question for this lesson. A field is visible in field-level security but removed from a page layout. Which surface leaks it? The primary answer is reports, and list views and search leak it the same way. [^2][^10] That question exists to separate candidates who know the layout is a presentation layer from candidates who have memorized the phrase UI hiding. If you can state the rule in that direction, the rest of the objective follows.
+
+A third variant closes the loop on record types. A company wants different picklist values and different record page arrangements for New Business and Renewal deals on the same object. The answer is record types plus page layouts, not FLS and not compact layouts. [^3][^4] Compact layouts only change the condensed panel at the top of the record, and FLS does not define which picklist values a user selects from.
+
+## Configuration Walkthrough
+
+Run this in a sandbox and check each surface as you go.
+
+1. Write the requirement in security terms first. Decide whether the field must be hidden, read-only, or visible, and whether the requirement is about records rather than fields. Everything that follows answers to that decision. [^10][^11]
+2. Set the field permission. In Object Manager, open the object, then the field, and use Set Field-Level Security, or edit field permissions from the profile or permission set. Hidden is the only state that removes a field from the user's view. [^10]
+3. Build the presentation. For process-specific picklists and layouts, create record types: confirm the master picklist already contains every value, define the record type, associate the business process where the object supports one, and assign the type per profile with the layout that profile should see. [^3]
+4. Assign layouts deliberately. In the object's Page Layouts list, use Page Layout Assignment to map profile and record type combinations to layouts. Remember that a single profile and record type pair resolves to one layout, so additional variation requires another profile, another record type, or a dynamic form. [^2]
+5. Review the app and its navigation. In App Manager, open the app, set the navigation items, and confirm which profiles are assigned the app. Then check tab visibility per profile, and note that hidden tabs reduce discoverability, not access. [^8][^9]
+6. Audit compact layouts. Open each compact layout for the object and compare its field list against the field permissions for the profiles that use it. Remove any field a population should not see in the highlights panel, and set the correct primary compact layout for the object. [^5]
+7. Consider dynamic forms where variation is required. In Lightning App Builder, edit or create a record page, migrate fields and sections from the page layout, add component visibility rules, and activate the page for the app, profile, and record type combinations that should receive it. [^6][^7]
+8. Verify from the user's side, on every surface. Log in as a representative user and open the record page, the highlights panel, the related lists, a list view that contains the field, a report grouped by the field, global search, and one API or Apex read. The last two are the ones deployments forget, and the ones that decide whether the control is real. [^10][^11]
+
+## Exam Traps
+
+Trap one: treating UI hiding as security. Removing a field from a layout, a compact layout, a record page, or an app does not stop reports, list views, search, the API, or system-mode code from reading it. [^2][^10][^11] The exam answer that says the field is protected because it is not on the page is always wrong.
+
+Trap two: forgetting compact layouts and app navigation as leak surfaces. The highlights panel is a separate field selection from the page layout, and a field removed from the page layout can still render above it. [^5] Tab visibility hides the door, not the room.
+
+Trap three: trying to show two layouts to one profile and record type pair. Layout assignment resolves to a single layout for that combination, so variation beyond it requires a different profile, a different record type, or a dynamic form. [^2][^6]
+
+Trap four: expecting record types to restrict record access. Record types route presentation, picklist values, and business processes; they do not restrict which records a user can open and they do not hide fields from reports or search. [^3][^4]
+
+Trap five: assuming dynamic forms replace field-level security. Dynamic forms change the arrangement and visibility of components on a record page, and FLS still governs whether the user can read or update the field at all. [^6][^10]
+
+Trap six: reaching for FLS alone when the requirement is a process difference. FLS cannot offer different picklist values or a different record page arrangement by process; that is record types plus layouts, or record types plus dynamic forms. [^3][^6]
+
+Trap seven: assuming a hidden tab means no access. A user who cannot see a tab can still reach the object's records through list views, related lists, reports, search, and integrations when their permissions allow it. [^9][^11]
+
+## Try It
+
+Reproduce the leak, then close it, so the difference is a memory rather than a rule.
+
+In a sandbox, create a custom field on Account and confirm it is visible and editable in your profile. Remove it from the page layout. Log in as a test user on that profile and open a record: the field is gone from the page. Now open a list view that includes the field as a column, and then a report grouped by it. Both still show values. The layout did what it was asked to do and nothing more. [^2][^10]
+
+Next, hide the field in field-level security for that profile and repeat the same three checks. The page, the list view, and the report all drop the field now, because all three read the field permission. [^10]
+
+Finish with the surface that reviewers miss. Put the field back in FLS and re-add it to the page layout, then add it to the compact layout only and remove it from the page layout again. Open the record as the test user and look at the highlights panel above the fields section. The field is still there, in the compressed presentation, which is exactly the leak this lesson is built around. [^5] Remove it from the compact layout as well, and the leak closes.
+
+## What's Next
+
+You can now name every surface that renders a field, state what each one hides and what it leaves exposed, and pair each UI mechanism with the field permission or share that does the protecting. Lesson 6, UI Hiding vs Real Security (Defense in Depth), Field Accessibility in Apex (p-3b), takes the pairing one layer deeper and makes defense in depth the subject. It covers how field accessibility is checked in Apex with schema accessibility methods, how security enforced queries and field stripping make code honor field permissions for the running user, why system mode and without sharing classes are not automatically safe, and how to design a sensitive field's protection end to end so that no single surface, UI or programmatic, is the only thing standing between a user and the data.
+
+## Related Requirements
+
+- Lesson 4 of 36 (p-2b): FLS scenarios, restricting standard fields, FLS versus record types
+- Lesson 6 of 36 (p-3b): UI hiding versus real security, field accessibility in Apex
+- Lesson 9 of 36 (p-5a): Programmatic enforcement of CRUD and FLS
+- Lesson 3 of 36 (p-2a): Field-level security fundamentals
+
+## References
+
+[^1]: Customize Page Layouts with the Original Page Layout Editor. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.customize_layoutcustomize_ple.htm&type=5)
+[^2]: Page Layout Considerations. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.layouts_considerations.htm&language=en_US&type=5)
+[^3]: Create Record Types. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.creating_record_types.htm&type=5)
+[^4]: Use Record Types. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.recordtypes_example.htm&language=en_US&type=5)
+[^5]: Compact Layouts. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.compact_layout_overview.htm&type=5)
+[^6]: Break Up Your Record Details with Dynamic Forms. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.dynamic_forms_overview.htm&type=5)
+[^7]: Get Help for Lightning App Builder. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.lightning_app_builder_overview.htm&type=5)
+[^8]: Lightning App Navigation Bar Items. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.customize_lex_nav_menus_create.htm&type=5)
+[^9]: Salesforce App Considerations. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.apps_considerations.htm&language=en&type=5)
+[^10]: Field Permissions. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.users_profiles_field_perms.htm&type=5)
+[^11]: Control Who Sees What. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.security_data_access.htm&type=5)
+[^12]: Salesforce Certified Platform Sharing and Visibility Architect Exam Guide. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005298977&language=en_US&type=1)

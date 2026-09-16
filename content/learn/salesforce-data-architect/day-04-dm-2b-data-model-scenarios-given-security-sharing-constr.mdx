@@ -1,0 +1,115 @@
+---
+title: "Data Architect DM-2B: Data-Model Scenarios Given Security and Sharing Constraints"
+slug: day-04-dm-2b-data-model-scenarios-given-security-sharing-constr
+series: salesforce-data-architect
+lesson: 4
+excerpt: "Security and sharing are not ornaments bolted onto a data model; they are constraints that decide which relationships and access mechanisms survive a design review. This lesson shows how to work backward from who must see what, to an Organization-Wide Defaults baseline, a role hierarchy, a small set of sharing rules, and the right relationship choices, then covers territories, account and opportunity teams, and Experience Cloud sharing sets for the access edge cases. Day 4 of the Platform Data Architect exam prep."
+date: "September 16, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [Salesforce, Data Architecture, Data Modeling, Certification]
+---
+
+Most exam questions in this domain do not describe a feature. They describe a business person, a set of records, and a rule about who may see them, and then they ask you to pick the model and the access mechanism that satisfy all three at once. Requirement dm-2b is explicit about the verb: given a customer scenario with specific security and sharing constraints, recommend a data model design that satisfies those constraints using the platform's sharing mechanisms and relationship choices. [^1]
+
+That is a different discipline than lesson three, where you learned how the sharing model stacks in general. Here the scenario arrives first, and the model must bend around the access rule. The single most reliable technique is to reverse the order of most people's thinking. Do not start with objects and relationships and then try to make sharing fit. Start with the access requirement, translate it into organization-wide defaults, the role hierarchy, and sharing rules, and only then choose the relationships and object shapes. A master-detail relationship made for convenience becomes an ownership trap when the requirement is that a child must be visible even though its parent is restricted. A lookup chosen to keep the child independent becomes the correct answer in that same scenario. [^2]
+
+This lesson gives you that reverse-order method, then walks through the mechanisms that solve the access edge cases: territories, account and opportunity teams, and Experience Cloud sharing sets. It finishes with how to tell a genuine security constraint from a reporting need, because the two lead to opposite designs.
+
+## Deep Dive
+
+### Work backward from the access requirement
+
+The sharing model on the platform is a stack. Organization-Wide Defaults (OWD) set the baseline level of access every user has to every record of an object. Role hierarchy, sharing rules, teams, manual sharing, and territories then open access up from that baseline. [^3] The order is fixed and it matters: OWD is the floor, and everything else can only raise, never lower, access.
+
+An architect given a security constraint should therefore resolve it in that same order. First ask who must see what, and classify the objects as public by default or private by default. Set the private objects' OWD to Private or Controlled by Parent as the baseline. Then ask whether the users who need access are in the same hierarchy branch as the owner, because the role hierarchy answers that case automatically. [^1] Then ask about everyone else, who will need sharing rules, teams, or manual shares. Only when the full access map is drawn do you decide whether the relationships support it or fight it.
+
+The reason to work in this order is that OWD and hierarchy decisions are cheap to change, while relationship choices are expensive to change. You can revisit a sharing rule in an afternoon. Converting a master-detail relationship back to a lookup after a roll-up summary exists is a migration project. So lock down the access picture first, then verify the relationship plan against it, rather than the other way around. [^2][^3]
+
+### The relationship choice is where most scenarios are won or lost
+
+Given a security constraint, the first relationship question is whether the child must inherit the parent's access or live apart from it. Master-detail ties the two tightly. Detail records inherit the security settings and permissions from their master, the detail record's Owner is set to the owner of the master, and the relationship field is required on the detail page layout. [^4] That is a statement about sharing as much as about data. When a requirement says "everyone who can see the account must see its line items, and nobody else may", master-detail delivers that inheritance for free, with no sharing rules at all.
+
+The telling detail is the Owner field. On the detail side of a master-detail relationship there is no Owner field; ownership belongs to the master. [^4] That single fact cascades: custom objects on the detail side cannot have sharing rules, manual sharing, or queues, because all three require an Owner field to operate against. [^4] So choosing master-detail to get inheritance simultaneously removes your ability to carve the child out with its own rules. The constraint "the child must sometimes be visible when the parent is not" is not a rare edge case. It is exactly the scenario where master-detail is wrong, and the exam states it plainly.
+
+Lookup is the decoupling tool. A lookup links two objects so you can look one up from the other, and unlike master-detail it does not carry the parent's sharing along with it. [^4] The child keeps its own Owner, which means the child can have its own sharing rules, manual sharing, and queues. [^2] When the access requirement is that a child object must be visible to all users even though the parent account is restricted, the correct design is a lookup from the child to the parent plus an opening mechanism, most naturally an owner-based or criteria-based sharing rule on the child. Master-detail would force the child to inherit the parent's restriction, and opening the parent to public violates the requirement outright. [^1][^2]
+
+This is the version of the lesson-three trap that appears most on the exam. Beginners reach for master-detail because it feels stronger and more correct. In a scenario with an independent-access need, it is the wrong tool, and the option "master-detail relationship to the parent" is a decoy the scenario is designed to reward eliminating. Teach yourself to read the word "independent", "even when", or "regardless of" in a requirement as a signal to check whether the child truly needs the parent's restriction to bind it. [^4]
+
+### The role hierarchy: upward, never sideways, never across, and never alone
+
+Because it appears in the quiz for this lesson and in countless scenarios, the role hierarchy deserves its own treatment. The role hierarchy is the mechanism by which users at higher levels in the hierarchy gain access to records owned by users below them. [^1] Three properties follow and are tested directly.
+
+First, it grants upward visibility. A manager sees the records owned by every user who sits below them in the hierarchy, subject to the base sharing model. [^1] Second, it does NOT grant lateral or peer visibility. Two roles at the same level in different branches do not see each other's records through the hierarchy, even though they are at the same rank. That is a classic distractor: "it grants lateral visibility between roles at the same level" is false. [^1] Third, it does not grant access to records owned by users outside the hierarchy branch. A manager in branch A gains no access to records owned by a user in branch B through the hierarchy alone. [^1]
+
+The fourth property is just as load-bearing. The role hierarchy is a mechanism in a larger stack, and it never replaces sharing rules. It coexists with sharing rules, teams, and manual shares, and those other mechanisms grant access that the hierarchy cannot. [^1][^3] So the true pair about the hierarchy is: it grants managers visibility of records owned below them, and it does not grant access to records owned by users outside the hierarchy branch. Both statements describe the same boundary from two directions.
+
+There is a performance consequence in here too, and it interacts with the growth-path advice at the end of this lesson. A role hierarchy only facilitates sharing at scale when it is shallow. Every level adds a hop that sharing recalculation must walk, and a very deep hierarchy inflates the cost of every ownership change and every bulk load that touches sharing. Keeping the hierarchy aligned to the access model rather than to the org chart is a design decision, not an afterthought. [^1][^3]
+
+### Territories, teams, and sharing sets: the access edge cases
+
+Most access requirements resolve cleanly onto OWD plus hierarchy plus a rule. The remainder do not, and each has a named mechanism.
+
+Territory management is for access that aligns to geography, product lines, industries, or customer segments, patterns that do not map naturally onto the role hierarchy. [^5] It requires the Territory Management feature, which is available only in Enterprise or Unlimited editions and must be turned on, so it is never a casual recommendation. [^5] Its value is that territory-based access can be maintained independently of the reporting structure, which is precisely the situation where a role hierarchy would force the org chart and the access model to distort each other.
+
+Account teams and opportunity teams grant record-level access to the users of a named account or opportunity who would not otherwise have it through the hierarchy. [^6] An account team on a large account typically includes the account owner, a solution engineer, a customer success manager, and a sales leader, people who may sit in entirely different hierarchy branches. Teams solve that collaboration need directly and without a hierarchy redesign. [^6] The cost is that every account team membership is a shared record in the sharing model, and a very wide rollout of teams drives up sharing recalculation. The exam's warning is not that teams are bad; it is that using them at massive scale without accounting for recalculation cost is a trap. [^6]
+
+Sharing sets are the Experience Cloud (formerly Community) mechanism for granting external users access to records, and they are the answer to the most common portal requirement of all. [^7] A sharing set grants external users access to records based on a lookup relationship from the user record to the data. The canonical case: a portal user is related to an account through a lookup on their User record, and a sharing set says every user related to an account can see that account and its children. [^7] Because the grant is defined once by the relationship rather than per user, sharing sets scale to high volume. The contrast the quiz draws is direct: a criteria-based sharing rule written for each partner does not scale, manual sharing by an admin does not scale, and public read-only OWD on Account violates the privacy constraint. Sharing sets bound to the lookup relationship are the mechanism built for exactly this. [^7]
+
+### When a requirement fights the natural sharing flow
+
+The most instructive scenarios are the ones where the access requirement contradicts the relationship that a clean model would otherwise use. You now have the tools to know what each side imposes. If the child must be visible independently of the parent, you need a lookup so the child owns its access, plus the child's own sharing rules. If the constraint is that every viewer of the parent must also see the child and no rule should be needed, you need master-detail. [^2][^4]
+
+There is a second layer to this decision that separates strong candidates. Before you reach for either relationship, ask whether the constraint is genuinely about security or is actually about reporting. A business request phrased as "everyone needs to see all the data" is frequently hiding a reporting requirement: a team wants one report that spans records it does not individually access, or a total that pulls from many owners' records. That need can be satisfied by an aggregate report, a roll-up summary, or a read built on described access, without opening record-level access at all. [^2] Treating a reporting need as a security need leads to excessive sharing and to a model with no least-privilege posture. The exam rewards the candidate who spots that the request is a total, not a door. [^1][^2]
+
+### Design for the restricted case, then predict growth
+
+Two practices close the method. The first is to design toward restrictions. Opening access from a private baseline by adding a few rules is auditable and reversible. Restricting from a wide-open baseline means writing restrictive rules everywhere, and it is far easier to get wrong and far harder to explain in a compliance review. Private by default, open by exception should be the default posture for anything the scenario does not explicitly mark as public. [^3]
+
+The second is to test the model against the growth path. A design that requires a new sharing rule for every team, every region, or every new product will not scale, because sharing recalculation cost grows with the number of rules and teams. [^1][^3] A role hierarchy that absorbs new people into existing roles, or a territory model that absorbs new regions into existing territories, grows without adding rules. When the scenario hints that the org is expanding, the answer is usually the structural mechanism, not the per-team rule. [^6]
+
+## Configuration Walkthrough
+
+Work this in a sandbox alongside the scenario described in the Try It section. The point is to feel how each access decision blocks or enables the next.
+
+1. Set the baseline. In Setup, open Sharing Settings and review the Organization-Wide Defaults for the constrained object. Set it to Private so the starting posture is restrictive, and verify how the platform documents implicit sharing for children of that object. [^3]
+2. Design the hierarchy. In Setup, open Roles, and arrange roles so managers sit above the users whose records they must see. Keep the tree shallow. Confirm that two roles at the same level in different branches show no peer access, which is the behavior the quiz asks about. [^1]
+3. Open only what the requirement needs. In Sharing Settings for the object, add an owner-based or criteria-based sharing rule that grants the precise set of users the scenario names. Do not open anything the scenario did not ask for. [^3]
+4. Decouple where required. Back in Object Manager, when the scenario needs a child visible independently of its parent, add a Lookup relationship to the parent rather than a master-detail, then give the child its own sharing rule so users outside the parent's access still reach it. [^2][^4]
+5. Handle the external users. In Experience Cloud administration, create a sharing set bound to the lookup field that relates portal users to their accounts, so those users see only their related records without per-user grants. [^7]
+6. Reach for territory or teams only when the hierarchy cannot carry the requirement. Where access follows geography, product line, or a customer segment rather than the reporting tree, turn on Territory Management (available in Enterprise and Unlimited editions) and model the territory hierarchy so access is maintained independently of roles. Where a named account needs a cross-branch team, add the account team instead, and remember that each membership is one more record the sharing engine recalculates. [^5][^6]
+
+Run the steps in this order and each decision inherits cleanly from the one before it. Reverse the order and you will find yourself fighting a master-detail relationship you should never have made.
+
+## Exam Traps
+
+**Trap one: choosing master-detail when the child must be visible independently of the parent.** Master-detail makes the detail record inherit the master's owner and sharing, and it removes the detail record's Owner field, which in turn removes the child's ability to carry its own sharing rules. [^4] When the requirement says the child stays visible even when the parent is restricted, the correct design is a lookup plus sharing rules on the child. [^2] The decoy answer to that question is the master-detail relationship, and it is wrong precisely because it produces the inheritance the requirement forbids.
+
+**Trap two: solving a "report all data" need by opening record access.** A request to "see everything" is often a request for an aggregate report or a roll-up total, which can be produced without granting every user record-level access to every row. [^2] Opening OWD or scattering sharing rules to satisfy what is really a reporting need destroys least privilege and invites audit findings. The professional move is to ask whether the ask is a door or a total, then route it to the cheaper mechanism.
+
+**Trap three: using account teams at massive scale without accounting for recalculation.** Account and opportunity teams are a clean answer to cross-hierarchy collaboration, but every team membership is a shared record, and broad team usage inflates sharing recalculation cost across the org. [^1][^6] When the scenario describes a large sales org, prefer the role hierarchy or territories for structural access and reserve teams for genuinely member-level collaboration.
+
+## Try It
+
+Model this scenario end to end. You are an architect at a manufacturer. Its service partners must log into Experience Cloud and see only the accounts they own, at high volume. Separately, an internal compliance team must see every record of a custom object even when the owning account is restricted, and the two sales directors in different branches both need to see each other's teams' records.
+
+Set the Account and the custom object to Private. Build a role hierarchy with the two directors each above their own branch, and confirm neither can see the other branch's records through the hierarchy. [^1] For the partner requirement, create the lookup from the portal User record to Account and add a sharing set bound to that lookup; verify partners see only their related accounts and that no per-partner rule is needed. [^7] For the compliance requirement, connect the custom object to Account with a lookup, not a master-detail, and add an owner-based sharing rule on the child that opens it to the compliance team, which works only because the child kept its Owner field. [^2][^4] Finally, note that the directors' access came from the hierarchy, the compliance team's from a rule, and the partners' from a sharing set, three different mechanisms because the three constraints are structurally different. That mapping, one constraint to one proven mechanism, is the skill this lesson is teaching.
+
+## What's Next
+
+You now have a repeatable method: translate who sees what into OWD, a role hierarchy, and sharing rules first, then choose relationships that reinforce or decouple that access, and reach for territories, teams, or Experience Cloud sharing sets when a requirement does not fit the main stack. Lesson 5, Business and technical metadata: business dictionary, data lineage, taxonomy, data classification, changes the register from access to meaning. It shows how to capture and manage the business and technical metadata that lets an organization govern what those objects and fields actually mean, trace where their values came from, and classify how sensitive they are, which is the governance layer every data model eventually needs.
+
+## Related Requirements
+
+- Lesson 3 of 42 (dm-2a): Designing a scalable data model that obeys the security and sharing model
+- Lesson 5 of 42 (dm-3a): Business and technical metadata: business dictionary, data lineage, taxonomy, data classification
+
+## References
+
+[^1]: Role Hierarchy. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.security_using_hierarchy.htm&language=en_US&type=5)
+[^2]: About Sharing Your Data, Salesforce Help. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.security_sharing_overview.htm&language=en_US&type=5)
+[^3]: Sharing Settings and Organization-Wide Defaults for custom objects. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.security_sharing_owd_custom_objects.htm&language=en_US&type=5)
+[^4]: Overview of Custom Object Relationships (Master-Detail and Lookup), Salesforce Help. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.overview_of_custom_object_relationships.htm&language=en_US&type=5)
+[^5]: Territory Management, Salesforce Help. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.territory_mgmt.htm&language=en_US&type=5)
+[^6]: Account Teams, Salesforce Help. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.account_team_tool.htm&language=en_US&type=5)
+[^7]: Create a Sharing Set for Experience Cloud Site Users. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.networks_setting_light_users.htm&language=en_US&type=5)
