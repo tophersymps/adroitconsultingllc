@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+
   // The /preview/* routes read content/*.mdx at request time, but Vercel
   // serverless functions only bundle files traced at build time. Without
   // these includes the preview functions deploy but return empty content —
@@ -22,6 +23,16 @@ const nextConfig: NextConfig = {
     // governed by this knob and still dominates the peak. Build-time resource
     // cap only — no effect on output or runtime behaviour.
     cpus: 4,
+    // NOTE (t_67209e0d, measured 2026-09-16): the coordinator above is NOT
+    // governed by this knob and is not reducible by any build-time config found.
+    // Cold-build peak tree RSS on this box: 2.88 GB (cpus:4 alone), 3.04 GB with
+    // NODE_OPTIONS=--max-old-space-size=1024, 2.89 GB with
+    // turbopackMemoryEviction:'full', 2.99 GB with typescript.ignoreBuildErrors,
+    // 2.87 GB with turbopackPluginRuntimeStrategy:'workerThreads'. The
+    // coordinator's 1.5-1.6 GB RSS is not its JS old space (a 64 MB heap cap
+    // still OOMs it at 1.48 GB RSS). Remaining lever is building off-box while
+    // the local models are resident — evidence:
+    // /Users/kelex/.hermes/kanban/workspaces/t_67209e0d-evidence/
   },
 
   async redirects() {

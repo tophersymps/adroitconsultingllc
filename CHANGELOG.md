@@ -4,6 +4,34 @@ All notable changes to the Adroit Consulting Blog project will be documented in 
 
 ## [Unreleased]
 
+### Perf: the `next-build` coordinator RSS is not cap-able by build config (measured) — off-box build is the remaining lever (t_67209e0d)
+
+**What** - No functional change. Investigated the MEDIUM finding from the perf review of `e0d35e7` (t_e8566dd9): a cold build still peaks at ~2.7-2.9 GB tree RSS against t_cb011d26's stated ~0.8 GB target, because the single `next-build` coordinator (~1.5-1.6 GB) is not governed by `experimental.cpus`. Five candidate levers were applied one at a time to a **fresh cold `.next`** and measured; **none reduced the peak**, so none was shipped (the card's own rule: do not force a change that merely moves the peak). The only durable artifact is a comment block inside the existing `experimental` block in `next.config.ts` recording the measured verdicts next to `cpus: 4` (additive; no second `experimental` block).
+
+**Why** - The finding asks for a coordinator cap. Four in-box levers were testable: a V8 heap cap (`NODE_OPTIONS=--max-old-space-size`), Turbopack's persistent-cache eviction mode, moving the in-process TypeScript check out, and Turbopack's Node-evaluation backend. Each was measured against the same page-matched baseline; each came back at or above the baseline, so shipping any of them would have been a change with no benefit (and `typescript.ignoreBuildErrors` would additionally have removed a build-time gate).
+
+**Verified** - Cold (`rm -rf .next` equivalent) `npm run build` on the 535-page baseline tree (`e0d35e7`), 0.4 s process-tree RSS sampling, `experimental.cpus: 4` kept throughout:
+
+| variant | peak tree RSS | coordinator RSS | exit |
+|---|---|---|---|
+| baseline (`cpus: 4` only) | 2.88 GB | 1574 MB | 0 |
+| `NODE_OPTIONS=--max-old-space-size=1024` | 3.04 GB | 1640 MB | 0 |
+| `NODE_OPTIONS=--max-old-space-size=64` | — | 1482 MB at failure | 1 (V8 OOM in the type check) |
+| `experimental.turbopackMemoryEviction: 'full'` | 2.89 GB | 1525 MB | 0 |
+| `typescript: { ignoreBuildErrors: true }` | 2.99 GB | 1642 MB | 0 |
+| `experimental.turbopackPluginRuntimeStrategy: 'workerThreads'` | 2.87 GB | 1733 MB | 0 |
+| final state (merged `main` + comment, 543 pages) | 2.94 GB | 1666 MB | 0 |
+| final state, baseline-matched env (535 pages, no local env file) | 2.88 GB | 1587 MB | 0 |
+
+- The 64 MB run is the load-bearing measurement: the coordinator was still holding **1482 MB RSS** when its V8 old space OOM'd, i.e. its resident set is not its JS heap. `footprint` at peak agrees — of 1.53 GB RSS the V8 heap category was 65-69 MB, `MALLOC_SMALL` ~18 MB, and the rest native (Turbopack Rust) + driver-mapped (IOAccelerator) pages, none of which any Next/Node knob exposed here governs.
+- AC-1: every variant that completed reported `Collecting page data using 4 workers` / `Generating static pages using 4 workers (N/N)` — the `cpus: 4` cap is preserved and untouched.
+- AC-3 (output provably unchanged): the `.next/static` `*.js`/`*.css` sha256 set is **identical (57/57)** to `t_e8566dd9-evidence/hashes_uncapped.txt` and the `Route (app)` table is identical, when the build is run in the same environment as the baseline (a worktree with **no local env file** — see Known Issues). Pairwise proof that the comment itself is output-neutral: pristine `e0d35e7` and `e0d35e7` + comment, back to back on the same tree, produce byte-identical hash sets and route tables.
+- AC-4: `vm_stat` `Swapouts` **3972 before / 3972 after** every monitored build in this run.
+- AC-5: `~/.hermes/scripts/build-headroom-guard.sh` exited 0 before each build; `npx tsc --noEmit` exits 0 on the final tree.
+- Evidence (raw logs, process-tree CSVs, swap readings, `footprint`/`vmmap` captures, hash files): `/Users/kelex/.hermes/kanban/workspaces/t_67209e0d-evidence/`.
+
+**Known Issues** - (1) The coordinator cannot be capped from build config; the remaining lever is **building off-box (or on the deploy machine) while the two local models are resident**, which is recorded as a recommendation, not implemented here. (2) Baseline portability: `hashes_uncapped.txt` was captured in a worktree **without** a local env file, and build output is environment-sensitive — in a worktree **with** the Supabase credentials present the build makes the courses table reachable, `/atlas` flips from static (`○`) to dynamic (`ƒ`) and one route chunk differs (56/57 hashes match). Any future output comparison must reproduce the baseline's environment or it will report a false diff. (3) Vercel's build machine is 2 cores / 8 GB, where Next's default worker count is already `max(1, cores-1) = 1`; `cpus: 4` therefore *raises* the worker count there from 1 to 4 (measured: no build-time regression, 54.7 s vs 57.6-64.2 s uncapped), so this lane's numbers are local-box numbers only.
+
 ### Perf: cap `next build` worker fan-out at 4 (`next.config.ts`) (t_cb011d26)
 
 **What** - Added an `experimental` block to `next.config.ts` with `cpus: 4` (the file had no `experimental` block before, so this adds one rather than extending an existing one; `outputFileTracingIncludes`, `redirects()` and `headers()` are untouched). This is the knob Next itself reads in `next/node_modules/next/dist/build/index.js:getNumberOfWorkers`, whose default is `Math.max(1, os.cpus().length - 1)` (`server/config-shared.js:218`) — i.e. **11** on this 12-logical-CPU machine. Build-time resource cap only: no output, route or runtime behaviour changes.
