@@ -10,6 +10,20 @@ const nextConfig: NextConfig = {
     "/preview/atlas/[series]/[slug]": ["./content/learn/**/*.mdx"],
   },
 
+  experimental: {
+    // Cap build worker fan-out. Next's default for this knob is
+    // `max(1, os.cpus().length - 1)` — 11 on this 12-logical-CPU machine —
+    // which spawned 11 concurrent build workers at ~150 MB RSS each on top of
+    // two local LLM servers already pinning ~36.9 GB, pushing the kernel into
+    // swap during the 2026-09-16 deploy-gate build. 4 caps both worker phases
+    // ("Collecting page data using 4 workers", "Generating static pages using
+    // 4 workers"), measured worker-only RSS ~1.65 GB -> ~0.95 GB. NB: the
+    // single next-build coordinator process (~1.7 GB on a cold build) is NOT
+    // governed by this knob and still dominates the peak. Build-time resource
+    // cap only — no effect on output or runtime behaviour.
+    cpus: 4,
+  },
+
   async redirects() {
     return [
       // /blog → /field-notes and /learn → /atlas (URL migration t_1ab5ef9f).
