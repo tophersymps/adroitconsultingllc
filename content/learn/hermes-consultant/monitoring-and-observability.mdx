@@ -1,0 +1,111 @@
+---
+title: "Lesson 21: Monitoring and Observability: Knowing When the Agent Is Quietly Failing"
+slug: monitoring-and-observability
+series: "hermes-consultant"
+lesson: 21
+excerpt: "An agent can run perfectly and still be wrong. This lesson teaches the observability craft: how to know, from the outside, whether an agent is actually doing the job rather than just looking busy. It covers the difference between loud failures and quiet ones, how to watch a whole fleet instead of a single job, and how to make silent degradation surface before the client discovers it."
+date: "September 16, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [AI Agents, Consulting, LLMs]
+---
+
+# Lesson 21: Monitoring and Observability: Knowing When the Agent Is Quietly Failing
+
+By lesson 20 you had an agent that could do real work and rules that kept it inside the lines. This lesson is about the failure that no guardrail catches, because it is not a rule being broken. It is the agent that runs on time, completes its runs, delivers to the right place, and is quietly wrong. The report fires Friday at five, the email lands in the channel, and the numbers in it went stale two weeks ago because the source system changed and nobody noticed. That is the quiet failure, and it is the one that costs clients trust, because it looks like success until someone actually reads the output.
+
+The discipline you need is observability: the ability to know what is happening inside a system from outside it, without being there to watch. It transfers to any agent platform, because it is really about three habits. Separating loud failures from quiet ones. Checking the whole fleet instead of babysitting a single job. And sampling the actual output so a wrong result surfaces early, instead of being discovered by the client. Hermes Agent is the concrete vehicle because it gives you the pieces: session history, execution records, event hooks, a dashboard, and a fleet health check. Your job is to assemble them into a habit, and this lesson teaches you how.
+
+## Define the terms: loud failure, quiet failure, and observability
+
+Start by naming the distinction that makes this lesson worth reading, because it is the whole point.
+
+A loud failure is one the platform notices and flags. A cron job fails to run, a delivery does not reach its target, a misconfigured job is marked blocked before it spends a token. Loud failures are visible in a status list, they generate alerts, and they get fixed because someone sees them. They are not pleasant, but they are honest, and honesty is the easy half of the job.
+
+A quiet failure is one that produces no error at all. The job runs, the delivery lands, everything reports green. The output is simply wrong. The summary omits a key category. The report pulls from a table that was renamed. The agent answers a client question confidently with a figure that is no longer current. None of this trips a status check, because status checks look at whether the work completed, not whether it was correct. Quiet failures are discovered by the client, usually weeks in, which is the worst possible place to discover them, because by then the agent has been confidently wrong for a while and the trust damage is done.
+
+Observability is the property that lets you catch the quiet ones. Formally, it means you can answer questions about a system's internal state from its external outputs: what ran, when, against what, with what result, and whether the result was actually right. An observable system does not ask you to trust it. It shows you enough evidence that you can check it. For an agent engagement, observability is not a tool you install. It is a property you design for, and it matters most at the boundary where the agent's output becomes the client's decision. That boundary is where a wrong answer stops being a bug and starts being a business problem.
+
+## The observability reflex: know it ran, then know it is right
+
+The consultant's mistake is to stop at "it ran." Observability has two floors, and the ground floor is not the important one.
+
+The first floor is execution: did the work happen? Hermes records every conversation as a session in a SQLite database, with the full message history, the tool calls and their results, the model that ran, the token counts, and the start and end timestamps. [^1] For scheduled work, there is an execution history that tells you what fired, when, and whether the run and the delivery each succeeded, and these two are tracked separately, because a run can complete and its output never reach anyone. [^2] This floor answers "did it run." It is useful, it is where most platforms stop, and it is not enough.
+
+The second floor is correctness: was the output right? No status system answers this for you, because correctness requires a human, or at least a human-designed check, to look at what the agent actually produced. This is the floor the quiet failures hide on. A report can fire and deliver every week and still be wrong, and no execution history will ever flag it. The only thing that flags it is someone reading the report and noticing the numbers are off.
+
+So the observability habit has two parts that are easy to conflate and must be kept separate. You monitor execution so you know nothing has broken silently at the infrastructure level. And you sample output so you know the work is still right at the substance level. If you do only the first, you have a monitoring dashboard and a false sense of security. If you do only the second, you catch wrongness late, after a quiet failure has already compounded across many runs. You do both, on a schedule, deliberately, and you write down what you checked so the client can see the system is being watched.
+
+## The fleet check: watch everything, not just the star job
+
+An engagement that ships value ships several agents. A weekly report, a nightly anomaly check, an intake assistant, a monitoring job that watches the others. Each can break on its own, and each can quietly drift on its own. The discipline that separates professional operations from a hobby is checking the whole set the way you would check any service you are responsible for, on a schedule of your own, whether anyone asks or not.
+
+Hermes gives you the tool for this: a fleet health check that surfaces every job with a failed run, a failed delivery, or a schedule that has silently stopped firing. [^3] You run it, and you get a list of what needs attention instead of having to guess. This is the difference between maintaining recurring value and letting it quietly decay, and it is a genuine consulting deliverable. When you hand over an engagement, part of what you hand over is the proof that the system is watched: a check that someone, or some scheduled job, runs against the whole fleet and acts on what it finds.
+
+The fleet check has to run on your own clock, not the client's. If you check the fleet only when the client mentions a problem, you have a support ticket, not observability. You schedule the check, the way you scheduled the work itself in lesson 11, so it fires whether you remember to look or not. That is the self-healing instinct made concrete: you do not rely on remembering to check, you build the check into the schedule so it happens without you.
+
+There is a neat pattern for this in Hermes. You can define a hook that fires on gateway startup and runs a one-shot agent against a checklist you keep in a file, so every time the gateway starts, a fresh agent checks for overnight cron failures and summarizes anything that broke. [^4] If nothing failed, it replies with a marker that sends no message at all, so the check is silent when healthy and loud only when something needs attention. That is observability done right: the system watches itself, stays quiet when it is fine, and makes noise exactly when it is not.
+
+## Make the quiet failures loud
+
+Here is the honest limit of the fleet check. It catches jobs that fail, delivered wrong, or stopped firing. It does not catch a job that runs and delivers output that is stale or subtly wrong, because that is not a failure the platform can see. So beyond watching execution, you build tripwires that surface wrongness earlier, and you do this in two ways: you watch for suspicious patterns in the run itself, and you sample the substance of the output.
+
+The first way is event-based. Hermes exposes event hooks at the lifecycle points that matter: when a session starts, when the agent begins a message, on each step of the tool-calling loop, and when the agent finishes. [^5] A handler fires on each of these, and you can write one that alerts you when an agent takes far more steps than it should, because an agent that loops for thirty iterations on a task that normally takes three is an agent that is spinning, and spinning is often the first sign of a quietly failing prompt. The documented example alerts on the tenth step. [^5] The principle transfers to any platform that exposes lifecycle events: you pick the signal that means "this is going wrong," and you wire it to surface loudly instead of hoping you notice it in a transcript.
+
+The second way is output sampling, and this is the one most consultants skip because it requires human judgment. You read the actual work. Not every run, not even every week, but on a cadence you can defend. For a weekly report, you read the last one before you tell the client the system is healthy. For a daily digest, you skim a day's worth a couple of times a month. The goal is not to catch every error. It is to catch the class of error that platforms cannot: the output that looks fine and is not. When you review a sample and the numbers are off, you have found a quiet failure that no status system would have found for you, and you fix the root cause instead of letting it compound.
+
+A third, lighter tripwire lives where the client already is. The dashboard gives you a live overview of an installation: gateway status, active sessions, recent sessions with their model, message count, and token usage, plus warnings when the host is low on memory or disk, or when the agent restarted unexpectedly under memory pressure. [^6] That catches a different quiet failure, the one where the process itself is struggling even though the output looks fine. A client whose agent keeps running out of memory is a client whose agent is about to start failing loudly, and the warning lets you fix it before that happens.
+
+## The verification reflex, applied to ongoing work
+
+Lesson 15 drilled a reflex into you: never claim something works because you configured it, prove it in the running system. Observability is that reflex, extended across time. A one-off task is proven the day you run it and check it. An ongoing engagement is proven every day it keeps producing right output, and the proof is not a status green light. It is the evidence that someone actually looked.
+
+So the handover test for an observable engagement is not "the dashboard says everything is up." It is "I have a scheduled fleet check, I review output samples on a cadence, I have tripwires that alert me when a run looks wrong, and here is the last check I ran and what it found." Every clause of that is something you did, not something you hoped for. When you show the client a fleet check that found a failed delivery and the record of you fixing it, you have shown them observability. When you show them a dashboard and say "everything is green," you have shown them a status screen, which is not the same thing.
+
+This is also where you protect yourself as a consultant. The quiet failure that damages your reputation is not the one where the agent broke loudly and you fixed it. It is the one where the agent was wrong for weeks, nobody was looking, and the client found out. By building the observation habit up front, you make that class of failure your discovery instead of theirs. You find the stale report first, you fix it, and you tell the client you caught and corrected a drift before it reached them. That is the difference between being the consultant who watches the system and the one who gets blamed when it goes unnoticed.
+
+## Worked example: watching the claims-intake agent
+
+Put it together on the engagement you have carried through the series. In lesson 20 you set governance on the claims-intake agent. This lesson asks the next question: how do you know, week after week, that it is still doing the job?
+
+You start with the execution floor. You have the weekly summary job from lesson 11, and you make the fleet check part of your routine. Each week you run it and confirm the job fired, the run succeeded, and the delivery reached the client's channel. [^3] If a delivery failed, you see it reported as a delivery failure, not passed off as a success, and you fix it. [^2] That is the ground floor, and it is quick.
+
+Then you add the tripwires. You look at the event hooks and you set one that alerts you if the intake agent ever takes far more steps than a normal intake reply should, because a looping agent is an agent whose prompt or source has drifted. [^5] You confirm the client's dashboard would warn you if the host is low on memory or if the agent restarted unexpectedly, so a struggling process surfaces before it starts failing visibly. [^6] None of these are onerous, and each one converts a potential quiet failure into a loud one.
+
+Then you do the part that requires judgment, and this is the part you never skip. Before you tell the client the system is healthy, you read a sample of the actual output. You open the last weekly report and check the numbers against what you know should be there. You open a couple of recent intake replies and read them for plausibility. The source system changed last month, the one that feeds the report, and nobody told you. If you read the report, you find the stale numbers yourself, you fix the source mapping, and you tell the client you caught a drift and corrected it before it reached them. If you had only watched the dashboard, the same stale report would have delivered for weeks and the client would have found it. That is the entire lesson, in one example.
+
+## The pitfalls to avoid
+
+**Stopping at "it ran."** An execution history proves work happened, not that it was right. Separate the two floors, and build a habit for the correctness floor, because no status system will do it for you.
+
+**Trusting a green dashboard.** A dashboard that says everything is up is a status screen, not observability. It will not tell you the report's numbers are stale. Someone has to read the output.
+
+**Checking only the star job.** A single healthy job tells you nothing about the four that are quietly drifting. Check the whole fleet on a schedule, whether anyone asks or not.
+
+**Relying on memory to check.** If your observability habit depends on remembering to look, it will not survive a busy month. Schedule the fleet check so it fires without you, and let it be loud when it finds a problem.
+
+**Discovering quiet failures last.** The report that is wrong for weeks and found by the client is the failure that costs trust. Catch it on a sample review first, so you fix it and tell the client, instead of them telling you.
+
+## Try it
+
+Take the engagement you have been carrying and design its observability on paper:
+
+1. Name the floors. What tells you each agent ran, and what tells you the output was actually right? Write down the second one, because it is the one you are most tempted to skip.
+2. Name the fleet. List every recurring job and session the engagement depends on, not just the one you built.
+3. Name the check. How will you confirm the whole fleet is healthy on a schedule, without relying on memory?
+4. Name the tripwires. Which lifecycle signal would mean "this agent is quietly going wrong," and how will you make it surface loudly?
+5. Name the sample. Which output do you actually read, and on what cadence, to catch wrongness a status system cannot see?
+6. Name the proof. What evidence will you show the client that the system is being watched, and that you caught a drift before it reached them?
+
+If you can answer all six, you have observability, and you can hand the client an engagement that does not just run, but proves it is still running correctly. If you find yourself writing "it ran" as the answer to "how do you know it is right," that is the quiet failure you are about to ship. Close that gap before you hand over.
+
+## What's next
+
+You can now watch an agent the way you would watch any system you are responsible for, separating loud failures from quiet ones, checking the whole fleet, and sampling the output so wrongness surfaces early. But there is a dimension of running an engagement this lesson only touched, and it grows with every agent you add. The next lesson is about cost: token budgets, model tiers, and predictable client pricing. It covers how to estimate what an agent actually costs to run, how to keep a recurring workload inside a budget instead of letting inference spend drift upward run over run, and how to translate that into pricing the client can predict and approve. Where this lesson made the system visible, the next one makes its cost visible, so you can tell a client not just that it works, but what working costs them.
+
+[^1]: Hermes Agent Docs, Sessions: every conversation is saved as a session in a SQLite database with full message history, model, tool calls and results, token counts, and start and end timestamps, and sessions support resume and cross-session search. [hermes-agent.nousresearch.com/docs/user-guide/sessions](https://hermes-agent.nousresearch.com/docs/user-guide/sessions)
+[^2]: Hermes Agent Docs, Scheduled Tasks (Cron): execution history tracks each job's runs and reports run success and delivery success separately, so a run that completes but whose message never reaches its target is flagged as a delivery failure, not passed off as a success. [hermes-agent.nousresearch.com/docs/user-guide/features/cron](https://hermes-agent.nousresearch.com/docs/user-guide/features/cron)
+[^3]: Hermes Agent Docs, Scheduled Tasks (Cron): `hermes cron doctor` is a fleet health check that surfaces every job with a failed run, a failed delivery, or a schedule that has silently stopped firing. [hermes-agent.nousresearch.com/docs/user-guide/features/cron](https://hermes-agent.nousresearch.com/docs/user-guide/features/cron)
+[^4]: Hermes Agent Docs, Event Hooks: a gateway hook that fires on `gateway:startup` can spawn a one-shot agent to run a startup checklist, such as checking for overnight cron failures, and reply with a `[SILENT]` marker when nothing needs attention so no message is sent when the system is healthy. [hermes-agent.nousresearch.com/docs/user-guide/features/hooks](https://hermes-agent.nousresearch.com/docs/user-guide/features/hooks)
+[^5]: Hermes Agent Docs, Event Hooks: lifecycle events include `agent:step` for each iteration of the tool-calling loop, and a handler can alert when an agent takes too many steps (the documented example fires on the tenth iteration). [hermes-agent.nousresearch.com/docs/user-guide/features/hooks](https://hermes-agent.nousresearch.com/docs/user-guide/features/hooks)
+[^6]: Hermes Agent Docs, Web Dashboard: the landing page shows a live overview with gateway status, active sessions, and recent sessions with model, message count, and token usage, and it warns when the host is low on memory or disk or when the agent restarted unexpectedly under memory pressure. [hermes-agent.nousresearch.com/docs/user-guide/features/web-dashboard](https://hermes-agent.nousresearch.com/docs/user-guide/features/web-dashboard)
