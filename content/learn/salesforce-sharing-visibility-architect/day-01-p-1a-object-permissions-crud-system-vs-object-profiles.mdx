@@ -31,6 +31,8 @@ Two things fall out of that table immediately. First, the permissions stack. Cre
 
 Second, the documentation marks all four of these as respecting sharing. That is a phrase worth slowing down on. Read, Create, Edit, and Delete describe what a user may do to records they can already reach. They do not by themselves reach anything. A user with Edit on Opportunity in an org whose opportunity organization-wide default is Private has permission to edit any opportunity they can access, and can access their own records plus whatever the sharing model grants them. Object permissions are the door, sharing is the hallway. [^1][^9]
 
+![The six object permissions split into two groups: Read, Create, Edit, and Delete, which respect sharing and only describe what a user may do to records they can already reach, and View All Records and Modify All Records, which override sharing for one object; the first four stack, so Delete implies Edit and Read while Create implies Read, and the two All Records permissions are not available for ideas, price books, article types, or products.](</diagrams/day-01-p-1a-object-permissions-crud-system-vs-object-profiles/1-six-object-permissions.png>)
+
 ### View All Records and Modify All Records step outside the sharing model
 
 Then come the two permissions that ignore sharing altogether. [^1]
@@ -51,6 +53,8 @@ Profiles and permission sets hold two categories of thing, and the setup UI keep
 API Enabled, View Setup and Configuration, Manage Users, and Customize Application live in that second category. The documentation's own examples are the fastest way to see the shape of it: users with View Setup and Configuration can open Setup pages, and users with API Enabled can access any Salesforce API. [^13] Neither permission mentions an object, because neither is about records.
 
 The classic mistake is treating the two categories as interchangeable because they sit in the same editor. A user with API Enabled and no object permissions has an integration user that can authenticate and then read nothing. A user with View Setup and Configuration can browse metadata and configuration surfaces for objects they cannot read a single record of. The permission set editor asks you to check boxes in both sections, which is exactly why exam writers test whether you know which section governs which question.
+
+![A side by side comparison of object permissions, whose names end in Records and whose scope is a single object, against user or system permissions, whose names end in Data, whose scope is all apps and data even when nothing is shared, and which are intended for org-wide administrators; feature permissions such as API Enabled and View Setup and Configuration grant no record access at all.](</diagrams/day-01-p-1a-object-permissions-crud-system-vs-object-profiles/2-records-vs-data.png>)
 
 There are system permissions whose names look like object permissions, and those are the real traps. View All Data and Modify All Data are user permissions. The platform describes them as granting view or modify access to all apps and data even when the data is not shared with the user, and it positions them for org-wide administrators doing data cleansing, deduplication, mass deletion, mass transfer, and record approval management. [^2] View All Records and Modify All Records are object permissions you grant per object. The names differ by one word. The scope differs by the entire org.
 
@@ -78,6 +82,8 @@ Muting. A muting permission set removes, or mutes, selected permissions inside t
 
 Status. A permission set group calculates the combined permissions from its included permission sets, and its status reports whether that calculation is current. You can assign users only to groups whose status is Updated. [^11] Recalculations are asynchronous, so an integration or a deployment that assigns groups immediately after editing them can fail on a group that has not finished recalculating, and the error message rarely says so directly.
 
+![The additive access model: one profile supplies the baseline, permission sets extend it without changing it, and permission set groups bundle sets per persona, all unioning into an effective access that nothing subtracts from; below, the group lifecycle runs from build to asynchronous recalculation to a status of Updated before any assignment, while muting removes only what the group permission sets contribute and never reaches the profile.](</diagrams/day-01-p-1a-object-permissions-crud-system-vs-object-profiles/3-additive-access-model.png>)
+
 ### Dynamic assignment runs on user access policies
 
 Membership in a permission set group can be assigned directly, or it can be driven from user data. The direct path is Setup, then Permission Set Groups, then Manage Assignments, where you select users and can optionally set an expiration date for the assignment. [^11] The automated path is a user access policy.
@@ -98,6 +104,8 @@ Standard objects arrive with baseline object permissions already configured on t
 
 One relationship behavior is documented in the object permissions page and appears in deployment failures. When an object has a master-detail relationship, a broken permission dependency exists if the child object holds a permission the parent must also have. For updates made in Setup, Salesforce fixes the parent on the first save of the profile or permission set. For updates made through the API, you must fix the dependency yourself. The dependency table is small and worth committing to memory: a child with Modify All Records or View All Records forces View All Records on the parent, and a child with View All Records or Read forces Read on the parent. [^1][^6] Metadata deployments that grant a child permission without the parent permission fail for exactly this reason.
 
+![A master detail pair showing that a child permission forces a parent permission: a child with Modify All Records or View All Records requires View All Records on the parent, and a child with View All Records or Read requires Read on the parent, with Setup repairing the gap on the first save while a metadata deployment through the API fails unless the architect fixes it.](</diagrams/day-01-p-1a-object-permissions-crud-system-vs-object-profiles/5-master-detail-dependency.png>)
+
 ## Worked example: read every Account, without admin rights
 
 The scenario is common enough to be a template. Support managers need to read every Account record, including accounts owned by other divisions, and they must not receive system administration. Four options are on the table, and each one changes something in the org.
@@ -111,6 +119,8 @@ Giving the managers Modify All Records works and overshoots. They would gain edi
 Creating a permission set that grants View All Records on Account and assigning it to those managers is the answer. View All Records bypasses sharing for that one object, so the managers read every account regardless of the organization-wide default and regardless of who owns what. [^1][^2] Nobody else's access changes, the profile baseline stays intact, the grant is auditable in one permission set, and removing the permission set removes the access. The scope of the change matches the scope of the requirement, which is the whole game in this domain.
 
 Now scale the same pattern. Suppose 400 field service technicians need a shared persona across six objects, and leadership wants new hires provisioned automatically. The architecture is permission sets organized by task, one permission set group per persona, and an active user access policy that assigns the group when a user record is created with the technician role. [^7][^10] That combination gives one assignment per user instead of six, gives the org a single place to change the persona later, and removes the human step that gets forgotten during onboarding. The caveat to write into the design document is the edition requirement for user access policies, and the operational dependency on the group's recalculation status before assignment. [^10][^11]
+
+![A worked scenario scoring four ways to give support managers read access to every Account: a profile with Read changes nothing because Read respects sharing, changing the org wide default to Public Read Only reaches every current and future user, Modify All Records overshoots into edit, delete, transfer, and approve authority, and a permission set granting View All Records on Account is the correct match; the same pattern scales to 400 technicians through one permission set group per persona plus an active user access policy.](</diagrams/day-01-p-1a-object-permissions-crud-system-vs-object-profiles/4-worked-scenario-blast-radius.png>)
 
 ## Configuration Walkthrough
 
