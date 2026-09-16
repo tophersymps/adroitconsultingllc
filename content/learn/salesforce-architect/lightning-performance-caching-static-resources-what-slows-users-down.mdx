@@ -43,6 +43,8 @@ The practical numbers worth keeping in your head are a latency of 150 ms or lowe
 
 Everything past that floor is what you can engineer. The rest of this lesson is the layers of cache you control, in the order a browser encounters them, plus the asset layer underneath.
 
+![The three cache layers a Lightning page passes through in order: the browser cache for repeat visits to the same assets, the Salesforce CDN for the first request of the day, and the client-side data cache for records and server data already on the client, each shown with the session setting or mechanism that turns it on, above the floor of network, device, browser, and configuration that no org controls.](</diagrams/lightning-performance-caching-static-resources-what-slows-users-down/1-cache-layer-stack.png>)
+
 ## Layer one: the browser
 
 Before any Lightning code runs, the browser can answer a request from its own store. Salesforce has a session setting for exactly this, "Enable secure and persistent browser caching to improve performance," and it is selected by default. It improves page reload performance by avoiding extra round trips to the server. [^4]
@@ -71,6 +73,8 @@ Once the framework and components are on the client, the cost shifts to data. Tw
 
 The wire service is what makes the cache shareable: because a wire provisions rather than requests, if the data already exists in the client cache, a network request may not be involved at all. [^10] Where you do need fresh data, the correction is explicit. A component that knows a cached value is invalid can query the server and refresh the cache with `refreshApex()`, and for stale Apex data you call `notifyRecordUpdateAvailable(recordIds)` so LDS knows those records are stale. [^8] One rule that prevents both bugs and load: the default cache duration can change as Salesforce optimizes the platform, so never design against a duration you assumed. [^8]
 
+![A wire call checking the client-side cache first: a cache hit renders from the cached value with no network request and shares one copy of a record across every component that asks for it, while a miss takes one server round trip and populates the cache for the next component, with refreshApex and notifyRecordUpdateAvailable named as the explicit corrections when a cached value is wrong.](</diagrams/lightning-performance-caching-static-resources-what-slows-users-down/2-client-data-cache-flow.png>)
+
 ## Static resources: getting assets out of the critical path
 
 Static resources are where an org's own assets live: the CSS, images, fonts, JavaScript libraries, and archives your components need. They are uploaded in Setup under Static Resources, the name can contain only underscores and alphanumeric characters and must be unique in the org, the maximum file size is 5 MB, and an org can hold up to 250 MB of static resources. [^1] In an LWC you import one from the `@salesforce/resourceUrl` scoped module. If the resource is an archive with a nested directory structure, you reach an item inside it by concatenating the path onto the imported URL. [^1]
@@ -83,6 +87,8 @@ Third-party JavaScript is the case that gets orgs into trouble, so it has its ow
 - Loading happens once, on first render, guarded by a flag. The documented pattern initializes the library in `renderedCallback()` on the first render, after the container element exists. [^13] A `renderedCallback()` that calls `loadScript` on every render re-requests the library on every re-render of the component.
 
 Libraries that take over the DOM need one more thing. If a call to `appendChild()` manipulates the DOM, styling is not applied to the appended element unless you add `lwc:dom="manual"` to the empty native element you intend to fill. [^13] And a library loaded through `loadScript` on the same page as an Aura component loading the same script via `ltng:require` is loaded twice, because the duplication is not detected, so the library has to protect itself. [^14] Framework guidance is also clear that using JavaScript to manipulate the DOM is not recommended in LWC, because the engine does it more efficiently. [^13]
+
+![Two ways to load a third-party library side by side: the failing pattern pulls the script from a public internet URL, calls loadScript with no first-render guard so it re-requests on every re-render, and loads twice when an Aura component loads the same script, while the architect's version sits in a static resource with public cache control, loads once on first render after the container exists, and stays minified in a lazily instantiated region.](</diagrams/lightning-performance-caching-static-resources-what-slows-users-down/3-static-resource-load-path.png>)
 
 The same discipline applies to conditional rendering. Hiding a region with CSS leaves the element and its children in the DOM, and any event listeners on them stay live. Conditional rendering that keeps the tree from being created is the cheaper option, whether that is Aura's `aura:if`, which lazily instantiates the enclosed tree, or LWC's `lwc:if` family, which supersedes the older `if:true` and `if:false` directives. [^6] [^16] When you decide what belongs on a page, remember that Lightning Components added to a page layout are instantiated when the page loads and contribute to the overall loading time, while Quick and Global Actions, the Utility Bar, and App Builder tabs are areas where the platform instantiates lazily. [^6] Put the heavy, rarely used widget in one of those places instead of in the main region of the page.
 
@@ -103,6 +109,8 @@ The order is the point. Steps 2 and 3 are configuration and diagnosis. Steps 4 t
 ## The decision sequence
 
 When you inherit a Lightning page with a performance complaint, run this sequence:
+
+![The seven-step decision sequence for an inherited Lightning page grouped into four bands: establish the problem with experienced page time at the 75th percentile and the four factors, confirm the org level caches are switched on, audit eager instantiation and data round trips and assets, and only then look at the server side.](</diagrams/lightning-performance-caching-static-resources-what-slows-users-down/4-decision-sequence.png>)
 
 1. Establish the number: EPT at P75 for the page, plus whether the complaint is about first load or navigation.
 2. Separate the four factors. Network, device, browser, and configuration all set the floor, and only the last one is yours. [^12]
