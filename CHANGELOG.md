@@ -4,6 +4,19 @@ All notable changes to the Adroit Consulting Blog project will be documented in 
 
 ## [Unreleased]
 
+### Perf: cache the Follow-along block alignment across `timeupdate` ticks (t_05dc3b79)
+
+**What** - `AudioPlayer.handleTimeUpdate` runs ~4x/s while audio plays. On every tick it re-queried the DOM (`articleBlocks()`: `main article` → `querySelectorAll(h2,h3,h4,h5,p,li,figcaption)`) and re-ran the greedy O(segments × blocks) `alignSegmentsToBlocks` over the whole manifest — even for the ticks that land on the same paragraph and change nothing. That per-tick work is now cached in `alignmentCacheRef`, keyed by `slug` + the `timings` array reference, with the DOM block elements cached alongside the alignment. A cache miss or a changed slug/timings reference rebuilds inside the existing `try/catch`; the `timings → null` path (sign-out / fetch failure) clears the cache. The follow-along scroll/change-detection logic (`lastScrollBlockRef`, `beginProgrammaticScroll`, settle/cap timers) is untouched byte-for-byte.
+
+**Why** - Sato's perf audit on t_0a39aba8 (PR #239) measured the per-tick realignment at **median 1.90 ms, p95 2.41 ms = ~7.6 ms/s (median) / ~9.7 ms/s (p95) of main-thread work** on this repo's largest article (146 blocks / 232 segments) — on exactly the frames where follow-along is also smooth-scrolling. Caching makes same-paragraph ticks effectively free (only the O(segments) `activeSegmentIndex` + a ref compare remain).
+
+**Verified** -
+- New regression test `src/components/BlogPost/AudioPlayerScroll.test.tsx` asserts the block DOM query (`article.querySelectorAll`) runs **once** across three same-paragraph `timeupdate`s — it **fails on the unfixed code** (`querySelectorAll` called 3×) and passes after.
+- Re-ran the audit bench (`.sato-perf/bench-align.mjs` logic, real `src/lib/audio-scroll.ts`, largest article 146/232): per-timeupdate median **1,955 µs → 0.29 µs** (~6,700×), p95 **2,257 µs → 0.46 µs**; 232 simulated ticks cost just **1 alignment build** instead of 232.
+- `npx vitest run` → 99 files / **810 tests pass** (809 + 1 new). `npx tsc --noEmit` → exit 0. `npm run lint` → clean. `npm run build` → exit 0.
+
+**Known Issues** - None. Pure caching change: scroll behavior, suppression timers, timings generation, `/api/audio/<slug>/timings`, and `audio-scroll.ts` are untouched.
+
 ### Fix: "Follow along" no longer unchecks itself on every auto-scroll (t_078c9385)
 
 **What** - The article-audio "Follow along" checkbox stays checked while the page auto-scrolls along with the spoken paragraph. Previously the window `scroll` listener stopped following on ANY scroll not covered by a programmatic-scroll guard, and that guard was cleared **1ms** after `window.scrollTo()` — long before the browser's first `scroll` event from a smooth-scroll animation (~16ms later, then every frame for ~300-700ms). The component read its OWN animation as a user scroll, un-checked the toggle, and following stopped for good after one paragraph. The same `SCROLL_THROTTLE_MS` branch also *re-issued* the scroll every 250ms while the same block was active, keeping the page in a permanent smooth-scroll animation.

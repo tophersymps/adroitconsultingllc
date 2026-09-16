@@ -203,6 +203,25 @@ describe("AudioPlayer Follow-along", () => {
     expect(scrollTo).not.toHaveBeenCalled();
   });
 
+  it("keeps the block alignment cached across same-paragraph timeupdates (no DOM re-query/re-align)", async () => {
+    renderAuthed();
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: /Follow along/i })).toBeChecked());
+    const article = document.querySelector("main article")!;
+    const qsa = vi.spyOn(article, "querySelectorAll");
+    const scrollTo = window.scrollTo as unknown as ReturnType<typeof vi.fn>;
+    scrollTo.mockClear();
+
+    // All three ticks land inside segment 1 (3-6s) -> the SAME target block --
+    // the exact ~4x/s case the caching targets. Only the first tick should
+    // re-query the DOM + re-run the alignment; the rest reuse the cache.
+    timeupdate(4);
+    timeupdate(5);
+    timeupdate(5.5);
+
+    expect(qsa).toHaveBeenCalledTimes(1);
+    expect(scrollTo).toHaveBeenCalledTimes(1); // one snap for the block change
+  });
+
   it("emits no Follow-along toggle for the logged-out locked card", async () => {
     authState = { user: null, isLoading: false };
     render(<AudioPlayer slug={SLUG} hasAudio />);

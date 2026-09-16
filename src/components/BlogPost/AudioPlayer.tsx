@@ -27,6 +27,7 @@ import {
   alignSegmentsToBlocks,
   activeSegmentIndex,
   targetScrollYForBlock,
+  type AlignedBlock,
   type SegmentTiming,
 } from "@/lib/audio-scroll";
 
@@ -70,6 +71,19 @@ export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
   const capTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Current scrollend handler so the listener can be removed deterministically.
   const scrollEndHandlerRef = useRef<EventListener | null>(null);
+  /**
+   * Cache of the block alignment so ~4x/s `timeupdate` ticks don't re-run the
+   * DOM query (`articleBlocks`) + the greedy O(segments x blocks) alignment for
+   * a paragraph that hasn't changed. Invalidated when the slug, the timings
+   * array, or the article elements change — everything is stable for the life
+   * of a single article, so one alignment build serves all its ticks.
+   */
+  const alignmentCacheRef = useRef<{
+    slug: string;
+    timings: SegmentTiming[] | null;
+    blocks: { text: string; el: HTMLElement }[];
+    aligned: AlignedBlock[];
+  } | null>(null);
 
   // End the programmatic-scroll suppression: clear the settle/cap timers, remove
   // the scrollend listener, and drop the gate back to false. Pure ref mutation —
@@ -123,7 +137,10 @@ export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
   // Fetch the exact segment timings for this article when signed-in.
   useEffect(() => {
     if (!user) {
-      const reset = setTimeout(() => setTimings(null), 0);
+      const reset = setTimeout(() => {
+        setTimings(null);
+        alignmentCacheRef.current = null;
+      }, 0);
       return () => clearTimeout(reset);
     }
     let cancelled = false;
@@ -135,7 +152,10 @@ export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
         const data = (await res.json()) as { segments: SegmentTiming[] };
         if (!cancelled && Array.isArray(data.segments)) setTimings(data.segments);
       } catch {
-        if (!cancelled) setTimings(null);
+        if (!cancelled) {
+          setTimings(null);
+          alignmentCacheRef.current = null;
+        }
       }
     })();
     return () => {
@@ -276,12 +296,29 @@ export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
       const segIdx = activeSegmentIndex(timings, currentTime);
       if (segIdx < 0) return;
 
-      const blocks = articleBlocks();
-      const blockTexts = blocks.map((b) => b.text);
-      const aligned = alignSegmentsToBlocks(timings, blockTexts);
-      const target = aligned[segIdx];
+      // Build the block alignment once per article/manifest and reuse it across
+      // the ~4x/s `timeupdate` ticks: the DOM block elements, their texts, and
+      // the greedy segment->block mapping are all stable for the life of the
+      // article, so only a slug change or a new timings array invalidate the
+      // cache. A cache miss/stale key rebuilds inside the same try (a missing
+      // article just caches an empty result and never scrolls, as before).
+      let cached = alignmentCacheRef.current;
+      if (
+        !cached ||
+        cached.slug !== slug ||
+        cached.timings !== timings
+      ) {
+        const blocks = articleBlocks();
+        const aligned = alignSegmentsToBlocks(
+          timings,
+          blocks.map((b) => b.text),
+        );
+        cached = { slug, timings, blocks, aligned };
+        alignmentCacheRef.current = cached;
+      }
+      const target = cached.aligned[segIdx];
       if (!target) return;
-      const block = blocks[target.blockIndex];
+      const block = cached.blocks[target.blockIndex];
       if (!block) return;
 
       // Scroll ONLY when the active paragraph changed. A repeat scroll within
