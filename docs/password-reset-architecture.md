@@ -1,6 +1,6 @@
 # Password Reset + Signup Recovery — Architecture
 
-Tenant: adroit-blog · Author: Brainiac (Arch) · Date: 2026-08-31
+Tenant: adroit-site-copy (legacy name: adroit-blog) · Author: Brainiac (Arch) · Date: 2026-08-31
 Sources: BA t_e9f1eb58 (`requirements-password-reset.md`), plan `~/.hermes/plans/2026-08-31_password-reset.md`
 Downstream: Design (kara t_64d4c246) → Build (steel t_e25638b3) → A11y+QA+Security → Deploy (alpha)
 
@@ -86,11 +86,12 @@ flowchart LR
   (less surface). Consequence: forgot-password page stays minimal.
 
 ## Risks
-1. **High — deploy-origin mismatch (natalie repeat).** The email callback must resolve on the origin used as
-   `redirectTo`. `checkOrigin`'s allowlist names `adroit-blog-two.vercel.app` as the live deploy, but that is
-   NOT in the Supabase `uri_allow_list`. Build must verify `https://adroit.io/auth/callback?next=/reset-password`
-   serves the app in prod; if it 404s, add the real origin to `uri_allow_list` and set `AUTH_ORIGIN` to it.
-   This is the single most important pre-deploy verification.
+1. **Resolved — deploy-origin mismatch (natalie repeat).** The email callback must resolve on the origin used as
+   `redirectTo`. The live deploy is `adroit.io` (+ `www.adroit.io`) on Vercel project `adroitconsultingllc`
+   (team `adroit-consulting`), which IS in the Supabase `uri_allow_list`.
+   `adroit-blog-two.vercel.app` is a RETIRED legacy alias — its Vercel project was deleted 2026-09-15 and the
+   hostname now returns 404, so it must never be treated as the live origin or added to an allowlist.
+   Verified 2026-09-15: `https://adroit.io/auth/callback?next=/reset-password` serves the app in prod.
 2. **Proxy.ts interplay (AC-2.6).** Proxy runs `getUser()` on `/auth/callback` (non-api) before the handler.
    For a guest clicking a reset link there is no prior session, so proxy passes through and the handler's
    `exchangeCodeForSession` cookie write is final. Build must add a test asserting the callback's
