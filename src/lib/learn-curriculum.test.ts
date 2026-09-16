@@ -66,11 +66,13 @@ const SCHEDULER_FINAL_COUNTS: Record<string, number> = {
   "hermes-consultant-intermediate": 25,
   "omni-studio-cert": 46,
   "salesforce-architect": 90,
+  "salesforce-sharing-visibility-architect": 36,
+  "salesforce-data-architect": 42,
 };
 
 describe("series.json curriculumLessons declarations", () => {
   const dirs = seriesDirs();
-  expect(dirs.length, "expected the seven learning tracks").toBe(7);
+  expect(dirs.length, "expected the nine learning tracks").toBe(9);
 
   for (const dir of dirs) {
     const cfg = readSeriesJson(dir);

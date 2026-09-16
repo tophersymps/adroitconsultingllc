@@ -3457,6 +3457,24 @@ export const learnSeries: LearningSeries[] = [
     ],
     "totalLessons": 20,
     "curriculumLessons": 20
+  },
+  {
+    "slug": "salesforce-data-architect",
+    "name": "Platform Data Architect Certification",
+    "description": "A one-stop prep course for the Salesforce Certified Platform Data Architect exam. All 21 official objectives split into 42 focused lessons, with data-modeling design patterns, LDV and MDM trade-offs, exam traps, and practice questions.",
+    "gradient": "from-teal to-cyan-600",
+    "lessons": [],
+    "totalLessons": 0,
+    "curriculumLessons": 42
+  },
+  {
+    "slug": "salesforce-sharing-visibility-architect",
+    "name": "Platform Sharing and Visibility Architect Certification",
+    "description": "A one-stop prep course for the Salesforce Certified Platform Sharing and Visibility Architect exam. All 18 official objectives split into 36 focused lessons, with config walkthroughs, sharing-model trade-offs, exam traps, and practice questions.",
+    "gradient": "from-violet to-purple-600",
+    "lessons": [],
+    "totalLessons": 0,
+    "curriculumLessons": 36
   }
 ];
 
