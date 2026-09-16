@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "agent-loop-spend-guardrails-2026",
+    "title": "Bound the Loop: Your Agent's Step Limit Is Not a Budget",
+    "excerpt": "A framework turn cap counts steps, not dollars. The three budget layers that stop a runaway agent, and how to size the ceiling from your own traffic.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "September 16, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "AI Agents",
+      "Agentic Frameworks",
+      "AI Infrastructure",
+      "Cost Control",
+      "FinOps",
+      "Reliability"
+    ],
+    "bannerImage": "/banners/agent-loop-spend-guardrails-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "salesforce-oauth-token-governance-2026",
     "title": "The Salesforce Credential Nobody Owns",
     "excerpt": "Three OAuth supply chain breaches in twelve months changed the threat model. The refresh token sitting in your org is the perimeter now, and it needs an owner.",
