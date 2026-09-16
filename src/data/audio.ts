@@ -78,6 +78,7 @@ export const articleAudio: ArticleAudio[] = [
   { slug: "salesforce-flow-vs-apex-when-to-use-which", voice: "af_heart", storagePath: "blog/salesforce-flow-vs-apex-when-to-use-which/af_heart.mp3", timingsStoragePath: "blog/salesforce-flow-vs-apex-when-to-use-which/af_heart.timing.json" },
   { slug: "salesforce-integration-seams-2026", voice: "af_heart", storagePath: "blog/salesforce-integration-seams-2026/af_heart.mp3", timingsStoragePath: "blog/salesforce-integration-seams-2026/af_heart.timing.json" },
   { slug: "salesforce-mcp-hosting-ga-2026", voice: "af_heart", storagePath: "blog/salesforce-mcp-hosting-ga-2026/af_heart.mp3", timingsStoragePath: "blog/salesforce-mcp-hosting-ga-2026/af_heart.timing.json" },
+  { slug: "salesforce-oauth-token-governance-2026", voice: "af_heart", storagePath: "blog/salesforce-oauth-token-governance-2026/af_heart.mp3", timingsStoragePath: "blog/salesforce-oauth-token-governance-2026/af_heart.timing.json" },
   { slug: "salesforce-release-discipline-2026", voice: "af_heart", storagePath: "blog/salesforce-release-discipline-2026/af_heart.mp3", timingsStoragePath: "blog/salesforce-release-discipline-2026/af_heart.timing.json" },
   { slug: "salesforce-stack-cost-modeling-2026", voice: "af_heart", storagePath: "blog/salesforce-stack-cost-modeling-2026/af_heart.mp3", timingsStoragePath: "blog/salesforce-stack-cost-modeling-2026/af_heart.timing.json" },
   { slug: "salesforce-summer-26-three-things", voice: "af_heart", storagePath: "blog/salesforce-summer-26-three-things/af_heart.mp3" },
