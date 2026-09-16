@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "salesforce-oauth-token-governance-2026",
+    "title": "The Salesforce Credential Nobody Owns",
+    "excerpt": "Three OAuth supply chain breaches in twelve months changed the threat model. The refresh token sitting in your org is the perimeter now, and it needs an owner.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "September 16, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "14 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "Security",
+      "OAuth",
+      "External Client Apps",
+      "Event Monitoring",
+      "Integrations"
+    ],
+    "bannerImage": "/banners/salesforce-oauth-token-governance-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "utilization-trap-capacity-planning-2026",
     "title": "Booked Solid: Why 100% Utilization Guarantees Late Delivery",
     "excerpt": "Billable utilization hit a record low in 2026. The reflex is to push it back up, and past 80 percent that reflex is what makes delivery dates slip.",
