@@ -1284,6 +1284,33 @@ export const learnSeries: LearningSeries[] = [
     "curriculumLessons": 90
   },
   {
+    "slug": "salesforce-data-architect",
+    "name": "Platform Data Architect Certification",
+    "description": "A one-stop prep course for the Salesforce Certified Platform Data Architect exam. All 21 official objectives split into 42 focused lessons, with data-modeling design patterns, LDV and MDM trade-offs, exam traps, and practice questions.",
+    "gradient": "from-teal to-cyan-600",
+    "lessons": [
+      {
+        "slug": "day-01-dm-1a-data-modeling-fundamentals-objects-fields-relation",
+        "title": "Data Architect DM-1a: Data Modeling Fundamentals: Objects, Fields, Relationships",
+        "series": "salesforce-data-architect",
+        "lesson": 1,
+        "excerpt": "The building blocks of every Salesforce data model: standard vs custom objects, what a field type actually commits you to, the lookup vs master-detail decision and everything it controls (ownership, sharing, delete, roll-ups), and the object features that shape the UI and the rules. Includes a configuration walkthrough, the exam traps, and a hands-on try-it.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Modeling",
+          "Certification"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 1,
+    "curriculumLessons": 42
+  },
+  {
     "slug": "agentic-ai",
     "name": "Agentic AI Implementation Path",
     "description": "From single-agent prototypes to multi-agent orchestration, a practitioner's curriculum for shipping agentic systems.",
@@ -3459,15 +3486,6 @@ export const learnSeries: LearningSeries[] = [
     "curriculumLessons": 20
   },
   {
-    "slug": "salesforce-data-architect",
-    "name": "Platform Data Architect Certification",
-    "description": "A one-stop prep course for the Salesforce Certified Platform Data Architect exam. All 21 official objectives split into 42 focused lessons, with data-modeling design patterns, LDV and MDM trade-offs, exam traps, and practice questions.",
-    "gradient": "from-teal to-cyan-600",
-    "lessons": [],
-    "totalLessons": 0,
-    "curriculumLessons": 42
-  },
-  {
     "slug": "salesforce-sharing-visibility-architect",
     "name": "Platform Sharing and Visibility Architect Certification",
     "description": "A one-stop prep course for the Salesforce Certified Platform Sharing and Visibility Architect exam. All 18 official objectives split into 36 focused lessons, with config walkthroughs, sharing-model trade-offs, exam traps, and practice questions.",
@@ -3509,6 +3527,23 @@ export const learnLessons: LearnLesson[] = [
       "Architecture",
       "Lightning",
       "Performance"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-01-dm-1a-data-modeling-fundamentals-objects-fields-relation",
+    "title": "Data Architect DM-1a: Data Modeling Fundamentals: Objects, Fields, Relationships",
+    "series": "salesforce-data-architect",
+    "lesson": 1,
+    "excerpt": "The building blocks of every Salesforce data model: standard vs custom objects, what a field type actually commits you to, the lookup vs master-detail decision and everything it controls (ownership, sharing, delete, roll-ups), and the object features that shape the UI and the rules. Includes a configuration walkthrough, the exam traps, and a hands-on try-it.",
+    "date": "September 16, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "16 min read",
+    "tags": [
+      "Salesforce",
+      "Data Architecture",
+      "Data Modeling",
+      "Certification"
     ],
     "status": "published"
   },
