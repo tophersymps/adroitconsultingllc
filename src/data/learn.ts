@@ -1997,9 +1997,77 @@ export const learnSeries: LearningSeries[] = [
           "Certification"
         ],
         "status": "published"
+      },
+      {
+        "slug": "day-02-dm-1b-modeling-design-considerations-normalized-vs-denor",
+        "title": "Data Architect DM-1B: Modeling Design Considerations: Normalized vs Denormalized, Standard vs Custom, Common Data Model",
+        "series": "salesforce-data-architect",
+        "lesson": 2,
+        "excerpt": "How to make the modeling trade-offs that day one only named: normalization versus denormalization and when each wins on a shallow-query platform, extending standard objects versus building custom ones, and the Salesforce common data model built around accounts, contacts, and person accounts that underpins Customer 360. Includes a configuration walkthrough, the exam traps, and a worked example. Day 2 of the Platform Data Architect exam prep.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Modeling",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-03-dm-2a-designing-a-scalable-data-model-that-obeys-the-sec",
+        "title": "Data Architect DM-2A: Designing a Scalable Data Model That Obeys the Security and Sharing Model",
+        "series": "salesforce-data-architect",
+        "lesson": 3,
+        "excerpt": "How the Salesforce sharing stack really works: organization-wide defaults set the baseline, then the role hierarchy, sharing rules, teams, and manual sharing open access upward and outward. This lesson ties that stack to data modeling by showing how ownership and the lookup versus master-detail choice determine who can see each record, and how to design private-by-default, few-rules models that scale. Includes a configuration walkthrough, the exam traps, and a worked example. Day 3 of the Platform Data Architect exam prep.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Security",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-04-dm-2b-data-model-scenarios-given-security-sharing-constr",
+        "title": "Data Architect DM-2B: Data-Model Scenarios Given Security and Sharing Constraints",
+        "series": "salesforce-data-architect",
+        "lesson": 4,
+        "excerpt": "Security and sharing are not ornaments bolted onto a data model; they are constraints that decide which relationships and access mechanisms survive a design review. This lesson shows how to work backward from who must see what, to an Organization-Wide Defaults baseline, a role hierarchy, a small set of sharing rules, and the right relationship choices, then covers territories, account and opportunity teams, and Experience Cloud sharing sets for the access edge cases. Day 4 of the Platform Data Architect exam prep.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Modeling",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-05-dm-3a-business-and-technical-metadata-business-dictionar",
+        "title": "Data Architect DM-3A: Business and Technical Metadata: Business Dictionary, Data Lineage, Taxonomy, Data Classification",
+        "series": "salesforce-data-architect",
+        "lesson": 5,
+        "excerpt": "The difference between metadata that helps and metadata that lies is discipline. This lesson separates business metadata from technical metadata, distinguishes the business glossary from the technical data dictionary, and shows how data lineage, taxonomy, and data classification each answer a different question: where a value came from, how categories are controlled, and how sensitive a field is. It closes with why even good metadata needs owners, change control, and a review cadence to stay trustworthy. Day 5 of the Platform Data Architect exam prep.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Governance",
+          "Certification"
+        ],
+        "status": "published"
       }
     ],
-    "totalLessons": 1,
+    "totalLessons": 5,
     "curriculumLessons": 42
   },
   {
@@ -2024,9 +2092,77 @@ export const learnSeries: LearningSeries[] = [
           "Certification"
         ],
         "status": "published"
+      },
+      {
+        "slug": "day-02-p-1b-object-permission-scenarios-and-mass-assign-licens",
+        "title": "Sharing & Visibility Architect P-1b: Object-Permission Scenarios and Mass-Assign / License-Based Patterns",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 2,
+        "excerpt": "How an object-permission grant scales from one user to a population: permission set groups as the packaging layer, dynamic assignment so joiners and leavers are covered without manual clicks, and the license rules that decide which object permissions an org can grant at all. Includes a worked 400-user scenario, a setup walkthrough, and the exam traps around mass assignment and license errors. Day 2 of the Platform Sharing and Visibility Architect exam prep.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "19 min read",
+        "tags": [
+          "Salesforce",
+          "Security",
+          "Sharing",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-03-p-2a-field-level-security-fundamentals-field-permission",
+        "title": "Sharing & Visibility Architect P-2a: Field-Level Security Fundamentals: Field Permissions, Standard vs Custom Fields",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 3,
+        "excerpt": "Field-level security in full: the three field permission states and why Hidden is the only one that removes a field from view, how FLS sits independently on top of object permissions, where FLS is honored and where it silently is not, and the programmatic mirror in schema describe, user mode, and stripInaccessible. Includes a worked scenario, a setup walkthrough, and the exam traps. Day 3 of the Platform Sharing and Visibility Architect exam prep.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "18 min read",
+        "tags": [
+          "Salesforce",
+          "Security",
+          "Sharing",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-04-p-2b-fls-scenarios-restricting-standard-fields-fls-vs-r",
+        "title": "Sharing & Visibility Architect P-2b: FLS Scenarios: Restricting Standard Fields, FLS vs Record Types",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 4,
+        "excerpt": "Field-level security in scenario form: how to restrict standard fields like Phone, Name, and Owner when you cannot simply hide them, why read-only is a different requirement from hidden, what a page layout does and does not revoke, and how record types differ from FLS as a control. Includes a worked Phone scenario, a setup walkthrough, the exam traps, and a sandbox try-it. Day 4 of the Platform Sharing and Visibility Architect exam prep.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "Salesforce",
+          "Security",
+          "Sharing",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-05-p-3a-ui-level-hiding-record-types-page-layouts-lightnin",
+        "title": "Sharing & Visibility Architect P-3a: UI-Level Hiding: Record Types, Page Layouts, Lightning Apps, Compact Layouts, Dynamic Forms",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 5,
+        "excerpt": "Every surface that renders a field, and what each one is actually capable of hiding: page layouts and where they stop, record types as the router between profiles, layouts, and picklists, Lightning app navigation and tab visibility, compact layouts and the highlights-panel leak, and dynamic forms as record-page variation beyond the classic layout model. Includes a worked report-leak scenario, a setup walkthrough, and the exam traps. Day 5 of the Platform Sharing and Visibility Architect exam prep.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "Salesforce",
+          "Security",
+          "Sharing",
+          "Certification"
+        ],
+        "status": "published"
       }
     ],
-    "totalLessons": 1,
+    "totalLessons": 5,
     "curriculumLessons": 36
   },
   {
@@ -3630,6 +3766,74 @@ export const learnLessons: LearnLesson[] = [
     "status": "published"
   },
   {
+    "slug": "day-02-dm-1b-modeling-design-considerations-normalized-vs-denor",
+    "title": "Data Architect DM-1B: Modeling Design Considerations: Normalized vs Denormalized, Standard vs Custom, Common Data Model",
+    "series": "salesforce-data-architect",
+    "lesson": 2,
+    "excerpt": "How to make the modeling trade-offs that day one only named: normalization versus denormalization and when each wins on a shallow-query platform, extending standard objects versus building custom ones, and the Salesforce common data model built around accounts, contacts, and person accounts that underpins Customer 360. Includes a configuration walkthrough, the exam traps, and a worked example. Day 2 of the Platform Data Architect exam prep.",
+    "date": "September 16, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "17 min read",
+    "tags": [
+      "Salesforce",
+      "Data Architecture",
+      "Data Modeling",
+      "Certification"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-03-dm-2a-designing-a-scalable-data-model-that-obeys-the-sec",
+    "title": "Data Architect DM-2A: Designing a Scalable Data Model That Obeys the Security and Sharing Model",
+    "series": "salesforce-data-architect",
+    "lesson": 3,
+    "excerpt": "How the Salesforce sharing stack really works: organization-wide defaults set the baseline, then the role hierarchy, sharing rules, teams, and manual sharing open access upward and outward. This lesson ties that stack to data modeling by showing how ownership and the lookup versus master-detail choice determine who can see each record, and how to design private-by-default, few-rules models that scale. Includes a configuration walkthrough, the exam traps, and a worked example. Day 3 of the Platform Data Architect exam prep.",
+    "date": "September 16, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "17 min read",
+    "tags": [
+      "Salesforce",
+      "Data Architecture",
+      "Security",
+      "Certification"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-04-dm-2b-data-model-scenarios-given-security-sharing-constr",
+    "title": "Data Architect DM-2B: Data-Model Scenarios Given Security and Sharing Constraints",
+    "series": "salesforce-data-architect",
+    "lesson": 4,
+    "excerpt": "Security and sharing are not ornaments bolted onto a data model; they are constraints that decide which relationships and access mechanisms survive a design review. This lesson shows how to work backward from who must see what, to an Organization-Wide Defaults baseline, a role hierarchy, a small set of sharing rules, and the right relationship choices, then covers territories, account and opportunity teams, and Experience Cloud sharing sets for the access edge cases. Day 4 of the Platform Data Architect exam prep.",
+    "date": "September 16, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "16 min read",
+    "tags": [
+      "Salesforce",
+      "Data Architecture",
+      "Data Modeling",
+      "Certification"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-05-dm-3a-business-and-technical-metadata-business-dictionar",
+    "title": "Data Architect DM-3A: Business and Technical Metadata: Business Dictionary, Data Lineage, Taxonomy, Data Classification",
+    "series": "salesforce-data-architect",
+    "lesson": 5,
+    "excerpt": "The difference between metadata that helps and metadata that lies is discipline. This lesson separates business metadata from technical metadata, distinguishes the business glossary from the technical data dictionary, and shows how data lineage, taxonomy, and data classification each answer a different question: where a value came from, how categories are controlled, and how sensitive a field is. It closes with why even good metadata needs owners, change control, and a review cadence to stay trustworthy. Day 5 of the Platform Data Architect exam prep.",
+    "date": "September 16, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "15 min read",
+    "tags": [
+      "Salesforce",
+      "Data Architecture",
+      "Data Governance",
+      "Certification"
+    ],
+    "status": "published"
+  },
+  {
     "slug": "day-01-p-1a-object-permissions-crud-system-vs-object-profiles",
     "title": "Sharing & Visibility Architect P-1a: Object Permissions: CRUD, System vs Object, Profiles vs Permission Sets",
     "series": "salesforce-sharing-visibility-architect",
@@ -3642,6 +3846,74 @@ export const learnLessons: LearnLesson[] = [
       "Salesforce",
       "Sharing and Visibility",
       "Permissions",
+      "Certification"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-02-p-1b-object-permission-scenarios-and-mass-assign-licens",
+    "title": "Sharing & Visibility Architect P-1b: Object-Permission Scenarios and Mass-Assign / License-Based Patterns",
+    "series": "salesforce-sharing-visibility-architect",
+    "lesson": 2,
+    "excerpt": "How an object-permission grant scales from one user to a population: permission set groups as the packaging layer, dynamic assignment so joiners and leavers are covered without manual clicks, and the license rules that decide which object permissions an org can grant at all. Includes a worked 400-user scenario, a setup walkthrough, and the exam traps around mass assignment and license errors. Day 2 of the Platform Sharing and Visibility Architect exam prep.",
+    "date": "September 16, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "19 min read",
+    "tags": [
+      "Salesforce",
+      "Security",
+      "Sharing",
+      "Certification"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-03-p-2a-field-level-security-fundamentals-field-permission",
+    "title": "Sharing & Visibility Architect P-2a: Field-Level Security Fundamentals: Field Permissions, Standard vs Custom Fields",
+    "series": "salesforce-sharing-visibility-architect",
+    "lesson": 3,
+    "excerpt": "Field-level security in full: the three field permission states and why Hidden is the only one that removes a field from view, how FLS sits independently on top of object permissions, where FLS is honored and where it silently is not, and the programmatic mirror in schema describe, user mode, and stripInaccessible. Includes a worked scenario, a setup walkthrough, and the exam traps. Day 3 of the Platform Sharing and Visibility Architect exam prep.",
+    "date": "September 16, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "18 min read",
+    "tags": [
+      "Salesforce",
+      "Security",
+      "Sharing",
+      "Certification"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-04-p-2b-fls-scenarios-restricting-standard-fields-fls-vs-r",
+    "title": "Sharing & Visibility Architect P-2b: FLS Scenarios: Restricting Standard Fields, FLS vs Record Types",
+    "series": "salesforce-sharing-visibility-architect",
+    "lesson": 4,
+    "excerpt": "Field-level security in scenario form: how to restrict standard fields like Phone, Name, and Owner when you cannot simply hide them, why read-only is a different requirement from hidden, what a page layout does and does not revoke, and how record types differ from FLS as a control. Includes a worked Phone scenario, a setup walkthrough, the exam traps, and a sandbox try-it. Day 4 of the Platform Sharing and Visibility Architect exam prep.",
+    "date": "September 16, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "17 min read",
+    "tags": [
+      "Salesforce",
+      "Security",
+      "Sharing",
+      "Certification"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-05-p-3a-ui-level-hiding-record-types-page-layouts-lightnin",
+    "title": "Sharing & Visibility Architect P-3a: UI-Level Hiding: Record Types, Page Layouts, Lightning Apps, Compact Layouts, Dynamic Forms",
+    "series": "salesforce-sharing-visibility-architect",
+    "lesson": 5,
+    "excerpt": "Every surface that renders a field, and what each one is actually capable of hiding: page layouts and where they stop, record types as the router between profiles, layouts, and picklists, Lightning app navigation and tab visibility, compact layouts and the highlights-panel leak, and dynamic forms as record-page variation beyond the classic layout model. Includes a worked report-leak scenario, a setup walkthrough, and the exam traps. Day 5 of the Platform Sharing and Visibility Architect exam prep.",
+    "date": "September 16, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "17 min read",
+    "tags": [
+      "Salesforce",
+      "Security",
+      "Sharing",
       "Certification"
     ],
     "status": "published"

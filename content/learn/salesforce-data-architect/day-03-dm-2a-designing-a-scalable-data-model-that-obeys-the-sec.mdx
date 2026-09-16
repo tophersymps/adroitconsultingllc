@@ -1,0 +1,112 @@
+---
+title: "Data Architect DM-2A: Designing a Scalable Data Model That Obeys the Security and Sharing Model"
+slug: day-03-dm-2a-designing-a-scalable-data-model-that-obeys-the-sec
+series: salesforce-data-architect
+lesson: 3
+excerpt: "How the Salesforce sharing stack really works: organization-wide defaults set the baseline, then the role hierarchy, sharing rules, teams, and manual sharing open access upward and outward. This lesson ties that stack to data modeling by showing how ownership and the lookup versus master-detail choice determine who can see each record, and how to design private-by-default, few-rules models that scale. Includes a configuration walkthrough, the exam traps, and a worked example. Day 3 of the Platform Data Architect exam prep."
+date: "September 16, 2026"
+author: "Adroit Consulting"
+readTime: "17 min read"
+tags: [Salesforce, Data Architecture, Security, Certification]
+---
+
+A data model and a security model are not two things. On Salesforce they are one design, because how records are shaped decides who can see them. Requirement dm-2a asks you to design a scalable data model that obeys the current security and sharing model, given a scenario, covering how ownership, sharing rules, and record access interact with object and relationship design. [^1]
+
+Day one gave you the relationship decision: master-detail or lookup. Day three reveals what that decision really bought. Master-detail hands the child's ownership and sharing to the parent. Lookup lets the child keep its own owner. The moment you pick one, you have also picked who can see the child, whether configurable sharing rules will be needed, and how much sharing recalculation the org will pay for. [^2][^3] This lesson makes that connection explicit, then teaches the scalable shape: private by default, opened by a small number of rules, with shallow roles and a model that lets field-level security apply cleanly.
+
+## Deep Dive
+
+### The sharing stack starts with OWD and opens upward
+
+Access to a Salesforce record is determined by a stack of mechanisms, and the ordering matters. Organization-wide defaults (OWD) set the baseline: for each object, how much access the users have by default. Then the mechanisms that open access up sit on top of that baseline: the role hierarchy, sharing rules, manual sharing, account teams, and territory management. [^4] Nothing in the upper layers grants a user less access than OWD permits, and nothing in OWD grants the kind of targeted access the upper layers exist to add. [^2]
+
+This is why a model that ignores OWD is guaranteed to fight the permissions layer forever. [^2] If you dismiss the baseline and try to satisfy every requirement with rules, you are building exceptions on top of a foundation you never chose. The architect's habit is to set OWD deliberately, per object, so that the baseline itself is the intended default, and then to use exactly as many rules as the business needs to reopen it. [^2]
+
+The scalable pattern is stated as a design principle: OWD should be as private as the business allows, then reopened with a small number of rules. [^4] Open by default and restrictive by exception is the invertible anti-pattern. Wide-open OWD plus many restrictive rules scales poorly and is hard to audit, because every hole must be plugged individually and the summary access a user already has is invisible at a glance. [^2][^4] The exam phrasing to recognize is "private by default, open by exception." When you see open OWD defended as a starting point, you are seeing a scaling problem in the making.
+
+### Ownership is the anchor of every sharing decision
+
+Every record in Salesforce has an owner, and ownership is the anchor of sharing. The role hierarchy, owner-based sharing rules, and account teams all key off who owns a record. So the first question in any sharing design is not "who should see this" but "who owns it," because almost everything else hangs from that answer. [^2]
+
+The relationship type decides it. In a master-detail relationship, the child record does not have its own owner. Its ownership is controlled by the parent: the detail record's owner is inherited from the master, and the child's access follows the parent's access. [^3] In a lookup relationship, the child keeps its own owner and can be owned independently of the parent. [^2]
+
+That single difference cascades through the whole security model. A master-detail child inherits the parent's sharing, so no configurable sharing rules are needed to make the child visible to the same users as its parent. That native inheritance is the cleanest way to satisfy a "child visible exactly where its parent is visible" requirement. [^3][^5] A lookup child, by contrast, must be opened explicitly if its access should mirror the parent's, and it may be opened to different users than the parent when the requirement demands it. [^2]
+
+So the exam distractor pattern emerges. When a scenario says the child must be visible to exactly the same users as the parent, with no extra rules, the answer is master-detail, because lookup would force explicit sharing rules and polymorphic or junction designs grant no implicit inheritance. [^5] When the requirement is the opposite, that the child must be visible even where the parent is not, the answer is lookup plus rules, because master-detail would force the child to inherit the restricted parent. That dependency, understood in both directions, is the heart of requirement dm-2a.
+
+Shared ownership also binds. When an object is owned by a queue rather than a person, the role-hierarchy-based access to its records disappears, because a hierarchy is a chain of people, not a queue. Architects who forget that queues change the sharing shape are in for a surprise the first time a manager cannot see a queued record a subordinate queued.
+
+### The role hierarchy grants upward visibility, never lateral
+
+The role hierarchy is the mechanism that lets a manager see records owned by the people below them. It grants upward visibility: a user's record access extends to records owned by anyone beneath them in the hierarchy, in the branches that roll up to their role. [^6]
+
+What it does not do is what trip candidates up. It does not grant lateral visibility between peers at the same level, and it does not grant visibility into branches outside a user's own hierarchy path. [^5][^6] Two sales reps under the same manager cannot see each other's records through the hierarchy; the manager sees both, but the reps see neither the other's records nor any other sibling branch. Lateral sharing, across peers or across business units at the same level, requires a different mechanism: a sharing rule, an account team, or territory management. [^4][^6]
+
+The quiz in this lesson tests exactly this. A sales org wants a private baseline but needs a manager to see records owned by people below them across two business units. The mechanism is the role hierarchy, which grants upward visibility to managers. Public read/write OWD would destroy the private baseline. A "share with peers" rule addresses the wrong target. And territory management is an alternative for a different class of scenario, not the only mechanism for manager visibility. [^5][^6]
+
+### Sharing cost grows with hierarchy depth and rule count
+
+Scalable sharing is not just correct access. It is cheap access, because every access decision has a maintenance cost that scales with the shape. The platform recalculates sharing in response to changes, and the amount of work in a recalculation depends on how deep the hierarchy is and how many rules, teams, and ownership changes there are. [^4]
+
+The two factors that most degrade sharing performance at large scale are a very deep role hierarchy and a large number of criteria-based sharing rules and account team members. [^5][^4] A deep hierarchy makes every recalculation touch more levels. Many rules and teams mean every ownership change, every rule-eligible record insert, and every membership change triggers a wide net of sharing recalculation. Frequent ownership changes amplify all of it, because each reparent or reassignment is a recalculation trigger on a large affected set. [^4]
+
+The design response is structural. Prefer shallow role hierarchies that align to the access model rather than to the org chart verbatim. [^6] Keep the count of opening rules small, which the private-by-default baseline makes possible. Use account and opportunity teams sparingly, knowing each member is an entry in a shared-access set. Reconcile the hierarchy to how access flows, not to how reporting is organized. A hierarchy built to mirror a nine-level corporate structure, when managers genuinely need only two levels of visibility, is a hierarchy that overpays in recalculation cost for access it never uses. [^2][^4]
+
+### External users add a second, separate sharing layer
+
+When the model must serve external users through Experience Cloud (for partners or community members), the sharing design gains a second dimension because external access is configured separately from internal access. External users have their own OWD settings, distinct from the internal OWD for the same objects. [^7] A portal user default that mirrors your internal private baseline can lock partners out of the accounts they should transact on, while an internal public OWD says nothing about what a community member can see.
+
+The mechanism to open access for high-volume external users is the sharing set, sometimes paired with sharing groups. A sharing set grants external users access to records through a lookup relationship, for example a portal user whose user record links to an account can be granted access to records related to that account. This is the scalable high-volume answer to "partners see their own accounts," because it is defined by the relationship rather than by a rule per partner. [^7][^8] When you model for external access, you anticipate that the two sharing models differ and that the data shape (a lookup from the external user to the account) is part of the requirement. [^7]
+
+### Security-by-design extends to fields and permissions
+
+Several more controls belong in a scalable model. Field-level security (FLS) controls which users can see and read fields, and permission sets bundle object, field, and record access so you can assign a coherent set of permissions instead of proliferating profiles. Permission set groups sit above permission sets: they assemble several permission sets into a single assignable unit, so a user type gets its access as one named bundle instead of a stack of overlapping assignments. That matters more as a model grows, because the question "why can this person see this field" has a smaller answer. Delegated administration is the third control. When a regional or business-unit team must administer part of the model themselves, you delegate administration of the selected objects and fields to them rather than widening the administrator profile, and the delegation has to line up with how those objects are owned. [^4][^6] The design consequence is that you should model fields so that FLS can be applied cleanly, and you should group permissions with permission sets and permission set groups for reuse. [^4][^6] A field that borrows a profile-based exception nobody can audit is a field that will be misconfigured. A field that sits cleanly under a named permission set is a field whose access is explainable.
+
+Implicit sharing is the final piece, and it is important because it silently overrides OWD in specific directions. Parent-to-child and child-to-parent sharing, read-only, grant implicit access in certain object pairs, such as Case and Contact, regardless of OWD. Portal implicit sharing similarly grants external users access to records related to their shared records. [^2] Knowing where implicit sharing already grants access is essential to predicting what users actually see, because it operates underneath the baseline you set and can surprise you when a child object seems more open than its OWD suggests. [^2]
+
+## Worked Example
+
+A service organization must share case records. Managers need to see every case owned by agents below them, across two support teams. Agents must not see each other's cases. The designer picks a private OWD as the baseline, a shallow role hierarchy with the two support teams under one manager role, and no per-case rules, because upward visibility handles the manager requirement natively. [^4][^6]
+
+Then the same org adds partner organizations. Partner users must see only the accounts they own through a lookup on their Experience Cloud user record, at high volume. The designer adds external OWD separately from internal, and a sharing set bound to the lookup relationship so each partner sees its related records without a rule per partner. [^7][^8]
+
+The model obeys the sharing model because the sharing model was designed first: baseline chosen, hierarchy shaped to access, internal rules minimal, external access isolated. No defensive rules, no public default, no unbounded recalculation.
+
+## Configuration Walkthrough
+
+Run this in a sandbox as you read to feel how the stack orders.
+
+1. Set a private baseline. From Setup, open Sharing Settings, and set the Organization-Wide Defaults for each object to Private before adding any rules. This is the secure baseline that makes "open by exception" possible and auditable. [^4]
+2. Design the role hierarchy. From Setup, open Roles, and build a hierarchy that is shallow and aligned to the access model rather than to the org chart. Two support-team roles under one manager role, rather than a nine-level tree, is the shape that scales. [^6]
+3. Add only the opening rules you need. From Setup, open Sharing Settings, then the object, then Sharing Rules, and add criteria-based or owner-based rules that reopen access from the private baseline. Keep the count small; each rule is a recalculation cost. [^2][^4]
+4. Bundle permissions with permission sets. From Setup, open Permission Sets, and package object, field, and record access so it can be assigned and reused rather than duplicated across profiles. Model fields so field-level security applies to them cleanly. [^4][^6]
+5. Configure the external layer separately. From Setup, open Sharing Settings, then External Sharing (under Experience Cloud), and set external OWD and sharing sets for partner or community users. Keep internal and external defaults distinct. [^7][^8]
+
+## Exam Traps
+
+**Trap one: assuming the role hierarchy grants lateral access.** It grants upward visibility to managers and downward visibility is not a thing, but it never grants peer or cross-branch visibility. [^5][^6] When a scenario needs peers to see each other, or managers to see across business units outside their path, the role hierarchy is the wrong tool and a sharing rule, team, or territory is the right one. [^6]
+
+**Trap two: building on a public-write baseline.** Setting OWD to Public Read/Write and then trying to restrict with many rules inverts the scalable pattern. [^2][^4] The design that scales is a private baseline plus a small number of opening rules, stated as private by default, open by exception. Wide-open plus restrictive is hard to audit and expensive to maintain.
+
+**Trap three: forgetting who master-detail makes the owner.** Master-detail children inherit the parent's owner and sharing, so choosing MD over lookup silently changes who can see child records. [^2][^3][^5] If the child should be visible wherever the parent is visible with no rules, master-detail is the answer. If the child must be visible independently of the parent, master-detail boxes you in and lookup plus rules is the answer.
+
+## What's Next
+
+You can now read the sharing model as a consequence of design: start from OWD, open with a few rules, keep the hierarchy shallow, isolate external access, and let ownership do the work that relationships already decided. Lesson 4, Data-model scenarios given security/sharing constraints, flips this around. Where today you learned the mechanisms, lesson 4 hands you a customer scenario with specific security and sharing constraints and asks you to recommend a data model that satisfies them, working backward from who must see what, through OWD and hierarchy and rules, to the relationship choice. It is the first lesson that tests the whole process as a scenario, which is how the exam asks it.
+
+## Related Requirements
+
+- Lesson 2 of 42 (dm-1b): Modeling design considerations, normalized vs denormalized, standard vs custom, common data model
+- Lesson 4 of 42 (dm-2b): Data-model scenarios given security/sharing constraints
+- Lesson 5 of 42 (dm-3a): Business and technical metadata
+
+## References
+
+[^1]: Platform Data Architect exam guide, Salesforce. [trailhead.salesforce.com](https://trailhead.salesforce.com/en/credentials/platformdataarchitect)
+[^2]: Control Access to Records, Trailhead Data Security module. [trailhead.salesforce.com](https://trailhead.salesforce.com/content/learn/modules/data_security/data_security_records)
+[^3]: Considerations for Object Relationships. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.relationships_considerations.htm&language=en_US&type=5)
+[^4]: Sharing Overview. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.security_sharing_overview.htm&language=en_US&type=5)
+[^5]: Sharing Rules, Trailhead Data Security module. [trailhead.salesforce.com](https://trailhead.salesforce.com/content/learn/modules/data_security/data_security_sharing_rules)
+[^6]: Role Hierarchies. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.security_roles_explained.htm&language=en_US&type=5)
+[^7]: Create a Sharing Set for Experience Cloud Site Users. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.networks_setting_light_users.htm&language=en_US&type=5)
+[^8]: Sharing Sets and Sharing Groups, Experience Cloud Security. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.networks_setting_light_users.htm&language=en_US&type=5)

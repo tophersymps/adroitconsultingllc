@@ -1,0 +1,176 @@
+---
+title: "Sharing & Visibility Architect P-2a: Field-Level Security Fundamentals: Field Permissions, Standard vs Custom Fields"
+slug: day-03-p-2a-field-level-security-fundamentals-field-permission
+series: salesforce-sharing-visibility-architect
+lesson: 3
+excerpt: "Field-level security in full: the three field permission states and why Hidden is the only one that removes a field from view, how FLS sits independently on top of object permissions, where FLS is honored and where it silently is not, and the programmatic mirror in schema describe, user mode, and stripInaccessible. Includes a worked scenario, a setup walkthrough, and the exam traps. Day 3 of the Platform Sharing and Visibility Architect exam prep."
+date: "September 16, 2026"
+author: "Adroit Consulting"
+readTime: "18 min read"
+tags: [Salesforce, Security, Sharing, Certification]
+---
+
+Object permissions answer a yes or no question about a whole object: can this user work with records of this type at all. Field-level security answers the question underneath it: of the fields on that object, which ones can this user see and which ones can this user change. The two layers are independent, and the independence is the entire exam objective. A user can hold full Read, Create, and Edit on Opportunity and still be unable to see a single discount value, and nothing about that combination is unusual.
+
+Field-level security, abbreviated FLS and documented in Setup as field permissions, lets you specify whether users can view or edit each field for an object. [^1] That definition captures the two verbs accurately and leaves out the third state that matters most: not seeing the field at all. The requirement to hide is the one that fails most often in real orgs, because the mechanisms people reach for to hide a field, such as taking it off a page layout, are not security mechanisms at all.
+
+This is lesson 3 of a 36-lesson course, and it sits in the second largest domain on the Sharing and Visibility Architect exam, Permissions to Standard Objects, Custom Objects, and Fields at 27 percent. The objective asks you to recommend the correct level of field permissions needed to provide appropriate access to a set of users. The word "level" is doing the work: read versus edit versus no access, applied to the right fields, for the right users, with the understanding that the answer changes depending on which surface the user is looking through.
+
+## Deep Dive
+
+### Three states, and only one of them hides
+
+A field inside a profile or permission set can be set to three things, and the platform's own framing of field permissions as view or edit is the reason candidates collapse them into two. [^1]
+
+- Visible and editable: the field appears and the user can change it.
+- Visible and read-only: the field appears and the user cannot change it.
+- Hidden: the field does not appear for that user.
+
+Read-only is a write control. Hidden is a read control. That sentence is the single most valuable thing in this lesson, because the exam and real requirements both phrase the ask in a way that makes read-only feel sufficient. If a requirement says a user must never see a field, read-only does not satisfy it. The field is still rendered, still returned by the UI, still visible in a report they can run, and still present in an API response for a query they have access to. Only Hidden removes it from the field set the user is working with. [^1][^7]
+
+The platform has no fourth state and no field-level equivalent of a partial grant. You cannot make a field read-only for one record and editable for another through FLS, because FLS is a property of the field on the object for that user, not a property of a record. Record-by-record differences belong to the sharing model. This is the boundary between the two halves of the exam, and questions cross it deliberately.
+
+### FLS sits independently on top of object permissions
+
+Object permissions and field permissions are granted in the same two places, which is exactly why they get confused. Both live in a profile and in a permission set. [^1][^3] The behavior when they combine is the first thing to lock down.
+
+Reading an object does not give a user access to every field on it. A user with Read on Opportunity can read opportunities they can reach, and can see only the fields their FLS makes visible. The documentation is explicit that field-level security restricts the fields a user can see and edit even when they have object-level access. [^1]
+
+The reverse also holds: hiding a field does not take away an object. A user whose FLS hides the compensation field still has whatever object permissions they had. They can create, edit, and delete records; they simply cannot populate or read that one attribute. This asymmetry is why FLS is described as a complementary control rather than a competing one. Object permissions decide the records, sharing decides which of those records a user can reach, and FLS decides the columns. [^2][^7]
+
+There is one object permission that deliberately reaches into the field layer, and it is worth knowing before Day 6. View All Records and Modify All Records, the two object permissions that override sharing, do not override field-level security by default, and Salesforce documents View All Fields as the object permission that grants field access for every field on the object. [^2] So an org that wants a user to see everything on an object has to grant the object-level override and the field-level visibility, not just the first.
+
+### Standard fields and custom fields behave the same mechanically, but the requirement differs
+
+The mechanism is identical. A standard field such as Phone, Account Number, or Owner is configured for FLS in the same grid as a custom field with a `__c` suffix. [^1] There is no separate standard-field security model, and any exam option implying that standard fields cannot be secured is wrong.
+
+What differs is the shape of the requirement. Sensitive business data tends to live in custom fields, so the common ask is to hide them outright. Standard fields are more often required by the platform or by the business object itself, which pushes the requirement toward read-only instead of hidden. Name is the canonical case. It is required for most objects, it appears in search results, list views, and record highlights by the platform's own design, and you cannot meaningfully hide it. Restricting Name for a group means making it read-only and accepting that it remains visible.
+
+Owners, system fields, and fields the platform depends on for automation follow the same logic. Making a required standard field hidden can produce a configuration that the platform then works around in surprising places, and the safe reading of such a requirement is "visible but locked" unless the scenario is unambiguous about not seeing it at all. [^1]
+
+Custom fields carry a second obligation that standard fields do not. Because a page layout and a set of FLS settings are separate layers, adding a custom field to the object does not automatically put it where you want it on a record page, and hiding it in FLS does not remove it from the layout definition. You maintain the field permission, the page layout, and any compact layout as three separate artifacts, and a design that changes only one of them is an incomplete design. [^5]
+
+### FLS is object-wide and user-group-scoped, never record-scoped
+
+Two scoping facts deserve their own section because they generate the majority of wrong answers in this domain.
+
+First, FLS applies to every record of the object. If a user can read opportunities at all, their field visibility on Opportunity is identical across every opportunity they can reach. There is no mechanism to hide a field on one record and show it on another through field permissions. [^1] When a scenario describes per-record field differences, the requirement is either a separate object, a record type with different layouts (which changes presentation, not access), or a genuinely different design.
+
+Second, FLS is configured per profile and per permission set, which means the granularity of "who" is the same as the granularity of everything else in the permission model. Two groups of users with different field needs are two configurations: read-only for support in the support profile or a support permission set, editable for sales in the sales profile. [^1][^3] That is exactly the profile-level difference the field permission grid exists to express.
+
+And the additive rule from Lesson 1 applies here without modification. Field permissions in permission sets add to the profile. A permission set cannot re-hide a field the profile makes visible, and a permission set that grants Edit on a field the profile marks read-only raises the user to editable. [^4] The union is the effective state, which means an audit that looks only at the profile will miss the grant that actually made the field editable.
+
+### The surfaces where FLS is honored, and the ones where it is not
+
+This is the section the exam mines hardest, because the correct answer to "is this field secure" depends entirely on which path the data travels.
+
+Surface one, the record page. The Lightning record page respects FLS in the sense that a hidden field does not render. Page layouts and Dynamic Forms control what appears, but they are not the security control. Removing a field from a layout is a presentation change, and the platform's own guidance treats layouts as UI configuration while field permissions are the access control. [^5]
+
+Surface two, search, list views, and reports. These surfaces read from FLS, not from the page layout. A field that is visible in FLS but absent from a layout is still available in a report, still displayable in a list view column, and still part of what search can surface. [^5] This is the exact reason "we removed it from the page layout" is not an answer to a data exposure question, and it is the platform behavior the third quiz question tests.
+
+Surface three, report and list view filters and groupings. A field hidden by FLS is not simply blank; it cannot be used at all by that user as a filter or grouping, because it is not part of their field set.
+
+Surface four, the API. A user whose FLS hides a field cannot retrieve it through SOQL or the REST and Bulk APIs, because the API layer honors the running user's field permissions. This matters for integration design: an integration running as a user with restrictive FLS sees the same restricted field set, which is sometimes a surprise during a data migration.
+
+Surface five, Apex. This is where the assumption breaks, and it breaks in a direction that leaks data rather than hiding it. SOQL written in Apex runs in system mode by default, and system mode does not enforce field-level security. A query that selects a hidden field returns that field to privileged code, and if that code returns the record to a client, the field reaches the client. [^7][^10][^11] The enforcement has to be written explicitly, which is the next section.
+
+### The programmatic mirror: describe checks, user mode, and stripInaccessible
+
+Because Apex runs with elevated permissions by default, the developer's job is to re-impose the running user's field visibility. Salesforce provides three tools, and an architect should be able to name which one fits which path.
+
+Schema describe checks are the direct mirror of FLS. The schema for an object exposes its fields, and each field describe answers `isAccessible()` and `isUpdateable()` for the running user. [^7] This is the check to use when a method needs to branch, for example to throw a clean error before running a query that would fail, or to decide whether to include an optional field in a response.
+
+User mode is the modern way to make database operations behave like the running user. Queries can request user mode with `WITH USER_MODE`, which makes the platform respect object permissions, field-level security, and sharing for the running user. [^10][^11] Salesforce recommends user mode over the older `WITH SECURITY_ENFORCED` clause because user mode has fewer limitations. [^11] The older clause also enforces object and field access on a SELECT, but it is strict and all-or-nothing: a single inaccessible field in the select list fails the entire query with an error rather than returning partial data. [^12]
+
+`Security.stripInaccessible` is the third tool and the most useful for boundaries. It takes a list of records and an access type, such as READABLE or CREATABLE, and returns the records with the fields the running user cannot access removed. [^7][^8] Salesforce documents it as the way to enforce field-level and object-level data protection, and it is the right answer for two specific paths: sanitizing query results before they are returned to a Lightning or Experience client, and sanitizing inbound payloads before DML so users cannot write fields they lack permission for. [^8][^9]
+
+The pattern that follows from all three is straightforward to state and easy to remember: keep user-facing data classes in the running user's context, prefer user mode for the query itself, and use stripInaccessible at the boundary where records cross into or out of the client. [^9]
+
+### One layer, many surfaces: how FLS relates to layouts, record types, and sharing
+
+It is worth putting FLS in its place in the stack before the exam does it for you, because the distractors in this objective are almost always a different layer wearing the right vocabulary.
+
+Sharing controls which records exist for a user. Object permissions control what the user may do to those records. FLS controls which fields of those records are in play. Page layouts, compact layouts, and Dynamic Forms control how the record page is arranged, and record types select which layout and which picklist values apply for a given business process. [^5][^6]
+
+Only the first three are security. The last group is presentation, and the exam's third question is a presentation layer being mistaken for a security layer. A field removed from a page layout but visible in FLS is fully readable in reports, list views, and search, which means the data is exposed to everyone the sharing model reaches. The durable fix is a field permission change, and the layout change is cosmetic housekeeping that goes alongside it. [^5]
+
+## Worked Scenario
+
+A Sales user should see the Opportunity Amount but must never see a custom Discount field. The company also wants the Discount field hidden from search results, list views, and reports, and it wants the restriction to hold for anything the sales team can reach.
+
+The first design instinct is to remove Discount from the sales page layout. It is the visible change, it takes thirty seconds, and it produces exactly the wrong result: the field disappears from the record page and remains available in every other surface, because layouts do not participate in field access. The second instinct is to set Discount to Read-Only, which is closer but still wrong for the stated requirement. Read-only means the user sees the value and cannot change it, and the requirement is that the user never sees it.
+
+The correct configuration is a field permission change. In the sales profile, or in a sales permission set if the sales population is not uniformly on one profile, open Field-Level Security for Opportunity and set Discount to Hidden while leaving Amount visible and, if the business needs it, editable. [^1] That single change removes Discount from the user's field set across the record page, search, list views, and reports, because those surfaces read from field permissions rather than from layouts.
+
+Then the second half of the work begins, and it is the half that gets skipped. The org has an Apex service that returns opportunity records to a Lightning component. If that service queries Discount in system mode and returns the record, the hidden field reaches the client regardless of the FLS change. The fix is to make the query respect user mode or to strip inaccessible fields before returning. [^7][^11] Finally, the layout change is still worth making, because a field hidden by FLS that remains on the layout just wastes space, but it is now housekeeping rather than the control. The requirement is satisfied by the field permission and the programmatic enforcement together, and by nothing else in the design.
+
+## Configuration Walkthrough
+
+Run this sequence in a sandbox with a custom field, a test user, and one Apex method.
+
+1. Identify the field and its category. In Setup, open Object Manager, select the object, and open Fields & Relationships to confirm the field exists, note whether it is standard or custom, and note whether it is required. A required standard field will push the design toward read-only rather than hidden. [^1]
+2. Decide the state before you touch anything. Write down which of the three states the requirement actually needs: visible and editable, visible and read-only, or hidden. Most FLS failures are a requirement that said hidden and a configuration that delivered read-only. [^1]
+3. Set the field permission in the right artifact. For a whole profile, open the profile and use its Field-Level Security page for the object. For a subset of users, create or open a permission set, find the object in the Find Settings box, select it, and use the field permissions grid alongside the object permissions grid. [^1][^3]
+4. Remember the additive rule while you are in that grid. If the profile already grants visibility and the requirement is to remove it, a permission set cannot do it. Field permissions in permission sets only add, so subtracting a field means editing the profile or moving the user to a profile that does not grant it. [^4]
+5. Fix the presentation layer next, not first. If the field is hidden by FLS, remove it from the page layout and check the compact layout so the record page and the highlights panel stay consistent. If the field is read-only, leaving it on the layout is usually correct, because the user needs to see the value. [^5]
+6. Check the report and search surfaces explicitly. Run a report as the affected user with a column for the field, try a list view column, and try a search term that would match a value in the field. If the field appears in any of those while FLS says Hidden, the change was applied to the wrong profile or permission set.
+7. Enforce it in code if any Apex or integration path touches the field. Prefer user mode for the query, or wrap the results with `Security.stripInaccessible` before returning them, and add schema describe checks where the method needs to branch. [^7][^11]
+8. Validate with a real login rather than a preview. Log in as a test user whose profile has the FLS change, open a record, open a report, and open the API-backed component, and confirm the field is absent in all three. Then log in as a user who should still see it and confirm nothing regressed for them.
+
+## Exam Traps
+
+Trap one: choosing Read-Only when the requirement says "must not see". Read-only leaves the field visible and only prevents editing. Hidden is the only state that removes it from the user's view, and the exam uses the phrase "never see" as the signal. [^1]
+
+Trap two: treating page layout changes as a security control. Layouts govern the record page. Search, list views, and reports read from field-level security, so a field visible in FLS but removed from a layout is still exposed there. [^5] The layered answer is both, with FLS doing the security work.
+
+Trap three: assuming Apex honors FLS automatically. Apex runs in system mode by default, and system mode does not enforce field-level security. User-mode SOQL returns hidden fields to privileged code unless the query uses user mode or the results are stripped. [^7][^11] The exam phrases this as hidden fields being "still returned" by user-mode Apex unless enforced, and that is the documented behavior.
+
+Trap four: believing FLS applies only to custom fields. The mechanism is identical for standard and custom fields, and any option that exempts standard fields from field-level security is describing a platform that does not exist. [^1]
+
+Trap five: trying to re-hide a field with a permission set. Permission sets are purely additive, and field permissions follow the same rule as object permissions. Nothing can subtract a field visibility the profile grants. [^4]
+
+Trap six: assuming a field hidden by FLS will behave the same everywhere a developer expects. FLS does not stop a system-mode query, does not stop a privileged integration running as a user with broader field access, and does not stop a report built by a user whose profile grants visibility. Field-level security is a strong control over user-facing surfaces and a partial control over code, and the architect's answer should say which. [^7][^11]
+
+Trap seven: confusing FLS with record types. Record types select page layouts, picklist values, and business processes for a subset of users on the same object. They do not hide fields from reports and they do not grant or deny field access. [^6]
+
+## Try It
+
+Build the three states and watch which surfaces respond to each.
+
+Create a custom field on Account, then create a test permission set and set the field to Hidden for it. Assign it to a test user whose profile does not otherwise grant the field. Log in as that user and check four places: the record page, a list view with the field as a column, a report with the field as a column, and a search for a value you know the field contains. [^1][^5] The field should be absent from all four.
+
+Now switch the field to Read-Only in that permission set and repeat the four checks. The field reappears everywhere, and the only thing that changed is that edits are blocked. That comparison is the difference between the two states, felt rather than read.
+
+Next, remove the field from the page layout only, set the field permission back to visible and editable, and repeat the checks. The record page loses the field, and the list view, report, and search keep it. That is the demonstration that layouts are presentation. [^5]
+
+Finish with the code path. Write a small Apex method that selects the field and returns the records, and call it as the test user whose FLS hides the field. The value comes back, because system mode does not enforce field-level security. [^7][^11] Change the query to user mode, or wrap the results with `Security.stripInaccessible(AccessType.READABLE, records)`, and call it again. The field is gone. [^7][^8] An architect who has seen that difference once will never again answer a field-security scenario with a layout change.
+
+## What's Next
+
+You can now state the three field permission states without hesitation, explain why Hidden is the only one that hides, place FLS correctly as a layer independent of object permissions and sharing, and name the surfaces that honor it and the code paths that do not. Lesson 4, FLS Scenarios: Restricting Standard Fields, FLS vs Record Types (p-2b), applies all of it under scenario pressure. It works through the standard fields you cannot fully hide, the difference between FLS and record types when a question offers both, and the reason a field absent from a page layout can still be edited on a record page.
+
+## Related Requirements
+
+- Lesson 2 of 36 (p-1b): Object-permission scenarios, mass-assign and license-based patterns
+- Lesson 4 of 36 (p-2b): FLS scenarios, restricting standard fields, FLS versus record types
+- Lesson 5 of 36 (p-3a): UI-level hiding, record types, page layouts, Lightning apps, compact layouts, Dynamic Forms
+- Lesson 9 of 36 (p-5a): Programmatic enforcement of CRUD and FLS in Apex
+
+## References
+
+[^1]: Field Permissions. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.users_profiles_field_perms.htm&type=5)
+[^2]: "View All" and "Modify All" Permissions Overview. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.users_profiles_view_all_mod_all.htm&type=5)
+[^3]: Enable Object Permissions in Permission Sets. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.perm_sets_objects_and_fields.htm&type=5)
+[^4]: Permission Sets. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.perm_sets_overview.htm&type=5)
+[^5]: The Enhanced Page Layout Editor. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.customize_layoutcustomize_pd.htm&type=5)
+[^6]: Create Record Types. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.creating_record_types.htm&type=5)
+[^7]: Apex Security and Sharing Model. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_security_sharing_chapter.htm)
+[^8]: Security Class, `stripInaccessible`. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexref.meta/apexref/apex_class_System_Security.htm)
+[^9]: Enforce Field-Level and Object-Level Data Protection with `stripInaccessible`. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_classes_with_security_stripInaccessible.htm)
+[^10]: Enforce User Mode for Database Operations. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_classes_enforce_usermode.htm)
+[^11]: WITH, SOQL and SOSL Reference. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.soql_sosl.meta/soql_sosl/sforce_api_calls_soql_select_with.htm)
+[^12]: Securing Data in Apex Controllers. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.lightning.meta/lightning/apex_crud_fls.htm)
+[^13]: Protect Your Application from CRUD/FLS Vulnerabilities. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.secure_coding_guide.meta/secure_coding_guide/secure_coding_access_control_protect_from_crud_fls_vulnerabilities.htm)
+[^14]: SOQL SELECT Syntax. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.soql_sosl.meta/soql_sosl/sforce_api_calls_soql_select.htm)
+[^15]: Control Who Sees What. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.security_data_access.htm&type=5)
+[^16]: Salesforce Certified Platform Sharing and Visibility Architect Exam Guide. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005298977&language=en_US&type=1)

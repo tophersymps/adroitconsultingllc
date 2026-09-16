@@ -1,0 +1,117 @@
+---
+title: "Data Architect DM-1B: Modeling Design Considerations: Normalized vs Denormalized, Standard vs Custom, Common Data Model"
+slug: day-02-dm-1b-modeling-design-considerations-normalized-vs-denor
+series: salesforce-data-architect
+lesson: 2
+excerpt: "How to make the modeling trade-offs that day one only named: normalization versus denormalization and when each wins on a shallow-query platform, extending standard objects versus building custom ones, and the Salesforce common data model built around accounts, contacts, and person accounts that underpins Customer 360. Includes a configuration walkthrough, the exam traps, and a worked example. Day 2 of the Platform Data Architect exam prep."
+date: "September 16, 2026"
+author: "Adroit Consulting"
+readTime: "17 min read"
+tags: [Salesforce, Data Architecture, Data Modeling, Certification]
+---
+
+Day one taught you to name the building blocks: objects, fields, lookup versus master-detail, record types, roll-ups. This lesson puts those blocks under design pressure. Requirement dm-1b asks you to compare and contrast normalization and denormalization, decide when to extend a standard object and when to build a custom one, and understand the Salesforce common data model (accounts, contacts, person accounts, and the relationships that underpin Customer 360) well enough to pick the right trade-off for a customer scenario. [^1]
+
+The shift in the exam's verb matters. Day one asked what a feature is. Day two asks which design you would choose and why. Every concept in this lesson has a default answer and a scenario that flips it. A stable lookup value that forces five hops is over-normalized. A standard object that matches most of a need is usually the right extension target. A Person Account enablement is permanent. Recognizing those defaults and the splits that override them is the skill being tested. [^2]
+
+## Deep Dive
+
+### Normalization versus denormalization is a cost trade, not a style point
+
+Normalization is the relational discipline of storing one fact in one place and referencing it through a relationship. The value lives once, on the record that owns it, and every other record points at it. The payoff is the absence of redundancy. There is exactly one place to update a value, so there is no risk that two copies drift apart. That is what the textbook calls avoiding update anomalies: you change the canonical value once and every reference sees the change.
+
+Denormalization is the opposite move. You copy a value onto a related record, or arrange for it to appear there through a formula or a lookup reach-through, so that reading the transactional record gives you the value without following a chain. The payoff is read speed and reporting simplicity. The cost is that the same fact now exists in multiple places, and you own the job of keeping those copies consistent.
+
+For a traditional SQL analyst, denormalization is a smell. For a Salesforce architect, it is frequently the correct answer, and the reason is structural. Salesforce has no arbitrary SQL join. Reports and queries work down a hierarchy of related objects, and the platform is shallow in exactly the way that punishes deep lookup chains. [^3] When every report needs the region, the account type, and the industry for each opportunity, you either reach across one lookup at a time or you put the value where the report starts.
+
+The platform gives you two declarative ways to denormalize without storing a copy of the data. A formula field can reach through a lookup to a parent field and render it on the child record, with zero storage cost because the value is recomputed on read rather than persisted. [^4] A roll-up summary field brings an aggregation from detail records up to the master, with a recompute cost rather than a storage cost, and only where a master-detail relationship exists. [^5] Both are denormalization, and both are sanctioned on-platform patterns that cost you nothing in maintenance the way a manually maintained stored copy would.
+
+The classic architecture error in this domain is over-normalizing reference data. Someone designs a shared Code object, or a Region object, and hangs a lookup to it off the transactional object. Every report that needs the value must hop through that lookup, and on a platform where reporting depth is measured in single-lookup hops, that turns every routine report into a multi-level join with degraded query performance at volume. [^3] A stable value that never changes is the worst candidate for normalization, because the entire reason to normalize, avoiding update anomalies, evaporates when nothing ever updates. The best candidate is a code that genuinely changes and that many records must stay consistent with.
+
+The recommendation pattern the exam rewards: profile the reference value. If it is stable and read-heavy (region, business unit, industry, country grouping), denormalize it onto the transactional record, either as a stored field or a formula. If it changes frequently and many records must reflect that change together, keep it normalized and reach it by lookup. The quiz in this lesson tests the stable end of that spectrum directly: five lookup hops to reach a region that never changes is an invitation to denormalize the region onto the transactional object, not to add a shared Region object that makes the chain longer. [^2][^6]
+
+### The standard data model is the default, and extending beats replacing
+
+Salesforce ships a default data model for a reason. Account, Contact, Opportunity, Case, and Lead are not just tables; they come with platform behavior that a custom object would force you to rebuild. Activities and feed tracking attach to these objects for free. Sharing has sensible defaults. Forecasting, service entitlements, and the standard report types are built against them. The documented design principle is to prefer standard objects when they match a substantial share of the need, roughly 80 percent in the common framing, and to extend them with custom fields rather than replace them. [^1][^7]
+
+Replace is the dangerous word. If your requirement is "we track companies and the people who work for them," rebuilding a parallel custom Company and Person object to avoid using Account and Contact buys you control over a model that the platform already handles better than you would, while forfeiting the ecosystem of apps, the reporting surface, and the free platform behavior. [^7] The documented position is unambiguous: before you create objects, you should understand which standard objects meet your needs, because the platform has already modeled common business scenarios in the standard objects. [^7]
+
+There are real costs to going custom. Standard objects cannot be renamed for reporting in some contexts, cannot be fully deleted because they carry org-wide dependencies, and their locked field sets stay with Salesforce's decisions. Custom objects give you full ownership of every field, layout, relationship, and naming choice, and you inherit the maintenance of each. [^7] So the honest trade-off is ownership versus ecosystem. A custom object is right when the behavior genuinely does not exist and you need full control. It is wrong when you are re-creating a standard concept to feel clever, because you give up free features to own something that was already adequate.
+
+The configuration path that follows from this is that most business data belongs as custom fields on standard objects. You add fields to Account rather than standing up a parallel Company object. That is the first step in this lesson's walkthrough, and it is a microcosm of the design philosophy: extend the standard model where it matches, and reserve full custom objects for where it does not. [^1][^7]
+
+### Person Accounts fuse the consumer with the account
+
+Person accounts are the platform's answer to B2C-style modeling. They pair a single individual as both an Account record and its related Contact record, so one consumer is one client through the account lens and one person through the contact lens. [^8] That pairing is what lets you use account-level features like opportunity tracking and case entitlement for an individual consumer who has no business account, while still having a contact on file. [^8]
+
+For an architect, the first thing to know is that this is a deliberate, org-wide, effectively irreversible decision. Person accounts cannot be created from standard business accounts; the feature is enabled by Salesforce and must be requested for new orgs, and once enabled it cannot be disabled. [^8] Enablement is not per record type and it is not toggled on and off. [^6] That permanence is exactly why the exam treats it as a design commitment rather than a configuration checkbox. If an organization models both individual consumers and business accounts, person accounts are ideal because both can live on the Account object and share the account-based features; if the organization is purely B2B, the consumer contact is just a Contact record and you gain nothing by fusing it.
+
+The trade-offs after enablement are behavioral. Lead conversion works differently. Record types and page layouts must be set up to handle person account records alongside business accounts, because a person account renders as a hybrid record with both account and contact fields. [^8] Reporting sees the two halves through tied account and contact reports, which produces its own quirks when you compare a report dimension across person versus business accounts. None of this is a reason to avoid person accounts where the model genuinely needs consumers. It is a reason to make the call as an architectural decision, with the permanence on the table, rather than as an afterthought. [^6]
+
+### The common data model is the canonical map, and MDM rides on it
+
+A common data model (CDM) is a canonical, business-level object map that is independent of any particular source system. It defines how the business thinks of its entities (customer, product, location, party) in clean terms, and it becomes the target that every source maps into. [^9] When an integration must pull four source systems, a CRM, an ERP, a legacy database, and a web platform, onto Salesforce, mapping each one directly to Salesforce produces a web of inconsistent field guesses. Mapping each source into the canonical model first, and then mapping the canonical model onto Salesforce, produces one consistent contract. [^9]
+
+This matters for several reasons. First, the canonical model decouples sources from targets. If a fifth source appears, you map it into the canonical model and nothing downstream changes. If Salesforce itself changes, you remap the canonical contract and no source is touched. Which is to say, the CDM is what keeps a multi-source integration honest, because it is the one place where the meaning of "customer" is agreed. [^9]
+
+The quiz tests this directly: when four source systems must map onto Salesforce, the artifact you produce first is the canonical common data model that maps source fields to target objects. Not a page layout per source, not a set of validation rules per source, not a separate custom object per source. All three of those alternatives fragment the model or come too late to establish the contract. [^6][^9]
+
+A canonical model is also the backbone of Master Data Management. Maturing your customer data across systems requires somewhere to agree on what a customer is before you can agree on whether two records are the same customer. That is a message that resurfaces across this course, but the version to internalize here is the simplest one: the CDM is the neutral map, the single source of truth for mapping, and the reason multi-system MDM and integration work has a foundation at all. [^9]
+
+### Naming and maintainability are governance, not cosmetics
+
+There is a layer of the lesson that the exam does not force and the platform still requires: a maintainable model has conventions. Wildcard and suffix naming, field-level help text, and description fields are how an org keeps itself intelligible as it grows. [^1] A field named within a consistent convention is searchable. Help text explains the field's meaning to the next person who inherits the org. Descriptions carry business context into the report and API surfaces.
+
+This is not boilerplate. Naming conventions are governance. They belong in the design from the start, because retrofitting them across a populated production object is a migration, not a cleanup. [^2] The exam rewards candidates who treat the maintainable-model layer as part of the deliverable, because a well-named model with documented fields is a model an org can actually operate.
+
+## Worked Example
+
+Put the trade-offs together. A retailer tracks sales opportunities. Each opportunity currently reaches its region through a five-record lookup chain, and regional reporting is slow. The requirement drivers are: regional reporting is the team's most-used report, region changes rarely, and there is interest in modeling individual consumer purchases for a new loyalty line.
+
+Start with the region. It is stable and read-heavy, so denormalize it. A formula field on Opportunity that renders the region from the account, or a stored region field populated at capture time, removes the five-hop cost from the dominant report. [^3][^4]
+
+Then consider the standard model. Sales opportunities, accounts, contacts, and the regional hierarchy all map to platform standards. The loyalty line adds consumer purchasers. Because the business now serves both business accounts and individual consumers, person accounts are the fit, and the org accepts that enablement is permanent before starting. [^8]
+
+Finally, the multi-channel integration that feeds into this org maps each source into a canonical customer model, then onto Account, Contact, and the custom loyalty fields. No bespoke Company object is built, because Account already carries companies. [^7][^9]
+
+The result: one faster report, one standard-extended model, one deliberate consumer decision, one canonical map. Every choice follows a stated trade-off rather than a default.
+
+## Configuration Walkthrough
+
+Run this in a sandbox as you read. Each step demonstrates one of the trade-offs.
+
+1. Extend the standard model. From Setup, open Object Manager, expand Account, and choose Fields & Relationships, then New to add custom fields. This is the declarative form of "prefer standard objects": you add customer fields to Account instead of building a parallel custom Company object. [^1][^7]
+2. Add a formula field to denormalize. On the object that needs the value (for example Opportunity), create a formula field that reaches through a lookup to render a parent value such as Account.Annual_Revenue__c or the region. Publish the field type as Formula so the value is recomputed on read rather than stored. [^4]
+3. Configure person accounts where enabled. From Setup, open Object Manager, expand Account, and choose Record Types, then also check the Person Account settings under Setup > Account > Person Account where the feature is enabled. Configure the record types and page layouts that will present person records alongside business records. [^8]
+4. Design the canonical object map. For each source system field, record the target standard or custom object, the target field, and the transformation, and store the map in your data dictionary. This is the CDM as a living artifact, the prerequisite for consistent multi-source mapping. [^9]
+5. Use a self-lookup for hierarchies. Where each entity has a single parent, model the hierarchy with Account.ParentId or a custom self-lookup instead of a junction object, which keeps a single path for a single-parent tree. [^2]
+
+## Exam Traps
+
+**Trap one: assuming denormalization is always wrong.** A candidate raised on relational normalization reflexively rejects copied values. On this platform, denormalizing stable reference values onto the transactional record is frequently the reported-best design, because queries and reports are shallow and there is no arbitrary SQL join. [^3] The exam's distractor is the "shared Region object referenced by all parties," which sounds like good practice and is over-normalization in the actual scenario. [^6]
+
+**Trap two: treating Person Accounts as reversible.** Enablement is org-wide and effectively permanent, and person accounts cannot be converted from or to standard accounts without enablement. [^8] Any answer that frames person accounts as toggled per record type, or as a light configuration, is wrong. It must be a deliberate architectural decision made with the permanence explicit. [^6]
+
+**Trap three: over-normalizing reference data into lookup chains.** A chain of lookups to reach a stable value slows every report that traverses it and is the single most expensive modeling mistake in this domain. [^3] When a value is stable and read-heavy, normalize it only if many records must stay in lockstep as it changes; otherwise denormalize the value onto the transactional record.
+
+## What's Next
+
+You can now weigh the modeling trade-offs and state the platform's reasons for each default: denormalize stable values, extend standard objects, treat person accounts as permanent, and build a canonical map before you integrate. Lesson 3, Designing a scalable data model that obeys the security and sharing model, takes the model you have designed and puts it under the security layer. It covers how ownership, organization-wide defaults, the role hierarchy, and sharing rules all interact with object and relationship choice, which is where a well-shaped model either scales or fights the permissions layer for the life of the org. The designs you just chose become the designs that sharing must respect there.
+
+## Related Requirements
+
+- Lesson 1 of 42 (dm-1a): Data modeling fundamentals: objects, fields, relationships
+- Lesson 3 of 42 (dm-2a): Designing a scalable data model that obeys the security and sharing model
+- Lesson 5 of 42 (dm-3a): Business and technical metadata
+
+## References
+
+[^1]: Optimize Customer Data with Standard and Custom Objects, Trailhead Data Modeling module. [trailhead.salesforce.com](https://trailhead.salesforce.com/content/learn/modules/data_modeling/objects_intro)
+[^2]: Data Modeling, Trailhead module. [trailhead.salesforce.com](https://trailhead.salesforce.com/content/learn/modules/data_modeling)
+[^3]: Considerations for Object Relationships. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.relationships_considerations.htm&language=en_US&type=5)
+[^4]: Elements of a Formula. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.elements_of_a_formula.htm&language=en_US&type=5)
+[^5]: Define Roll-Up Summary Fields. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.fields_about_roll_up_summary_fields.htm&language=en_US&type=5)
+[^6]: Platform Data Architect exam guide, Salesforce. [trailhead.salesforce.com](https://trailhead.salesforce.com/en/credentials/platformdataarchitect)
+[^7]: Standard Objects, Object Reference for the Salesforce Platform. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_list.htm)
+[^8]: Person Accounts, Salesforce Help. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.account_person.htm&language=en_US&type=5)
+[^9]: Salesforce Certified Platform Data Architect Exam Guide (data modeling and common data model objectives). [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005298972&language=en_US&type=1)
