@@ -210,3 +210,174 @@ describe("AudioPlayer Follow-along", () => {
     expect(screen.queryByRole("checkbox", { name: /Follow along/i })).toBeNull();
   });
 });
+
+/**
+ * Regression suite for the Follow-along self-cancel bug (t_078c9385).
+ *
+ * A real browser fires `scroll` events ASYNCHRONOUSLY and repeatedly while a
+ * `behavior: "smooth"` scroll animates (~300-700ms). The old code cleared its
+ * `programmaticScrollRef` guard 1ms after `scrollTo`, so every scroll event
+ * from ITS OWN animation was misread as a user scroll -> following=false and the
+ * toggle un-checked itself on every paragraph.
+ *
+ * These tests use a `window.scrollTo` mock that EMITS that burst (not a bare
+ * mock, which is why the original suite was green on broken code). Each
+ * test that triggers the burst waits >=150ms before finishing so the emulated
+ * events have all landed locally (no pending timers leak into the next test).
+ */
+describe("AudioPlayer regression: follow-along survives its own programmatic scroll", () => {
+  function stubScrollToWithSmoothBurst() {
+    Object.defineProperty(window, "scrollTo", {
+      writable: true,
+      value: vi.fn(() => {
+        // Emulate a real smooth scroll: dispatch scroll events on the next frame
+        // and keep dispatching them while the animation runs.
+        for (let i = 1; i <= 6; i++) {
+          setTimeout(() => window.dispatchEvent(new Event("scroll")), i * 16);
+        }
+      }),
+    });
+  }
+
+  const settle = () => new Promise((r) => setTimeout(r, 150));
+
+  it("AC-2/REPRO: keeps the toggle checked after a smooth-scroll event burst", async () => {
+    stubScrollToWithSmoothBurst();
+    authState = { user: { id: "u1", email: "a@b.c", isAdmin: false }, isLoading: false };
+    stubArticle();
+    render(<AudioPlayer slug={SLUG} hasAudio />);
+
+    const toggle = await screen.findByRole("checkbox", { name: /Follow along/i });
+    await waitFor(() => expect(toggle).toBeChecked());
+
+    timeupdate(4); // advances into paragraph 1 — triggers our programmatic scroll
+    await waitFor(() => expect(window.scrollTo).toHaveBeenCalled());
+
+    // Let the emulated smooth-scroll event burst land.
+    await settle();
+
+    expect(screen.getByRole("checkbox", { name: /Follow along/i })).toBeChecked();
+  });
+
+  it("AC-1: advancing across >=2 paragraphs keeps the toggle checked", async () => {
+    stubScrollToWithSmoothBurst();
+    authState = { user: { id: "u1", email: "a@b.c", isAdmin: false }, isLoading: false };
+    stubArticle();
+    render(<AudioPlayer slug={SLUG} hasAudio />);
+
+    const toggle = await screen.findByRole("checkbox", { name: /Follow along/i });
+    await waitFor(() => expect(toggle).toBeChecked());
+    const scrollTo = window.scrollTo as unknown as ReturnType<typeof vi.fn>;
+    scrollTo.mockClear();
+
+    // Paragraph 1 (t=4s) then paragraph 2 (t=7s).
+    timeupdate(4);
+    await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
+    await settle();
+
+    timeupdate(7);
+    await waitFor(() => expect(scrollTo.mock.calls.length).toBe(2));
+    await settle();
+
+    expect(screen.getByRole("checkbox", { name: /Follow along/i })).toBeChecked();
+  });
+
+  it("AC-1: scrolls once per new block, never re-scrolls within the same block", async () => {
+    stubScrollToWithSmoothBurst();
+    authState = { user: { id: "u1", email: "a@b.c", isAdmin: false }, isLoading: false };
+    stubArticle();
+    render(<AudioPlayer slug={SLUG} hasAudio />);
+
+    const toggle = await screen.findByRole("checkbox", { name: /Follow along/i });
+    await waitFor(() => expect(toggle).toBeChecked());
+    const scrollTo = window.scrollTo as unknown as ReturnType<typeof vi.fn>;
+    scrollTo.mockClear();
+
+    // All of these land in paragraph 1 (3s-6s). Only the first may scroll.
+    timeupdate(4);
+    await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
+    timeupdate(4.4);
+    timeupdate(4.8);
+    timeupdate(5);
+    await settle();
+
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("checkbox", { name: /Follow along/i })).toBeChecked();
+  });
+
+  it("AC-3: a wheel input still unchecks the toggle without pausing/muting audio", async () => {
+    authState = { user: { id: "u1", email: "a@b.c", isAdmin: false }, isLoading: false };
+    stubArticle();
+    render(<AudioPlayer slug={SLUG} hasAudio />);
+
+    const toggle = await screen.findByRole("checkbox", { name: /Follow along/i });
+    await waitFor(() => expect(toggle).toBeChecked());
+    const scrollTo = window.scrollTo as unknown as ReturnType<typeof vi.fn>;
+    scrollTo.mockClear();
+
+    fireEvent.wheel(window);
+    expect(screen.getByRole("checkbox", { name: /Follow along/i })).not.toBeChecked();
+
+    // audio element still exists & still has a src (not paused/removed)
+    const audio = getAudio();
+    expect(audio).not.toBeNull();
+    expect(audio.getAttribute("src")).toBe(`/api/audio/${SLUG}`);
+
+    timeupdate(4);
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it("AC-3: a touchmove input still unchecks the toggle without pausing audio", async () => {
+    authState = { user: { id: "u1", email: "a@b.c", isAdmin: false }, isLoading: false };
+    stubArticle();
+    render(<AudioPlayer slug={SLUG} hasAudio />);
+
+    const toggle = await screen.findByRole("checkbox", { name: /Follow along/i });
+    await waitFor(() => expect(toggle).toBeChecked());
+
+    fireEvent.touchMove(window);
+    expect(screen.getByRole("checkbox", { name: /Follow along/i })).not.toBeChecked();
+    expect(getAudio()).not.toBeNull();
+  });
+
+  it("AC-3: an arrow-key scroll input still unchecks the toggle without pausing audio", async () => {
+    authState = { user: { id: "u1", email: "a@b.c", isAdmin: false }, isLoading: false };
+    stubArticle();
+    render(<AudioPlayer slug={SLUG} hasAudio />);
+
+    const toggle = await screen.findByRole("checkbox", { name: /Follow along/i });
+    await waitFor(() => expect(toggle).toBeChecked());
+
+    fireEvent.keyDown(window, { key: "ArrowDown" });
+    expect(screen.getByRole("checkbox", { name: /Follow along/i })).not.toBeChecked();
+    expect(getAudio()).not.toBeNull();
+  });
+
+  it("AC-4: a scrollbar drag after the programmatic scroll has settled stops following", async () => {
+    stubScrollToWithSmoothBurst();
+    authState = { user: { id: "u1", email: "a@b.c", isAdmin: false }, isLoading: false };
+    stubArticle();
+    render(<AudioPlayer slug={SLUG} hasAudio />);
+
+    const toggle = await screen.findByRole("checkbox", { name: /Follow along/i });
+    await waitFor(() => expect(toggle).toBeChecked());
+    const scrollTo = window.scrollTo as unknown as ReturnType<typeof vi.fn>;
+    scrollTo.mockClear();
+
+    // Trigger a programmatic scroll and let the whole suppression window pass
+    // (burst events at 16-96ms extend the no-scroll window to ~246ms; cap 800ms).
+    timeupdate(4);
+    await waitFor(() => expect(scrollTo).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 350)); // > settle window
+    expect(screen.getByRole("checkbox", { name: /Follow along/i })).toBeChecked();
+
+    // A plain scroll with no preceding wheel/touch/key input = scrollbar drag.
+    fireEvent.scroll(window, { target: document.body });
+    expect(screen.getByRole("checkbox", { name: /Follow along/i })).not.toBeChecked();
+
+    // Audio still present (not paused/removed).
+    const audio = getAudio();
+    expect(audio).not.toBeNull();
+    expect(audio.getAttribute("src")).toBe(`/api/audio/${SLUG}`);
+  });
+});

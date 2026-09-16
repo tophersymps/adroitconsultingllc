@@ -12,14 +12,15 @@
  * audio plays, the article is snapped along to the EXACT spoken paragraph using
  * the generator-time segment timings manifest (fetched from the authed
  * /api/audio/<slug>/timings route) aligned to the article's content blocks.
- * A user scroll (wheel/touch/scroll) stops following WITHOUT pausing audio;
- * re-enable via the toggle. Throttled with a requestAnimationFrame guard so
- * follow-along never fights a human scroll (>= ~250ms between programmatic
- * scrolls for the same paragraph).
+ * A user scroll (wheel/touch/scroll-key) stops following WITHOUT pausing audio;
+ * re-enable via the toggle. Our own programmatic smooth-scroll is suppressed
+ * via a settle window (scrollend / no-scroll-for-150ms, hard-capped at 800ms)
+ * so it is not misread as a user stop. The page scrolls only when the active
+ * spoken paragraph changes (never re-scrolls within the same paragraph).
  *
  * Auth source-of-truth: src/lib/hooks/useAuth.ts (as before).
  */
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/hooks/useAuth";
 import {
@@ -41,7 +42,13 @@ export interface AudioPlayerProps {
 
 const SPEEDS = [1, 1.25, 1.5] as const;
 const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
-const SCROLL_THROTTLE_MS = 250;
+// Suppression window for our OWN programmatic scroll: hold until the smooth
+// scroll settles. `scrollend` ends it immediately where supported; otherwise a
+// "no scroll event for 150ms" settle window (extended by each in-flight event)
+// applies, hard-capped at 800ms so a stuck/stalled animation can never
+// permanently wedge following into a suppressed state.
+const SCROLL_SETTLE_MS = 150;
+const SCROLL_SUPPRESS_CAP_MS = 800;
 
 export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
   const { user, isLoading } = useAuth();
@@ -52,8 +59,50 @@ export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
   const [following, setFollowing] = useState<boolean>(false);
   const [pinned, setPinned] = useState<boolean>(false);
   const lastScrollBlockRef = useRef<number | null>(null);
-  const lastScrollAtRef = useRef(0);
+  // Boolean gate: true while OUR programmatic smooth-scroll is still settling.
+  // Read+written by the scroll listener and beginProgrammaticScroll only — never
+  // cleared by a 1ms timer (the bug this file fixes): a real smooth scroll fires
+  // scroll events for hundreds of ms, so a timer guard must span the settle
+  // window, not outlive the first event.
   const programmaticScrollRef = useRef(false);
+  // Settle-window timers for the suppression (see SCROLL_SETTLE_MS/CAP_MS).
+  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const capTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Current scrollend handler so the listener can be removed deterministically.
+  const scrollEndHandlerRef = useRef<EventListener | null>(null);
+
+  // End the programmatic-scroll suppression: clear the settle/cap timers, remove
+  // the scrollend listener, and drop the gate back to false. Pure ref mutation —
+  // stable across renders.
+  const endProgrammaticScroll = useCallback(() => {
+    if (settleTimerRef.current !== null) {
+      clearTimeout(settleTimerRef.current);
+      settleTimerRef.current = null;
+    }
+    if (capTimerRef.current !== null) {
+      clearTimeout(capTimerRef.current);
+      capTimerRef.current = null;
+    }
+    if (scrollEndHandlerRef.current && window.removeEventListener) {
+      window.removeEventListener("scrollend", scrollEndHandlerRef.current);
+      scrollEndHandlerRef.current = null;
+    }
+    programmaticScrollRef.current = false;
+  }, []);
+
+  // Begin the suppression window before a programmatic scrollTo. Suppressed
+  // until the scroll settles: scrollend where supported, else "no scroll event
+  // for SCROLL_SETTLE_MS" (each in-flight scroll event in the effect's onScroll
+  // re-arms it), hard-capped at SCROLL_SUPPRESS_CAP_MS. A wheel/touch/key input
+  // during the window calls endProgrammaticScroll directly.
+  const beginProgrammaticScroll = useCallback(() => {
+    endProgrammaticScroll();
+    programmaticScrollRef.current = true;
+    scrollEndHandlerRef.current = () => endProgrammaticScroll();
+    window.addEventListener("scrollend", scrollEndHandlerRef.current);
+    settleTimerRef.current = setTimeout(endProgrammaticScroll, SCROLL_SETTLE_MS);
+    capTimerRef.current = setTimeout(endProgrammaticScroll, SCROLL_SUPPRESS_CAP_MS);
+  }, [endProgrammaticScroll]);
 
   // Default: ON for signed-in, OFF under reduced-motion (read once).
   useEffect(() => {
@@ -99,24 +148,58 @@ export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
     if (audioRef.current) audioRef.current.playbackRate = speed;
   }, [speed]);
 
-  // A user scroll (window wheel/touch/scroll) stops following without pausing
-  // audio. Our own programmatic scrollTo is suppressed via the ref so it does
-  // not count as a user stop.
+  // A user stops following via real *input* — wheel, touch, or the scroll keys.
+  // These are never generated by a programmatic scroll, so they are the
+  // authoritative "user scrolled" signal and need no suppression. A `scroll`
+  // listener is kept only to catch scrollbar drags (which fire neither wheel nor
+  // touch), gated by the settle window so our own smooth-scroll burst is not read
+  // as a user stop. `following` is deliberately NOT a dependency: the handlers
+  // only ever set it false and read refs, so they never need re-subscribing.
   useEffect(() => {
     if (!user) return;
-    const onScrolled = () => {
-      if (programmaticScrollRef.current) return;
+    const stopFollowing = () => {
+      endProgrammaticScroll();
       setFollowing(false);
     };
-    window.addEventListener("wheel", onScrolled, { passive: true });
-    window.addEventListener("touchmove", onScrolled, { passive: true });
-    window.addEventListener("scroll", onScrolled, { passive: true });
-    return () => {
-      window.removeEventListener("wheel", onScrolled);
-      window.removeEventListener("touchmove", onScrolled);
-      window.removeEventListener("scroll", onScrolled);
+    const onWheelOrTouch = stopFollowing;
+    const onScrollKey = (e: KeyboardEvent) => {
+      if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(e.key)) {
+        stopFollowing();
+      }
     };
-  }, [user, following]);
+    const onScroll = () => {
+      if (programmaticScrollRef.current) {
+        // Our own smooth-scroll animation is still settling: re-arm the
+        // no-scroll-for-150ms window so this burst is attributed to us, not the
+        // user. The hard cap (SCROLL_SUPPRESS_CAP_MS) still bounds it.
+        if (settleTimerRef.current !== null) clearTimeout(settleTimerRef.current);
+        settleTimerRef.current = setTimeout(endProgrammaticScroll, SCROLL_SETTLE_MS);
+        return;
+      }
+      // A scroll with no preceding input, after our animation settled => a
+      // scrollbar drag: stop following (audio keeps playing).
+      setFollowing(false);
+    };
+    window.addEventListener("wheel", onWheelOrTouch, { passive: true });
+    window.addEventListener("touchmove", onWheelOrTouch, { passive: true });
+    window.addEventListener("keydown", onScrollKey);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("wheel", onWheelOrTouch);
+      window.removeEventListener("touchmove", onWheelOrTouch);
+      window.removeEventListener("keydown", onScrollKey);
+      window.removeEventListener("scroll", onScroll);
+      if (settleTimerRef.current !== null) clearTimeout(settleTimerRef.current);
+      if (capTimerRef.current !== null) clearTimeout(capTimerRef.current);
+      if (scrollEndHandlerRef.current && window.removeEventListener) {
+        window.removeEventListener("scrollend", scrollEndHandlerRef.current);
+      }
+      settleTimerRef.current = null;
+      capTimerRef.current = null;
+      scrollEndHandlerRef.current = null;
+      programmaticScrollRef.current = false;
+    };
+  }, [user, endProgrammaticScroll]);
 
   // FLOAT activation animation: when the player first pins to the top (its
   // natural position has scrolled above the header band), light up a drop
@@ -201,14 +284,12 @@ export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
       const block = blocks[target.blockIndex];
       if (!block) return;
 
-      // Scroll ONLY when the active paragraph changed, or long enough has
-      // elapsed since the last programmatic scroll within the same paragraph
-      // (prevents fighting a human dragging within a long section).
-      const now = Date.now();
-      if (lastScrollBlockRef.current === target.blockIndex) {
-        if (now - lastScrollAtRef.current < SCROLL_THROTTLE_MS) return;
-        top = 0; // recompute below with measureBand
-      }
+      // Scroll ONLY when the active paragraph changed. A repeat scroll within
+      // the SAME block is a no-op: user input already cancels `following`, so
+      // there is nothing to "re-align" inside one block, and re-scrolling would
+      // restart the smooth animation and keep the page permanently moving
+      // (fighting any reader inside that paragraph).
+      if (lastScrollBlockRef.current === target.blockIndex) return;
       // Absolute document offset of the block top, then align it below the
       // floated player: target = blockTop - (playerH + headerH + gap).
       const rect = block.el.getBoundingClientRect();
@@ -216,24 +297,16 @@ export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
       const { playerH, headerH } = measureBand();
       top = targetScrollYForBlock(Math.max(0, blockDocTop), playerH, headerH, 12);
       lastScrollBlockRef.current = target.blockIndex;
-      lastScrollAtRef.current = now;
 
-      programmaticScrollRef.current = true;
+      // Suppress the scroll events OUR smooth-scroll animation will emit until
+      // it settles (scrollend / no-scroll-for-150ms, hard-capped at 800ms) so
+      // they are not misread as a user stop. The old 1ms clear expired before
+      // the first event landed and un-checked the toggle on every paragraph.
+      beginProgrammaticScroll();
       window.scrollTo({ top, behavior: following ? "smooth" : "auto" });
     } catch {
       // never throw from playback-driven side effects
-    } finally {
-      // The scroll event we just caused should NOT count as a user stop.
-      window.setTimeout(() => {
-        programmaticScrollRef.current = false;
-      }, 1);
     }
-  }
-
-  /** A user scroll input (wheel/touch/scroll) stops following, not audio. */
-  function onUserScroll() {
-    if (programmaticScrollRef.current) return;
-    if (following) setFollowing(false);
   }
 
   if (!hasAudio) return null;
@@ -264,9 +337,6 @@ export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
     <div
       ref={wrapperRef}
       data-audio-scroll=""
-      onWheel={onUserScroll}
-      onTouchStart={onUserScroll}
-      onScroll={onUserScroll}
       className={`my-6 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-[var(--border-default)] dark:bg-[var(--surface-card)] ${
         pinned
           ? "shadow-[0_8px_24px_rgba(11,29,58,0.16)] ring-1 ring-gray-300 dark:shadow-[0_8px_24px_rgba(0,0,0,0.5)] dark:ring-[var(--border-default)] transition-shadow duration-300"
@@ -315,7 +385,6 @@ export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
         aria-label="Article audio player"
         src={`/api/audio/${slug}`}
         onTimeUpdate={handleTimeUpdate}
-        onScroll={onUserScroll}
       />
     </div>
   );
