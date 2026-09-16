@@ -14,9 +14,10 @@
  * /api/audio/<slug>/timings route) aligned to the article's content blocks.
  * A user scroll (wheel/touch/scroll-key) stops following WITHOUT pausing audio;
  * re-enable via the toggle. Our own programmatic smooth-scroll is suppressed
- * via a settle window (scrollend / no-scroll-for-150ms, hard-capped at 800ms)
- * so it is not misread as a user stop. The page scrolls only when the active
- * spoken paragraph changes (never re-scrolls within the same paragraph).
+ * via a settle window (scrollend / no-scroll-for-150ms) so it is not misread as
+ * a user stop; the wall-clock cap is only a stall guard and sits far above any
+ * real smooth-scroll burst. The page scrolls only when the active spoken
+ * paragraph changes (never re-scrolls within the same paragraph).
  *
  * Auth source-of-truth: src/lib/hooks/useAuth.ts (as before).
  */
@@ -46,10 +47,18 @@ const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 // Suppression window for our OWN programmatic scroll: hold until the smooth
 // scroll settles. `scrollend` ends it immediately where supported; otherwise a
 // "no scroll event for 150ms" settle window (extended by each in-flight event)
-// applies, hard-capped at 800ms so a stuck/stalled animation can never
-// permanently wedge following into a suppressed state.
+// applies. Those two signals are the real end-of-suppression triggers — the
+// wall-clock cap below is ONLY a wedge guard, so it must outlast every real
+// animation. Chrome's smooth-scroll event burst scales with distance: measured
+// 731ms / 768ms / 851ms for an ordinary one-screen (~1000px) jump and 1515ms
+// for a three-screen jump, so the former 800ms cap expired MID-animation and
+// the next event from our own scroll was read as a user scroll -> the toggle
+// un-checked itself (t_a34614a1). 4000ms is above any plausible animation.
 const SCROLL_SETTLE_MS = 150;
-const SCROLL_SUPPRESS_CAP_MS = 800;
+const SCROLL_SUPPRESS_CAP_MS = 4000;
+// How close to the `top` we last asked `scrollTo` for (px) a post-suppression
+// `scroll` event must land to still count as the tail of our own animation.
+const SCROLL_TAIL_EPSILON_PX = 2;
 
 export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
   const { user, isLoading } = useAuth();
@@ -71,6 +80,13 @@ export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
   const capTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Current scrollend handler so the listener can be removed deterministically.
   const scrollEndHandlerRef = useRef<EventListener | null>(null);
+  // The `top` we last asked `window.scrollTo` for, and when the last scroll
+  // event absorbed by the suppression window arrived. Together they recognise
+  // the tail of our own smooth scroll — an event that lands just after
+  // suppression ended, still at the offset we were animating to — so a signal
+  // firing a frame early can never make our own scroll look like user input.
+  const lastProgrammaticTargetRef = useRef<number | null>(null);
+  const lastSuppressedScrollAtRef = useRef<number>(0);
   /**
    * Cache of the block alignment so ~4x/s `timeupdate` ticks don't re-run the
    * DOM query (`articleBlocks`) + the greedy O(segments x blocks) alignment for
@@ -188,12 +204,30 @@ export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
       }
     };
     const onScroll = () => {
+      const now = typeof performance !== "undefined" ? performance.now() : Date.now();
       if (programmaticScrollRef.current) {
         // Our own smooth-scroll animation is still settling: re-arm the
         // no-scroll-for-150ms window so this burst is attributed to us, not the
-        // user. The hard cap (SCROLL_SUPPRESS_CAP_MS) still bounds it.
+        // user. The wedge cap (SCROLL_SUPPRESS_CAP_MS) still bounds it, but it
+        // sits far above any real animation, so it can no longer end the
+        // suppression while our own events are still arriving.
+        lastSuppressedScrollAtRef.current = now;
         if (settleTimerRef.current !== null) clearTimeout(settleTimerRef.current);
         settleTimerRef.current = setTimeout(endProgrammaticScroll, SCROLL_SETTLE_MS);
+        return;
+      }
+      // Suppression has ended. If this event is the TAIL of our own animation —
+      // it arrives on the animation's own cadence right after suppression ended
+      // AND sits at the offset we asked `scrollTo` for — it is still ours, not a
+      // scrollbar drag. (Belt-and-braces: the settle window already covers
+      // this, but it must not depend on a timer landing at the right moment.)
+      const target = lastProgrammaticTargetRef.current;
+      if (
+        target !== null &&
+        now - lastSuppressedScrollAtRef.current <= SCROLL_SETTLE_MS &&
+        Math.abs((window.scrollY ?? 0) - target) <= SCROLL_TAIL_EPSILON_PX
+      ) {
+        lastSuppressedScrollAtRef.current = now;
         return;
       }
       // A scroll with no preceding input, after our animation settled => a
@@ -299,14 +333,21 @@ export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
       // Build the block alignment once per article/manifest and reuse it across
       // the ~4x/s `timeupdate` ticks: the DOM block elements, their texts, and
       // the greedy segment->block mapping are all stable for the life of the
-      // article, so only a slug change or a new timings array invalidate the
-      // cache. A cache miss/stale key rebuilds inside the same try (a missing
-      // article just caches an empty result and never scrolls, as before).
+      // article, so only a slug change, a new timings array, or an article
+      // subtree that was empty/replaced invalidate the cache. A cache miss/stale
+      // key rebuilds inside the same try (a missing article simply falls through
+      // to `blocks[target.blockIndex]` being undefined and never scrolls).
+      // NEVER cache an empty alignment: if the first tick lands before the
+      // article body exists (or its elements get detached by a remount),
+      // `articleBlocks()` returns [] and caching that would silently disable
+      // Follow-along for the rest of the mount (sato, t_fdd0654c P1).
       let cached = alignmentCacheRef.current;
       if (
         !cached ||
         cached.slug !== slug ||
-        cached.timings !== timings
+        cached.timings !== timings ||
+        cached.blocks.length === 0 ||
+        !cached.blocks[0]?.el.isConnected
       ) {
         const blocks = articleBlocks();
         const aligned = alignSegmentsToBlocks(
@@ -336,9 +377,11 @@ export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
       lastScrollBlockRef.current = target.blockIndex;
 
       // Suppress the scroll events OUR smooth-scroll animation will emit until
-      // it settles (scrollend / no-scroll-for-150ms, hard-capped at 800ms) so
-      // they are not misread as a user stop. The old 1ms clear expired before
-      // the first event landed and un-checked the toggle on every paragraph.
+      // it settles (scrollend / no-scroll-for-150ms; the wall-clock cap is only
+      // a stall guard, well above any real animation) so they are not misread as
+      // a user stop. The old 1ms clear expired before the first event landed and
+      // un-checked the toggle on every paragraph.
+      lastProgrammaticTargetRef.current = top;
       beginProgrammaticScroll();
       window.scrollTo({ top, behavior: following ? "smooth" : "auto" });
     } catch {
@@ -386,7 +429,7 @@ export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
         </span>
         <div className="flex items-center gap-3">
           {timings && timings.length > 0 && (
-            <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-[var(--ink-muted)]">
+            <label className="flex min-h-11 cursor-pointer items-center gap-2 text-xs text-gray-500 dark:text-[var(--ink-muted)]">
               <input
                 type="checkbox"
                 checked={following}
