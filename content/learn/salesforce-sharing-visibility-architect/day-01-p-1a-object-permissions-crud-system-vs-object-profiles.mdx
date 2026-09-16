@@ -1,0 +1,182 @@
+---
+title: "Sharing & Visibility Architect P-1a: Object Permissions: CRUD, System vs Object, Profiles vs Permission Sets"
+slug: day-01-p-1a-object-permissions-crud-system-vs-object-profiles
+series: salesforce-sharing-visibility-architect
+lesson: 1
+excerpt: "The bluntest control in the Salesforce security stack: what Read, Create, Edit, and Delete actually grant, why View All Records and Modify All Records are a different decision, how system permissions differ from object permissions, and how a profile baseline plus additive permission sets and permission set groups produce a user's effective access. Includes a worked scenario, a setup walkthrough, and the exam traps."
+date: "September 16, 2026"
+author: "Adroit Consulting"
+readTime: "18 min read"
+tags: [Salesforce, Sharing and Visibility, Permissions, Certification]
+---
+
+Object permissions are the coarsest control in the Salesforce security stack, and that is why they come first. Nothing else in the platform is quite so blunt: a user either can or cannot touch any record of a given object type, regardless of who owns those records. Salesforce describes them as the base-level access users have to create, read, edit, and delete records for each object, and it separates them from field-level security and record-level sharing in the same sentence. [^1][^8] Get this layer wrong and every downstream sharing decision inherits the error.
+
+The Sharing and Visibility Architect exam leans on this layer harder than any other. Permissions to Standard Objects, Custom Objects, and Fields is 27 percent of the exam, the second largest domain, and the first objective in that domain asks you to recommend the right level of object permissions for a set of users given a scenario. [^17] The verb is recommend, not define. The exam hands you a business situation, four mechanisms that would each change something real in an org, and expects you to pick the one whose blast radius matches the request.
+
+So this lesson does three things. It defines each object permission and the exact behavior it grants, with the sharing behavior of each one spelled out. It separates object permissions from system permissions, because that confusion is the single most common failure in this domain. And it walks the profile, permission set, and permission set group relationship until the additive rule is second nature, then applies all of it to a worked scenario and a setup sequence you can run in a sandbox today.
+
+## Deep Dive
+
+### The six object permissions, and the four that respect sharing
+
+The platform documents seven object-level access permissions, and the first four are the ones people mean when they say CRUD. [^1]
+
+- Read: the user can view records of that object type.
+- Create: the user can read and create records.
+- Edit: the user can read and update records.
+- Delete: the user can read, edit, and delete records.
+
+Two things fall out of that table immediately. First, the permissions stack. Create implies Read. Edit implies Read. Delete implies Read and Edit. The platform encodes this in the setup UI, so checking Edit on the object permissions grid also checks Read, and unchecking Read clears the permissions that depend on it. You cannot build a user who can update a record but not see it through object permissions alone.
+
+Second, the documentation marks all four of these as respecting sharing. That is a phrase worth slowing down on. Read, Create, Edit, and Delete describe what a user may do to records they can already reach. They do not by themselves reach anything. A user with Edit on Opportunity in an org whose opportunity organization-wide default is Private has permission to edit any opportunity they can access, and can access their own records plus whatever the sharing model grants them. Object permissions are the door, sharing is the hallway. [^1][^9]
+
+### View All Records and Modify All Records step outside the sharing model
+
+Then come the two permissions that ignore sharing altogether. [^1]
+
+- View All Records: the user can view all records of that object, regardless of sharing settings.
+- Modify All Records: the user can read, edit, delete, transfer, and approve all records of that object, regardless of sharing settings.
+
+Salesforce is explicit that these two ignore sharing rules and settings, and describes them as a way to grant access to records across the organization for one object without handing over org-wide system permissions. [^2] The table in the documentation even grades each object permission as respecting or overriding sharing, which is the cleanest way to hold the distinction in your head. Object permissions are not uniformly about records. Four of them wait for sharing to decide, and two of them overrule it.
+
+Modify All Records deserves its own sentence, because it is wider than most people assume. It carries transfer and approval authority along with read, edit, and delete, and users who hold it can manually share records. [^1][^9] When an exam option offers Modify All Records to solve a read-only requirement, the option is overshooting the requirement on at least four axes, and architectures that hand it out casually end up with a permission set nobody can safely revoke later.
+
+Two limits are worth memorizing because they come up in design reviews rather than trivia quizzes. View All Records and Modify All Records are not available for ideas, price books, article types, and products. [^2] And View All Records on a parent object does not automatically extend to that parent's standard child records, although it does cover child records of custom objects. [^2] If you have ever promised a team visibility into every contact because they could see every account, that second limit is the reason it did not work the way you expected.
+
+### System permissions answer a different question
+
+Profiles and permission sets hold two categories of thing, and the setup UI keeps them in separate sections for a reason. Object permissions answer what a user can do to records of a specific object. User permissions, also called system permissions or app permissions, answer what tasks and features a user can reach at all. [^3][^19]
+
+API Enabled, View Setup and Configuration, Manage Users, and Customize Application live in that second category. The documentation's own examples are the fastest way to see the shape of it: users with View Setup and Configuration can open Setup pages, and users with API Enabled can access any Salesforce API. [^13] Neither permission mentions an object, because neither is about records.
+
+The classic mistake is treating the two categories as interchangeable because they sit in the same editor. A user with API Enabled and no object permissions has an integration user that can authenticate and then read nothing. A user with View Setup and Configuration can browse metadata and configuration surfaces for objects they cannot read a single record of. The permission set editor asks you to check boxes in both sections, which is exactly why exam writers test whether you know which section governs which question.
+
+There are system permissions whose names look like object permissions, and those are the real traps. View All Data and Modify All Data are user permissions. The platform describes them as granting view or modify access to all apps and data even when the data is not shared with the user, and it positions them for org-wide administrators doing data cleansing, deduplication, mass deletion, mass transfer, and record approval management. [^2] View All Records and Modify All Records are object permissions you grant per object. The names differ by one word. The scope differs by the entire org.
+
+One more detail worth carrying into the scalability domain later: neither View All Data nor Modify All Records overrides field-level security. A user still needs field permissions, or the View All Fields object permission, to read each field. [^2] And enabling a permission that wide across a large object catalog can time out in Setup, so the documentation recommends the Metadata API for those updates. [^2] Wide permissions have operational costs, not just access costs.
+
+### One profile, many permission sets, and a rule you cannot break
+
+Every user has exactly one profile. Users can also hold multiple permission sets, and Salesforce states plainly that permission sets extend a user's functional access without changing their profile, which is the recommended way to manage permissions. [^4] That single sentence is the answer to a large share of this exam's scenario questions.
+
+The mechanics are additive. If a permission is not enabled in the profile but is enabled in one of the user's permission sets, the user has the permission. [^4] The union of the profile plus every assigned permission set is the user's functional access. Nothing subtracts. No permission set can take away a permission the profile grants, and two permission sets granting the same checkbox do not conflict, they overlap. [^3][^4]
+
+That leaves the profile as the baseline grant, and the baseline matters more than the marketing suggests. Since Winter '21, editing standard objects on standard profiles is disabled, so a standard-profile tweak now means cloning the profile and assigning the clone. [^12] Salesforce's own guidance goes further and recommends assigning users the Minimum Access - Salesforce profile, or a clone of it, then using permission sets and permission set groups to add only what each user needs. [^7] The reason is arithmetic: dozens of near-identical profiles mean dozens of places to make the same change, and one of them will be missed.
+
+There is a quiet implementation detail here that architects hit when they try to audit access. From API version 25.0 onward, every profile is automatically associated with a permission set that stores the profile's user, object, and field permissions plus setup entity access. You can query these profile-owned permission sets, but you cannot modify them, and they do not appear in the user interface. [^6] If a permissions report built from the tooling shows a mystery assignment, that mechanism is usually the explanation.
+
+### Permission set groups, muting, and status
+
+Permission set groups exist to collapse the assignment math. A group bundles permission sets together based on job personas or roles, and users assigned the group receive the combined permissions of every permission set inside it. A permission set can belong to more than one group, and updates to a permission set propagate to every group that includes it. [^5]
+
+The problem they solve is visible in Salesforce's own worked example. A sales employee needs analytics templates, survey creation and management, full account and opportunity CRUD, and custom list views and reports. Without groups, an admin assigns three permission sets to every person in that cohort, and the assignment list grows with every new persona. With a group, the admin builds one group and makes one assignment per user. [^5]
+
+Two behaviors matter for the exam and for real implementations.
+
+Muting. A muting permission set removes, or mutes, selected permissions inside the group, and Salesforce recommends it over building near-identical copies of a permission set with a few permissions stripped out. [^5][^7] Muting works on the permissions the group's permission sets contribute. It does not reach the profile, so it cannot be used to undo a baseline grant.
+
+Status. A permission set group calculates the combined permissions from its included permission sets, and its status reports whether that calculation is current. You can assign users only to groups whose status is Updated. [^11] Recalculations are asynchronous, so an integration or a deployment that assigns groups immediately after editing them can fail on a group that has not finished recalculating, and the error message rarely says so directly.
+
+### Dynamic assignment runs on user access policies
+
+Membership in a permission set group can be assigned directly, or it can be driven from user data. The direct path is Setup, then Permission Set Groups, then Manage Assignments, where you select users and can optionally set an expiration date for the assignment. [^11] The automated path is a user access policy.
+
+A user access policy grants or removes access to permission set licenses, permission sets, permission set groups, package licenses, queues, and public groups in one operation. Policies come in two flavors. A manual policy runs once against a filtered set of users, which is how you migrate a cohort off a legacy profile. An active policy runs on a triggered event such as a user record being created or updated, filtered by criteria such as role or profile, so a new hire with the Sales Rep role receives the correct licenses, permission sets, and groups automatically. [^10] If users match several active policies, the policy with the lowest Order value applies. [^10]
+
+Two caveats belong in any recommendation you write. User access policies are available in Enterprise and Unlimited editions, so a Professional Edition org needs the manual alternative. [^10] And the platform's performance guidance for large cohorts is to assign users permission set groups rather than many individual permission sets, because assigning many users to the same set of multiple permission sets is where throughput problems show up. The same page notes that permission sets tied to a user license or permission set license perform better than unlicensed ones. [^6][^7]
+
+### What object permissions do not do
+
+Object, field, and record access are three layers, and the documentation gives each one a distinct job. Object-level security is the bluntest control and can hide an entire object type from a user. Field-level security controls whether a user can see or edit a particular field, and it covers related lists, list views, reports, and search, not just page layouts. Record-level sharing settings, roles, and sharing rules decide which individual records a user can view and edit. [^8]
+
+The layering has a practical consequence that shows up in scenario questions constantly. A user with Read on Account in an org with a Private account organization-wide default can log in, open the Accounts tab, run a list view, and see only the accounts the sharing model gives them. If the requirement says a handful of users must read every account, object permissions alone cannot deliver it, and changing the org-wide default delivers it to everyone. [^9] That is the gap View All Records fills at the object level, and it is why the option appears so often in exam scenarios about small groups needing broad read access.
+
+### Standard objects, custom objects, and the broken permission dependency
+
+Standard objects arrive with baseline object permissions already configured on the profiles Salesforce ships, which is why a Standard User can work with accounts and contacts on day one. Custom objects arrive with no baseline at all, so the first access anyone has to a new custom object is an explicit grant someone made. That difference explains why custom objects so often end up with permission-set-based access while standard objects are still governed by profile sprawl.
+
+One relationship behavior is documented in the object permissions page and appears in deployment failures. When an object has a master-detail relationship, a broken permission dependency exists if the child object holds a permission the parent must also have. For updates made in Setup, Salesforce fixes the parent on the first save of the profile or permission set. For updates made through the API, you must fix the dependency yourself. The dependency table is small and worth committing to memory: a child with Modify All Records or View All Records forces View All Records on the parent, and a child with View All Records or Read forces Read on the parent. [^1][^6] Metadata deployments that grant a child permission without the parent permission fail for exactly this reason.
+
+## Worked example: read every Account, without admin rights
+
+The scenario is common enough to be a template. Support managers need to read every Account record, including accounts owned by other divisions, and they must not receive system administration. Four options are on the table, and each one changes something in the org.
+
+Giving each manager a profile with Read on Account solves nothing. Read respects sharing, so these managers would still see only their own accounts plus whatever the sharing model already grants. [^1][^9] The option sounds least invasive, which is precisely why it is the most tempting wrong answer.
+
+Setting the Account organization-wide default to Public Read Only does give every manager read access to every account. It also gives that access to every other user in the org, plus every future user, and it weakens the baseline for every downstream sharing rule that assumed a more restrictive default. The org-wide default is a door you cannot quietly close again, and reaching for it to solve a five-person requirement is the failure mode this exam is built to catch.
+
+Giving the managers Modify All Records works and overshoots. They would gain edit, delete, transfer, and approve authority over every account in the org, plus the manual share capability that comes with it. [^1] The requirement was read.
+
+Creating a permission set that grants View All Records on Account and assigning it to those managers is the answer. View All Records bypasses sharing for that one object, so the managers read every account regardless of the organization-wide default and regardless of who owns what. [^1][^2] Nobody else's access changes, the profile baseline stays intact, the grant is auditable in one permission set, and removing the permission set removes the access. The scope of the change matches the scope of the requirement, which is the whole game in this domain.
+
+Now scale the same pattern. Suppose 400 field service technicians need a shared persona across six objects, and leadership wants new hires provisioned automatically. The architecture is permission sets organized by task, one permission set group per persona, and an active user access policy that assigns the group when a user record is created with the technician role. [^7][^10] That combination gives one assignment per user instead of six, gives the org a single place to change the persona later, and removes the human step that gets forgotten during onboarding. The caveat to write into the design document is the edition requirement for user access policies, and the operational dependency on the group's recalculation status before assignment. [^10][^11]
+
+## Configuration Walkthrough
+
+Run this in a sandbox as you read. The ordering matters: build the permission set, then the group, then the assignment, then verify.
+
+1. Create the permission set. In Setup, enter Permission Sets in Quick Find and select New. Give it a label that names the task it grants, not the job title of the person receiving it. [^3]
+2. Add the object permissions. Open the permission set, search for the object in the Find Settings box, select it, and click Edit. In the Object Permissions section, check the boxes the scenario requires and leave unchecked what you intend to withhold. Save. [^3]
+3. Watch the master-detail dependency. If the object you just granted sits on the detail side of a master-detail relationship, check the parent object's permissions. A child grant of Read or View All Records requires Read on the parent, and Setup repairs that on the first save. Deployments through the API do not get that repair. [^1][^6]
+4. Add the user permissions the role actually needs. On the same permission set, open the App Permissions or System Permissions section and enable only the specific capabilities required, such as API Enabled for an integration principal. [^19]
+5. Build the permission set group. In Setup, open Permission Set Groups and create one per persona. Add the task-based permission sets to it, and reuse any permission set that serves more than one persona. [^5]
+6. Wait for the group to finish calculating. Confirm the status reads Updated before you try to assign it, because assignment against a stale group fails. [^11]
+7. Assign the group. Use Manage Assignments on the group, or the user's Permission Set Group Assignments related list for a single user. Set an expiration date where the access is temporary. [^11] For a whole cohort or for new hires, define a manual or active user access policy instead of clicking through users one at a time. [^10]
+8. Verify from both directions. In Object Manager, open the object and click Object Access to see every profile, permission set, and permission set group that grants access and at what level. [^14] Then open a representative user, click View Summary, and use Access Granted By on a permission row to see which assignment is responsible. [^15] Refresh the summary page if a recent change is not showing. [^15]
+
+## Exam Traps
+
+Trap one: believing a permission set can trim a profile. Permission sets are purely additive. They extend access and never reduce it, so a user with an over-broad profile grant cannot be fixed by adding a permission set. The only ways to reduce that user's access are to change the profile, move the user to a different profile, or revoke the grant at the source. [^4]
+
+Trap two: filing View All Records and Modify All Records as system permissions. They are object permissions, granted per object in the profile or permission set grid, but they behave like sharing overrides, which is why they get tested alongside sharing settings. [^1][^9] The paired trap is confusing them with View All Data and Modify All Data, which are user permissions with org-wide scope. [^2] Read the option carefully: Records versus Data.
+
+Trap three: treating overlapping grants as conflicts. A user's effective access is the union of the profile and all assigned permission sets. Two permission sets granting the same checkbox overlap without conflict, and there is no precedence order to reason about, because nothing is being subtracted. [^3][^4] Exam options that describe a permission set overriding or being overridden by another permission set are describing a mechanism that does not exist.
+
+Trap four: reaching for a profile change or an org-wide default change when the requirement names a small group. A profile change touches everyone on that profile. An org-wide default change touches every user and rewrites the assumptions underneath the sharing rules. When the requirement says these few users and nobody else, the answer is a permission set or a permission set group. [^2][^7]
+
+Trap five: forgetting that a permission set group is still bound by the additive rule and by status. A group bundles included permission sets and can be muted, but muting only affects the contributions of those permission sets, never the profile. And a group that has not finished recalculating cannot be assigned. [^5][^11]
+
+Trap six: assuming the profile is editable for standard objects. On standard profiles, editing standard object permissions is disabled from Winter '21 onward, so the remediation path is clone and reassign. [^12]
+
+## Try It
+
+Build the worked example and watch the sharing layer assert itself.
+
+Create a permission set called Support Manager Read All Accounts with Read and View All Records on Account, and assign it to a test user who owns no accounts. Log in as that user and confirm the account list view shows records owned by other users. Then remove only the View All Records checkbox, keep Read, and reload. The records owned by other users disappear while the accounts the user owns remain. That single comparison is the difference between an object permission that respects sharing and one that overrides it. [^1][^9]
+
+Next, test the additive rule where it bites. Give the test user a permission set that grants Delete on a custom object while the profile grants only Read. The user can delete. Now try to remove the profile's Read grant by assigning a permission set that appears to restrict it. It does not work, because permission sets have no subtractive capability. [^4]
+
+Finish with the audit view. In Object Manager, open Account and check Object Access to see the permission sets and groups granting access. [^14] Then open the test user's access summary and use Access Granted By on the Read permission for Account to see both sources listed. [^15] An architect who can trace access from either direction is an architect who can debug a sharing question in minutes.
+
+## What's Next
+
+You can now name each object permission, say which four respect sharing and which two override it, separate object permissions from system permissions, and explain why a profile plus a set of permission sets produces an additive result that nobody can subtract from. Lesson 2, Object-Permission Scenarios and Mass-Assign / License-Based Patterns (p-1b), puts that knowledge under scenario pressure. It works through mass assignment at cohort scale, how license type changes which object permissions are even available to grant, and the scenarios where the correct answer is a permission set group with a dynamic policy rather than a manually maintained assignment list.
+
+## Related Requirements
+
+- Lesson 2 of 36 (p-1b): Object-permission scenarios, mass-assign and license-based patterns
+- Lesson 9 of 36 (p-5a): Programmatic enforcement of CRUD and FLS in Apex
+- Lesson 10 of 36 (p-5b): Sharing behavior in Apex, with and without sharing, runAs versus system mode
+
+## References
+
+[^1]: Object Permissions. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.users_profiles_object_perms.htm&type=5)
+[^2]: "View All" and "Modify All" Permissions Overview. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.users_profiles_view_all_mod_all.htm&type=5)
+[^3]: Enable Object Permissions in Permission Sets. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.perm_sets_objects_and_fields.htm&type=5)
+[^4]: Permission Sets. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.perm_sets_overview.htm&type=5)
+[^5]: Permission Set Groups. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.perm_set_groups.htm&type=5)
+[^6]: Permission Set Considerations. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.perm_sets_considerations.htm&type=5)
+[^7]: Guidelines for Creating Permission Sets and Permission Set Groups. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.perm_sets_best_practices.htm&type=5)
+[^8]: Control Who Sees What. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.security_data_access.htm&type=5)
+[^9]: Comparing Security Models. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.users_sharing_vs_obj_level_perms.htm&type=5)
+[^10]: User Access Policies. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.perm_user_access_policies.htm&type=5)
+[^11]: Assign Permission Set Groups to Users. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.perm_set_groups_assign.htm&type=5)
+[^12]: Edit Object Permissions in Profiles. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.perm_sets_object_perms_edit.htm&language=en_US&type=5)
+[^13]: User Permissions. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.admin_userperms.htm&type=5)
+[^14]: Manage Object Access in Object Manager. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.perm_object_access_summary.htm&type=5)
+[^15]: View a User's Access Summary. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.users_access_summary.htm&language=en_US&type=5)
+[^16]: Control Access to Objects, Data Security module. [trailhead.salesforce.com](https://trailhead.salesforce.com/content/learn/modules/data_security/data_security_objects)
+[^17]: Salesforce Certified Platform Sharing and Visibility Architect Exam Guide. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005298977&language=en_US&type=1)
+[^18]: Salesforce Certified Platform Sharing and Visibility Architect. [trailhead.salesforce.com](https://trailhead.salesforce.com/en/credentials/platformsharingandvisibilityarchitect)
+[^19]: Enable User Permissions in Permission Sets. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.perm_sets_app_perms.htm&type=5)

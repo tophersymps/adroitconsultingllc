@@ -2003,6 +2003,33 @@ export const learnSeries: LearningSeries[] = [
     "curriculumLessons": 42
   },
   {
+    "slug": "salesforce-sharing-visibility-architect",
+    "name": "Platform Sharing and Visibility Architect Certification",
+    "description": "A one-stop prep course for the Salesforce Certified Platform Sharing and Visibility Architect exam. All 18 official objectives split into 36 focused lessons, with config walkthroughs, sharing-model trade-offs, exam traps, and practice questions.",
+    "gradient": "from-violet to-purple-600",
+    "lessons": [
+      {
+        "slug": "day-01-p-1a-object-permissions-crud-system-vs-object-profiles",
+        "title": "Sharing & Visibility Architect P-1a: Object Permissions: CRUD, System vs Object, Profiles vs Permission Sets",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 1,
+        "excerpt": "The bluntest control in the Salesforce security stack: what Read, Create, Edit, and Delete actually grant, why View All Records and Modify All Records are a different decision, how system permissions differ from object permissions, and how a profile baseline plus additive permission sets and permission set groups produce a user's effective access. Includes a worked scenario, a setup walkthrough, and the exam traps.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "18 min read",
+        "tags": [
+          "Salesforce",
+          "Sharing and Visibility",
+          "Permissions",
+          "Certification"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 1,
+    "curriculumLessons": 36
+  },
+  {
     "slug": "agentic-ai",
     "name": "Agentic AI Implementation Path",
     "description": "From single-agent prototypes to multi-agent orchestration, a practitioner's curriculum for shipping agentic systems.",
@@ -3516,15 +3543,6 @@ export const learnSeries: LearningSeries[] = [
     ],
     "totalLessons": 20,
     "curriculumLessons": 20
-  },
-  {
-    "slug": "salesforce-sharing-visibility-architect",
-    "name": "Platform Sharing and Visibility Architect Certification",
-    "description": "A one-stop prep course for the Salesforce Certified Platform Sharing and Visibility Architect exam. All 18 official objectives split into 36 focused lessons, with config walkthroughs, sharing-model trade-offs, exam traps, and practice questions.",
-    "gradient": "from-violet to-purple-600",
-    "lessons": [],
-    "totalLessons": 0,
-    "curriculumLessons": 36
   }
 ];
 
@@ -3607,6 +3625,23 @@ export const learnLessons: LearnLesson[] = [
       "Salesforce",
       "Data Architecture",
       "Data Modeling",
+      "Certification"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-01-p-1a-object-permissions-crud-system-vs-object-profiles",
+    "title": "Sharing & Visibility Architect P-1a: Object Permissions: CRUD, System vs Object, Profiles vs Permission Sets",
+    "series": "salesforce-sharing-visibility-architect",
+    "lesson": 1,
+    "excerpt": "The bluntest control in the Salesforce security stack: what Read, Create, Edit, and Delete actually grant, why View All Records and Modify All Records are a different decision, how system permissions differ from object permissions, and how a profile baseline plus additive permission sets and permission set groups produce a user's effective access. Includes a worked scenario, a setup walkthrough, and the exam traps.",
+    "date": "September 16, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "18 min read",
+    "tags": [
+      "Salesforce",
+      "Sharing and Visibility",
+      "Permissions",
       "Certification"
     ],
     "status": "published"
