@@ -26,6 +26,8 @@ A field inside a profile or permission set can be set to three things, and the p
 - Visible and read-only: the field appears and the user cannot change it.
 - Hidden: the field does not appear for that user.
 
+![Three field permission states side by side: visible and editable grants read and write, visible and read-only is a write control only, and hidden is the only state that removes the field from the user's field set](</diagrams/day-03-p-2a-field-level-security-fundamentals-field-permission/1-three-field-permission-states.png>)
+
 Read-only is a write control. Hidden is a read control. That sentence is the single most valuable thing in this lesson, because the exam and real requirements both phrase the ask in a way that makes read-only feel sufficient. If a requirement says a user must never see a field, read-only does not satisfy it. The field is still rendered, still returned by the UI, still visible in a report they can run, and still present in an API response for a query they have access to. Only Hidden removes it from the field set the user is working with. [^1][^7]
 
 The platform has no fourth state and no field-level equivalent of a partial grant. You cannot make a field read-only for one record and editable for another through FLS, because FLS is a property of the field on the object for that user, not a property of a record. Record-by-record differences belong to the sharing model. This is the boundary between the two halves of the exam, and questions cross it deliberately.
@@ -74,6 +76,8 @@ Surface four, the API. A user whose FLS hides a field cannot retrieve it through
 
 Surface five, Apex. This is where the assumption breaks, and it breaks in a direction that leaks data rather than hiding it. SOQL written in Apex runs in system mode by default, and system mode does not enforce field-level security. A query that selects a hidden field returns that field to privileged code, and if that code returns the record to a client, the field reaches the client. [^7][^10][^11] The enforcement has to be written explicitly, which is the next section.
 
+![A comparison table of where a field hidden by field-level security disappears versus a field merely removed from the page layout, across the record page, search, list views, reports, report filters, the API, and Apex in system mode](</diagrams/day-03-p-2a-field-level-security-fundamentals-field-permission/2-surfaces-where-fls-holds.png>)
+
 ### The programmatic mirror: describe checks, user mode, and stripInaccessible
 
 Because Apex runs with elevated permissions by default, the developer's job is to re-impose the running user's field visibility. Salesforce provides three tools, and an architect should be able to name which one fits which path.
@@ -86,11 +90,15 @@ User mode is the modern way to make database operations behave like the running 
 
 The pattern that follows from all three is straightforward to state and easy to remember: keep user-facing data classes in the running user's context, prefer user mode for the query itself, and use stripInaccessible at the boundary where records cross into or out of the client. [^9]
 
+![A decision path for enforcing field-level security in Apex: schema describe checks when the method must branch, user mode when the query must act as the running user, and stripInaccessible when records cross the client boundary](</diagrams/day-03-p-2a-field-level-security-fundamentals-field-permission/3-apex-enforcement-decision.png>)
+
 ### One layer, many surfaces: how FLS relates to layouts, record types, and sharing
 
 It is worth putting FLS in its place in the stack before the exam does it for you, because the distractors in this objective are almost always a different layer wearing the right vocabulary.
 
 Sharing controls which records exist for a user. Object permissions control what the user may do to those records. FLS controls which fields of those records are in play. Page layouts, compact layouts, and Dynamic Forms control how the record page is arranged, and record types select which layout and which picklist values apply for a given business process. [^5][^6]
+
+![The four layers on a record: sharing decides which records a user reaches, object permissions decide what they may do with them, field-level security decides which fields are in play, and page layouts and record types only arrange the page](</diagrams/day-03-p-2a-field-level-security-fundamentals-field-permission/4-fls-in-the-layer-stack.png>)
 
 Only the first three are security. The last group is presentation, and the exam's third question is a presentation layer being mistaken for a security layer. A field removed from a page layout but visible in FLS is fully readable in reports, list views, and search, which means the data is exposed to everyone the sharing model reaches. The durable fix is a field permission change, and the layout change is cosmetic housekeeping that goes alongside it. [^5]
 
@@ -103,6 +111,8 @@ The first design instinct is to remove Discount from the sales page layout. It i
 The correct configuration is a field permission change. In the sales profile, or in a sales permission set if the sales population is not uniformly on one profile, open Field-Level Security for Opportunity and set Discount to Hidden while leaving Amount visible and, if the business needs it, editable. [^1] That single change removes Discount from the user's field set across the record page, search, list views, and reports, because those surfaces read from field permissions rather than from layouts.
 
 Then the second half of the work begins, and it is the half that gets skipped. The org has an Apex service that returns opportunity records to a Lightning component. If that service queries Discount in system mode and returns the record, the hidden field reaches the client regardless of the FLS change. The fix is to make the query respect user mode or to strip inaccessible fields before returning. [^7][^11] Finally, the layout change is still worth making, because a field hidden by FLS that remains on the layout just wastes space, but it is now housekeeping rather than the control. The requirement is satisfied by the field permission and the programmatic enforcement together, and by nothing else in the design.
+
+![The Discount field scenario compared across three candidate fixes: removing the field from the page layout fails, setting it read-only fails, and setting it hidden with programmatic enforcement on the Apex path holds](</diagrams/day-03-p-2a-field-level-security-fundamentals-field-permission/5-discount-scenario-trap-signals.png>)
 
 ## Configuration Walkthrough
 
