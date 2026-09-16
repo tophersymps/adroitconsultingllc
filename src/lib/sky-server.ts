@@ -62,7 +62,8 @@ async function getCourseTracks(): Promise<Record<string, string>> {
 
 /** All series slugs (best-effort, content-derived). */
 function getAllSeriesSlugs(): string[] {
-  return ["salesforce-architect", "agentic-ai", "omni-studio-cert", "ai-at-work"].filter(
+  return ["salesforce-architect", "agentic-ai", "omni-studio-cert", "ai-at-work",
+          "salesforce-sharing-visibility-architect", "salesforce-data-architect"].filter(
     (s) => Boolean(getSeriesBySlug(s)),
   );
 }

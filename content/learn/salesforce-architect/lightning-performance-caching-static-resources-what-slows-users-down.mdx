@@ -1,0 +1,157 @@
+---
+title: "Lesson 43: Lightning Performance: Caching, Static Resources, and What Slows Users Down"
+slug: lightning-performance-caching-static-resources-what-slows-users-down
+series: "salesforce-architect"
+lesson: 43
+excerpt: "Where a Lightning page's load time actually goes, the cache layers that cut it down (secure browser caching, the Salesforce CDN, the Lightning Data Service client cache, and cacheable Apex), and how to ship static resources so third-party assets stop sitting in the critical path."
+date: "September 16, 2026"
+author: "Adroit Consulting"
+readTime: "13 min read"
+tags: [Salesforce, Architecture, Lightning, Performance]
+---
+
+# Lesson 43: Lightning Performance: Caching, Static Resources, and What Slows Users Down
+
+Lesson 42 took a Lightning Web Components screen apart and showed how the pieces fit: composition, wire, Lightning Data Service. You can get all of that architecturally right and still ship a page that users hate, because a correct component tree is not automatically a fast one. This lesson is about the cost side. Where the milliseconds actually go when a Lightning page loads, which of those costs belong to the platform, which belong to your org's configuration, and which belong to code you wrote.
+
+Lesson 24 covered the server half of performance: selective SOQL, indexes, and Platform Cache, all of which decide how fast a query comes back. This lesson covers everything that happens before and after that query: the browser, the CDN, the client-side cache the framework keeps for you, and the static assets you bundle. Connect the two and you can account for a page load end to end. Skip this half and you will spend a week indexing fields on an org whose real problem is a chart library loading on every render.
+
+The organizing idea is that a Lightning page load is not one thing. It is a bootstrap, a set of component downloads, a set of data round trips, and a render, and each of those has its own cache. Performance work is mostly the discipline of asking which cache should be absorbing this cost, and then checking whether that cache is actually switched on.
+
+## Define the terms first
+
+- **Experienced Page Time (EPT)**: the total time required for a page to load into a state where a user can fully interact with it. Salesforce measures it at the 75th percentile (P75), meaning the time within which 75% of page loads complete. [^5]
+- **Initial page load vs subsequent page load**: the initial load includes rendering the page and initializing the framework, also called the Lightning Experience bootstrap. Subsequent loads happen as a user navigates within an already-initialized session, and they are generally faster because the core framework does not reload. [^5]
+- **Cold load**: the first time a component is loaded each day it is slower, because the component is not cached yet. Later loads of the same component display faster. [^2]
+- **Static resource**: a file uploaded to the org that code references by name. Static resources can be archives such as .zip and .jar files, images, stylesheets, JavaScript, and other files. [^1]
+- **Cache Control (public vs private)**: the setting on a static resource that decides how the Salesforce server caches it. Private means the cached resource is stored for the current user's session only. Public means the cached resource is shared with other users in the org for faster load times, and once cached it is accessible to all internet traffic, including unauthenticated users. [^1]
+- **CDN**: a geographically distributed network of servers that store cached versions of web assets, so content is served from a location closer to the user instead of from the Salesforce data center. [^3]
+- **Lightning Data Service (LDS)**: the client-side data layer that loads a record once, caches it, and shares that one version with every component that asks for it. [^7]
+- **Cacheable Apex**: an Apex method annotated `@AuraEnabled(cacheable=true)`, which caches the method's results on the client. To be cacheable, a method must only get data and cannot mutate it. [^8]
+- **Lazy instantiation**: deferring the creation of a component until the user actually needs it, so its markup, data calls, and event listeners are not built during the initial load. [^6]
+
+## The floor is set by things the platform does not control
+
+Four factors set how fast Lightning Experience can possibly feel for a given user, and only one of them is your org's configuration:
+
+1. Network, meaning the conditions and distance between the device and the host instance. A session between a user in Asia and an instance hosted in Europe crosses continents several times just to establish a secure session. [^12]
+2. Device, meaning available processing power, memory, and disk performance, since the framework leans on the client to execute JavaScript and render. [^12]
+3. Browser, since Lightning Experience runs faster in some browsers than others. [^12]
+4. Salesforce configuration, meaning Lightning page customizations, Visualforce implementations, and org-specific settings. [^12]
+
+The practical numbers worth keeping in your head are a latency of 150 ms or lower and a download speed of 3 Mbps or higher for a stable experience, and at least 8 GB of RAM on the device with roughly 3 GB available for Salesforce browser tabs. [^12] Those are useful in an architecture review because they let you say something honest to a complaint that starts with "Salesforce is slow": two users in the same org, on the same page, can legitimately see different EPT because of their link and their laptop.
+
+Everything past that floor is what you can engineer. The rest of this lesson is the layers of cache you control, in the order a browser encounters them, plus the asset layer underneath.
+
+## Layer one: the browser
+
+Before any Lightning code runs, the browser can answer a request from its own store. Salesforce has a session setting for exactly this, "Enable secure and persistent browser caching to improve performance," and it is selected by default. It improves page reload performance by avoiding extra round trips to the server. [^4]
+
+Two facts about that setting matter. First, disabling it has a significant negative performance impact on Lightning Experience, and the documentation is blunt that you should only disable it for two reasons: company policy that forbids browser caching even for encrypted data, or development in a sandbox or Developer Edition where you want to see code changes without emptying the cache. [^4] If you are testing your way through a change, use a sandbox, then turn the setting back on. The companion page for developers says the same thing from the other direction: after disabling the browser caching setting, you can reload a page to test your changes without clearing your cache, and you should reenable it afterward. [^9]
+
+Second, the cache has a visible side effect that shows up as a bug report. When secure and persistent data caching is enabled, updates to fields on record pages in Experience Cloud are not observed immediately. To see the latest changes right away, you log out and log back in, and other users keep the old value until the cache is deleted or invalidated. [^4] Nobody escapes this with a page refresh. Design your UAT scripts knowing it.
+
+## Layer two: the CDN
+
+The browser cache only helps repeat visitors to the same assets. The CDN helps the first request of the day from anywhere in the world. Caching on the CDN improves the performance and scale of the site: users are served cached content from CDN servers that are usually closer to them than Salesforce's own servers, so page load times improve both in routine conditions and under high traffic. [^3]
+
+Salesforce exposes this as one checkbox: in Session Settings, "Enable Content Delivery Network (CDN) for Lightning Component framework." When enabled, it turns on CDN delivery for the static JavaScript and JSON files in the Lightning component framework that powers Lightning Experience. It does not distribute your Salesforce data or metadata through the CDN. [^3] On a cold boot of Lightning Experience, Salesforce measured an average improvement of 15% in load time at the 75th percentile of users. [^3]
+
+The part of that post that should get your attention is the adoption number: only 52% of customers have it enabled. [^3] The setting is disabled by default for orgs created before the Winter '19 release, and enabled by default for newer orgs and for new and existing Experience Builder sites. [^3] In an org with a decade of history, this is the cheapest real performance win available, and it takes one checkbox and a note to IT: the CDN changes the domain that serves framework files to `static.lightning.force.com`, so that host has to be allowed through the corporate firewall, and filtering by IP address there will break because those addresses are dynamic. [^3] Verify before you check the box, then check the box.
+
+There is a second CDN story for public sites. An Experience Cloud site published on Lightning Web Runtime (LWR) is delivered as two layers: a static layer holding the framework and the UI, which is stored on the CDN when you publish, and a dynamic layer that handles live data only when the flow needs it. [^11] The browser pulls the static layer immediately, so the page appears with almost no delay. [^11] The tradeoff is the same cache invalidation tradeoff that shows up everywhere in this lesson: because the static layer is a published artifact, component changes, including Salesforce's own updates to standard components, do not appear until you republish the site. [^11]
+
+## Layer three: the client-side data cache
+
+Once the framework and components are on the client, the cost shifts to data. Two mechanisms carry the load, and lesson 42 introduced both as architecture. Here they are as performance levers.
+
+**Lightning Data Service** caches records on the client and shares them across components. If a page is composed of components showing the same record, all of them show the same version, and the record loads once no matter how many components use it. [^7] It loads record data progressively, caches results on the client, invalidates cache entries when dependent data or metadata changes, and optimizes server calls by bulkifying and deduplicating requests. [^7] It also maintains a separate timeout for object and layout metadata, cached in a durable store that is available in orgs with secure browser caching. That timeout explains an old familiar complaint: after you change a layout, the record page shows the new layout only after the timeout when you reload, and logging out and back in forces it immediately. [^7]
+
+**Cacheable Apex** is the escape hatch for data that LDS does not manage. Annotating an Apex method with `@AuraEnabled(cacheable=true)` caches the method results on the client, which means the component can show cached data immediately instead of waiting for a server trip. When the cached data is stale, the framework retrieves the latest data from the server. To be cacheable, a method must only get data and cannot mutate it, and a method called with `@wire` must be cacheable. [^8] Caching is called out as especially beneficial for users on high latency, slow, or unreliable connections, which is a useful argument when someone proposes turning it off to avoid thinking about staleness. [^8]
+
+The wire service is what makes the cache shareable: because a wire provisions rather than requests, if the data already exists in the client cache, a network request may not be involved at all. [^10] Where you do need fresh data, the correction is explicit. A component that knows a cached value is invalid can query the server and refresh the cache with `refreshApex()`, and for stale Apex data you call `notifyRecordUpdateAvailable(recordIds)` so LDS knows those records are stale. [^8] One rule that prevents both bugs and load: the default cache duration can change as Salesforce optimizes the platform, so never design against a duration you assumed. [^8]
+
+## Static resources: getting assets out of the critical path
+
+Static resources are where an org's own assets live: the CSS, images, fonts, JavaScript libraries, and archives your components need. They are uploaded in Setup under Static Resources, the name can contain only underscores and alphanumeric characters and must be unique in the org, the maximum file size is 5 MB, and an org can hold up to 250 MB of static resources. [^1] In an LWC you import one from the `@salesforce/resourceUrl` scoped module. If the resource is an archive with a nested directory structure, you reach an item inside it by concatenating the path onto the imported URL. [^1]
+
+Cache Control is the setting that decides whether the CDN can help you. Set it to Public for assets that are not user-specific, because a public resource is cached on the Salesforce server and shared across users for faster load times, and after caching it is reachable by all internet traffic including unauthenticated users. Set it to Private for anything that must stay inside one user's session, and accept that it will not be shared the same way. [^1] The underlying platform behavior is worth stating plainly: static resources are managed and distributed by the platform, which acts as a content distribution network for the files, and caching and distribution are handled for you. [^15] That is why a public static resource is a delivery decision and not just a checkbox.
+
+Third-party JavaScript is the case that gets orgs into trouble, so it has its own rules. Before adding a library, check AppExchange and check whether a base Lightning component already does the job. [^13] If the library is genuinely needed, download it, upload it as a static resource, and load it in the component. [^13] Loading is done with `loadScript` and `loadStyle` from `lightning/platformResourceLoader`; both return promises, you can chain or parallelize them, and you control the load sequence. [^14] Two details separate a working integration from a performance problem:
+
+- The library goes through a static resource rather than a public internet URL, which is both a content security policy requirement and a caching requirement. [^13]
+- Loading happens once, on first render, guarded by a flag. The documented pattern initializes the library in `renderedCallback()` on the first render, after the container element exists. [^13] A `renderedCallback()` that calls `loadScript` on every render re-requests the library on every re-render of the component.
+
+Libraries that take over the DOM need one more thing. If a call to `appendChild()` manipulates the DOM, styling is not applied to the appended element unless you add `lwc:dom="manual"` to the empty native element you intend to fill. [^13] And a library loaded through `loadScript` on the same page as an Aura component loading the same script via `ltng:require` is loaded twice, because the duplication is not detected, so the library has to protect itself. [^14] Framework guidance is also clear that using JavaScript to manipulate the DOM is not recommended in LWC, because the engine does it more efficiently. [^13]
+
+The same discipline applies to conditional rendering. Hiding a region with CSS leaves the element and its children in the DOM, and any event listeners on them stay live. Conditional rendering that keeps the tree from being created is the cheaper option, whether that is Aura's `aura:if`, which lazily instantiates the enclosed tree, or LWC's `lwc:if` family, which supersedes the older `if:true` and `if:false` directives. [^6] [^16] When you decide what belongs on a page, remember that Lightning Components added to a page layout are instantiated when the page loads and contribute to the overall loading time, while Quick and Global Actions, the Utility Bar, and App Builder tabs are areas where the platform instantiates lazily. [^6] Put the heavy, rarely used widget in one of those places instead of in the main region of the page.
+
+## A worked example: the slow Account record page
+
+An org's Account record page has drifted. EPT at P75 sits above four seconds. The page holds eighteen components, six of which call Apex on load, one of which renders a chart by loading a charting library in `renderedCallback()` without a guard. A related list returns two hundred rows. The org was created in 2016, and nobody has ever opened Session Settings. Here is how an architect works it, in order:
+
+1. **Measure before changing anything.** Pull the page's EPT from Scale Center's Lightning Experience Insights, which reports page performance across the org, or watch it live with an EPT counter or the browser profiler. [^5] [^12] Guessing at a performance problem is how you spend a month optimizing the wrong layer.
+2. **Turn on the two org switches.** Enable the CDN for the Lightning component framework (after IT allowlists `static.lightning.force.com`) and confirm secure and persistent browser caching is on in an org created before Winter '19. [^3] [^4] These two changes cost nothing and address framework delivery and repeat-visit reloads.
+3. **Split the cost of a cold load from a warm one.** Check whether the pain is the first load of the day, when component code is not cached yet, or every navigation after it. [^2] If every subsequent navigation is slow, the framework is not the problem and you can skip straight to the page's own components and data.
+4. **Count what loads eagerly.** Eighteen components instantiate at page load on a layout, each potentially with its own data calls and listeners. [^6] Move the chart, the historical trend panel, and anything else that is not needed for triage into a tab or a Utility Bar entry where the platform instantiates lazily, or guard them behind conditional rendering. [^6]
+5. **Collapse the data calls.** Six components calling Apex on load is six round trips, and if a wired Apex method is not cacheable, none of them benefits from the client cache. [^8] Where several components need the same records, load once in a parent and pass the data down, which is the data-down contract from lesson 42. Where LDS already manages the record, use the LDS wire adapters and let the page share one cached copy. [^7]
+6. **Cap the payload.** The related list returning two hundred rows should select only the columns on screen and set a limit with a paging mechanism rather than returning everything. [^6]
+7. **Move the library.** The chart library belongs in a static resource with Cache Control set to Public so it can be cached and shared, loaded once on first render after the chart's container exists, minified, and only when the user opens the tab that needs it. [^1] [^13]
+
+The order is the point. Steps 2 and 3 are configuration and diagnosis. Steps 4 through 7 are design. Doing step 7 first, because a library load is visible in a profiler, is the classic mistake: it is usually the smallest cost on the page.
+
+## The decision sequence
+
+When you inherit a Lightning page with a performance complaint, run this sequence:
+
+1. Establish the number: EPT at P75 for the page, plus whether the complaint is about first load or navigation.
+2. Separate the four factors. Network, device, browser, and configuration all set the floor, and only the last one is yours. [^12]
+3. Confirm the org-level caches are on: CDN delivery for the framework, secure and persistent browser caching, and Public cache control on assets that are not user-specific. [^3] [^4] [^1]
+4. Audit eager instantiation. Everything on a page layout is created at load; only specific regions instantiate lazily. [^6]
+5. Audit data: how many round trips, whether they are cacheable, and whether the same record is being fetched by several components. [^7] [^8]
+6. Audit assets: what third-party code loads, at what moment, at what size, and whether it is in a static resource with Public cache control. [^13]
+7. Only then look at the server side, and pick up lesson 24: selectivity, indexes, and partitioning.
+
+## The pitfalls
+
+**Treating the org-level cache settings as trivia.** Secure browser caching is on by default and disabling it has a significant negative impact, so an org that disabled it years ago for a debugging session is a real and common case. [^4] The CDN setting is off by default for any org created before Winter '19, and less than half of customers have turned it on. [^3] Check both before you profile anything.
+
+**Loading third-party libraries in the render path.** A `loadScript` call without a first-render guard re-runs on every re-render, and a library loaded through `loadScript` next to an Aura component loading the same script through `ltng:require` loads twice. [^13] [^14] Load once, in a static resource, on the render that needs it.
+
+**Caching mutable data, then showing stale values.** `cacheable=true` methods must only get data and cannot mutate it. [^8] If a component writes a record and expects the screen to update, the write has to be imperative and the read has to be refreshed with `refreshApex()` or `notifyRecordUpdateAvailable(recordIds)`. [^8] The wire service also does not re-evaluate when data changes behind it, for example through a trigger or an auto-launched flow, which is exactly where an architect has to design the refresh instead of hoping. [^10]
+
+**Blaming the platform for a client-side problem.** EPT is measured on the user's device over the user's network, and both set the floor before your code runs. [^12] If the org's users are on a high-latency link with an underpowered browser, that is the finding, and the fix is a network or device conversation, not a refactor.
+
+**Assuming an LWR site picked up a change.** The static layer is published to the CDN, so a component change, or a Salesforce update to a standard component, does not reach users until you republish. [^11] Publish is the cache invalidation step, and skipping it in a release plan produces a very confusing bug report.
+
+## Try it
+
+A service org's console case page has EPT at P75 of 4.8 seconds. The default tab holds twenty-two components, including the full case feed, four components with wired Apex calls, an unfiltered related list of three hundred cases, and a chart component that calls `loadScript` in `renderedCallback()` without a guard. The org predates Winter '19 and the CDN setting is off. Answer before reading on.
+
+1. Which two changes cost nothing and can be made today? *(Enable the CDN for the Lightning component framework after IT allowlists `static.lightning.force.com`, and confirm secure and persistent browser caching is enabled. Both are session settings, and both are on by default only in newer orgs.)* [^3] [^4]
+2. Where does the case feed belong, and why? *(In a tab or another lazily instantiated region. Components on a page layout are instantiated at page load, while App Builder tabs and the Utility Bar are instantiated lazily.)* [^6]
+3. Four wired Apex calls on one page: what do you check first? *(Whether the methods are cacheable. A method used with `@wire` must be `cacheable=true`, and cacheable results come from the client cache when available.)* [^8]
+4. What is wrong with the related list as configured? *(It returns three hundred rows without selecting only the needed columns or limiting and paging the result set, so the page pays for data nobody reads.)* [^6]
+5. The chart component's `loadScript` call: what are the two fixes? *(Guard the load so it runs on the first render only, and deliver the library from a static resource with Public cache control instead of an external URL, minified and loaded only when the tab is opened.)* [^13] [^1]
+6. The layout on this record page changed an hour ago and users still see the old one. Is that a defect? *(No. Object and layout metadata is cached in a durable store with its own timeout, so the change appears after the timeout on reload, or immediately after logging out and back in.)* [^7]
+
+## What's next
+
+You can now account for a Lightning page's load time in layers: the user's network and device, the browser cache, the CDN, the client-side data cache, and the assets you ship. That is the toolkit you need before any performance claim becomes a budget rather than an opinion. The next lesson changes subject and returns to Apex with an adversarial eye. Lesson 44 is the security review: OWASP for Apex, covering SOQL injection, CRUD and field-level security enforcement, and what secure code looks like when it is written by design rather than patched after a finding.
+
+[^1]: developer.salesforce.com. [Access Static Resources | Lightning Web Components Developer Guide](https://developer.salesforce.com/docs/platform/lwc/guide/create-resources.html)
+[^2]: developer.salesforce.com. [Improve Performance | Lightning Web Components Developer Guide](https://developer.salesforce.com/docs/platform/lwc/guide/perf-intro.html)
+[^3]: developer.salesforce.com. [Enable CDN to Load Lightning Experience Faster | Salesforce Developers Blog](https://developer.salesforce.com/blogs/2023/03/enable-cdn-to-load-lightning-experience-faster)
+[^4]: developer.salesforce.com. [Enable Secure Browser Caching | Lightning Web Components Developer Guide](https://developer.salesforce.com/docs/platform/lwc/guide/perf-secure-browser-caching.html)
+[^5]: developer.salesforce.com. [Harness Lightning Experience Insights to Improve Performance | Salesforce Developers Blog](https://developer.salesforce.com/blogs/2026/03/harness-lightning-experience-insights-to-improve-performance)
+[^6]: developer.salesforce.com. [Lightning Components Performance Best Practices | Salesforce Developers Blog](https://developer.salesforce.com/blogs/developer-relations/2017/04/lightning-components-performance-best-practices.html)
+[^7]: developer.salesforce.com. [Lightning Data Service | Lightning Web Components Developer Guide](https://developer.salesforce.com/docs/platform/lwc/guide/data-ui-api.html)
+[^8]: developer.salesforce.com. [Client-Side Caching of Apex Method Results | Lightning Web Components Developer Guide](https://developer.salesforce.com/docs/platform/lwc/guide/apex-result-caching.html)
+[^9]: developer.salesforce.com. [Disable Caching During Development | Debug Lightning Web Components](https://developer.salesforce.com/docs/platform/lwc/guide/debug-disable-caching.html)
+[^10]: developer.salesforce.com. [Understand the Wire Service | Lightning Web Components Developer Guide](https://developer.salesforce.com/docs/platform/lwc/guide/data-wire-service-about.html)
+[^11]: developer.salesforce.com. [Create Faster, Lighter Experience Cloud Sites with Omnistudio Components and LWR | Salesforce Developers Blog](https://developer.salesforce.com/blogs/2026/01/create-faster-lighter-experience-cloud-sites-with-omnistudio-components-and-lwr)
+[^12]: trailhead.salesforce.com. [Optimize Lightning Experience Performance | Lightning Experience Performance Optimization](https://trailhead.salesforce.com/content/learn/modules/lightning-experience-performance-optimization/optimize-lightning-experience-performance)
+[^13]: developer.salesforce.com. [Use Third-Party JavaScript Libraries | Lightning Web Components Developer Guide](https://developer.salesforce.com/docs/platform/lwc/guide/js-third-party-library.html)
+[^14]: developer.salesforce.com. [Platform Resource Loader | Lightning Web Components Component Reference](https://developer.salesforce.com/docs/platform/lightning-component-reference/guide/lightning-platform-resource-loader.html)
+[^15]: trailhead.salesforce.com. [Use Static Resources | Visualforce Fundamentals](https://trailhead.salesforce.com/content/learn/modules/visualforce_fundamentals/visualforce_static_resources)
+[^16]: developer.salesforce.com. [HTML Template Directives | Lightning Web Components Developer Guide](https://developer.salesforce.com/docs/platform/lwc/guide/reference-directives.html)
