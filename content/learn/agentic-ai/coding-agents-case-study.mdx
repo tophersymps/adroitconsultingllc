@@ -1,0 +1,144 @@
+---
+title: "Lesson 43: Case Study: Coding Agents (Hermes, Claude Code, and Copilot Under the Hood)"
+slug: coding-agents-case-study
+series: "agentic-ai"
+lesson: 43
+excerpt: "The case study run closes with the class of agent closest to where you are reading this: coding agents, and what happens under the hood in tools like Hermes, Claude Code, and Copilot. This lesson walks the spectrum from inline autocomplete to fully asynchronous cloud agents, breaks down the documented agentic loop (gather context, take action, verify results), and names the one thing a coding agent has that no browser agent does: a verifier that runs itself. Code either compiles, passes tests, or it does not, and that changes the reliability arithmetic from the last lesson. You will trace a failing-test fix through the loop, see why context is the resource to manage, understand how the harness (models that reason, tools that act) is assembled, and learn the build order for adopting a coding agent safely."
+date: "September 16, 2026"
+author: "Adroit Consulting"
+readTime: "17 min read"
+tags: [LLMs, AI Agents, Case Study, Coding Agents, Developer Tools]
+---
+
+# Lesson 43: Case Study: Coding Agents (Hermes, Claude Code, and Copilot Under the Hood)
+
+Lesson 40 was a routing problem with a retrieval step in the middle. Lesson 41 was a decomposition problem with a synthesis step at the end. Lesson 42 left text behind and drove a browser. This one does not leave text behind at all. Its environment is a filesystem and a shell, its tools read and write text and run commands, and the thing it produces is code.
+
+Define the class. A coding agent is an agent whose environment is a working directory and a terminal. It observes that environment by reading files and running commands, decides what to change, acts by editing files or executing a command, and observes again. That is the same perceive, decide, act, observe loop from Lesson 15, with the browser swapped for a repo. Claude Code documents the loop in three blended phases: gather context, take action, verify results, repeating until the task is complete.[^1] You can interrupt it at any point. Every tool call returns information that feeds the next decision.[^1]
+
+The one idea to carry out: **a coding agent is the case where the agent loop gets a verifier that runs itself, and that changes both the reliability math and what "done" means.** Code either compiles, passes tests, or it does not, and the check costs almost nothing to run. The browser agent in Lesson 42 could not tell whether its click landed on the right element without a human looking; a coding agent can run a test suite and read a pass or a fail on its own. That single difference is why coding agents are the most widely adopted agents in production, and why they are worth studying as the cleanest example of the loop.
+
+## From autocomplete to agent
+
+Start with the spectrum, because the word "coding agent" is used for at least three different things and they are not interchangeable. GitHub Copilot launched in 2021 as inline autocomplete: ghost text after your cursor, one prediction at a time, you press Tab. That is not an agent. It has no loop, no tools, no observation. It predicts what comes next from the code it can see and stops.
+
+The first rung above that is agent mode in the IDE. GitHub describes it as the version that makes autonomous edits directly in your local development environment, deciding what to change, proposing edits and terminal commands, and iterating toward the task while you stay close to the loop.[^4] This is a real agent: it reads your workspace, changes multiple files, runs tests, reads the failures, fixes, and reruns. The loop from Lesson 15 is present, and so is the self-running verifier, because the agent can execute the test suite itself.
+
+The second rung is the cloud agent, which GitHub distinguishes explicitly from agent mode. Copilot cloud agent works in the background on GitHub, in its own ephemeral development environment powered by GitHub Actions, where it can explore your code, make changes, and execute automated tests and linters, then open a pull request for you to review.[^4] It automates branch creation, commit messages, and pushing, and it leaves the iteration on GitHub where every step is a commit you can audit.[^4]
+
+The spectrum matters because each rung has a different cost and a different trust boundary. Autocomplete is zero-risk: it only suggests. Agent mode edits your local tree, so it needs permissions and approvals. The cloud agent edits a branch in an ephemeral environment and hands you a pull request, so the blast radius is contained to a reviewable diff before anything reaches your main branch. The same underlying loop powers all three; what changes is where it runs and how much of the world it is allowed to touch.
+
+## The agentic loop, documented
+
+Claude Code's docs give the cleanest public description of the mechanism, so work from that. The loop is: gather context, take action, verify results, and repeat.[^1] The loop adapts to what you ask. A question about your codebase might only need context gathering. A bug fix cycles through all three phases repeatedly. A refactor might involve extensive verification. The model decides what each step needs based on what it learned from the previous step, chaining dozens of actions and course-correcting along the way.[^1]
+
+Two components power it: models that reason and tools that act. Claude Code itself is neither; the docs call it the agentic harness, the layer that provides the tools, context management, and execution environment that turn a language model into a capable coding agent.[^1] That framing is worth sitting with. The model on its own can only emit text. Tools are what make it agentic. Without tools it can only answer; with tools it can act.[^1]
+
+The docs walk a concrete example of the loop for the task "fix the failing tests":[^1]
+
+1. Run the test suite to see what is failing.
+2. Read the error output.
+3. Search for the relevant source files.
+4. Read those files to understand the code.
+5. Edit the files to fix the issue.
+6. Run the tests again to verify.
+
+Each tool use gives the model new information that informs the next step. That is the loop in its purest form: observe the failure, find the cause, change the code, observe the result, repeat until the check passes. There is no step here a human had to supervise, because the verification step runs itself and the model can read its own result.
+
+## The tools are the capability
+
+An agent's capability is the set of tools it can chain through the loop. Claude Code groups its built-in tools into five categories, and each represents a different kind of agency: file operations (read, edit, create, rename), search (find files by pattern, search content with regex, explore codebases), execution (run shell commands, start servers, run tests, use git), web (search, fetch documentation), and code intelligence (type errors and warnings after edits, jump to definitions, find references).[^1]
+
+The shape of that list matters. Read and write are there, so the agent can move a codebase. Search is there, because an agent that can only read what it is told about cannot find the bug on its own. Execution is there, because the self-running verifier depends on the ability to run commands and read their output. Web is there for error messages and documentation. Every one of those tools exists to feed information back into the loop.
+
+Hermes assembles the same idea at larger scale. Its architecture doc maps a central tool registry of more than 70 registered tools across roughly 28 toolsets, each tool file self-registering at import time, with the terminal tools supporting multiple backends (local, Docker, SSH, and remote environments).[^3] The lesson from the registry design is that tools are a first-class, extensible surface: an agent is not a fixed program, it is a loop plus whatever tools you attach to it, and the tool surface is where you extend capability without changing the loop.
+
+## The verifier is the difference
+
+This is the section that connects Lesson 42 to this one, so spend it carefully. The best-practices guide for Claude Code is blunt about what separates a session you watch from one you can walk away from: give the agent a way to verify its work. The docs put it as, give Claude a check it can run, tests, a build, a screenshot to compare, and say it is the difference between a session you watch and one you walk away from.[^2]
+
+The reasoning is worth unpacking. Without a check, the only signal the agent has for "done" is that the work looks done, and the human becomes the verification loop: every mistake waits for you to notice it. With a check, the loop closes on its own. Claude does the work, runs the check, reads the result, and iterates until the check passes.[^2] The check is anything that returns a pass or fail signal the model can read in the conversation: a test suite, a build exit code, a linter, a script that diffs output against a fixture, a screenshot compared against a design.[^2]
+
+Now contrast that with the browser agent from Lesson 42. Its end state was verifiable from outside, but only by a person (or an external lookup) checking the license portal. The agent could not cheaply confirm its own click landed correctly; that is why the lesson pushed screenshot logging and external verification. A coding agent has no such problem. Its check is a command it can run and read in the same conversation, so verification is not an external step bolted on after the fact, it is the natural last phase of every loop iteration.
+
+That changes the reliability arithmetic in a way worth naming. Lesson 42 showed that a 90 percent per-step success rate collapses to about 35 percent across ten steps, so the design response was to collapse steps into verified atomic commands and check after each one. A coding agent gets to check after every step almost for free, because the check is a test command and its output lands in context. It can afford to be wrong often, as long as it notices quickly, because the cost of a wrong step is one more iteration, not a silent bad result. The design center shifts from "do it right the first time" to "do it, check it, fix it, loop." Both lessons still demand a verifier; the difference is that in coding agents the verifier is built into the loop.
+
+## Context is the resource
+
+Every tool call and every command output feeds back into the loop, and that is exactly why context is the scarce resource. The Claude Code best-practices guide makes it the central constraint: the context window holds your entire conversation, every message, every file read, every command output, and it fills up fast, and LLM performance degrades as context fills.[^2] A single debugging session or codebase exploration can generate tens of thousands of tokens, and when the window fills, the model starts to forget earlier instructions and make more mistakes.[^2]
+
+The mitigations are all about keeping the load-bearing information near the top and out of the noise. Put persistent rules in a file the agent reads every session (Claude Code uses CLAUDE.md; Hermes uses context files and skills), rather than repeating them in prompts. Run `/context` to see what is consuming the window.[^2] When unrelated work pollutes a session, start a clean one instead of carrying the noise.[^2] This is the context-engineering discipline from earlier lessons, applied inside the agent that is doing the engineering.
+
+Two failure patterns from the guide are directly about context, and they are the ones you will actually hit. The kitchen sink session: you start one task, ask something unrelated, go back to the first task, and now the window is full of irrelevant information. The fix is to clear between unrelated tasks.[^2] The trust-then-verify gap: the agent produces a plausible-looking implementation that does not handle the edge cases. The fix is always to provide verification; if you cannot verify it, do not ship it.[^2] Both are context and verification problems, not model-quality problems, and both are solved by the design choices in this lesson.
+
+## The harness is a system, not a prompt
+
+It is worth looking past the interactive chat and seeing that a coding agent is a small piece of a larger runtime. Hermes's architecture maps the full path a single conversation takes: user input flows to a core loop, which builds a system prompt, resolves a provider and model, makes an API call, dispatches any tool calls, and loops until it produces a final response, then saves the session.[^3] The same core loop serves the CLI, the messaging gateway, scheduled jobs, and the IDE integration, with the platform differences living in the entry point rather than the agent.[^3]
+
+Two pieces of that architecture are directly relevant to this lesson. First, context compression and prompt caching are built in, not added on: Hermes summarizes middle conversation turns when context exceeds thresholds, and applies prompt caching to avoid re-paying for a stable prefix.[^3] That is the resource management from the previous section made structural, which is why a long coding session does not hit the context wall the way the naive picture suggests.
+
+Second, the scheduling and delivery layer matters. Hermes exposes scheduled jobs that run the agent in a fresh session, optionally load attached skills as context, run a prompt, and deliver the result to a configured target, with the scheduler checking that the job's configuration is valid before it ever spends a token.[^3][^5] A coding agent can therefore be more than an interactive tool; it can be a recurring task that opens in the morning, works while you are elsewhere, and reports back. The shift from interactive chat to scheduled work is the same shift Lesson 42 described for workflows, and the underlying loop does not change.
+
+Why mention this at all, beyond completeness? Because the reader is likely inside such a system already. These lessons are themselves written by an agent running on a schedule, with writing-standards skills attached, committed to a repo, and pushed to origin by a script that verifies the remote before it pushes. That is not flavor; it is the exact pattern this lesson teaches, observed live. The point to carry into a client conversation is not the internal tooling, it is the pattern: an agent that writes to a filesystem and pushes through a verified path is an assembly of the loop, tools, context management, and a verifier, and you can build that same assembly for someone else's team.
+
+## Worked example: the failing-test loop
+
+Here is a full trace of one coding-agent task, so the loop is concrete rather than abstract. The scenario: a payments module has a test failing in `calculate_fee`, and you hand the task to a coding agent with the instruction to make the test pass and not break anything else.
+
+Iteration one is context. The agent reads the failing test to learn what the assertion expects, then runs the test suite (or the single test) to see the actual error. It reads the error output. This is gather context, and it does not edit anything yet.
+
+Iteration two is locate and understand. The agent searches the codebase for `calculate_fee` and for the function the test actually calls, reads the implementation, and reads whatever it calls into. If the failure is in a dependency, it follows that too. At this point it understands the gap between what the test expects and what the code returns, which is the diagnosis.
+
+Iteration three is act. The agent edits the file, then runs the test again. This is the verify phase, and here is where the self-running verifier earns its place: it reads the result in context. If the test still fails, it reads the new error, adjusts, and reruns. If the test passes, it runs the broader suite to check nothing else broke, because the instruction said not to break anything.
+
+Iteration four is the wider check and the handoff. The agent runs the full test suite, confirms green, and reports what it changed and what the test output showed, with evidence rather than a bare assertion. That evidence, per the best-practices guidance, is what lets you review faster than re-running the verification yourself.[^2]
+
+Now the teaching parts. First, the agent was able to close this loop without you because the check existed and ran itself. If the repo had no tests, the agent's only "done" signal would have been that the code looked right, which is the trust-then-verify gap, and you would have become the verification loop.[^2] Second, the trace worked because the task was narrow and the failure was reproducible. Broad, vague, or unreproducible tasks are where coding agents stall, and the fix is the scoping and verification guidance from the best-practices list: give a symptom, a likely location, and what fixed looks like.[^2]
+
+## Safety and permissions
+
+A coding agent holds real tools and a real terminal in a real repo, so the boundary design is not optional. The Claude Code docs enumerate permission modes that set what the agent can do without asking: an auto mode where a classifier reviews most actions in the background and blocks risky ones, a manual mode where it asks before file edits and shell commands, an accept-edits mode where it edits files and runs common filesystem commands freely, and a plan mode where it explores and proposes without editing source.[^1] The same page notes you can allowlist trusted commands (like the test command) so it does not ask every time, and scope settings from organization policy down to personal preference.[^1]
+
+Two more controls are worth naming because they generalize. File edits are reversible: before the agent edits a file, it snapshots the current contents, so you can rewind to a previous state or ask it to undo.[^1] Checkpoints cover file changes, but actions that affect remote systems (databases, APIs, deployments) cannot be checkpointed, so those are controlled by the permission mode and permission rules.[^1] That split is the correct mental model: the local diff is cheap to roll back, the remote effect is not, so approval effort should concentrate where the rollback is impossible.
+
+Hermes's security model makes the same point structurally, with command approval, authorization, and container isolation as first-class concerns, and a file-write safety root that restricts which paths the agent can mutate in a given session.[^3][^5] The pattern to take into a real adoption: decide what the agent can do without asking, keep the irreversible effects behind an approval, and make the reversible local edits cheap to undo. That is Lesson 42's handoff vocabulary (confirm before irreversible, watch sensitive surfaces) applied to a repo instead of a browser.
+
+## The build order
+
+The same sequence from the last two case studies holds, with the verifier doing more of the work:
+
+1. **Start where the check is strong.** A repo with a real test suite and a fast build is where a coding agent is most reliable. A repo with no tests is the hardest place to start, because the agent has no self-running verifier.
+2. **Define what "done" means in a verifiable sentence.** "Make the failing test pass without breaking the suite" is a sentence. "Improve this module" is not, and the agent cannot close the loop on a goal it cannot check.
+3. **Give the agent the tools to verify its own work.** Tests, a build, a linter, a script that diffs output against a fixture. If the check does not exist, write it before you delegate, or you become the loop.
+4. **Scope the first tasks narrowly.** One bug, one feature, one refactor. Broad multi-repo changes are where the context fills and the loop stalls.
+5. **Set the permission boundary explicitly.** What can run without asking, what needs approval, and which irreversible effects (deployments, database writes) are always gated.
+6. **Put persistent rules in a file, not a prompt.** Code style, commands the agent cannot guess, repo etiquette, in a file it reads every session, kept short enough that it does not ignore it.[^2]
+7. **Watch the context budget.** Run the inspection command, clear between unrelated tasks, and keep one task per session so the load-bearing instructions stay near the top.[^2]
+8. **Move up the spectrum only after the local loop is boring.** Once agent mode in a repo you trust is routine, the cloud agent (which hands you a reviewable pull request from an ephemeral environment) is the natural next step, and it contains the blast radius to a diff.[^4]
+9. **Verify at the handoff, not just inside the loop.** Re-read the diff, run the suite yourself, and use the evidence the agent showed rather than trusting the summary.
+
+## Try it
+
+Three exercises, in increasing order of depth. All of them work with any coding agent in a throwaway repo.
+
+**Exercise one: watch the loop, count the iterations.** Give a coding agent a deliberately broken function with a failing test and the instruction "make the test pass, do not break the suite." Do not help. Count how many gather-act-verify cycles it takes, and write down what it read at each step. That count is your first honest measurement of how the loop behaves on a real task, and it is the baseline you will compare everything else against.
+
+**Exercise two: remove the verifier and see what breaks.** Take the same broken function but delete the test first, then give the agent the same instruction. Watch what it does without a check to run. It will still produce code, but its "done" signal is now that the code looks right, and you will feel yourself becoming the verification loop. That feeling is the lesson: the verifier is not an accessory, it is the difference between a loop that closes and one that does not.
+
+**Exercise three: give it a goal it cannot check.** Prompt the agent to "improve the quality of this module" in a repo that already passes all its tests. It will spend tokens exploring, propose speculative changes, and stall on a definition of quality it cannot verify. Then re-scope it as "add a test that catches the empty-input crash and make it pass." Compare the two sessions. The first is where coding agents go to waste; the second is the shape of every task you should actually delegate.
+
+## Summary
+
+Coding agents are the cleanest example of the loop from this path, because their environment, a filesystem and a shell, comes with a verifier that runs itself. The loop is the documented three-phase cycle of gather context, take action, verify results, repeated, with models that reason and tools that act inside an agentic harness.[^1] An agent's capability is its tool surface, and its cost center is its context window, which fills fast and degrades performance as it does.[^2][^3]
+
+The difference from the browser agent is the verifier. A coding agent can run a test and read the pass or fail in the same conversation, so it can afford to be wrong often as long as it notices quickly, and the design center shifts to do, check, fix, loop.[^2] The spectrum from autocomplete to agent mode to cloud agent is a spectrum of blast radius and trust, not a spectrum of mechanism; the loop is the same, and what changes is where it runs and how much of the world it touches.[^4] Safety is a boundary design, not a model property: permission modes for what runs without asking, checkpoints for reversible local edits, and approval where the rollback is impossible.[^1] And the whole thing is a system, not a prompt, with context compression, provider resolution, scheduling, and delivery assembled around one core loop.[^3] Give an agent a check it can run, scope the task so the check is meaningful, and the loop closes on its own.
+
+## What's next
+
+This lesson closes the case study run with the agent that writes code, and the next lesson turns outward. Lesson 44 covers enterprise integration, connecting agents to the systems a company actually runs on: Salesforce, ERP, CRM, and data warehouses. Where this lesson's agents acted on a filesystem and a shell, enterprise integration puts the agent at the seam with systems of record, which brings its own tool surface (connectors and APIs), its own context (schemas, records, entitlements), and a much harder verification problem, because the effect is a change to live business data, not a diff in a repo. You will apply the tool boundary, the verifier discipline, and the permission design from this path to agents whose actions land in the systems that run the business.
+
+[^1]: Anthropic. [How Claude Code works](https://code.claude.com/docs/en/how-claude-code-works)
+[^2]: Anthropic. [Best practices for Claude Code](https://code.claude.com/docs/en/best-practices)
+[^3]: Nous Research. [Hermes Agent, architecture](https://hermes-agent.nousresearch.com/docs/developer-guide/architecture)
+[^4]: GitHub. [About GitHub Copilot cloud agent](https://docs.github.com/en/copilot/concepts/agents/cloud-agent/about-cloud-agent)
+[^5]: Nous Research. [Hermes Agent, scheduled tasks (cron)](https://hermes-agent.nousresearch.com/docs/user-guide/features/cron)
