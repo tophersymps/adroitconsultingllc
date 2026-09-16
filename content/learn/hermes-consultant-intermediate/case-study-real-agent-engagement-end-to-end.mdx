@@ -1,0 +1,169 @@
+---
+title: "Lesson 21: Case Study: A Real Agent Engagement, End to End"
+slug: case-study-real-agent-engagement-end-to-end
+series: "hermes-consultant-intermediate"
+lesson: 21
+excerpt: "Twenty lessons taught you the parts. This one runs them together. A single agent engagement from first call to handover, told in sequence with the mistakes left in: a scope scoped small on purpose, an estimate that survived because it priced the data instead of the code, an export that changed its schema on a Tuesday, an IT director who went quiet while holding the security gate, a catalog defect that was the client's to own, and a handover that made the client's own staff the operator. Read it for the sequencing, not the techniques, because the sequencing is the part you cannot practice alone."
+date: "September 16, 2026"
+author: "Adroit Consulting"
+readTime: "20 min read"
+tags: [AI Agents, Consulting, Case Study]
+---
+
+# Lesson 21: Case Study: A Real Agent Engagement, End to End
+
+You have learned twenty techniques in a row, each one cleanly separated: capture, estimation, pricing, teams, incidents, security, stakeholders, scope. Real engagements do not arrive separated. They arrive interleaved, in the wrong order, with weather on top of them: a data source that changes on a Tuesday, a gatekeeper who goes silent, an assumption that turns out to be wrong in week three and has to be paid for anyway.
+
+This lesson is one engagement, told in sequence. It is a composite drawn from the shape real agent deliveries take, with names changed and the parts that went badly left in, because the sequence is the part no single technique lesson can teach you. The consultancy is yours. The client is Halyard Industrial Supply, a 210-person distributor of pumps, seals, and fittings. The fee is fixed. The date is real.
+
+## The engagement in one paragraph
+
+Halyard's inside sales team of six quote requests that arrive by email and web form. A rep reads each request, retypes the line items into the ERP, checks stock and price, and drafts a reply. Median turnaround is two days. Eighteen percent of requests generate a second email because a line item or a pack quantity was missed. You have seven weeks and $46,000 to build an agent that reads each request, extracts the line items, matches them against the catalog, flags anything ambiguous, and drafts a quote reply into a review queue where a rep approves, edits, or rejects it. The agent never sends anything and never sets a price that a pricing rule did not produce. The sponsor is Dana Whitfield, VP of Sales Operations, who signed the engagement and owns the outcome. The day-to-day contact is Priya Raman, inside sales manager. Miguel Santos runs IT and holds every gate that touches the client network.
+
+## Week zero: qualification, and the discovery that actually mattered
+
+The first call is a referral from Dana's counterpart at another distributor, which is how most of these engagements arrive. The stated problem is "our reps waste time on data entry." The enacted problem is different, and finding the difference is the first billable move.
+
+Discovery is half a day in the room with two reps, not three interviews with managers. Watching the work beats asking about the work, because people describe the process they think they follow. What the half day revealed:
+
+Requests are free text, not forms. One request is three lines and one is forty. Twenty-two percent arrive incomplete, so the rep's first action is often a clarifying email, which is where most of the two days goes. The ERP has no usable API for this purpose, only a nightly CSV export of the item master that lands on a network share at 2am. The mailbox has a thirty-day retention policy, so the historical corpus you would want for testing is smaller than anyone assumed.
+
+Then the test that paid for itself. Before quoting, you asked for sixty real requests with the rep's final answer for each. That request does three things at once. It gives you a golden set you can grade against from day one. It surfaces the data quality problem early. And it tells you whether the client can actually supply the material a fixed-fee engagement depends on. Sixty files arrived in two days, which is a good sign, and inside them you found the first genuine risk: the item master contains roughly four hundred duplicate SKUs with different pack quantities. Two reps have been quoting the same part at different prices for years.
+
+You do not solve that in discovery. You write it down, price around it, and name it in the proposal.
+
+## Week one: the baseline and the number
+
+The scope statement that goes into the statement of work is one paragraph and one acceptance bar. Write the acceptance bar so a stranger could test it:
+
+> A request passes when every line item in the source email appears in the draft either as a matched catalog item or as a flagged exception, no line item reaches the draft without a pricing rule behind it, an ambiguity is flagged rather than guessed, and no message leaves the system without a rep's approval.
+
+Notice what that bar does. It makes "done" testable by someone who was not in the room, and it makes the duplicate-SKU problem visible without making it the agent's fault. Ambiguity is flagged. That is the acceptance bar absorbing a data defect before the defect can become a delivery dispute.
+
+The estimate follows the critical path, not the total work. Code is the easy part here: extraction, catalog matching, draft generation, review queue. The critical path runs through the item master. So the estimate prices four days of data work (deduplicate by SKU and unit of measure, build the matching rule, decide what happens when a request names a part that no longer exists), six days of build, three days of evaluation and tuning, two days of handover, and the rest in review, communication, and buffer. Seven weeks, three milestones, one fixed fee, twenty percent contingency held privately rather than sold away.
+
+Three milestones with gates, and the gates matter more than the dates:
+
+- Milestone one, end of week two: extraction and matching running on the golden set, ninety percent line-item extraction accuracy, every unmatched item flagged.
+- Milestone two, end of week four: nightly catalog refresh wired, pricing rules loaded, security review closed, ambiguity flag rate under control.
+- Milestone three, end of week six: five live business days with two reps on real requests, no unflagged miss reaching a quote, turnaround for unambiguous requests under four hours.
+
+The exclusions go in writing, because they are the requests that will arrive anyway: order entry into the ERP, pricing exceptions, any outbound send, and the catalog cleanup itself. That last exclusion is a conversation, not a line item. You tell Dana plainly that the duplicate SKUs are a data problem that predates the engagement, that you will build around it and flag it, and that whoever owns the ERP data owns the cleanup. She agrees. That agreement is worth more in week five than the sentence it cost in week one.
+
+## Weeks two and three: build, and the Tuesday the export changed
+
+The build is unglamorous and it is where the delivery gets its shape. Three decisions carry most of the weight.
+
+**Isolation.** The agent runs as its own Hermes profile on a small VM in the client's environment: its own configuration, memory, skills, cron jobs, and state, separate from anything else you or a future consultant runs on that machine.[^1] When the engagement ends, the client has one home directory to own and one to remove. Isolation is not a technicality here; it is what makes the handover a clean transfer instead of an archaeology project.
+
+**Packaging.** Everything the engagement learns becomes a written skill rather than a behavior inside one consultant's head: the extraction rules, the matching rule, the flag policy, the pricing rule table, the review procedure.[^2] A skill is a document the agent loads when the work calls for it, which means the delivery is inspectable, diffable, and reviewable by the client's own people. It is also the asset you carry into the next distributor engagement.
+
+**Access.** The mailbox connection runs through an MCP server rather than a bespoke integration, and only the tools the engagement actually needs are exposed to the agent.[^3] Fewer tools is a security decision and a reliability decision at the same time: every capability you expose is one more thing that can behave unexpectedly at 2am.
+
+Then Tuesday of week three. The ERP admin pushes a config change and the nightly export ships a renamed column and one extra trailing field. The agent's parser matches nothing. For one run, every line item in every draft came back unmatched.
+
+The draft never reached a rep, and that is the whole story of why this is a bug and not an incident. The extract step carried a validation gate written in week two: before the agent does any work, it checks that the export still has the shape it expects, that row counts are within a reasonable band of the trailing average, and that the match rate is not collapsing. When the check failed, the job stopped and alerted instead of producing plausible-looking drafts with blank item numbers. The failure was loud, dated, and diagnosable in ten minutes.
+
+Two lessons came out of that Tuesday and both are transferable.
+
+First, design for a loud failure, not a resilient-looking one. The tempting version of robustness is an agent that keeps producing output no matter what the input looks like. That version would have shipped forty-eight wrong drafts into the review queue and made the consultant look reliable right up to the moment a rep quoted a customer from a blank line. Fail closed, stop, and say so. The platform supports the posture: a scheduled job does not silently inherit a changed global model or provider, it alerts and waits for an explicit decision instead of running on configuration nobody approved.[^4] When the platform's own default is fail-closed, the delivery should be too.
+
+Second, tune the alert until it means something. The first version of the ambiguity alert fired on every unmatched part, and by day three the reps were ignoring it, which is worse than no alert at all. You changed it to fire on a deviation: unmatched rate more than five points above the trailing week, or item count more than double the median. Noisy monitoring trains people to ignore monitoring. Cut it until every alert is worth reading.
+
+Dana heard about the Tuesday from you, in one message, that afternoon: what broke, what did not reach a rep, what the fix is, when she will have it. No drama, no speculation, no apology tour. Incident communication is a low-emotion factual channel, and the fastest way to lose a sponsor is to make them hear about a data problem from their own rep.
+
+## Week four: the people, not the code
+
+The security review is where technical work becomes a political event. Miguel's team has three requirements: the service account gets read-only mailbox access and nothing else, no credentials in files on the VM, and a written record of what the agent can reach.
+
+All three are reasonable, and two of them change the design. Credentials move into the client's secret manager, pulled at process start rather than pasted into a config file on a machine nobody audits, and each credential is attributable to the source it came from rather than to a file someone edited at some point.[^5] The agent's reach is bounded by its approval posture, so anything beyond reading, drafting, and writing to a review queue requires a deliberate decision rather than an implied permission.[^6] You hand Miguel the config, not an assurance about the config, because the review is about evidence.
+
+Miguel then went quiet for nine days. He holds milestone two, and milestone two holds the pilot.
+
+The move here is not patience and it is not pressure, it is a gate that can fail. The plan already said that the security sign-off was a dated gate and that a non-answer by its date moves the pilot schedule. When the date got close, you raised it in the sponsor lane, factually: "the security sign-off is the last item between build and pilot, the pilot date moves if it is not answered by Friday, and I need either the answer or the new date." Dana got an answer out of Miguel in a day, because the person who owns the outcome now owned the slippage too. A gate nobody can fail is a date you are pretending to hold.
+
+Midweek, the scope request arrived, the one you predicted in week one. "While you are in there, can it also handle the warehouse transfer items." No refusal, no absorption. You wrote it down, restated it as a delta, and priced it: three days, or the pilot date moves three days, or something comes out of scope. Dana looked at the number, said the warehouse flow is a separate quarter, and the change order was closed as declined, in writing, with the reason. Declined change orders are still records. In six months that conversation happens again, and the record is what keeps it from being a negotiation.
+
+## Week five: the defect that was not ours
+
+Third week of build, a rep notices the agent quoting a part at a price he had never seen. Chasing it down lands on the duplicate SKUs: same part number, three pack quantities, three price points, all live in the item master.
+
+This is the moment a consultant's fee quietly dies, and it is worth being precise about why. The instinct is to roll the cleanup into the engagement, because you are in the data anyway and the client will be happy. Do that and three things follow. The three extra days are unpaid. The delivery now includes work that was excluded in the statement of work, which teaches the client that exclusions are soft. And the client never learns that they have a data governance problem, so it stays in the catalog and poisons the next system anyone builds.
+
+The professional move is to name the defect with evidence and refuse to own it. The evidence is the export rows and the two historical quotes at different prices. The name is specific: four hundred duplicate SKUs with divergent pack quantities and no governing rule. The message is not "your data is bad," it is "the catalog has no single source of truth for pack quantity, the agent cannot invent one, here is the workaround and here is the decision that belongs to you."
+
+The workaround is what a delivery actually looks like under real conditions: match on part number plus unit of measure, and when a request names a part with more than one live pack quantity, flag it as an exception with both options shown and let the rep choose. Deterministic where the data is deterministic, human where the data is not. The acceptance bar absorbs it cleanly because the bar says ambiguity is flagged, never guessed.
+
+Then the rehearsal. The golden set ran at ninety-four percent extraction accuracy and one hundred percent flagging of unmatched items, which passes the bar and passes it for the right reasons. You ran it with Priya watching, on requests she picked, which is not a formality. A client who watches their own hard cases come back correct owns the result in a way that a receipt of your test results can never buy.
+
+## Week six: handover, done as you went
+
+The handover was half built by week three, because writing it at the end is how runbooks end up describing a system that no longer exists.
+
+The operating doc lives where the agent reads it every session. In Hermes, project context files are loaded automatically at session start and progressively as the agent moves through directories, which means the document describing how this deployment works is the same document the agent consults before it touches anything.[^7] That single decision removes the most common handover failure, which is documentation that is accurate on the day it is written and false by the next model change.
+
+The runbook is written for a calm stranger under pressure, not for an engineer who built the thing. Each entry is a symptom, a check, an action, and an escalation point. The most valuable entry in the whole document came out of the dry run, where Priya drove the console and you said nothing unless asked. She hit a step where a mailbox access token expires on a ninety-day cycle and nothing in the draft runbook told her what the expiry would look like from outside. She found it, the entry got written, and that one sentence is the difference between a two-hour outage and a two-day one in six months.
+
+Two boundary conversations belong here. First, credentials. The client owns the secret manager, the rotation, and the access list; you own the documentation of what the agent needs and why. Second, memory. The agent carries bounded, curated notes about the environment, and it is not a client knowledge base.[^8] Anything a new operator must know goes in the runbook, where it can be reviewed, version-controlled, and corrected, not in the agent's private notes.
+
+The taper starts the day after handover: daily check-ins for a week, then weekly for a month, then an agreed response window with a named owner on their side. State the taper in writing at handover, when everyone is friendly. Support without an end date becomes support without an invoice.
+
+## Week seven: the close, and the honest scorecard
+
+Measurement needs a definition that predates the change, so the one you agreed in week one is the one you report: median turnaround for unambiguous requests, and the rate of second emails caused by a missed item.
+
+Median turnaround for unambiguous requests went from roughly two days to under four hours. The missed-item second-email rate went from eighteen percent to six percent. Both numbers come from the reps' own tracking, not from the agent's logs, because a delivered system grading itself is not evidence.
+
+And here is the honest part, which belongs in the close conversation. The turnaround improvement is real but it is smaller than the raw numbers suggest, because the request still needs a rep to approve it, and requests that arrive ambiguous still take a day, since a human has to resolve them. The miss rate improved for a reason that has little to do with clever extraction: the agent surfaces every unmatched line as a flag, and a rep who is shown a flag checks it. The delivery did not make the reps faster at reading. It removed the retyping and made the misses visible. That is a smaller claim than the pitch deck version and a much more durable one, and Dana can verify every word of it.
+
+The natural follow-on is order entry, and the professional answer is to not sell it yet. The catalog has no governing rule for pack quantity. Automating order entry on top of that catalog would industrialize the defect. You say so, you quote the cleanup as its own piece of work with its own owner, and you leave with a referral and a return engagement that starts from a clean data foundation.
+
+## What actually went wrong
+
+A case study without this section is marketing. Five things went wrong, and four of them cost money.
+
+**The estimate assumed clean data.** Four hundred duplicate SKUs were not in the estimate, and the workaround for them was three unpaid days inside a fixed fee. The contingency absorbed it, which is what the contingency is for, and the lesson is that in agent delivery the data always deserves more of the estimate than the code does.
+
+**The golden set nearly did not exist.** Thirty-day mailbox retention meant the historical corpus was thinner than anyone assumed, and sixty usable requests had to be assembled by hand from reps' own folders. That was four days of unplanned work in week one. The fix is procedural, not technical: ask for the historical corpus during qualification, before you quote, because whether the client can produce it is itself a signal.
+
+**The first alert was noise.** Flagging every ambiguity trained the reps to ignore flags, which would have quietly destroyed the main thing the delivery improved. Alert on deviation from a baseline, not on the existence of a condition.
+
+**The runbook was going to be written at the end.** Moving it into the build meant the dry run could find the token-expiry gap. Written at the end, that gap would have been found by the client during their first real outage.
+
+**Nobody had asked who approves quotes on holiday.** It surfaced in the pilot week when Priya was out for two days and the queue sat. The answer took ten minutes to agree and should have been a line in the scope. Small governance questions have long lead times; ask them in week one.
+
+## The skeleton you can reuse
+
+The transferable shape of this engagement is a sequence with four gates, and it holds whether you are building on Hermes or on whatever the client already runs.
+
+- Qualification: test the data before you quote. The sample corpus answers three questions at once, and whether the client can produce it is the most honest signal you will get about the engagement.
+- Baseline: one testable acceptance bar, written exclusions, milestones with gates, and the sponsor's agreement on who owns the defects that predate you.
+- Build: isolate the environment, package the knowledge, expose the minimum access, and make failure loud. The single most valuable design decision in the whole build is that the pipeline stops rather than produces plausible output from unexpected input.
+- Stakeholders: treat security, IT, and the sponsor as dated gates with consequences, run the change-order process on every request including the ones you would have done for free, and name client defects with evidence instead of absorbing them.
+- Handover: write the operating doc while you build, run a dry run with the client driving, hand the credentials to their owner, and put an end date on support.
+- Close: measure against a definition that predates the change, report the smaller honest number, and refuse the follow-on that would build on a broken foundation.
+
+None of the individual moves in that sequence are difficult. Holding the sequence while a Tuesday breaks the export, a gatekeeper goes quiet, and a scope request lands mid-build is the actual job, and it is the reason the technique lessons were worth learning one at a time.
+
+## Try it
+
+Pick an engagement you have run, or one running now, and rebuild it against the skeleton. Answer in writing, in this order.
+
+1. What did you test about the client's data before you quoted, and what did the test not cover? Name the assumption that would have cost the most if it had been wrong.
+2. Write the acceptance bar as a testable sentence a stranger could grade. If any clause requires judgment to evaluate, rewrite it until it does not.
+3. List the exclusions you wrote down, and the request that arrived anyway. What was the change-order response, and is it on the record?
+4. Name every failure mode in the system and state what an operator would see when each one happens. Any failure that would produce plausible output instead of stopping is a defect in the design, not in the data.
+5. Write the runbook entry that a dry run with the client driving would have caught. If no dry run has happened, schedule it, and let the client hold the keyboard for the whole session.
+
+## What's next
+
+You have watched the pieces run in sequence, with the weather. The next lesson is where that sequence stops being a war story and becomes infrastructure: building repeatable processes, starting with the checklists and templates that turn a good engagement into a delivery framework you can hand to another consultant. The case study is the raw material. The next lesson is the mold.
+
+[^1]: Hermes Agent Docs, Profiles, a profile is a separate Hermes home directory with its own config, memory, sessions, skills, cron jobs, and state database, which is what makes a client deployment one directory that the client can own, back up, or remove when the engagement ends. [hermes-agent.nousresearch.com/docs/user-guide/profiles](https://hermes-agent.nousresearch.com/docs/user-guide/profiles)
+[^2]: Hermes Agent Docs, Features, Skills, skills are on-demand knowledge documents the agent loads when the work calls for them, which turns the engagement's rules into inspectable, diffable deliverables instead of behavior that lives in one consultant's head. [hermes-agent.nousresearch.com/docs/user-guide/features/skills](https://hermes-agent.nousresearch.com/docs/user-guide/features/skills)
+[^3]: Hermes Agent Docs, Features, MCP, MCP connects the agent to external tool servers and supports per-server filtering so only the tools you choose are exposed, which is how the mailbox connection stays bounded to the capabilities the engagement actually needs. [hermes-agent.nousresearch.com/docs/user-guide/features/mcp](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp)
+[^4]: Hermes Agent Docs, Features, Cron Jobs, scheduled work is defined explicitly, and a job that is not pinned to a provider or model alerts and waits for an explicit decision rather than silently inheriting a changed global default, the same fail-closed posture the extract validation gate copies. [hermes-agent.nousresearch.com/docs/user-guide/features/cron](https://hermes-agent.nousresearch.com/docs/user-guide/features/cron)
+[^5]: Hermes Agent Docs, Secrets, provider keys can be pulled from an external secret manager at process startup instead of being stored in a file, and every credential injected by a source is labelled with its origin, which is what makes credential ownership auditable at handover. [hermes-agent.nousresearch.com/docs/user-guide/secrets](https://hermes-agent.nousresearch.com/docs/user-guide/secrets)
+[^6]: Hermes Agent Docs, Security, the security model covers dangerous-command approval, user authorization, and container isolation, the mechanism that decides how much an agent can do on its own without asking. [hermes-agent.nousresearch.com/docs/user-guide/security](https://hermes-agent.nousresearch.com/docs/user-guide/security)
+[^7]: Hermes Agent Docs, Features, Context Files, project context files such as AGENTS.md are loaded into the system prompt at session start and discovered progressively as the agent reads through subdirectories, so a deployment's operating doc is read before the agent acts rather than filed where nobody looks. [hermes-agent.nousresearch.com/docs/user-guide/features/context-files](https://hermes-agent.nousresearch.com/docs/user-guide/features/context-files)
+[^8]: Hermes Agent Docs, Features, Memory, memory is bounded and curated under a hard character limit and is scoped per profile, which is exactly why operator knowledge belongs in the runbook where it can be reviewed and corrected instead of in the agent's private notes. [hermes-agent.nousresearch.com/docs/user-guide/features/memory](https://hermes-agent.nousresearch.com/docs/user-guide/features/memory)
