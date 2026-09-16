@@ -56,9 +56,28 @@ const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 // un-checked itself (t_a34614a1). 4000ms is above any plausible animation.
 const SCROLL_SETTLE_MS = 150;
 const SCROLL_SUPPRESS_CAP_MS = 4000;
+// Animation-start grace (ms): how long suppression survives WITHOUT having
+// absorbed a single `scroll` event from the animation it just started. Chrome's
+// FIRST event for a smooth document scroll is not synchronous with the
+// `scrollTo` call: measured live 158.8 / 184.7 / 205.3 / 306.6 ms, and 244.2 ms
+// for a bare probe in a visible, focused, unthrottled tab. A 150 ms window armed
+// at suppression start therefore expired BEFORE the animation had emitted
+// anything, its first event landed on the post-suppression path, and the toggle
+// un-checked itself on our own scroll (t_8ef99cf7). Until one event has been
+// absorbed there is no inter-event cadence to measure, so the window must cover
+// the browser's scroll-start latency; the moment an event is absorbed the 150 ms
+// no-scroll window becomes the real settle test. 1500 ms is ~5x the worst
+// latency measured, and errs high by design (only a stalled animation waits this
+// long, and a stalled animation would not emit the events that matter).
+const SCROLL_START_GRACE_MS = 1500;
 // How close to the `top` we last asked `scrollTo` for (px) a post-suppression
 // `scroll` event must land to still count as the tail of our own animation.
 const SCROLL_TAIL_EPSILON_PX = 2;
+
+/** Monotonic-ish timestamp in ms from the same clock the scroll handler uses. */
+function nowMs(): number {
+  return typeof performance !== "undefined" ? performance.now() : Date.now();
+}
 
 export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
   const { user, isLoading } = useAuth();
@@ -87,6 +106,9 @@ export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
   // firing a frame early can never make our own scroll look like user input.
   const lastProgrammaticTargetRef = useRef<number | null>(null);
   const lastSuppressedScrollAtRef = useRef<number>(0);
+  // When the current programmatic scroll was started. Bounds the "our animation
+  // is still travelling toward our target" rescue below (t_8ef99cf7).
+  const programmaticScrollStartedAtRef = useRef<number>(0);
   /**
    * Cache of the block alignment so ~4x/s `timeupdate` ticks don't re-run the
    * DOM query (`articleBlocks`) + the greedy O(segments x blocks) alignment for
@@ -125,14 +147,53 @@ export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
   // for SCROLL_SETTLE_MS" (each in-flight scroll event in the effect's onScroll
   // re-arms it), hard-capped at SCROLL_SUPPRESS_CAP_MS. A wheel/touch/key input
   // during the window calls endProgrammaticScroll directly.
+  //
+  // Arm the settle timer with the window that matches the state of THIS scroll:
+  // before the first event has been absorbed the browser may not have emitted
+  // anything yet, so only the animation-start grace is meaningful; afterwards
+  // the inter-event window is the real settle test (t_8ef99cf7).
+  const armSettleTimer = useCallback(() => {
+    if (settleTimerRef.current !== null) clearTimeout(settleTimerRef.current);
+    settleTimerRef.current = setTimeout(
+      endProgrammaticScroll,
+      lastSuppressedScrollAtRef.current === 0 ? SCROLL_START_GRACE_MS : SCROLL_SETTLE_MS,
+    );
+  }, [endProgrammaticScroll]);
+
   const beginProgrammaticScroll = useCallback(() => {
     endProgrammaticScroll();
     programmaticScrollRef.current = true;
+    programmaticScrollStartedAtRef.current = nowMs();
+    // No event of THIS animation has been absorbed yet -> the first timer must
+    // span the browser's scroll-start latency, not the 150 ms inter-event window.
+    lastSuppressedScrollAtRef.current = 0;
     scrollEndHandlerRef.current = () => endProgrammaticScroll();
     window.addEventListener("scrollend", scrollEndHandlerRef.current);
-    settleTimerRef.current = setTimeout(endProgrammaticScroll, SCROLL_SETTLE_MS);
+    armSettleTimer();
     capTimerRef.current = setTimeout(endProgrammaticScroll, SCROLL_SUPPRESS_CAP_MS);
-  }, [endProgrammaticScroll]);
+  }, [endProgrammaticScroll, armSettleTimer]);
+
+  // Absorb a `scroll` event we recognise as our own animation and restart the
+  // suppression window from it. If suppression had already ended (the rescue
+  // path) re-open it so the rest of the burst is covered too — bounded by the
+  // same stall-guard cap, so it can never wedge.
+  const absorbProgrammaticScroll = useCallback(
+    (at: number) => {
+      lastSuppressedScrollAtRef.current = at;
+      if (!programmaticScrollRef.current) {
+        programmaticScrollRef.current = true;
+        if (!scrollEndHandlerRef.current) {
+          scrollEndHandlerRef.current = () => endProgrammaticScroll();
+          window.addEventListener("scrollend", scrollEndHandlerRef.current);
+        }
+        if (capTimerRef.current === null) {
+          capTimerRef.current = setTimeout(endProgrammaticScroll, SCROLL_SUPPRESS_CAP_MS);
+        }
+      }
+      armSettleTimer();
+    },
+    [armSettleTimer, endProgrammaticScroll],
+  );
 
   // Default: ON for signed-in, OFF under reduced-motion (read once).
   useEffect(() => {
@@ -204,30 +265,37 @@ export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
       }
     };
     const onScroll = () => {
-      const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+      const now = nowMs();
+      const target = lastProgrammaticTargetRef.current;
+      const y = window.scrollY ?? 0;
       if (programmaticScrollRef.current) {
         // Our own smooth-scroll animation is still settling: re-arm the
         // no-scroll-for-150ms window so this burst is attributed to us, not the
         // user. The wedge cap (SCROLL_SUPPRESS_CAP_MS) still bounds it, but it
         // sits far above any real animation, so it can no longer end the
         // suppression while our own events are still arriving.
-        lastSuppressedScrollAtRef.current = now;
-        if (settleTimerRef.current !== null) clearTimeout(settleTimerRef.current);
-        settleTimerRef.current = setTimeout(endProgrammaticScroll, SCROLL_SETTLE_MS);
+        absorbProgrammaticScroll(now);
         return;
       }
-      // Suppression has ended. If this event is the TAIL of our own animation —
-      // it arrives on the animation's own cadence right after suppression ended
-      // AND sits at the offset we asked `scrollTo` for — it is still ours, not a
-      // scrollbar drag. (Belt-and-braces: the settle window already covers
-      // this, but it must not depend on a timer landing at the right moment.)
-      const target = lastProgrammaticTargetRef.current;
-      if (
+      // Suppression has ended. Two shapes of event are still OURS:
+      //  (1) the animation's TAIL — it arrives on the animation's own cadence
+      //      right after suppression ended AND sits at the offset we asked for;
+      //  (2) the animation's FIRST event, arriving after suppression ended
+      //      because the scroll-start latency outlasted even the start grace —
+      //      the position is still on its way to our target, and a user scroll
+      //      converges on no such offset (a bare drag lands wherever the reader
+      //      put it, at/at-the-target only by accident and only once settled).
+      const isTail =
         target !== null &&
         now - lastSuppressedScrollAtRef.current <= SCROLL_SETTLE_MS &&
-        Math.abs((window.scrollY ?? 0) - target) <= SCROLL_TAIL_EPSILON_PX
-      ) {
-        lastSuppressedScrollAtRef.current = now;
+        Math.abs(y - target) <= SCROLL_TAIL_EPSILON_PX;
+      const isLateFirst =
+        target !== null &&
+        lastSuppressedScrollAtRef.current === 0 &&
+        now - programmaticScrollStartedAtRef.current <= SCROLL_START_GRACE_MS &&
+        Math.abs(y - target) > SCROLL_TAIL_EPSILON_PX;
+      if (isTail || isLateFirst) {
+        absorbProgrammaticScroll(now);
         return;
       }
       // A scroll with no preceding input, after our animation settled => a
@@ -252,8 +320,9 @@ export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
       capTimerRef.current = null;
       scrollEndHandlerRef.current = null;
       programmaticScrollRef.current = false;
+      lastSuppressedScrollAtRef.current = 0;
     };
-  }, [user, endProgrammaticScroll]);
+  }, [user, endProgrammaticScroll, absorbProgrammaticScroll]);
 
   // FLOAT activation animation: when the player first pins to the top (its
   // natural position has scrolled above the header band), light up a drop

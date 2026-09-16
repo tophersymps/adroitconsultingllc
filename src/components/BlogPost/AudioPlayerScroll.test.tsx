@@ -291,8 +291,13 @@ describe("AudioPlayer regression: follow-along survives its own programmatic scr
    * `window` `scroll` event per frame — the burst the component must not read
    * as user input.
    */
-  function stubScrollToWithSmoothBurst(opts: { frames?: number; frameMs?: number } = {}) {
-    const { frames = 6, frameMs = FRAME_MS } = opts;
+  function stubScrollToWithSmoothBurst(opts: {
+    frames?: number;
+    frameMs?: number;
+    /** Delay before the FIRST event, when it exceeds one frame (default: one frame). */
+    firstDelayMs?: number;
+  } = {}) {
+    const { frames = 6, frameMs = FRAME_MS, firstDelayMs = frameMs } = opts;
     Object.defineProperty(window, "scrollTo", {
       writable: true,
       value: vi.fn((arg?: ScrollToOptions | number) => {
@@ -307,7 +312,7 @@ describe("AudioPlayer regression: follow-along survives its own programmatic scr
               value: from + ((top - from) * i) / frames,
             });
             window.dispatchEvent(new Event("scroll"));
-          }, i * frameMs);
+          }, firstDelayMs + (i - 1) * frameMs);
         }
       }),
     });
@@ -554,4 +559,151 @@ describe("AudioPlayer regression: follow-along survives its own programmatic scr
     },
     15000,
   );
+
+  /**
+   * t_8ef99cf7 — the residual race of the same feature. Suppression used to be
+   * armed with the 150 ms inter-event window AT SUPPRESSION START, i.e. before
+   * the browser had emitted a single event for the animation. Chrome's FIRST
+   * `scroll` event for a smooth document scroll is not synchronous with the
+   * `scrollTo` call: measured live at 158.8 / 184.7 / 205.3 / 306.6 ms, and
+   * 244.2 ms for a bare probe in a visible, focused, unthrottled tab. So the
+   * window expired first, the first animation event landed on the
+   * post-suppression path, the position-based tail check could not match (no
+   * event had ever been suppressed, so `lastSuppressedScrollAtRef` was still 0),
+   * and `setFollowing(false)` ran — the reported symptom, reproduced 4/6 live
+   * runs (2/2 at 1x CPU with no polling).
+   *
+   * Both cases below are invisible to the rest of this suite: every other burst
+   * here starts emitting on the very first frame.
+   */
+  it(
+    "REGRESSION (t_8ef99cf7): a LATE first event (200 ms after scrollTo) keeps the toggle checked through the whole burst",
+    async () => {
+      const FIRST_DELAY_MS = 200; // > SCROLL_SETTLE_MS (150); live measured 158-307 ms
+      const FRAMES = 40; // 200 + 39 x 16 = 824 ms of animation
+      stubScrollToWithSmoothBurst({ frames: FRAMES, firstDelayMs: FIRST_DELAY_MS });
+      authState = { user: { id: "u1", email: "a@b.c", isAdmin: false }, isLoading: false };
+      stubArticle();
+      render(<AudioPlayer slug={SLUG} hasAudio />);
+
+      const toggle = await screen.findByRole("checkbox", { name: /Follow along/i });
+      await waitFor(() => expect(toggle).toBeChecked());
+      const scrollTo = window.scrollTo as unknown as ReturnType<typeof vi.fn>;
+      scrollTo.mockClear();
+
+      // Sample the toggle AFTER every scroll event the animation emits: the
+      // component's own listener was registered at mount, so this one (added
+      // now) observes the state each event left behind.
+      const seen: boolean[] = [];
+      const record = () => {
+        const box = screen.queryByRole("checkbox", { name: /Follow along/i }) as HTMLInputElement | null;
+        seen.push(box?.checked ?? false);
+      };
+      window.addEventListener("scroll", record);
+
+      timeupdate(4); // advances into paragraph 1 -> our programmatic smooth scroll
+      await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
+      await afterBurst(FRAMES);
+      window.removeEventListener("scroll", record);
+
+      // The burst really was driven, and every event of it stayed suppressed.
+      expect(seen.length).toBe(FRAMES);
+      expect(seen.every((checked) => checked)).toBe(true);
+      expect(screen.getByRole("checkbox", { name: /Follow along/i })).toBeChecked();
+      // Exactly one snap — the late tail must not re-scroll.
+      expect(scrollTo).toHaveBeenCalledTimes(1);
+    },
+    15000,
+  );
+
+  it(
+    "REGRESSION (t_8ef99cf7): a premature scrollend before the animation's first event does not end suppression",
+    async () => {
+      // Suppression can also be ended early by a `scrollend` that is not ours to
+      // trust (a nested scroller's scrollend bubbles to `window`, and the
+      // listener cannot tell them apart). The animation is then still in flight
+      // toward our target and its first event must not be read as user input.
+      const FRAMES = 20;
+      stubScrollToWithSmoothBurst({ frames: FRAMES, firstDelayMs: 200 });
+      authState = { user: { id: "u1", email: "a@b.c", isAdmin: false }, isLoading: false };
+      stubArticle();
+      render(<AudioPlayer slug={SLUG} hasAudio />);
+
+      const toggle = await screen.findByRole("checkbox", { name: /Follow along/i });
+      await waitFor(() => expect(toggle).toBeChecked());
+      const scrollTo = window.scrollTo as unknown as ReturnType<typeof vi.fn>;
+      scrollTo.mockClear();
+
+      const seen: boolean[] = [];
+      const record = () => {
+        const box = screen.queryByRole("checkbox", { name: /Follow along/i }) as HTMLInputElement | null;
+        seen.push(box?.checked ?? false);
+      };
+      window.addEventListener("scroll", record);
+
+      timeupdate(4);
+      await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
+      // Premature end-of-suppression signal: fires 90 ms in, before any of the
+      // animation's own events (first one at 200 ms).
+      setTimeout(() => window.dispatchEvent(new Event("scrollend")), 90);
+      await afterBurst(FRAMES);
+      window.removeEventListener("scroll", record);
+
+      expect(seen.length).toBe(FRAMES);
+      expect(seen.every((checked) => checked)).toBe(true);
+      expect(screen.getByRole("checkbox", { name: /Follow along/i })).toBeChecked();
+    },
+    15000,
+  );
+
+  it("AC-4 (t_8ef99cf7): a bare scroll after a LATE-first-event burst has settled still stops following", async () => {
+    // Guards the other direction: the start grace must not make the toggle
+    // un-stoppable. Once the animation's events have been absorbed and the
+    // settle window has passed, a plain scroll with no preceding input is still
+    // the reader's scrollbar drag.
+    stubScrollToWithSmoothBurst({ frames: 6, firstDelayMs: 200 });
+    authState = { user: { id: "u1", email: "a@b.c", isAdmin: false }, isLoading: false };
+    stubArticle();
+    render(<AudioPlayer slug={SLUG} hasAudio />);
+
+    const toggle = await screen.findByRole("checkbox", { name: /Follow along/i });
+    await waitFor(() => expect(toggle).toBeChecked());
+    const scrollTo = window.scrollTo as unknown as ReturnType<typeof vi.fn>;
+    scrollTo.mockClear();
+
+    timeupdate(4);
+    await waitFor(() => expect(scrollTo).toHaveBeenCalled());
+    // Burst: events at 200/216/.../280 ms; suppression ends 150 ms after the last.
+    await new Promise((r) => setTimeout(r, 700));
+    expect(screen.getByRole("checkbox", { name: /Follow along/i })).toBeChecked();
+
+    fireEvent.scroll(window, { target: document.body });
+    expect(screen.getByRole("checkbox", { name: /Follow along/i })).not.toBeChecked();
+    expect(getAudio().getAttribute("src")).toBe(`/api/audio/${SLUG}`);
+  });
+
+  it("AC-4 (t_8ef99cf7): a bare scroll while our own smooth scroll never emitted anything still stops following after the start grace", async () => {
+    // The start grace is not a blanket amnesty: it is bounded. A programmatic
+    // scroll whose animation produced no events at all (nothing to suppress)
+    // must not swallow a reader's scrollbar drag once the grace has passed.
+    stubScrollToWithSmoothBurst({ frames: 0 });
+    authState = { user: { id: "u1", email: "a@b.c", isAdmin: false }, isLoading: false };
+    stubArticle();
+    render(<AudioPlayer slug={SLUG} hasAudio />);
+
+    const toggle = await screen.findByRole("checkbox", { name: /Follow along/i });
+    await waitFor(() => expect(toggle).toBeChecked());
+    const scrollTo = window.scrollTo as unknown as ReturnType<typeof vi.fn>;
+    scrollTo.mockClear();
+
+    timeupdate(4);
+    await waitFor(() => expect(scrollTo).toHaveBeenCalled());
+    // Wait past the start grace: 1500 ms is the bound on "our animation may
+    // still be starting up", not an amnesty for anything that follows.
+    await new Promise((r) => setTimeout(r, 1700));
+    expect(screen.getByRole("checkbox", { name: /Follow along/i })).toBeChecked();
+
+    fireEvent.scroll(window, { target: document.body });
+    expect(screen.getByRole("checkbox", { name: /Follow along/i })).not.toBeChecked();
+  }, 15000);
 });
