@@ -104,7 +104,10 @@ export function getQuizForLesson(series: string, slug: string): QuizData | null 
 /**
  * Knowledge-check metadata for a series: scans `content/learn/<series>/checks/`
  * for `check-<n>.json` and returns `[{ n, lessons: [a, b] }]` sorted by n.
- * Check n covers lessons [5n−4, 5n]. Empty array when the dir is missing.
+ * The lesson range is read from each check file's own title (`Lessons A–B`),
+ * so it stays correct for any per-course cadence and short-tail merges —
+ * it is NOT derived from `5n−4, 5n` (that hardcode broke once cadence became
+ * per-course, Chris 2026-09-17). Empty array when the dir is missing.
  */
 export function getKnowledgeChecks(series: string): KnowledgeCheckMeta[] {
   if (!isValidSegment(series)) return [];
@@ -121,7 +124,19 @@ export function getKnowledgeChecks(series: string): KnowledgeCheckMeta[] {
     if (!m) continue;
     const n = parseInt(m[1]!, 10);
     if (!Number.isInteger(n) || n < 1) continue;
-    checks.push({ n, lessons: [5 * n - 4, 5 * n] });
+    const quiz = readQuizJson(path.join(dir, file));
+    let lessons: [number, number] = [5 * n - 4, 5 * n]; // fallback default
+    if (quiz?.title) {
+      const rm = /Lessons\s+(\d+)\s*[–-]\s*(\d+)/.exec(quiz.title);
+      if (rm) {
+        const a = parseInt(rm[1]!, 10);
+        const b = parseInt(rm[2]!, 10);
+        if (Number.isInteger(a) && Number.isInteger(b) && a > 0 && b >= a) {
+          lessons = [a, b];
+        }
+      }
+    }
+    checks.push({ n, lessons });
   }
   return checks.sort((a, b) => a.n - b.n);
 }
