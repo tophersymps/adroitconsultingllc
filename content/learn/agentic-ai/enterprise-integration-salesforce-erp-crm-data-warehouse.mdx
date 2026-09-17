@@ -26,6 +26,8 @@ The first decision is which direction the call goes. Reading accepts a narrower 
 
 The second decision is that connectors are not just plumbing. Anthropic's notes on building effective agents describe the augmented LLM as the foundation: a model given retrieval, tools, and memory, with the tool interface tailored to the specific use case and documented well for the model.[^1] In an enterprise integration the tool is a connector, and the interface the model sees is what you write. The same discipline that helps a coding agent pick the right file helps an enterprise agent pick the right record and the right action, but the stakes of a wrong pick are higher because the target is shared state.
 
+![The read path and the write path compared across what each touches, its identity, its blast radius, who refuses, and its guardrail](</diagrams/enterprise-integration-salesforce-erp-crm-data-warehouse/1-read-write-paths.png>)
+
 ## Three shapes of connection
 
 Enterprise systems connect to agents in three recognizable shapes. Most real deployments use a mix of all three, and picking which shape fits a given system is most of the architecture.
@@ -37,6 +39,8 @@ Enterprise systems connect to agents in three recognizable shapes. Most real dep
 **Managed agent platforms.** Salesforce's Agentforce is the extreme of this shape: instead of you bolting tools onto a model, the platform provides the reasoning engine, the actions, the guardrails, and the connectors. Salesforce describes Agentforce as the AI agent platform that delivers autonomous support at enterprise scale, and notes that you can use MuleSoft API connectors to connect its agents to any system.[^4] The benefit is that actions are built and governed inside the same platform that owns the data, so a deployment in Salesforce has a shorter guardrail gap. The cost is that you operate inside a vendor's model for prompts, actions, and limits.
 
 The rough guidance: use a direct API when you have a small, stable set of operations and want full control; use an MCP server when the system already governs its data and you want to inherit that governance without rebuilding it; and use a managed platform when the business context you need lives in that platform and you want actions, reasoning, and data governed together. Do not default to the newest shape. Default to the one that lets the agent inherit the most existing governance with the least new surface you have to defend.
+
+![Three shapes of connection compared, direct API, MCP server, and managed agent platform, showing what each gains, what you own, and when to choose it](</diagrams/enterprise-integration-salesforce-erp-crm-data-warehouse/2-connection-shapes.png>)
 
 ## The read path: a governed query into the data warehouse
 
@@ -51,6 +55,8 @@ That single sentence captures the whole read-path lesson. The warehouse already 
 - **Grant per tool, not per server.** Snowflake notes that access to the MCP server does not grant access to the tools; each tool needs its own grant.[^3] Scope discovery just as tightly, because tool lists are how an agent learns what it can reach.
 
 The read path has a second risk that is easy to miss. High tool counts and broad tool descriptions degrade selection. The Snowflake server caps each MCP server at 50 tools and warns that higher counts can degrade tool-selection accuracy, and it flags that untrusted third-party MCP servers can carry tool poisoning or tool shadowing, so you should verify every tool a third-party server offers.[^3] In our own pipeline we treat a tool surface as attack surface: the fewer tools an agent can see, the fewer it can misuse, and the more accurate its choice is when it does pick.
+
+![Four tool-surface failure modes with the fix for each: SQL bypass on a shared server, untrusted third-party MCP servers, too many tools, and recursive tool calls](</diagrams/enterprise-integration-salesforce-erp-crm-data-warehouse/3-tool-surface-failure-modes.png>)
 
 ## The write path: actions in a CRM or ERP
 
@@ -87,6 +93,8 @@ A support agent answers a customer's question about a late order. It needs two f
 **Path three, the write.** When the agent determines the customer is eligible for an escalation, it drafts the case subject and body and calls a write tool that creates a pending case, not a live one. The write tool's identity is the only one with create permission for cases, the case lands with an approval-required status, and no case commits until a service rep confirms it. The agent returns the proposal, the confirmation step it is waiting on, and the case number it generated, so the human can verify before anything lands.[^2]
 
 The whole example fits in one mental model: the agent can see exactly what it needs to see, read through governed tools that cannot expose more, and its only write is a reversible proposal awaiting a human hand. That is not overengineering. It is the shape of an integration that operations teams can trust with a real codebase, and it is exactly where the agent's usefulness and its safety come from the same choices.
+
+![The three paths of the order-support agent: a governed warehouse read, a read-only CRM read, and a write that creates a pending case awaiting a human confirmation](</diagrams/enterprise-integration-salesforce-erp-crm-data-warehouse/4-order-support-agent.png>)
 
 ## A checklist for your first enterprise seam
 
