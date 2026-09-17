@@ -28,6 +28,8 @@ A high-quality schema has five parts:
 4. **Output schema.** What the tool returns, designed so the model can decide the next step.
 5. **Error schema.** How the tool reports failure in a way the model can recover from.
 
+![The tool contract as three parties and five schema parts: the model returns a structured tool call, the application layer validates it against the schema and executes it on the backend system, and a failure travels back as a structured error rather than a raw stack trace](</diagrams/tool-design-schemas-error-handling-retries/1-tool-contract-anatomy.png>)
+
 ## Designing inputs that remove ambiguity
 
 Vague inputs cause the model to omit required fields, invent unsupported parameters, or pass values in the wrong format. A strong input schema uses specific field names, narrow data types, enums for controlled values, stated units and formats, required/optional markers, and validation constraints. [^1]
@@ -111,6 +113,8 @@ Before deciding to retry, classify the failure. The decision should be mechanica
 
 A schema violation is permanent on the literal call but transient at the agent level: retrying the same prompt produces a similar malformed call, so the right move is re-plan with the error appended to context. [^5]
 
+![A classification table for tool call failures: 2xx is success, 400 through 422 are permanent, 404 is usually permanent, 408 through 504 and connection errors are transient, and a tool call schema violation or hallucinated tool name is permanent on the call. Only the transient branch reaches the retry machinery, which backs off with full jitter, charges a turn-level budget, and stops at zero](</diagrams/tool-design-schemas-error-handling-retries/2-classify-before-retry.png>)
+
 ### Backoff with jitter, and a budget
 
 Once you've decided to retry, use **exponential backoff with full jitter**, capped. Exponential growth spreads retries across time so a fleet doesn't synchronize and hammer a recovering service; jitter randomizes the delay; a cap prevents unbounded waits. [^5] The canonical reference for full jitter is AWS's "Exponential Backoff And Jitter" post. [^7]
@@ -120,6 +124,8 @@ Then add a **retry budget per turn**: a turn-level counter, decremented on trans
 ### Idempotency keys for write tools
 
 The first pattern to add to any tool that mutates state is an **idempotency key**, the pattern Stripe's API made canonical. The agent derives a stable key (e.g., a hash of turn ID + tool name), passes it on every call, and the server returns the same response for the same key within a window (24 hours is Stripe's default). A retry against the same key returns the first result; the duplicate write never happens. Two rules: derive the key from the turn, not a fresh UUID per call (a fresh UUID defeats the purpose), and apply the same key shape to *every* state-mutating tool; a mixed system is the failure mode hiding in plain sight. If an upstream API has no idempotency support, treat it as a permanent flaw: request the feature or wrap it in your own idempotency proxy. [^5] [^8]
+
+![Two retry timelines side by side: without an idempotency key a timed-out CreateOrder call is retried and creates a second order for one customer, while a key derived from the turn ID and tool name makes the retry return the first result instead of executing the write again](</diagrams/tool-design-schemas-error-handling-retries/3-idempotency-key-flow.png>)
 
 ### When writes partially succeed: compensating transactions
 
