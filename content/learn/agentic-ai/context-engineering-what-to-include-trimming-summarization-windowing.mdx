@@ -24,6 +24,8 @@ The practical result is **context rot**. As token count grows, a model's ability
 
 So the answer to "should I buy a 200K window" is usually "no, learn to curate the 10K you actually need." Anthropic's position is that context engineering beats raw context maximization. [^1]
 
+![Why a bigger context window does not fix context: n squared pairwise relationships, a finite attention budget, and context rot, with a chart showing recall falling as the window fills and the conclusion to curate the 10K tokens you need rather than buy a 200K window](</diagrams/context-engineering-what-to-include-trimming-summarization-windowing/1-context-rot.png>)
+
 ## Operation 1: Decide what to include
 
 Before you trim anything, get the inclusion side right, because a well-chosen initial context needs far less maintenance later. Context breaks into three families per LangChain: **instructions** (prompts, memories, few-shot examples, tool descriptions), **knowledge** (facts, memories), and **tools** (feedback from tool calls). [^2] Your inclusion decision is which members of each family earn a slot in the window for this step.
@@ -64,6 +66,8 @@ Windowing is the rolling-window version of trimming: keep the most recent N turn
 
 The subtle failure is window sizing. Different agent scaffolds keep history differently: SWE-agent skips failed retry turns, OpenHands keeps them all. With a window of 10, an agent that failed all 10 turns in a row would feed only erroneous observations into its context. [^3] JetBrains' conclusion is that the masking window is a hyperparameter you tune per agent, not a constant you copy. [^3]
 
+![Table of the four context operations, Include, Trim, Summarize, and Window, each with what it does, when it fires, its cost, and how it bites back, from observation masking to compaction at 95% of the window](</diagrams/context-engineering-what-to-include-trimming-summarization-windowing/2-four-operations.png>)
+
 ## The hybrid pattern that wins
 
 JetBrains tested three strategies head to head on SWE-bench Verified with 500 instances each, across models from 32B to 480B: a raw agent with unmanaged memory, observation masking, and LLM summarization. Their findings are unusually clean:
@@ -73,6 +77,8 @@ JetBrains tested three strategies head to head on SWE-bench Verified with 500 in
 - Their **hybrid** (masking as the first line of defense, summarization only as a last resort for very long runs) beat pure masking by 7% on cost and pure summarization by 11%, while nudging solve rates up about 2.6 points. [^3]
 
 The pattern to copy: **mask early and often, summarize rarely and late.** Let cheap deletion handle the steady accumulation, and reserve the expensive LLM summary for the runs that genuinely threaten the window.
+
+![Four context strategies compared on SWE-bench Verified over 500 instances each: raw agent, observation masking, LLM summarization, and the hybrid that is 7% cheaper than masking and 11% cheaper than summarization, ending with the rule to mask early and often and summarize rarely and late](</diagrams/context-engineering-what-to-include-trimming-summarization-windowing/3-context-strategy-benchmark.png>)
 
 ## Worked example: a diagnostic agent that stays sharp
 
