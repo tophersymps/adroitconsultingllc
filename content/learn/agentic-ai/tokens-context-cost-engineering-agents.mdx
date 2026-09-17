@@ -29,6 +29,8 @@ On Claude Sonnet 4.6, for example, input is $3 per million tokens and output is 
 
 One more compounding factor: structured output costs more tokens than prose; Lesson 2 measured JSON at 12 tokens vs 6 for the same information. Agents are structured-output machines (tool calls, JSON schemas), so they pay the markup on every act stage.
 
+![Input tokens cost $3 per million on Sonnet 4.6 and are the only bill you can engineer, while output tokens cost $15 per million, a 5x spread, and cannot be cached or meaningfully compressed](</diagrams/tokens-context-cost-engineering-agents/1-two-bills.png>)
+
 ## Lever 1: Budget before you build
 
 You wouldn't ship a web service without monitoring memory. Don't ship an agent without a token budget. Comet's guidance is to account for every source of context up front: system prompts (typically 500–2,000 tokens), user input sized at worst case, tool outputs, conversation history, and retrieved documents. [^3]
@@ -70,6 +72,8 @@ The structural rule is the same from both providers: **static-first, variable-la
 
 Model choice is a first-class cost lever. Anthropic's routing workflow is explicit: route easy, common questions to a small cheap model and hard, unusual ones to a more capable model. [^2] And the multi-agent research post found model choice matters more than raw budget: upgrading to Claude Sonnet 4 was "a larger performance gain than doubling the token budget" on the previous generation. [^1]
 
+![The four cost levers: budget before you build, compress to the smallest set of high-signal tokens, cache the static prefix at 0.1x the input price, and route easy questions to a small cheap model](</diagrams/tokens-context-cost-engineering-agents/2-four-levers.png>)
+
 ## Worked example: the Fortress 10-agent pipeline
 
 The Fortress runs a real 10-stage delivery pipeline (BA → Architect → DevOps → Designer → Developer → Accessibility → Security → Performance → QA → Deploy), where an orchestrator routes each task to a specialist agent and every stage hands a structured deliverable to the next. [Source: Fortress of Solitude kanban roster, internal] Let's put a price on one task, using Claude Sonnet 4.6 pricing from the docs above ($3/MTok input, $15/MTok output, $0.30/MTok cache read). [^4]
@@ -79,6 +83,8 @@ Assume each stage makes one LLM call with a 30K-token input: a 20K static prefix
 **Without caching:** 10 stages × 30K input = 300K tokens → $0.90 input. 10 × 4K output = 40K → $0.60. **$1.50 per task.**
 
 **With caching** (the 20K static prefix is a cache hit within its TTL): 10 stages × (10K uncached × $3 + 20K cached × $0.30) = 10 × ($0.03 + $0.006) = **$0.36 input**. Output unchanged. **$0.96 per task.**
+
+![The Fortress 10-agent pipeline prices a single task at $1.50 without caching versus $0.96 with caching, a 36% cut of $0.54, which at 200 tasks a month drops the bill from $300 to $192 before routing and compression are even applied](</diagrams/tokens-context-cost-engineering-agents/3-fortress-pipeline.png>)
 
 That's a 36% cut: $0.54 per task. At 200 tasks a month, **$300 → $192, about $108 saved on this one pipeline**, before any compression or routing. Note two honest caveats: this assumes steady traffic that keeps cache entries alive (the 5-minute TTL refreshes free on hits, but a cold start pays a 1.25x write), and real usage is messier than one-call-per-stage. The Fortress already routes models deliberately: local inference for routine stages, cloud models for creative and implementation work, and a two-task split (cheap discovery, premium execution) that holds the expensive step near $0.60, with every agent carrying a token budget and a model tier. [Source: Fortress of Solitude kanban roster, internal]
 
