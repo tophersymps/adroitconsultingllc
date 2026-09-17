@@ -53,6 +53,8 @@ Three knobs, in increasing order of strictness, plus one contract format underne
 
 The decision rule, straight from the docs: if you're connecting the model to tools, functions, or data in your system, use **function calling**; if you want to structure the model's final answer to the user, use **Structured Outputs via a response format**. And on the ladder itself: "We recommend always using Structured Outputs instead of JSON mode when possible." [^3] [^1]
 
+![The structured-output ladder: JSON mode guarantees only valid JSON, JSON Schema is the contract itself, Structured Outputs enforces the schema, and function calling adds tool selection on top](</diagrams/structured-output-json-mode-function-calling-tool-schemas/1-ladder.png>)
+
 ### The rung you actually need
 
 The ladder from JSON mode up to function calling maps directly onto the reliability spectrum from Lesson 6, and it is worth internalizing *why* each rung sits above the last. JSON mode only guarantees parseability. It will happily return valid JSON with the wrong keys, the wrong types, or an extra top-level field, because validity is all it checks. If you only need "is this JSON," JSON mode is enough, but "is this JSON" is rarely the real requirement.
@@ -73,6 +75,8 @@ It is worth walking the five steps slowly, because the common mental model is wr
 
 The two providers express the same shape differently, and seeing both is useful. OpenAI frames it as a numbered sequence ending in a final response or more tool calls. Anthropic's framing is block-based: the model's response carries a `tool_use` block (which tool, what arguments), your application runs the lookup, and the next request carries a `tool_result` block with the outcome, so the model can incorporate it and continue. Different vocabulary, same contract: the model proposes, your code executes, and the result is fed back so the loop can continue. The architecture is identical because it is the only shape that keeps the model safely at arm's length from your systems.
 
+![The tool-calling round trip: you send the tools, the model proposes a call, your code executes it, you return the result, and the model answers or calls again](</diagrams/structured-output-json-mode-function-calling-tool-schemas/2-tool-calling-loop.png>)
+
 The critical fact bears repeating because it is the safety property that makes everything else in this lesson work: the model only ever *proposes* a call. It cannot execute anything, because it has no execution capability; it produces data. The moment your code decides to act on that data is the moment you are in control, and with control comes the responsibility to validate before you act. That is why the validation layer in the pitfall section is not optional: the model's proposal is very good most of the time, and exactly wrong sometimes, and your code is the only thing standing between a bad proposal and a bad side effect.
 
 ## Tool schemas done right
@@ -89,6 +93,8 @@ Schema design is where reliable agents are won or lost, and Anthropic's guidance
 The ordering in that list is deliberate, and the first bullet is the one people most often skip, so it deserves the emphasis it gets. The tool's *description* is how the model knows when to reach for it, and a thin description is how the model reaches for the wrong tool, or reaches for the right tool with the wrong arguments. A 3 to 4 sentence description covers what the tool does, when to use it, when *not* to use it, what each parameter means, and its limitations. That last item, limitations, is the one most descriptions omit, and it is exactly what prevents the model from using a tool beyond its competence. Writing good descriptions is cheap and it is the highest-leverage thing you can do for tool-call reliability.
 
 Consolidating related operations is a subtle fix for a real failure mode. Three tools, `create_pr`, `review_pr`, `merge_pr`, force the model to pick between three similar options, and similarity breeds ambiguity: which one fits this exact request? Collapsing them into one tool with an `action` parameter removes the ambiguity at the source, because now there is only one tool to select, and the action is a single enum value inside it. Fewer, more capable tools mean the model spends its effort on the right action, not on disambiguating near-identical tool names. Namespacing solves the related growth problem: as the library grows, `github_list_prs` and `slack_send_message` cannot be confused the way two generic tools with overlapping names can. Uniqueness of selection scales with clarity of naming.
+
+![Consolidate create_pr, review_pr, and merge_pr into one github_pr tool with an action enum, and namespace tool names across services](</diagrams/structured-output-json-mode-function-calling-tool-schemas/3-consolidate-tools.png>)
 
 The remaining items are the reliability guardrails. High-signal output means the tool returns semantic, stable identifiers and only the fields the model needs for its next decision, so tool results do not bloat the context window or distract the model with irrelevant detail. `strict: true` upgrades the schema guarantee so calls must match the schema exactly. And `tool_choice` gives you control over *whether* and *which* tool gets used: `auto` lets the model decide, `any` forces a tool call, `tool` pins a specific tool, and `none` disables tools for this request. Together they let you tighten or loosen the model's discretion to match the reliability you need for a given step.
 
@@ -113,6 +119,8 @@ Treating "valid JSON" as "correct output." JSON mode guarantees parseability and
 The pitfall is the gap between "parses" and "is correct," and it is a wide one. Valid JSON can still have the wrong keys, the wrong types, a missing required field, or an invalid enum value; JSON mode will happily produce all of those, because it only guarantees parseability. The fix is validation: run every model output against your schema before you act on it, using Pydantic in Python, Zod in TypeScript, or a plain JSON Schema validator. This is the "your code disposes" half of the opening sentence, and it is not optional.
 
 The two non-completion cases are the ones even careful teams forget. A request can come back truncated if it hits `max_output_tokens`, producing output that cuts off mid-structure. And a request can be a safety refusal, where the model declines and returns a refusal rather than the structured data you asked for. Both look like completions at a glance, and both are full of traps if you trust the payload blindly. The provider docs walk through checking the response status and the refusal fields before trusting the output, and you should do the same. An unvalidated tool-call argument is not a quality nit; it is a bug waiting for a production incident, because it is exactly the seam where a bad proposal becomes a bad side effect.
+
+![Valid JSON is not correct output: check for truncation and safety refusals, validate against your schema, then execute](</diagrams/structured-output-json-mode-function-calling-tool-schemas/4-validation-gate.png>)
 
 ## Try it
 
