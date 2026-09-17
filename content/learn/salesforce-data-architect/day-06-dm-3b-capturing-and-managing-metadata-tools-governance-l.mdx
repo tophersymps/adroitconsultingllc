@@ -1,0 +1,143 @@
+---
+title: "Data Architect DM-3B: Capturing and Managing Metadata: Tools, Change Control, and Governance Linkage"
+slug: day-06-dm-3b-capturing-and-managing-metadata-tools-governance-l
+series: salesforce-data-architect
+lesson: 6
+excerpt: "Metadata that nobody can retrieve, diff, or report on is documentation, not governance. This lesson covers the tool families that capture metadata on the platform (Object Manager, Field Usage, the Setup Audit Trail, the Metadata API, the Tooling API), where enterprise catalogs and platform scanners fit, and why source-controlled deployment is metadata governance in practice. It closes on the linkage that turns a written standard into a running control: checked automatically, reconciled on a cadence, owned by a named steward. Day 6 of the Platform Data Architect exam prep."
+date: "September 17, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [Salesforce, Data Architecture, Data Governance, Certification]
+---
+
+Lesson 5 built the artifact set: the business glossary, the technical data dictionary, lineage, taxonomy, and classification. This lesson answers the question that follows immediately. What do you actually use to capture those artifacts, keep them true across releases, and prove to an auditor that the org's metadata is under control?
+
+Requirement dm-3b asks you to recommend approaches and tools for capturing, maintaining, and governing business and technical metadata on the Salesforce Platform, and to explain how metadata management links into an enterprise data governance program. [^1] The exam tests the tools at a specific level of precision. It wants you to know which artifact holds a business definition, which tool answers "who changed this validation rule," which interfaces produce metadata you can put in Git, and which parts of a governance program the platform can enforce without human memory.
+
+The reason this matters more than the exam weight suggests is that metadata management is the operational arm of data governance. A governance program publishes standards. Those standards only become real when something monitors conformance to them on a schedule. An org where the naming convention lives in a PDF and the enforcement lives in a reviewer's memory has a standard, not a control, and the difference is exactly what an audit finds.
+
+The three quiz questions in this lesson test three boundaries. Configuration change versus data change. Which interfaces produce machine-readable metadata. And the gap between a one-time documentation exercise and a repeatable control. Everything below is built to make those boundaries obvious.
+
+## Deep Dive
+
+### Metadata tooling divides into three families
+
+Sort the tools by what question they answer, and the field stops looking like a catalog of products. [^11]
+
+Native Salesforce tools answer questions about the org as configured right now. Object Manager holds the field and object descriptions. Field Usage, surfaced as "Where is this used?", lists the components that reference a custom field. The Setup Audit Trail records who changed configuration and when. The Metadata API and the Tooling API expose the same configuration in machine-readable form. [^3][^4][^7]
+
+Enterprise metadata catalogs answer questions that span systems. Collibra and Informatica's Axon and Enterprise Data Catalog are the names to know here: they hold business definitions, ownership, classification, and lineage across Salesforce and the other platforms an enterprise runs. [^13][^14] They are the natural home for the business half of metadata when the org footprint reaches beyond one Salesforce instance, because a glossary that covers only half of an enterprise's systems cannot resolve a term like "active customer" across all of them.
+
+Platform-specific scanners answer questions about the org as a system. Elements.cloud, Metazoa, and Gearset's org intelligence read the org's own metadata and produce dependency graphs, unused-field reports, description coverage, and technical debt assessments. [^11][^12] The tools in this family are the ones that tell you which fields have never been populated, which flows reference a field three hops away, and which parts of the org nobody can explain.
+
+The exam wants the categories, not the logos. Native tools govern what the platform holds. Catalogs govern the enterprise picture. Scanners govern the org's internal quality. When a question describes a governance need, the correct answer usually follows from which of the three the need belongs to.
+
+### The Metadata API is the machine-readable substrate
+
+The Metadata API retrieves and deploys org metadata as XML. It works in packages: a retrieve operation pulls a defined set of components down as files, and a deploy operation pushes a package back up, with the component list described in a `package.xml` manifest. [^3]
+
+That XML is the reason the Metadata API matters to a governance conversation. It is the format that goes into version control, gets diffed in a pull request, and ships in a deployment pipeline. Change Sets, the Salesforce CLI, DevOps Center, and commercial deployment tools all sit on top of it. [^9] When a team "has metadata under source control," what they mean in practice is that the org's configuration exists as Metadata API output in a Git repository.
+
+The API's granularity is worth knowing for the exam. It works at the level of whole components and packages. A deployment is a batch operation with an asynchronous status to poll, which is efficient for a release and awkward for a single field. That awkwardness is one reason the Tooling API exists. [^4]
+
+### The Tooling API answers what Object Manager cannot
+
+The Tooling API is available over REST and SOAP and offers finer-grained access to metadata than the Metadata API, including the ability to query metadata and dependency information directly. [^4] Where the Metadata API moves packages, the Tooling API lets a tool ask a question: which fields on this object have descriptions, how many references does this component have, and which metadata types depend on it.
+
+Dependency information is exposed through the `MetadataComponentDependency` object, which is queryable but carries real caveats. It has been in beta for years, it caps results at 2,000 records per query and 100,000 in total, and it excludes reports entirely. [^7] Treat the Tooling API as a strong foundation for conformance checks and precise lookups, not as a guarantee of complete impact analysis. That gap between "queryable" and "complete" is a favorite exam distinction and a real project risk.
+
+The pair to remember for the exam is simple. The Metadata API and the Tooling API are the two interfaces that produce machine-readable metadata, which is what makes them suitable for change control and cataloging. [^3][^4] A page layout and a standard report are metadata and data consumers respectively. Neither is a metadata management substrate.
+
+### Change control is metadata governance in practice
+
+Ask what happens when a field is added directly in production, and the governance argument makes itself. The org changes, a user sees a new field, and the Setup Audit Trail records that something happened. What no one has is a diff, a reviewer, a test run, or a rollback path. The change is real and the record of it is thin.
+
+Route the same change through a repository and the picture inverts. The field is defined in source, reviewed by someone who can see exactly what changed, deployed through a validated pipeline, and reversible because the previous state still exists. Every schema change flowing through source-controlled deployment rather than a production click is the operational definition of metadata governance, and it is the practice this lesson's first exam trap protects.
+
+The platform's own tooling supports both the disciplined path and the shortcut. DevOps Center runs a Git-backed, work-item-driven release process that admins can use without a command line, and it tracks which components moved through which pipeline stage. [^9] Commercial tools such as Gearset and Copado operate in the same space, and Gearset also supplies the org analysis layer described earlier. [^12] A change set, by contrast, leaves no persistent record of what it contained once the deployment completes, which is why teams outgrow it.
+
+There is a second governance benefit hiding here. If the metadata lives in a repository, the repository becomes the input to every catalog and every conformance check. You can run a script against a checked-out branch without touching production, which is how governance tooling avoids becoming a production risk itself.
+
+### The Setup Audit Trail answers "who changed this field"
+
+When an auditor or an incident responder asks who altered a validation rule last quarter, the native answer is the Setup Audit Trail. It records configuration changes made in Setup, with the user and the timestamp attached, and it covers the settings areas that shape org behavior: custom objects and fields, validation rules, record types, permission and sharing settings, security configuration, and more. [^2][^8]
+
+Know the mechanics, because they get tested. The trail is on by default and requires no setup. It is visible to users with the View Setup and Configuration permission, displays the 20 most recent entries in the UI, and can be downloaded as a CSV covering the retention window. [^2][^8] Salesforce retains the records for 180 days, so an org that needs a longer history exports the file on a schedule. The underlying records are also available to query, which is how teams build their own change dashboards over configuration activity. [^8]
+
+The exam trap is the boundary. The Setup Audit Trail tracks configuration, not record data. If a customer's address changed, the trail will not show it, and that is not a defect in the trail. Record-level change history is the job of Field History Tracking on the object, and Field Audit Trail extends that mechanism. [^6]
+
+Field History Tracking records who changed a tracked field, when, and the before and after values, for up to 20 fields per object, with history retained for 18 months in the org. [^6] Field Audit Trail extends the capability: history can be kept indefinitely, up to 200 fields per object can be tracked, and archived history is stored separately from your data storage. [^5] Because these limits and add-on availability shift between releases, confirm the current numbers against the release notes for your edition rather than quoting a figure from memory. [^5]
+
+The last gap worth naming is the permission diff. When a profile changes, the trail records that the profile changed, not which permissions moved. Detecting that someone granted Modify All Data requires a metadata snapshot before and after, which is another argument for keeping metadata in source control where the diff can be read. [^8]
+
+### Governance defines the standards; the tools enforce them
+
+The linkage between metadata management and an enterprise data governance program runs in one direction. The governance program sets the standards and the tools measure conformance to them. [^1]
+
+What the program owes the platform is a short list of decisions. A naming convention for objects and fields. A required set of descriptive metadata: description, help text, and, where relevant, an owner. A classification scheme that labels data by sensitivity, so that protection decisions follow from the label rather than from a person's judgment in the moment. And an ownership model that names a steward for each domain. On the platform, tagging and classification are what drive field-level and object-level security policies, which is the mechanism that makes a classification scheme operationally meaningful rather than decorative. [^10]
+
+The metadata repository is the meeting point between the program and the org. It holds the object and field definitions, the owner or steward for each domain, the classification label, the lineage that traces a value from source through transformation to consumption, and the mapping from each business glossary term to the objects and fields that implement it. [^1][^7] The design rule is single source of truth: the repository owns the definition, and the in-system descriptions are synced from it, so the two cannot drift into different stories about the same field.
+
+That design rule is what makes the third exam trap in this lesson real. A glossary built once and never reconciled to the org becomes untrustworthy within a release cycle, and once one entry is known to be stale, users stop consulting the whole artifact. Reconciliation is a cadence, not a launch task.
+
+### Turn the standard into a control
+
+Here is the sentence worth memorizing for this requirement: a standard becomes a control when it is checked automatically. [^1]
+
+The check itself is unglamorous. Fields missing descriptions, fields missing owners, names that do not match the convention, and classifications that were never assigned are all queryable through the platform's metadata interfaces. A scheduled report, a Tooling API query, or a scanner run against the org turns those questions into a list with an owner and a due date. [^4][^7]
+
+Automate the check and the governance conversation changes shape. It stops being an annual cleanup project and becomes an exception report that gets smaller every sprint. It also stops depending on whether each developer remembered the rule at the moment they created a field, which is the one thing a standard can never rely on.
+
+Two practical cautions, both tested indirectly. First, the tools available in any given release move. Which Object Manager features exist, which dependency objects are generally available, and what retention windows apply are version-specific facts, so confirm them against current release notes instead of assuming last year's behavior. Second, the check has to run against something authoritative. A report that reads the live production org tells you about today. A check that runs against source-controlled metadata tells you what is about to ship, which is where you still have time to change it.
+
+## Configuration Walkthrough
+
+Run these five steps in a sandbox. Together they produce a working capture-and-maintain loop rather than a set of disconnected features.
+
+1. Populate the in-system technical and business metadata. In Setup, open Object Manager, select an object, and open a field. Use Edit to write a Description and Help Text that state what the field means and who owns it, then do the same for the object's Description. This is the piece of metadata that lives where the builders will see it. [^3]
+2. Use dependency insight before you change anything. On the custom field's detail page, use "Where is this used?" to see the layouts, validation rules, formulas, flows, and Apex that reference it. Understand the limit as well as the feature: the tool covers custom fields, cannot follow indirect chains where one flow calls another that references the field, and should be paired with a metadata search when the blast radius matters. [^7]
+3. Review configuration change history. In Setup, open View Setup Audit Trail to see configuration changes by user and date, and download the CSV to keep a history beyond the 180-day retention window. Use this for incident questions about configuration; use Field History Tracking or Field Audit Trail for questions about record values. [^2][^6]
+4. Move schema changes onto the deployment path. Retrieve and deploy metadata as XML through the Metadata API, directly or through the Salesforce CLI, DevOps Center, or a commercial deployment tool, and commit the source to version control. From that point on, the repository is the record of what changed and who approved it. [^3][^9]
+5. Build the conformance check and give it a cadence. Write a report or a Tooling API query that flags fields missing descriptions, fields missing owners, and names that break the convention, schedule it, and route its output to the responsible stewards. Then reconcile the external glossary and classification against the org on a fixed rhythm, so the repository stays the source of truth instead of an artifact of the project that created it. [^4][^7]
+
+## Exam Traps
+
+**Trap one: using the Setup Audit Trail as a data-change audit.** The trail records configuration changes, not record-level data changes. [^2] When a scenario asks who deleted an opportunity or changed a customer's billing address, the answer is field history on the object, not the Setup Audit Trail. When the scenario asks who edited a validation rule, the answer flips. Read the question for whether the subject is configuration or data before you pick.
+
+**Trap two: clicking schema changes in production without source control.** A production click leaves a thin audit entry and no diff, no review, and no rollback path. [^9] The exam frames this as an architecture and governance failure, not just a process preference, because the change history that a deployment pipeline produces is the evidence a governance program is built on. If a scenario offers "make the change in production and document it later" as an option, that is the distractor.
+
+**Trap three: building the glossary once and never reconciling it.** An enterprise catalog that is not synced to the org drifts, and a drifted catalog is worse than none because people act on it. [^1] The correct architecture keeps the external catalog as the source of truth for definitions and ownership, syncs the in-system descriptions from it, and runs a conformance check on a schedule so drift is detected rather than discovered during an audit.
+
+## Try It
+
+Build the capture-and-check loop for one domain, and answer the three exam questions with your own org's evidence.
+
+Start with a governed object such as Account or Opportunity. Write down its classification, its steward, and the glossary terms that resolve to its fields. Then open View Setup Audit Trail and find the last configuration change made to that object, noting that you can see the user and the date but not the permission-level detail. Now run the conformance question: list the custom fields on that object that have no Description, or no owner recorded anywhere. That list is the output of a standard that has not yet become a control.
+
+Then close the loop. Write the query or report that produces that list automatically, decide who receives it, and set the cadence. When you can explain why the audit trail did not answer the record-change question, why the Metadata API and Tooling API are the two interfaces a catalog can consume, and why the automated check is the difference between a standard and a control, you have the full dm-3b requirement in hand.
+
+## What's Next
+
+You can now name the tool families, explain what the Metadata API and Tooling API produce, run a source-controlled change process, use the Setup Audit Trail for configuration questions without confusing it with data history, and turn a written standard into an automated conformance check. Lesson 7 moves from how metadata is managed to how a specific data model choice is made: Big Objects versus standard and custom objects, the reasons to choose each, the pros and cons, and the mechanics that decide the answer, including asynchronous SOQL, partitioning, and indexing.
+
+## Related Requirements
+
+- Lesson 5 of 42 (dm-3a): Business and technical metadata, business dictionary, data lineage, taxonomy, data classification
+- Lesson 27 of 42 (gv-2a): Enterprise data governance program, framework, stewardship
+
+## References
+
+[^1]: Salesforce Certified Platform Data Architect Exam Guide (metadata management and enterprise data governance objectives). [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005298972&language=en_US&type=1)
+[^2]: Monitor Setup Changes with the Setup Audit Trail. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.admin_monitorsetup.htm&type=5)
+[^3]: Understanding Metadata API, Metadata API Developer Guide. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.api_meta.meta/api_meta/meta_intro.htm)
+[^4]: Introducing Tooling API, Tooling API Developer Guide. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.api_tooling.meta/api_tooling/intro_api_tooling.htm)
+[^5]: Field Audit Trail Implementation Guide (tracked field limits, retention, and history storage). [resources.docs.salesforce.com](https://resources.docs.salesforce.com/latest/latest/en-us/sfdc/pdf/field_history_retention.pdf)
+[^6]: Track Field History, Salesforce Help. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.tracking_field_history.htm&type=5)
+[^7]: How to search Salesforce metadata using native tools, APIs, and Gearset (dependency object limits, "Where is this used?" scope). [gearset.com](https://gearset.com/blog/salesforce-metadata-search)
+[^8]: Salesforce Audit Trail and Field History Tracking guide (retention window, visible entries, queryable audit records, permission diff gap). [gearset.com](https://gearset.com/blog/salesforce-audit-trail)
+[^9]: Salesforce DevOps Center Developer Guide (Git-backed pipelines, work items, source-driven change management). [resources.docs.salesforce.com](https://resources.docs.salesforce.com/latest/latest/en-us/sfdc/pdf/devops_center_dev.pdf)
+[^10]: Data Governance in Data 360 (tags, classifications, and policy-driven security). [help.salesforce.com](https://help.salesforce.com/s/articleView?id=data.c360_a_data_gov_capabilities.htm&language=en_US&type=5)
+[^11]: Elements.cloud vs Metazoa: Salesforce org intelligence compared (platform scanner category, dependency and dictionary coverage). [elements.cloud](https://elements.cloud/elements-cloud-vs-metazoa/)
+[^12]: Your Ultimate Guide to Data Management Tools on the AppExchange (metadata analysis tools versus deployment and DevOps tools). [salesforceben.com](https://salesforceben.com/your-ultimate-guide-to-data-management-tools-on-the-appexchange)
+[^13]: Collibra Data Catalog (enterprise metadata catalog category). [collibra.com](https://www.collibra.com/products/data-catalog)
+[^14]: Informatica Axon Data Governance (enterprise catalog and governance platform category). [informatica.com](https://www.informatica.com/products/data-governance/axon-data-governance.html)
