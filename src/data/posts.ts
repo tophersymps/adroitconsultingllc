@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "salesforce-ldv-query-performance-2026",
+    "title": "The Sandbox Has 4,000 Rows. Production Has 40 Million.",
+    "excerpt": "Spring '26 added Apex cursors and Winter '27 raised heap limits. Neither helps a query the optimizer refuses to index. Here is the selectivity arithmetic to check first.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "September 17, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "13 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "Apex",
+      "SOQL",
+      "Performance",
+      "Large Data Volumes",
+      "Architecture"
+    ],
+    "bannerImage": "/banners/salesforce-ldv-query-performance-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "supabase-edge-functions-2026",
     "title": "Supabase Edge Functions in 2026: What Fits in the Envelope",
     "excerpt": "Edge Functions run TypeScript at the edge under a hard envelope: 2s CPU, 256MB, a wall clock. The envelope decides what fits; @supabase/server owns the auth.",

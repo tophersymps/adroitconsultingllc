@@ -1,0 +1,142 @@
+---
+title: "The Sandbox Has 4,000 Rows. Production Has 40 Million."
+slug: salesforce-ldv-query-performance-2026
+excerpt: "Spring '26 added Apex cursors and Winter '27 raised heap limits. Neither helps a query the optimizer refuses to index. Here is the selectivity arithmetic to check first."
+category: "Salesforce"
+categoryColor: sf
+categoryGradient: "from-sky to-sky-dark"
+date: "September 17, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "13 min read"
+tags: [Salesforce, Apex, SOQL, Performance, "Large Data Volumes", Architecture]
+bannerImage: /banners/salesforce-ldv-query-performance-2026.png
+---
+
+A query that returns in 400 milliseconds in a developer sandbox can take 40 seconds in production, and the code is identical in both places. Developer sandboxes hold a fraction of production data, so a filter that matches a few hundred rows in the sandbox matches millions in the org. The query optimizer decides how to execute your filter by looking at the distribution of the data underneath it, and that distribution is not the same in the two orgs.[^6]
+
+That mismatch is the whole problem, and the 2026 releases have made it harder to see rather than easier. Salesforce raised the Apex heap limits in Winter '27, from 6 MB to 10 MB for synchronous transactions and from 12 MB to 25 MB for asynchronous ones, which removes a failure that used to announce a data volume problem by name.[^9] Apex cursors, generally available since Spring '26, let you walk a result set of up to 50 million rows without materializing it.[^4] Both changes are genuinely useful. Neither of them touches the mechanism that makes a large query slow.
+
+![Two layers of a Salesforce query problem: the memory and result-handling layer that changed in 2026, where sync heap moved from 6 MB to 10 MB, async heap from 12 MB to 25 MB, Apex cursors reached 50 million rows, and a beta FORMULA() function arrived in SOQL WHERE clauses; and the planning layer that did not change, where selectivity thresholds, the default index list, the 50,000-row per-transaction SOQL ceiling for non-cursor queries, and the optimizer cost model all behave as before](</diagrams/salesforce-ldv-query-performance-2026/1-two-layers.png>)
+
+## What actually changed in 2026, and what did not
+
+The heap increase is the change most developers notice first. Synchronous transactions go from 6 MB to 10 MB and asynchronous transactions from 12 MB to 25 MB, applied automatically on the Winter '27 release schedule, with confirmation available through `Limits.getLimitHeapSize()`. Preview instances ran the upgrade on August 28 and 29, 2026, and non-preview instances follow on October 9 and 10.[^9][^11] If you deploy features built in a Winter '27 nonproduction org down to a Summer '26 production org, Setup exposes an "Enforce the Summer '26 Apex heap limit" setting so a sandbox can hold the older numbers while you verify. Once every production org is on Winter '27, the higher limits apply regardless of that setting.[^9]
+
+Apex cursors are the more interesting addition, because they change how you process a result set rather than how much of it fits in memory. A cursor is created by `Database.getCursor()` or `Database.getCursorWithBinds()`, and `Cursor.fetch(position, count)` pulls rows at an offset you track yourself. The maximum is 50 million rows per cursor, the same in synchronous and asynchronous contexts, and the fetch calls count against your SOQL query limit while the fetched rows count against the row limit. You get 100 fetch calls per transaction. Cursors are stateless and lock in their result set at creation: a record that stops matching the original `WHERE` clause after an update still appears in the set, and sharing changes made later do not alter it. Salesforce positions cursors chained into queueable jobs as an alternative to batch Apex, and two cursor-specific exceptions, `System.FatalCursorException` and `System.TransientCursorException`, exist for the failure paths.[^4]
+
+Winter '27 also added a beta `FORMULA()` function that evaluates arithmetic inside a SOQL `WHERE` clause, so you can compare two fields without building a formula field or filtering in Apex. It is beta, it requires API version 68.0 or later, and it works only in sandbox, Developer Edition, and scratch orgs. It is not available in production.[^10]
+
+Now the part that did not move. A query is still selective or not selective on exactly the same terms as it was five releases ago, the default index list is unchanged, the optimizer still picks a plan by cost, and outside of cursors a transaction still stops at 50,000 retrieved records.[^2][^5] That last number is the one to keep in view. Cursors let you process 50 million rows in chunks; they do not let a single non-cursor query return more than 50,000.[^4][^5]
+
+## Selectivity is arithmetic, and you can do it before you ship
+
+The optimizer's rule is narrow and worth stating precisely: a query is selective when at least one filter is on an indexed field and that filter's result set falls below a system threshold. If a query has at least one selective filter, it is selective. If it has none, the optimizer falls back to a full table scan.[^2]
+
+Which fields carry an index by default is not a mystery either. Primary keys (`Id`, `Name`, `OwnerId`), foreign keys (lookup and master-detail relationship fields, and the `CreatedById` and `LastModifiedById` audit fields), audit dates (`CreatedDate` and `SystemModstamp`), and `RecordType` fields on standard objects that have them are all indexed. Custom fields are indexed when they are marked Unique or External ID. Fields that are not indexed by default get indexed automatically once the optimizer recognizes that an index would help a frequently run query.[^3][^6]
+
+The thresholds depend on which kind of index you are relying on, and the distinction catches people out:
+
+- A **standard index** is selective up to 30 percent of the first million targeted records and 15 percent of records beyond that, capping at 1 million targeted records. That ceiling is only reachable in an object with more than about 5.6 million records.[^1][^2]
+- A **custom index** is selective up to 10 percent of the first million records and 5 percent beyond, capping at 333,333 targeted records.[^1][^2]
+
+The reason the numbers are stated as percentages rather than counts is that they move as the org grows, which is the mechanism behind the slowest kind of production surprise. A filter that was comfortably selective at 200,000 records stops being selective well before you reach 2 million, with no code change and no deployment to blame.
+
+Salesforce's own worked example is the fastest way to internalize the arithmetic. Take a custom object with 239,619 records. Thirty percent of that is 71,885 for a standard index, and ten percent is 23,961 for a custom index.[^2]
+
+![Selectivity thresholds for a custom object holding 239,619 records: a standard index is selective below 71,885 matched rows and a custom index below 23,961; a filter on CreatedDate returning 84,567 rows for the current year clears neither bar and is non-selective, while a filter on Status equal to Available returning 14,397 rows sits under the custom-index threshold and is selective once the field is indexed; both thresholds scale as percentages, the standard index stepping from 30 percent to 15 percent past the first million records with a 1 million row cap, and the custom index from 10 percent to 5 percent with a 333,333 row cap](</diagrams/salesforce-ldv-query-performance-2026/2-selectivity-arithmetic.png>)
+
+A `WHERE` clause that reads `CreatedDate = THIS_YEAR AND Status__c = 'Available'` fails on the first filter and passes on the second. `CreatedDate` is indexed, but `SELECT COUNT() FROM Appointment__c WHERE CreatedDate = THIS_YEAR` returns 84,567 rows, above the 71,885 standard threshold, so the optimizer will not use that index to drive the query. `Status__c` is not indexed by default, but `SELECT COUNT() FROM Appointment__c WHERE Status__c = 'Available'` returns 14,397 rows, which is under the 23,961 custom-index threshold. Get a custom index on `Status__c` and the same query becomes selective, because one selective filter is all it takes.[^2]
+
+Combining filters follows its own rules. With `AND`, the optimizer treats the overall condition as selective when the filter targets less than twice the individual thresholds, or less than the threshold for the intersection of the fields. With `OR`, every filter has to meet the threshold on its own, which is why an `OR` is the most common way a query loses its index.[^6]
+
+## Read the plan instead of arguing about it
+
+Salesforce ships the tool that answers this question. In the Developer Console, open Help and then Preferences, set Enable Query Plan to TRUE, and the Query Editor tab gains a Query Plan button. Run a query and the tool returns every available execution plan with its cost, which is the fact you were guessing at.[^1]
+
+The output has six columns, and three of them matter on the first read:
+
+- **Leading Operation Type** tells you how the query will actually execute. `Index` means an index drives it. `Sharing` means sharing rules give the optimizer a usable filter. `TableScan` means every record in the object is in scope. `Other` covers optimizations internal to Salesforce, and `OR` filters that do use indexes show up here rather than as `Index`.[^1]
+- **Cost** is the plan's cost against the selectivity threshold. A value above 1 means the filter is not selective, and the plan with the lowest cost is the one that runs.[^1]
+- **Cardinality** is the estimated row count the leading operation would return. An indexed field only appears as a plan option when a supported operation is used against it, so a missing index plan is itself information.[^1]
+
+The practical consequence of `Cost` is simple. If an indexed field shows a higher cost than the table scan, the table scan runs, and the index you paid a support case for sits unused.[^1]
+
+![How to read a Salesforce query plan: the six columns are Cardinality, Fields, Leading Operation Type, Cost, sObject Cardinality, and sObject Type; the leading operation type resolves to Index, Sharing, TableScan, or Other; a cost at or below 1 with an Index or Sharing lead means the query is driven by selective filters, while a cost above 1 or a TableScan lead means the filters are not selective and the query needs rewriting before it ships; indexed fields appear as a plan option only when a supported operation is used against them](</diagrams/salesforce-ldv-query-performance-2026/3-read-the-plan.png>)
+
+Where you find the tool is changing. Web Console, the browser-based development environment built into the org, becomes generally available in Winter '27 and is now the default in-org editor for Apex, LWC, Anonymous Apex, and SOQL with Query Plan inspection. The legacy Developer Console has not been removed, it is simply no longer the default surface, and it can be enabled from Setup under Development, Web Console.[^12][^13] If your team's SOP says "check the plan in the Developer Console", that instruction needs an update before the next release lands.
+
+## The filter shapes that quietly disable an index
+
+This is where most of the wasted hours live. A field can be indexed and still not be used, because the optimizer skips custom indexes for whole categories of comparison.[^1][^3]
+
+- **Negative operators.** `!=`, `NOT CONTAINS`, and `NOT STARTS WITH` never use a custom index. `!=` is the one people write without thinking, usually to filter out a single value.[^1][^3]
+- **Null and empty comparisons.** Comparing against an empty value, as in `Name != ''`, defeats the index. Null values in picklist and foreign key fields in a `WHERE` filter do not use the index either, and Salesforce's LDV guidance recommends designing the data model so that null is not a valid value in the first place.[^3][^8]
+- **Leading wildcards.** `Name LIKE '%Smith'` cannot seek an index, because the leading percent sign removes the prefix the index is sorted on.[^1]
+- **`OR` across mixed fields.** An `OR` comparison where any involved field is non-indexed, or is above the 10 percent threshold, disables the index path for the whole condition.[^1]
+- **`CONTAINS` past a threshold.** The `CONTAINS` operator requires a full scan of the index, and once the rows to scan exceed 333,333 the custom index is typically not used at all. That number is documented as subject to change.[^3]
+- **Fields that cannot be indexed at all.** Multi-select picklists, currency fields in a multicurrency org, long text areas, binary fields (blob, file, encrypted text), and some formula fields are not candidates for a custom index. Formula fields that invoke `TEXT()` on a picklist field are excluded specifically.[^3]
+
+![Filters that disable an index and the rewrite for each: a negative operator such as not-equal, not-contains, or not-starts-with is skipped by a custom index and should be restated as an inclusive filter; a comparison against an empty or null value is skipped and should use a sentinel value in the data model instead; a leading wildcard search cannot seek an index and belongs in SOSL when the text itself is the search target; an OR condition loses the index path when any branch is non-indexed or above the 10 percent threshold and should be decomposed into single-filter queries whose results are combined; and a CONTAINS operation that scans past 333,333 index rows should move to SOSL or to an indexed prefix filter](</diagrams/salesforce-ldv-query-performance-2026/4-index-killers.png>)
+
+## The rewrite playbook
+
+**Measure the distribution before you theorize.** One query replaces a lot of guessing. Replacing the selected fields with a count and grouping by the field in question gives you the distribution of values, and `GROUP BY ROLLUP` returns the totals you need alongside it.[^6]
+
+```
+SELECT StageName, COUNT(Id) FROM Opportunity
+GROUP BY ROLLUP(StageName)
+```
+
+Run the same shape per candidate filter and you have the numbers the thresholds are compared against. Add `WHERE IsDeleted = false` when you want the statistics to exclude records sitting in the Recycle Bin, because the default count includes soft-deleted records.[^6] Then verify your filter against the plan, not against the query text.
+
+**Replace null with a sentinel.** Salesforce's LDV documentation uses a worked rewrite to make the point. A query that filtered with `Contact__c != null` and `Category__c != null` was rewritten to drop the null comparisons and filter with `Category__c != 'Default'`, substituting a real value for the absence of one so an index can be used on that field.[^8] The design decision behind it is the durable part: if null means "no value" rather than a value in its own right, you cannot index it.
+
+**Decompose when the combination defeats itself.** Where multiple `WHERE` filters stop an index from being used even though the individual fields are indexed, the documented approach is to break the single query into multiple queries, each carrying one filter, and combine the results in Apex.[^8] That move is the same judgement call as deciding whether a process belongs in Apex rather than Flow in the first place, which we covered in [why Flow and Apex are a build-order question, not a preference](/field-notes/salesforce-flow-vs-apex-when-to-use-which).
+
+**Do not run a query you already know is empty.** When bind variables can carry null, check for the null and skip the query rather than letting it run and return nothing. It costs nothing to write and it removes a class of plan that never needed to execute.[^8]
+
+**Prefer `SystemModstamp` to `LastModifiedDate` for change detection on large objects.** `SystemModstamp` is in the default index list; `LastModifiedDate` is not. On a large object that difference decides whether your incremental filter drives an index or scans the table.[^3]
+
+**Use SOSL when the term lives inside the text.** SOSL executes against search indexes rather than the database, tokenizes multiple terms within a field, and is generally faster than SOQL when the search expression uses `CONTAINS`.[^8] Searching for a first name inside a company name is the canonical case.
+
+**Then choose the processing model, which is a separate decision from the filter.** A `SOQL for` loop processes results in batches through internal calls to `query` and `queryMore`, which keeps heap under control but can increase CPU and DML calls; Salesforce's preferred answer for mass updates is Batch Apex, which minimizes exposure to governor limits.[^3] Cursors plus chained queueables are the third option, and the one worth evaluating now that they are generally available: they avoid batch Apex's constraints, at the cost of tracking offsets yourself and staying inside 100 fetch calls per transaction.[^4]
+
+**Escalate to platform features last, and know what you are asking for.** If the filter is genuinely as selective as it can be and the object is still slow, two options exist, both managed by Salesforce rather than by you.
+
+A **custom index** is requested through a support case, and the case quality determines the outcome. Include the fields to index, the SOQL query with the literal bind values rather than Apex variables, login access for testing, the error messages and timestamps, reproduction steps, and an assessment of whether additional filters could solve it instead. Salesforce's own guidance is that improper custom indexes can slow queries down, so the request is a design conversation rather than a formality.[^2]
+
+A **skinny table** holds frequently used fields together so read-only operations avoid a join. Salesforce creates and maintains them on request, you cannot create, access, or modify one yourself, they cap at 200 columns, they cannot contain fields from other objects, and they are available on custom objects and on Account, Contact, Opportunity, Lead, and Case. They are kept in sync with the source table and omit soft-deleted records. Full sandboxes inherit them; other sandbox types do not, and having production skinny tables activated elsewhere also goes through Customer Support. Salesforce's documentation is blunt that they are not a magic wand, since maintaining a second copy of live data has a cost and an inappropriate use degrades performance.[^7]
+
+## Put volume in the definition of done
+
+The failure this article describes is a process failure more often than a technical one. A team writes a query against a sandbox holding four thousand rows, the plan looks fine, and the query ships inside a trigger where it runs against forty million. Non-selective queries are also the ones most likely to fail outright in a trigger or a batch class, because the execution time compounds across every record the trigger touches, which puts them squarely in the family of quiet platform failures we catalogued in [the Salesforce failure patterns that only show up in production](/field-notes/salesforce-failure-patterns-2026).[^2]
+
+Four habits close most of the gap:
+
+1. **Test against production-scale data, not production-shaped data.** A Full sandbox or a seeded partial copy at real volume is the difference between knowing and hoping. If your data model is expected to reach millions of rows, the test environment has to get there before the query does.
+2. **Make the query plan a review artifact for large objects.** For any object above a stated volume threshold, the plan output belongs in the pull request alongside the test results. It is one screenshot and it ends the argument.
+3. **Keep a written selectivity budget per large object.** Which objects are large, which filters are expected to stay selective, and which fields carry indexes. When someone adds a filter on the object, the budget tells them whether they are inside the plan or outside it.
+4. **Re-check plans when volume moves.** Thresholds are percentages, so yesterday's selective query is tomorrow's table scan. A scheduled re-check on the highest-volume objects catches the drift before a user does.
+
+We run our own delivery pipeline on hard per-run budgets and ceilings, and the discipline that keeps it stable is the one worth borrowing here: when something hits a limit, find out what produced the volume before you raise the limit. The ceiling is usually reporting a defect, not causing one.
+
+## What to do next
+
+The Winter '27 release notes are published and preview sandboxes have already taken the upgrade, with non-preview instances following on October 9 and 10.[^11] Before that lands, do three things: confirm with `Limits.getLimitHeapSize()` which heap numbers your org actually runs, find your largest three objects and read a query plan for each of their hottest queries, and check whether any of those queries filter on `LastModifiedDate`, compare with `!=`, or test for null.
+
+The heap increase is good news and it is also a hazard. A heap error names the problem in the log. A slow query just shows up as a timeout under load, six weeks after the release that made the payload large enough to matter, in an org where nobody remembers which filter stopped being selective. The limit went up. The arithmetic did not change.
+
+[^1]: Salesforce Help, "Developer Console Query Plan Tool FAQ," knowledge article 000386864, published June 25, 2026, [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000386864&language=en_US&type=1)
+[^2]: Salesforce Help, "Make Salesforce Platform SOQL Query Selective," knowledge article 000385218, published April 2, 2026, [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000385218&language=en_US&type=1)
+[^3]: Salesforce, "Working with Very Large SOQL Queries," Apex Developer Guide, [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/langCon_apex_SOQL_VLSQ.htm)
+[^4]: Salesforce, "Apex Cursors," Apex Developer Guide, [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_cursors.htm)
+[^5]: Salesforce, "Execution Governors and Limits," Apex Developer Guide, [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_gov_limits.htm)
+[^6]: Salesforce, "Lightning Platform Query Optimizer," Best Practices for Deployments with Large Data Volumes, [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.salesforce_large_data_volumes_bp.meta/salesforce_large_data_volumes_bp/ldv_deployments_infrastructure_salesforce_query_optimizer.htm)
+[^7]: Salesforce, "Skinny Tables," Best Practices for Deployments with Large Data Volumes, [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.salesforce_large_data_volumes_bp.meta/salesforce_large_data_volumes_bp/ldv_deployments_infrastructure_skinny_tables.htm)
+[^8]: Salesforce, "Using SOQL and SOSL," Best Practices for Deployments with Large Data Volumes, [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.salesforce_large_data_volumes_bp.meta/salesforce_large_data_volumes_bp/ldv_deployments_techniques_using_soql_and_sosl.htm)
+[^9]: Salesforce, "Handle Larger Datasets with Increased Apex Heap Limits," Winter '27 Release Notes, [help.salesforce.com](https://help.salesforce.com/s/articleView?id=release-notes.rn_apex_heap_limit.htm&language=en_US&release=264&type=5)
+[^10]: Salesforce, "Compare Values Between Fields in SOQL (Beta)," Winter '27 Release Notes, [help.salesforce.com](https://help.salesforce.com/s/articleView?id=release-notes.rn_api_soql_where.htm&release=264&type=5)
+[^11]: Salesforce Help, "Salesforce Sandbox Preview Instructions," knowledge article 000391927, [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000391927&language=en_US&type=1)
+[^12]: Salesforce Ben, "Salesforce Developer Console Just Disappeared: Here's What's Actually Happening," [salesforceben.com](https://www.salesforceben.com/salesforce-developer-console-just-disappeared-heres-whats-actually-happening/)
+[^13]: Apex Hours, "Salesforce Winter '27: Developer Console Is Now Web Console!," [apexhours.com](https://www.apexhours.com/salesforce-winter-27-developer-console-is-now-web-console/)
