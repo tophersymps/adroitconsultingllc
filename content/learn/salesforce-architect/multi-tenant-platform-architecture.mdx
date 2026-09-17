@@ -14,6 +14,8 @@ tags: [Salesforce, Architecture]
 
 Here is the single fact that explains most of what surprises newcomers to Salesforce: **you never own a server, a database, or even a schema. You rent a private, configurable slice of a platform that thousands of other companies share.** Almost every "weird" platform rule (governor limits, code-coverage gates, sandbox refresh windows, the instance your org lives on) is a direct consequence of that sharing. This lesson makes the mechanism concrete, because the System Architect exam (and real architecture work) constantly assumes you understand it.
 
+The reason to lead with that fact is that a surprising share of arguments about Salesforce architecture are really arguments about ownership. On a traditional stack, an architect decides how much hardware to buy, how to shard a database, and when to schedule a migration window. On this platform, none of those levers exist, and reaching for equivalents of them produces designs that fight the platform instead of using it. Once you know the platform is shared, metadata-driven, and partitioned by tenant, the constraint set stops looking arbitrary and starts looking like a contract you design inside.
+
 ## The three terms you must nail
 
 **Multi-tenant.** Salesforce's own technical brief defines it plainly: the platform "isolates and concurrently supports the varying requirements of many tenants (organizations, business units, and so on)." [^1] One platform, many customers, strict isolation.
@@ -24,11 +26,21 @@ Here is the single fact that explains most of what surprises newcomers to Salesf
 
 That last point is the architect's lever: your customizations are *descriptions*, not artifacts. That is why the platform can ship updates to every customer simultaneously, and why your metadata can evolve without downtime.
 
+Take the three terms one at a time and notice what each one rules out. Multi-tenancy rules out any design that assumes the platform will tolerate one tenant consuming a disproportionate share of a shared resource, which is the entire reason governor limits exist. The OrgID rules out designs that treat the database as scoped to your company: your queries run against a shared structure and are only narrowed by an identifier the kernel applies on your behalf. Metadata-driven design rules out the mental habit of thinking about "my table" and "my compiled artifact," because there is no table with your name on it and no binary in a deploy folder. What you actually version and promote is descriptions, which is why a deployment can be inspected, diffed, and rolled back in ways a compiled artifact cannot.
+
+There is also a practical implication for how you estimate work. Because customizations are metadata, the cost of adding a field is close to zero and the cost of adding a *relationship* is a real design decision about sharing and volume. The platform makes the cheap thing trivially cheap, which means the architect's job is less about controlling cost per artifact and more about controlling complexity per model.
+
 ## Under the hood: how one database stays private
 
 The shared data layer is worth knowing at a name level because exam questions describe it. Org-defined objects and fields live in the **Universal Data Dictionary (UDD)** (notably the `MT_Objects` and `MT_Fields` system tables), while application data lives in the big `MT_Data` table, where each row carries a GUID, the owning OrgID, and an ObjID. [^1]
 
+Read that structure the way a database designer would read a schema, because it tells you what the platform considers expensive. Object and field definitions live in the UDD: small, rarely changing, and read constantly by the kernel that materializes virtual components. Actual records live in one very large table, distinguished by an ObjID that says which object a row belongs to and an OrgID that says which tenant owns it. That is a schemaless-of-sorts design achieved inside a single relational schema. Your "custom object" is not a table. It is an ObjID plus a set of field definitions in the UDD, and the platform knows how to assemble that into the shape of a record at request time.
+
 Isolation is enforced at the physical layer too: all platform data, metadata, and pivot tables are **partitioned by OrgID** using native database partitioning. Every query targets one org's data, so the optimizer only touches that org's partitions, a technique the brief calls "partition pruning." [^1]
+
+That single detail is worth sitting with, because it is the answer to the question every enterprise architect asks on day one: if my data shares a table with a thousand other companies, what stops a query from reading theirs, and what stops a badly written query from scanning everything? The answer is that isolation is not a filter applied after the fact. It is a physical layout. Data is partitioned by OrgID, and partition pruning means the optimizer touches only the partitions belonging to the org making the request. Security is enforced in the application layer too, through the sharing model, but the sharing model sits on top of a physical guarantee rather than replacing it. Two independent mechanisms, one logical and one physical, and a design that respects both is what "defense in depth" means on a multi-tenant platform.
+
+Two consequences follow for your own designs. First, anything that forces a query to span more of the shared structure than necessary is expensive for everyone, which is the deeper reason selective SOQL filters and indexed fields matter beyond their own governor-limit cost. Second, because the physical layer is organized by tenant and by object, the shape of your object model has a performance dimension, not just a reporting dimension. A very large number of tiny custom objects and a very large object with many fields are not equivalent choices, even though both are "just metadata."
 
 ## The instance model
 
@@ -37,9 +49,15 @@ Each org belongs to a single **instance**. [^2] Two kinds of infrastructure exis
 - **First-party infrastructure**: owned and operated by Salesforce (data centers in Amsterdam, Stockholm, Tokyo, Osaka, and Virginia North/South). Your instance is actively served from one location, with transactions replicated asynchronously to a paired ready instance; Salesforce runs regular site switches for maintenance, compliance, and disaster recovery. [^2]
 - **Hyperforce**: Salesforce-managed infrastructure hosted on **AWS and GCP**. Hyperforce runs active/active across three availability zones, distributes requests through a load balancer, and validates failover with Game Day exercises and chaos engineering. [^2] Hyperforce also brings native end-to-end encryption, Zero Trust, and blue/green releases that keep planned maintenance to about one minute a year. [^1]
 
+The difference between the two models is worth stating in plain terms because it shows up in architecture discussions constantly. First-party infrastructure is a primary site with an asynchronous copy of transactions replicated to a paired ready instance, so a failover involves losing whatever had not yet replicated, and maintenance requires planned site switches. Hyperforce runs active/active across three availability zones, which means more than one zone is serving at any moment, traffic is load balanced across them, and failover is a routing change rather than a site cutover. The maintenance number tells the operational story: planned maintenance measured in about a minute a year, versus a site switch that a release calendar has to plan around.
+
 You can find your org's instance in **Setup → Company Information** (the Instance field). Here's the naming tell: instance names that start with **two letters** (like `AP0` or `NA106`) are first-party; names that start with **three letters** (like `GBR10`) are Hyperforce. [^3]
 
 Why should an architect care? Data residency, latency, compliance, and maintenance windows all hang off the instance. That's why the platform brief explicitly recommends building applications "free from specific data center requirements." [^2]
+
+The naming tell is the kind of small piece of knowledge that pays off disproportionately in a meeting. When a client asks whether their org is on Hyperforce, you do not need a support case. You read the Instance field and count letters. Two letters, first-party. Three letters, Hyperforce. From that one fact you can reason about the encryption posture, the failover model, and how much of the release calendar will be consumed by maintenance windows, before anyone has pulled a single report.
+
+The "free from specific data center requirements" recommendation deserves an explanation, because it reads like generic advice until you connect it to the rest of this lesson. On a shared, metadata-driven platform, the instance your org runs on is not something your design controls. It is assigned, and it can change as Salesforce introduces new infrastructure. An architecture that encodes an assumption about which data center serves it, whether through hardcoded endpoint expectations, latency budgets that only hold from one geography, or integration patterns that assume same-region network behavior, has quietly taken a dependency on an assignment it does not own. Building free of that dependency means the design keeps working when the platform's infrastructure evolves, which on this platform is a "when," not an "if."
 
 ## Environments: production org + sandboxes
 
@@ -56,6 +74,8 @@ The four types (with the numbers straight from Salesforce Help):
 
 [^5] [^4]
 
+Two rows in that table carry most of the architectural weight. "Metadata only" for Developer and Developer Pro means the environment has the shape of your org with none of its history, which makes it the right place to build and the wrong place to test anything that depends on real volumes or real record distributions. "Metadata + sample data" for Partial Copy is a middle path whose limit is the point: up to 10,000 parent records and their related children, selected by a template you define. That is enough to exercise logic against representative data without dragging production volumes into a cheap environment. Full is the only row that says "all data," and that is why it is the only environment where a UAT pass means something about production.
+
 Entitlements differ by edition; the ones that matter for most architecture work: Developer sandboxes come with 25 (Enterprise), 100 (Unlimited), 100 (Performance); Developer Pro with 5 (Unlimited/Performance); Partial Copy with 1 (Enterprise/Unlimited/Performance); **Full with 1 (Unlimited/Performance) and none by default on Enterprise**. You can purchase Partial and Full sandboxes for Enterprise, Unlimited, and Performance editions. [^4]
 
 That maps to a classic environment ladder:
@@ -66,6 +86,10 @@ That maps to a classic environment ladder:
 - **Prod** → the production org, untouchable by development
 
 [^5]
+
+The entitlement column is where environment design turns into a budget conversation, and it is worth knowing the shape of that conversation in advance. On Enterprise, Developer sandboxes are plentiful and Full sandboxes do not exist by default. That single fact pushes most Enterprise orgs toward the ladder above: many cheap environments for building, one sampled environment for integration testing, and a purchased Full environment reserved for the release rehearsal. On Unlimited and Performance the Full sandbox is included, and the constraint shifts from "can we afford a rehearsal" to "how do we schedule refreshes so the rehearsal actually reflects the release."
+
+The ladder also encodes a rule that is easy to state and easy to violate: **each environment exists to answer a question the one below it cannot.** A Developer sandbox answers "does this work?" A Partial Copy environment answers "does this work against representative data with the integration switched on?" A Full environment answers "does this work against production reality, and can we operate it?" Production answers nothing, because production is not a test. If your team is asking test questions in production, something in the ladder is missing.
 
 ## Worked example
 
@@ -79,11 +103,21 @@ A UK manufacturing client, 200 users, Enterprise edition, is taking over a Sales
 
 The client pushes back on the Full-sandbox purchase. Your answer as an architect: the 29-day Full refresh is the only environment with production-identical data, and UAT before a production deployment is exactly what Salesforce documents Full sandboxes for. This is the difference between "tested" and "validated against reality."
 
+Walk the scenario forward six months to see why the environment design holds. Feature work is running in three Developer sandboxes in parallel, so three developers are not fighting over one environment. The integration developer has a Developer Pro that can be refreshed daily, which matters because ERP test data changes and a stale dataset produces false confidence. QA gets a Partial Copy whose template is now tuned to include the specific record types the release touches, and because Partial Copy refreshes every 5 days, there is no long wait to re-baseline after a fix. The Full sandbox is doing the one job only it can do: a dress rehearsal against production-like volume and distribution, timed to the week before release. Production receives changes through one path.
+
+Now consider the counter-design, which is what most orgs actually have when nobody architects the environments. One Developer sandbox shared by everyone. A Partial Copy that gets refreshed whenever someone remembers, so its data drifts out of relevance. No Full sandbox, so UAT happens in production on a quiet Friday. Every one of those choices is locally reasonable and cumulatively expensive, because each one moves a question up the ladder to an environment that cannot answer it. The architecture work here is not exotic. It is assigning questions to environments so that the expensive environment is used for the expensive question.
+
 ## The pitfall to avoid
 
 **Treating governor limits as a nuisance instead of the contract.** The platform has "an extensive set of governors and resource limits associated with platform code execution" (CPU time, memory, queries, DML statements, math operations, outbound callouts), specifically "to prevent malicious or unintentional monopolization of shared, multitenant system resources." [^1] The brief describes exactly what happens to a developer who codes a loop updating a thousand rows one at a time: runtime exceptions from resource limits, followed by a lesson in bulk processing. [^1] "My org is small" is not an argument: the limits exist because you share infrastructure with orgs that aren't.
 
+The reason this pitfall deserves the strong framing is that the limit is not a performance tuning detail you address later. It is the platform telling you the shape your code must have. Row-by-row DML inside a loop fails not because the platform is inefficient but because each call is a distinct transaction against shared infrastructure, and the platform will not let one tenant open thousands of those. The correct response is collection-based processing: build a list, perform one DML operation on the list, and stay inside a single transaction's budget. Once you internalize that the limit is a contract rather than an obstacle, the designs get simpler, not harder.
+
 A second, operational pitfall: **refreshing many sandboxes at once.** Salesforce processes sandbox copy/refresh jobs *in series*, not parallel, so a batch of refreshes can look like it's stuck when it's simply queued. [^5] Also remember the sandbox's **org ID changes every refresh**; anything that treats a sandbox as a stable endpoint breaks after refresh. [^4]
+
+The changing org ID is the more dangerous of those two, because it fails silently and at a distance. Any external system configured to talk to a sandbox by its org identifier, whether an integration endpoint, a connected app configuration, or a hardcoded reference in a test script, will stop matching after a refresh. The defensive pattern is to key configuration on the sandbox's My Domain URL and to treat the org ID as a value that is expected to change, not a constant. That one habit prevents a whole class of "the integration worked last week and now it doesn't" incidents that otherwise get blamed on the integration.
+
+A third pitfall, and the one that connects this lesson to every lesson after it: **designing as if the org were the whole system.** Architecture on this platform happens inside constraints you do not set. The instance, the partitions, the governor limits, the refresh cadence, and the entitlements are all given. Good architecture here is not about removing those constraints. It is about choosing designs that are compatible with them, then spending your design effort on the decisions you actually control: the data model, the sharing model, the integration boundaries, and the release pipeline.
 
 ## Try it
 
@@ -94,6 +128,8 @@ A second, operational pitfall: **refreshing many sandboxes at once.** Salesforce
 5. Why does row-by-row DML inside a loop fail on a shared platform even though your org has only 50 users?
 
 **Answers:** (1) First-party, two-letter prefix. (2) Hyperforce, three-letter prefix. (3) Partial Copy: it refreshes every 5 days and pulls up to 10k parent records via a template, but it's a sample, not a full copy. (4) Enterprise includes zero Full sandboxes by default, and Full is the documented environment for UAT at the end of the lifecycle. A full-data rehearsal is the only way to validate against production reality. (5) Governor limits cap per-transaction work to protect shared resources; the platform is designed to push you toward bulk processing.
+
+Add one more exercise of your own. Pick any integration in an org you know and write down which environment it currently points at, whether that environment's org ID is treated as stable, and what breaks when that environment refreshes. Most teams discover at least one integration wired to a sandbox in a way that will fail on the next refresh, and finding it in a planning session is far cheaper than finding it during a release week.
 
 ## What's next
 

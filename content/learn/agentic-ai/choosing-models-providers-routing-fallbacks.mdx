@@ -16,15 +16,23 @@ Lessons 1–5 built the agent loop, its prompts, and its economics. This lesson 
 
 The fix is hospital triage: nobody sends every patient to the most specialized surgeon; simple cases go to fast, cheap care and complex cases escalate. **Routing** is the decision logic that directs each request to the model that fits it. [^1]
 
+The instinct to standardize on one flagship model is understandable. One model means one integration, one bill, one set of behaviors to learn, one prompt to tune. It feels simpler. But it optimizes for the wrong thing. The moment your agent system has real traffic, the request mix is wildly uneven: most calls are cheap pattern matching (classify this, extract that), a few are genuinely hard reasoning, and a handful justify frontier-grade inference. Pricing them all the same way is like buying a supercomputer for a school that mostly needs the attendance sheet. The economics lesson from Lesson 5 applies here in structural form: you save real money not by negotiating a better price but by matching each request to a model that is *good enough*, which is exactly what routing does.
+
 ## What a model router actually is
 
 An **LLM router** (or gateway) sits between your application and the provider APIs, choosing where each request lands across models from OpenAI, Anthropic, Google, and others based on rules, scores, or fallback logic. Because it's a layer, swapping a model becomes a config change, not a code change. A distinction matters: routing *platforms* are not routing *destinations*. Groq or Together are destinations a request can land on; the router is the decision-making layer that selects among them. [^2]
+
+That last distinction trips up more people than it should, and it is worth being explicit. A destination is a place a request can execute: OpenAI's API, Anthropic's API, a Groq endpoint, a self-hosted server. A router is the logic that decides *which* destination to send a given request to. Groq can be very fast, but nothing about Groq chooses requests for you; something upstream has to decide to send a request there. When people say "we use a router," they mean there is a decision layer in front of the destinations. If you only ever call one provider directly, you do not have a router, you have an integration.
+
+The layer design pays off the moment anything changes. A provider releases a new flagship: you update a config entry, not the routing code. A provider raises prices: you shift a tier's mapping to a cheaper alternative. A provider has an outage: your fallback logic, already in place, absorbs it. Because the router is decoupled from your application logic, none of these require a code change or a redeploy. That is the operational argument for a router even before you consider cost.
 
 Braintrust's guide breaks routing into **three jobs**, each with a different success measure: [^2]
 
 1. **Resilience routing.** When the primary model returns a 5xx, times out, or rate-limits, send the request to a fallback. Success = uptime during a provider incident.
 2. **Cost routing.** Match each request to the cheapest model that can handle it well. Success = spend reduction *without* quality loss.
 3. **Quality routing.** Choose models based on measured performance on real traffic (evals, traces, scorers). It's the most durable discipline, because selection follows evidence.
+
+Keep the three jobs separate in your head, because they optimize different things and you can run them in tension. Resilience routing wants more providers in the mix so there is always somewhere to fail over. Cost routing wants the cheapest model that passes a quality bar. Quality routing wants the model that scores best on real evals, which is often not the cheapest. A router that only optimizes one job will quietly fail the other two. The mature approach runs all three and recognizes them as different success measures: uptime for resilience, spend-without-quality-loss for cost, and evidence-driven selection for quality.
 
 ## Capability tiers: stop naming models, start naming tiers
 
@@ -33,6 +41,10 @@ The mental model that makes routing tractable is the **capability tier**: instea
 A community RFC on tier-based dispatch formalizes the same idea as config: a `model_tiers` block maps `small`, `medium`, `large` to concrete model+provider pairs, a `role_defaults` block assigns tiers to roles (planner → large, implementer → medium, monitoring → small), and each tier lists multiple providers so the router can fall back within a tier before escalating. [^4]
 
 Tiers decouple routing logic from model specifics. When a provider releases a new flagship, you update the tier mapping, not the routing code. *Note: I'm keeping model names out of this lesson deliberately; frontier names and prices rotate quarterly. Check current model cards and price pages before committing to any tier mapping.*
+
+The tier abstraction is the single highest-leverage idea in this lesson, so it is worth pushing on why it works. The problem with routing to model names is that names are unstable. A flagship that is expensive and slow today is matched or beaten by a cheaper competitor in a quarter, and your routing logic, full of hard-coded names and assumptions about their relative quality, is suddenly wrong. Tiers fix this by separating the *decision* from the *implementation*. Your application logic says "this step needs a large-tier model," and the config maps large to a specific model+provider that can be changed without touching the logic. The routing rule is stable; the thing it resolves to is not. That is why tiers, not names, are the durable unit of routing.
+
+The `role_defaults` idea deserves emphasis because it connects tiers to the agent loop from Lesson 1. Different loop steps have different capability needs. A planner decomposing a vague goal into concrete subtasks benefits from the largest tier, because the reasoning is hard and errors are expensive downstream. An implementer executing a well-scoped subtask needs good but not frontier capability, so medium works. A monitoring step that just checks status signals needs almost no intelligence, so small is right. Assigning tiers to roles, rather than to individual one-off calls, makes the routing policy legible and maintainable: you can look at a role and see which tier it uses and why.
 
 ## What actually drives the routing decision
 
@@ -43,6 +55,10 @@ Four dimensions, roughly in priority order [^1]:
 - **Task complexity.** "Extract an email address" needs pattern matching, not intelligence; a regex with a fallback works. Middle-complexity tasks are the hard cases; start with heuristics (input length, keywords like "analyze" vs. "extract"); you don't need perfect prediction, being right 80% of the time still saves most of the money.
 - **Privacy and compliance.** These create hard boundaries that override cost: HIPAA data needs providers with Business Associate Agreements, EU user data may need EU data centers, and routing must enforce this from request metadata and data-classification tags.
 
+Cost and volume lead the list because they dominate the practical savings, but the order is not absolute. Privacy and compliance are listed last because they are not a priority *order* so much as a hard constraint that overrides everything above it. You cannot route HIPAA data to the cheapest provider if that provider has no Business Associate Agreement, no matter how much money it would save. Compliance boundaries must be enforced before cost, latency, or complexity get a vote, which means the router needs to read data-classification tags and request metadata and apply those boundaries first. When compliance and cost collide, compliance wins, and the router has to be built to know that.
+
+The complexity dimension contains the most counterintuitive guidance: for a lot of "intelligent" work, you do not need an intelligent model. Extracting an email address is a regex problem with a fallback, and sending it to a frontier model is waste. The genuinely hard cases are the middle-complexity ones, where the task is not trivial but not deeply reasoning either. For those, heuristics get you most of the value: input length and trigger keywords ("analyze" vs. "extract") are enough to place most requests correctly. The key insight is that you do not need perfect routing. Being right 80% of the time captures most of the savings, and the 20% you misroute to the expensive model is a rounding error against the 80% you correctly sent cheap.
+
 ## The three patterns that matter in production
 
 Most production routing is conditional logic, not ML [^1]:
@@ -51,9 +67,19 @@ Most production routing is conditional logic, not ML [^1]:
 2. **Confidence-based routing (escalation).** Send to a fast, cheap model first; if confidence is below a threshold, escalate to a bigger model. If 70% of requests are handled confidently by the cheap model, you cut expensive-model usage by 70%.
 3. **Fallback chains + circuit breakers.** Requests cascade through providers until something succeeds. Circuit breakers matter: if a model is timing out on most requests, stop sending traffic to it and test it after a cooling-off period.
 
+The phrase "not ML" is the surprising part for people who assume routing must be smart. The overwhelming majority of production routers are plain conditional logic, and that is the right choice. ML-based routers exist and can be better in some high-volume settings, but they add training, evaluation, and monitoring overhead, and the evidence shows that a handful of well-chosen rules captures most of the benefit. Rule-based routing is simple, auditable, and instantly debuggable: you can see exactly why any request went where it did. Start there, and only consider learned routing when rules demonstrably plateau.
+
+Confidence-based escalation is the pattern that quietly delivers the biggest savings. The structure is elegant: send every request to a cheap, fast model first; if the model's confidence in its answer is above a threshold, return it; if below, escalate to a bigger model. When the cheap model is confidently right most of the time, you only pay for the expensive model on the genuinely hard cases. The 70% figure is illustrative, not a guarantee, but the mechanism is what matters: escalation concentrates expensive-model spend exactly where it is needed. The main design work is choosing the confidence threshold and the cheap model's reliability, and both are measurable.
+
+Fallback chains are the resilience backbone, and circuit breakers are what keep them from doing more harm than good. A naive fallback chain just cascades requests through providers until one succeeds. The problem is a failing provider: if a model is timing out on most requests, every new request burns a timeout on it before falling through, and the chain is slow for everyone. The circuit breaker closes the broken provider off after it fails too many times, so traffic skips it entirely, then tests it again after a cooling-off period and reopens it if it has recovered. Without breakers, your resilience mechanism becomes your latency problem.
+
 Design the *end of the chain* explicitly: when every model in a tier fails, decide in advance whether to route up a tier, serve a cached response, fall to a self-hosted model, or return a clear error. [^3]
 
+The end-of-chain decision is the one teams forget until the incident happens. You have built a beautiful cascade, and then every tier is down, and nobody has decided what happens next. The honest options are: escalate up a tier (accept higher cost to keep serving), serve a cached or canned response (accept staleness to avoid failure), fall back to a self-hosted model (accept lower quality for availability), or return a clear error to the user (accept failure, but a clean, explainable one). The wrong move is to have no plan and discover the hole mid-outage. Decide the terminal behavior in advance, write it down, and test it.
+
 One warning from the tooling itself: fallbacks handle **provider errors**, not low-quality answers that return successfully. A router can't detect a bad answer unless you add a quality check on top. [^2]
+
+This is the sharpest limitation in the whole lesson and it deserves to be stated plainly. Fallback logic reacts to transport-level failures: 5xx, timeouts, rate limits. What it cannot see is a request that returned HTTP 200 with a confident-sounding but wrong answer. A router has no idea whether the output is any good, because it never looks at the content, it only observes whether the call succeeded. If you want to catch bad answers, you need a separate quality check: a validator, an eval, a scorer that runs on the output. Without that, a cheap model can be confidently wrong all day and your router will happily keep sending it traffic, because from the router's perspective everything is fine.
 
 ## Where the router lives: build vs. buy
 
@@ -65,17 +91,29 @@ You have three honest options:
 
 Managed platforms are fastest to start; self-hostable routers give you data-residency control. Differentiators: provider breadth, failover mechanics, and whether routing connects to evaluation and tracing. [^2]
 
+The build option is more viable than most teams think. A basic router is a few hundred lines: a decision function that reads request metadata, matches it against rules, and calls the right provider, plus a small fallback and circuit-breaker layer. You get total control, native integration with your feature flags and cost tracking, and no per-call gateway fees. The catch is that you own the monitoring, the retry logic, and every edge case, and debugging a routing bug across multiple providers is genuinely unpleasant. Build when you have the engineering capacity and want the control; buy when you want to move fast.
+
+The managed versus self-hosted trade-off comes down to a single question most of the time: data residency. A managed gateway like OpenRouter routes your requests through its infrastructure, which is excellent for speed of setup and provider breadth, but your data leaves your boundary. If your workload has strict data-residency requirements, that is a non-starter, and a self-hosted gateway like LiteLLM, where requests never leave your infrastructure, is the answer. Within each option, the differentiators are provider breadth (how many destinations you can reach), failover mechanics (how well the fallback and circuit-breaker logic is implemented), and whether routing hooks into your evaluation and tracing so you can actually measure whether the routing is working.
+
 ## Worked example: the Fortress's two-tier decision
 
 This isn't hypothetical at Adroit. Our Fortress runs a hybrid inference stack that is, in effect, a two-tier router: **cloud frontier models for kanban agent workers** (tool-calling and structured completion gates: work that must produce valid JSON), and a **local llama.cpp server** (Qwen 35B-A3B MoE, Q4_K_M, port 8080) for free-text background subsystems: context compression, title generation, triage, monitoring. [^7]
 
 The division wasn't chosen on a whiteboard; it was forced by a failure. A local Qwen model began emitting empty `{}` objects for nested tool-call arguments, silently breaking the kanban completion gate (tasks could never validate complete). Free-text reasoning stayed correct; structured tool-call JSON was broken. The rule: **if your workload depends on strict structured output, keep it on the tier you've verified, and put a validation layer in front of anything that doesn't.** [Source: Fortress of Solitude incident record t_db6b0a22, via local-llm-infrastructure-2026]
 
+The two-tier split is a compact illustration of everything in this lesson, so it is worth reading it as a routing decision. The cloud frontier tier is expensive but verified for the exact capability that matters, emitting valid structured tool-call JSON. The local llama.cpp tier is cheap and private but proved unreliable at structured output, while staying fine at free-text reasoning. The router does not just split by cost or by latency; it splits by a *capability constraint*, which is a form of quality routing informed by a real failure. The work that depends on strict structured output goes to the verified tier, and the free-text background work goes to the cheap local tier where reliability is not at stake.
+
+The incident also demonstrates why tiers need validation layers rather than blind trust. The local model did not fail loudly; it returned 200 responses with empty `{}` where valid arguments should be. Nothing in the transport layer would have caught it. Only a validation gate that checks whether the tool-call arguments are actually non-empty and schema-conforming caught the problem, and only because the completion gate happened to parse tool results. The generalizable rule is the one stated: for any workload whose output must conform to a contract, put a validation layer in front of the model, and do not assume a model you have not verified will keep producing valid structured output. Capability can degrade with model changes, and only validation notices.
+
 The economics match Lesson 5's routing lever: routing ~70% of calls to smaller models with quality-equivalent outputs drops a $50K/month workload to $8–15K/month in published 2026 analysis. [^8]
+
+That figure is the payoff for the whole lesson in one sentence. The savings do not come from one dramatic decision; they come from the unglamorous work of classifying requests, assigning tiers, and routing the majority to models that are good enough. A 70% shift to smaller models, with no measurable quality loss, compresses a large bill by more than half. The mechanism is exactly the "calculator problems on a supercomputer" waste that opened this lesson, inverted: stop paying frontier prices for work that does not need frontier intelligence, and the bill follows.
 
 ## The pitfall to avoid
 
 Routing for cost without a **quality bar**. It's the most common failure: aggressively send traffic to cheap models, watch the bill drop, and discover weeks later that completion rates, retry counts, or structured-output validity quietly degraded. Monitor quality metrics alongside cost; if retries or dissatisfaction rise, you're not saving money, you're shipping debt. [^1]
+
+The trap is that cost routing looks like pure upside at first. The bill drops immediately, which is satisfying and easy to report. Quality degradation, by contrast, is slow and distributed: completion rates dip a little, retries creep up, a few structured-output calls start failing. Each signal is small enough to dismiss, and none of them appear on a cost dashboard. By the time the degradation is obvious, it has already eroded the product. The fix is structural: track quality metrics in the same dashboard as cost, and treat a rise in retries or a drop in completion rate as a cost in itself. If the cheap tier is generating more retries, you are not saving money, you are deferring it into rework, which is debt.
 
 ## Try it
 
@@ -83,9 +121,13 @@ Routing for cost without a **quality bar**. It's the most common failure: aggres
 2. **Configure a real fallback chain.** Pick a managed or self-hosted gateway; try LiteLLM's `model_list` with two deployments behind one alias, then kill the primary and watch the request fail over. [^6]
 3. **Add routing observability.** Log every routed request with model, matched rule, and request ID. After a week, check: what fraction hit the cheap tier, and did the answers hold up? [^1]
 
+Each exercise targets a different muscle. The tier map forces you to reason about capability needs per step rather than defaulting to one model. The fallback chain exercise gives you the visceral experience of watching failover work, which builds confidence that it will work when you actually need it. And routing observability is the habit that protects you from the pitfall: you cannot detect quiet quality degradation without logs that tie each request to the model that served it and the rule that routed it. After a week of data, the question "what fraction hit the cheap tier, and did the answers hold up?" is exactly the quality-vs-cost check the whole lesson is trying to institutionalize.
+
 ## What's next
 
 You can now choose and route models. Lesson 7 is the step that turns a model into a component your code can depend on: structured output, getting JSON mode and function calling to return what you asked for, and designing tool schemas properly. A good model is only useful if you can reliably parse what it returns, and that is exactly what this lesson builds.
+
+There is a reason the routing lesson comes before the structured-output lesson. Routing decides *which* model runs a step, but the decision only matters if the model's output is usable by your code. A cheap model that you can parse reliably is a better choice than a frontier model whose output you have to wrestle into shape, which is one more reason the capability tiers in this lesson interact with the reliability machinery in the next. Once you can match models to steps and parse their output, you have the raw material for every agent in the rest of the track.
 
 [^1]: blog.logrocket.com. [blog.logrocket.com](https://blog.logrocket.com/llm-routing-right-model-for-requests/)
 [^2]: braintrust.dev. [braintrust.dev](https://www.braintrust.dev/articles/best-llm-routers-2026)

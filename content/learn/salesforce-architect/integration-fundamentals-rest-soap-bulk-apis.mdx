@@ -14,6 +14,8 @@ tags: [Salesforce, Architecture, Integration]
 
 Salesforce never lives alone. It sits between the ERP, the e-commerce platform, the marketing automation tool, and a dozen SaaS apps, and every one of them needs to move records in and out. Choosing *which API* moves those records is one of the most visible decisions a System Architect makes, and it's a favorite exam topic because the "right" answer depends on volume, latency, and direction, not on which API you like best. This lesson builds the decision framework: what REST, SOAP, and Bulk actually are, the limits that constrain them, and how to pick.
 
+The reason this decision is architecturally load-bearing rather than a preference is that an API choice is really three commitments stacked on top of each other. It commits you to a payload format, which determines how much transformation lives on each side. It commits you to a communication style, synchronous or asynchronous, which determines what happens to the caller when the platform is slow or unavailable. And it commits you to a share of a finite, org-wide request allocation that every other integration also draws from. Get the format wrong and you write transformation code forever. Get the sync model wrong and an outage in one system becomes an outage in two. Get the volume wrong and the org's daily API budget is gone by lunchtime.
+
 ## The API options in one table
 
 Salesforce ships a dozen-plus APIs, but for plain data movement the Help doc "Which API Do I Use?" narrows the field. The essentials:
@@ -27,17 +29,33 @@ Salesforce ships a dozen-plus APIs, but for plain data movement the Help doc "Wh
 
 [^1]
 
+Read the table as a set of three axes rather than four competing products. The first axis is format: JSON and XML are self-describing and human readable, CSV is compact and column-oriented, and Avro is a binary schema-carrying format that exists because event streams need to be cheap to produce at high rates. The second axis is communication: synchronous means the caller waits and gets an answer in the same exchange, asynchronous means the caller hands over work and comes back for the result. The third axis, which the table implies but does not spell out, is what the API is optimized for. REST and SOAP are optimized for correctness per interaction. Bulk is optimized for throughput. Pub/Sub is optimized for fan-out, where one event needs to reach many independent consumers without the producer knowing who they are.
+
+When you are sizing an integration, work the axes in order. Decide first whether the caller can wait, because that decision eliminates half the options immediately. Then decide the volume, because 2,000 records is the line that moves you from synchronous calls to Bulk. Only then pick a format based on what the other system already speaks. Most integration design arguments disappear if you run those three questions in that order instead of starting from "which API do we prefer."
+
 ## REST API: the default choice
 
 REST API is "one of several web interfaces that you can use to access your Salesforce data without using the Salesforce user interface." You send HTTP requests to endpoints called **resources** (records, query results, metadata), each exposed by a URI. Its primary benefit: "it doesn't require much tooling to access your data. It's simpler to use than SOAP API but still provides plenty of functionality." [^2]
 
 For an architect, REST is the workhorse for synchronous, interactive flows: a customer submits an order on a website, the site creates the Order record and gets the Salesforce ID back in the same request. The REST ecosystem also includes **Composite** resources, which batch several subrequests into one HTTP call (up to 25 subrequests per request, with `allOrNone` semantics and the ability to feed one subrequest's output into another). Each composite request counts as a single call toward your API limits. [^3]
 
+Two features in that paragraph are doing more work than their word count suggests, and both matter for architecture.
+
+The first is that a REST resource is addressed by a URI, which means the API surface is discoverable and testable with nothing more than an HTTP client. That is why REST is the right default when the calling system is a web or mobile application, or when a developer needs to prototype an integration before committing to a design. The tooling cost is close to zero, and the tooling cost is usually what determines whether an integration gets built well or built badly under deadline.
+
+The second is the **Composite** resource, and it is the single most useful lever for keeping an org's API consumption under control. Composite folds up to 25 subrequests into one HTTP call, and each composite request counts as a single call toward your allocation. That means an integration that would otherwise burn 25 calls per record batch can burn one. Composite also supports `allOrNone` semantics, so you can choose between "all subrequests succeed or none are applied" and independent execution, and it lets one subrequest consume the output of another, which is how you build a create-then-update chain that stays inside a single round trip. The tradeoff is that a Composite request is still synchronous and still subject to the timeout that governs all synchronous calls, so it is a batching mechanism for modest volumes rather than a substitute for Bulk.
+
+It is also worth knowing what REST is not for, because the failure mode is subtle. REST is a synchronous interface, so every request holds a connection on both sides for its duration. When a caller loops REST calls one record at a time, it is not just burning request allocation. It is also holding connections, and if enough of those calls run past the long-running threshold it begins consuming the concurrency allowance described below. The problem compounds: the same anti-pattern that exhausts the daily allocation also crowds out the concurrency budget that the org's other integrations depend on.
+
 ## SOAP API: the contract-driven option
 
 SOAP API is the older sibling: WSDL-based, XML only, synchronous. You generate a WSDL that describes the org's objects, then call operations like `create()` and `query()` from any language that supports web services. There are two WSDLs: the **enterprise WSDL**, generated from your org's schema (regenerate it whenever objects or fields change), and the **partner WSDL**, a loosely-typed version for apps that run against many orgs. [^4]
 
+Those two WSDLs exist because there are two different integration problems, and picking the wrong one creates maintenance work forever. The enterprise WSDL is strongly typed and generated from a specific org's schema. It gives the calling code compile-time knowledge of the objects and fields it can use, which is a genuine benefit: typos become build failures instead of production errors. The price is that the WSDL is a snapshot. Change an object or a field, and the generated client is stale until you regenerate it. The partner WSDL is loosely typed: the same client can run against many orgs with different schemas, because the schema is not baked into the contract. That makes it the right choice for a product or a middleware layer that has to serve many customers, and the wrong choice for a single-org integration where you would rather have the compiler catch a field rename.
+
 Salesforce's own guidance names its niche: "you can use SOAP API to integrate Salesforce with your org's ERP and finance systems." [^1] That's not nostalgia: SOAP gives you a machine-verifiable contract (the WSDL) that fits enterprises with rigid governance, and it's still the interface many middleware stacks already speak. One operational limit to remember: `create()` and `update()` accept **up to 200 records per call**, and if you exceed it "the entire operation fails." [^5]
+
+The 200-record cap and the all-or-nothing failure behavior are worth treating as features rather than annoyances, because that is how the finance and ERP integrations that use SOAP tend to view them. A batch of 150 journal entries that either lands completely or fails completely is a much easier thing to reconcile than a partial success, and reconciliation is the job of the systems that speak SOAP. The practical consequence for design is that you size SOAP batches to stay at or under 200 and you treat failure as an expected outcome that needs a handling path, not an exception. If the source system can produce more than 200 records per cycle, either chunk the calls or move the volume to Bulk and accept the loss of whole-operation semantics.
 
 ## Bulk API 2.0: scale without the wait
 
@@ -45,7 +63,11 @@ Bulk API 2.0 is "based on REST principles and optimized for working with large s
 
 The official sizing rule is your exam anchor: **any operation with more than 2,000 records is a good candidate for Bulk API 2.0**; jobs with fewer than 2,000 records should use "bulkified" synchronous calls in REST (for example, Composite) or SOAP. [^6] For bulk queries, Bulk API 2.0 supports extracting up to 1 TB of data per day. [^1]
 
-And use Bulk API 2.0, not its predecessor: the old Bulk API still exists, but "use Bulk API 2.0 instead of Bulk API if you want a more streamlined workflow"; it manages batches for you automatically and has the advantage of future innovation. [^6]
+The missing SLA is the tradeoff you are accepting when you choose Bulk, and it should be an explicit part of the design rather than a surprise. You get scale in exchange for giving up a completion guarantee. That means a Bulk integration is never finished when the caller returns; it is finished when the job reports success and you have reconciled the results. Any process that depends on the data landing needs a downstream trigger, a polling step, or a scheduled check, and any process that depends on the data landing *by a certain time* needs a margin built into the schedule. The 2 AM night run exists in so many architectures for exactly this reason.
+
+Use the newer API: the old Bulk API still exists, but "use Bulk API 2.0 instead of Bulk API if you want a more streamlined workflow"; it manages batches for you automatically and has the advantage of future innovation. [^6]
+
+That batching detail is the concrete difference. In the earlier Bulk API you were responsible for splitting your job into batches and managing each one, which meant tuning batch sizes and handling partial failures across many batches. Bulk API 2.0 takes the whole job and handles the batching internally, so the integration hands over a CSV and a job definition and then reads back results. Less code, fewer failure modes, and the platform does the tuning. When a project still has an older Bulk integration running, "modernize it" is usually a smaller piece of work than teams expect and it removes a meaningful amount of custom batching logic.
 
 ## The limits that make the choice matter
 
@@ -57,7 +79,13 @@ Salesforce balances API load with **three types of limits**, and the architect w
 
 Monitor with the `Sforce-Limit-Info` response header (REST), the `/limits` endpoint, or the API Usage section of System Overview in Setup. [^7]
 
+The phrase "per org, not per user" is the one to underline. The allocation belongs to the org, which means every integration shares one budget and none of them can see the others' consumption unless someone is monitoring. That single design property explains a whole genre of production incident: an integration ships, works perfectly in isolation, and eventually causes failures in an unrelated integration because the two of them together crossed the line. It is also why the monitoring tools matter more than they look. A response header, a limits endpoint, and a Setup page are the only early warning you get before a vendor's integration starts returning errors it did not cause.
+
+The concurrency limit is a different shape of constraint and it catches experienced developers off guard because it is not about volume. It applies specifically to calls that run 20 seconds or longer, and the ceiling is low: 25 in a production org or sandbox. Short, fast calls are unconstrained by this limit, which means the design pressure is toward making calls finish quickly rather than toward making fewer calls. A middleware layer that fans out 30 parallel queries, each taking 25 seconds, will trip the limit even though the total request count is trivial. The fix is almost always architectural rather than code-level: reduce the work per call so the call finishes fast, or restructure the pattern so the parallel burst becomes a queue.
+
 Bulk has its own layer of allocations: **15,000 batches per rolling 24 hours** (shared between Bulk API and Bulk API 2.0), a max of **150,000,000 records uploaded per 24-hour period**, up to **10,000 Bulk 2.0 query jobs per day**, and ingest results retrievable for **7 days** after job completion. [^8]
+
+Notice that these limits are measured in a different unit than the REST allocation. REST is counted in requests, Bulk is counted in batches and records. That is a useful signal about the intended use of each API, and it is why the sizing rule is expressed in records rather than calls. The 7-day result retention is also an operational constraint with teeth: a reconciliation job that runs weekly is running right at the edge of the window, and a job that runs on a longer cadence will lose the results it needs. Design the checking step to run well inside 7 days of the ingest job, not at the boundary.
 
 ## Worked example: an order sync architecture
 
@@ -68,11 +96,19 @@ A retailer runs Salesforce for order management and needs four integrations. Her
 3. **Analytics export**: the data warehouse pulls 500,000 records for reporting. **Bulk API 2.0 query job**: async, paginated, results retrievable within 7 days. Doing this over synchronous REST would burn 500k of the org's daily allocation and hit the 10-minute timeout before finishing. ✓
 4. **Middleware upsert**: an iPaaS syncs 40 changed records every hour. **Composite** (or bulkified SOAP `update()`): a handful of records, needs a quick answer, and Composite folds them into one API call. ✓
 
+Three of those four choices are driven by limits rather than by preference, which is the point of the exercise. The night run is Bulk because 80,000 is 40 times the 2,000-record threshold. The analytics export is Bulk because 500,000 synchronous calls would consume the org's entire daily Enterprise allocation several times over before the task finished, and because a synchronous call that long runs into the 10-minute timeout anyway. The middleware upsert is Composite rather than 40 separate calls because 40 calls and 1 call do the same work and draw very different amounts against the allocation.
+
+Now stress the design the way a review board would. What happens if the nightly ERP job fails halfway? With Bulk, the job reports its failures with the source row identifiers, and because the ingest results stay retrievable for 7 days, the integration team can reprocess the failed rows without re-exporting the whole file. What happens if the warehouse export runs two hours long? Nothing depends on its completion, because it is a query job whose results are collected later. What happens if the website order call times out at peak? The caller has no Order ID, so the front end needs a retry path and the org needs a way to detect a duplicate if the first request actually succeeded. That last question is answered in a later lesson on integration reliability, and the point to carry forward is that the API choice did not create the duplicate risk. It surfaced it.
+
 ## The pitfall to avoid
 
 **Using a synchronous API for a bulk problem.** The classic failure: a developer takes a working REST integration and loops it, 100,000 records, one HTTP call each. That's 100,000 API calls against an Enterprise allocation of maybe 125,000 for the whole day, so the org's limit is gone by noon, every other integration starts failing with `REQUEST_LIMIT_EXCEEDED`, and the vendor (you) gets the call. The rule of thumb from the docs is also a cost rule: above 2,000 records, go Bulk. [^6]
 
 The second trap is subtler: **ignoring the concurrency limit for long-running calls.** A middleware that fires 30 parallel sync REST queries, each running 25 seconds, exceeds the 25-long-running-request ceiling and gets throttled. Design for batch over burst, and when you size an org's API allocation, remember limits are org-wide, so one chatty integration starves every other one. [^7]
+
+A third trap is worth adding, because it is the one that shows up in mature orgs rather than new ones: **choosing the API that is convenient for the calling system instead of the one that fits the data shape.** A system that already speaks SOAP will happily push 50,000 records through SOAP in 250-call chunks of 200, and every one of those calls will succeed. It will also consume a meaningful share of the daily allocation, run slowly, and require custom chunking code that has to handle the all-or-nothing failure of each 200-record batch. The integration "works." It is also the kind of thing that gets rewritten two years later at the client's expense, because the shape of the data was always bulk and the API never was.
+
+The fourth trap is a design-hygiene one: **treating the 2,000-record rule as a hard cliff in both directions.** The rule is a threshold of good judgment, not a switch. A one-time migration of 5,000 records is technically above the line, and using Bulk for it means accepting asynchronous processing and a results-reconciliation step for a job you could also split into 25 compliant calls. Either answer can be right. What matters is that the choice is made deliberately, with the async tradeoff named, rather than inherited from whoever wrote the first version of the script.
 
 ## Try it
 
@@ -84,6 +120,8 @@ A manufacturer's middleware must move data in these shapes. For each, pick the A
 4. The same finance system must nightly pull every invoice changed that day for reconciliation.
 
 **Answers:** (1) REST: single record, synchronous, user waits. (2) Bulk API 2.0 ingest: 250k records is massively past the 2,000 threshold, CSV input, async. (3) SOAP `create()`: the finance system already speaks WSDL, and 150 records fits the 200-per-call cap with whole-operation failure semantics on excess. (4) Bulk API 2.0 query job: a bulk read that doesn't need to block the caller; results stay available for 7 days. If you picked "REST in a loop" for any of these, re-read the pitfall above.
+
+Then do the arithmetic, because exam questions and real sizing exercises both reward it. Take an Enterprise org with 100,000 base requests plus 1,000 per license, and suppose the org has 200 Salesforce licenses. That is 100,000 + 200,000, or 300,000 requests a day. Now price out a hypothetical integration that syncs 5,000 changed records every hour, 24 hours a day, one REST call per record: 120,000 calls a day, or 40 percent of the org's entire allocation, from a single integration that does not touch a single bulk record. Convert it to Composite batches of 25 and the same work costs 4,800 calls. That difference is the entire lesson in one calculation, and it is worth running against any integration you are asked to review.
 
 ## What's next
 
