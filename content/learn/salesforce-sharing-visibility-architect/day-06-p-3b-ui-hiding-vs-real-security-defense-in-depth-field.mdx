@@ -35,6 +35,8 @@ The exam language for the correct answer is layered. For a single sensitive fiel
 
 Each layer covers a different surface. Field-level security without programmatic enforcement leaves the Apex and API paths open. Programmatic enforcement without field-level security means every new code path has to remember the rule, and the ones that forget leak. Layout changes without either are decoration. [^3][^4]
 
+![The four defense-in-depth layers for a single field, each governing a different surface, with their failure modes when a layer is missing](</diagrams/day-06-p-3b-ui-hiding-vs-real-security-defense-in-depth-field/1-defense-in-depth-layers.png>)
+
 ### How Apex decides what it is allowed to touch
 
 This is the part of the objective candidates get wrong, so state it precisely. Apex database operations (SOQL, SOSL, DML, and Database class methods) have historically run in system mode by default, which means the running user's object permissions, field-level security, and sharing rules were not applied unless the developer added enforcement. The keyword on the class governed record-level sharing, not field permissions, and those are different mechanisms. [^5][^6]
@@ -47,6 +49,8 @@ Two separate decisions are in play:
 - Access mode: whether object permissions (CRUD) and field permissions (FLS) apply to the operation. Controlled by the access mode of the query or DML statement.
 
 A `without sharing` class disables the first and says nothing about the second. This is the single most common misconception in the whole objective: engineers read "without sharing" as "runs as the user's permissions are irrelevant," which is half true, and then conclude the code is either fully permissive or fully locked down. Neither.
+
+![The two separate decisions in Apex access: sharing controls record visibility via the class keyword, while access mode controls CRUD and field permissions, and the misconception that without sharing flips field-level security](</diagrams/day-06-p-3b-ui-hiding-vs-real-security-defense-in-depth-field/2-sharing-vs-access-mode.png>)
 
 ### Checking field accessibility with schema describe methods
 
@@ -134,6 +138,8 @@ The trade-off against `WITH SECURITY_ENFORCED` is the design decision the exam i
 
 One limit to state plainly: `stripInaccessible` addresses field access on the records you hand it. It does not replace an object permission check or the sharing model, so a method that also creates records still needs a create check, and a method that reads records still needs the sharing context to be correct. [^6][^9]
 
+![A comparison of the three in-code enforcement mechanisms: schema describe methods, WITH SECURITY_ENFORCED, and Security.stripInaccessible, showing what each does when a user cannot read a field](</diagrams/day-06-p-3b-ui-hiding-vs-real-security-defense-in-depth-field/3-enforcement-mechanisms.png>)
+
 ### The AuraEnabled boundary
 
 Lightning components reach Apex through `@AuraEnabled` methods, and that annotation is a doorway, not a security control. The annotation makes a method callable from the client; it does not make the method respect the user's permissions. If the method body is a plain query, the client receives whatever the query returns, including fields the user cannot see in the interface. [^10]
@@ -175,6 +181,8 @@ Should the operation fail or degrade? If the field is essential to the result, e
 Is there a bypass in the design, and is it justified? If the code must ignore sharing to do its job, say so explicitly at the class, keep it narrow, and confirm that nothing it touches crosses back into a user-visible surface.
 
 An answer that names one layer is a partial answer. The exam guide's phrase for the complete one is defense in depth, and the worked example below is what that looks like on a single field. [^3][^14]
+
+![The decision sequence for choosing the enforcement layer in a scenario, working through field versus record, whether the code path consults field permissions, fail versus degrade, and whether a bypass is justified](</diagrams/day-06-p-3b-ui-hiding-vs-real-security-defense-in-depth-field/4-decision-sequence.png>)
 
 ### A version note that changes how you write this today
 
@@ -254,6 +262,8 @@ return Security.stripInaccessible(AccessType.READABLE, accounts).getRecords();
 Now the same four paths, and the fifth path a reviewer would have to go looking for. An integration or a batch job running under a broad service user reads the field regardless of any of the above, because the service user is configured to read it. The design answer is not to fight that; the answer is to make sure nothing written into a user-visible surface copies the value across. The batch that rolls compensation totals onto a dashboard tile visible to reps is the real exposure, and it is created by field permissions and visibility decisions on the target object, not by anything in the source query.
 
 The layer count in this example is four: field-level security, layout consistency, programmatic enforcement in the component's controller, and a decision about the asynchronous paths. Any one of them alone leaves a route to the data. That is the whole of objective p-3b.
+
+![The Compensation field across its four access paths, showing which declarative surfaces hold because they consult field permissions and which path (the Lightning component with plain Apex) leaks, plus the fifth asynchronous path a reviewer must seek out](</diagrams/day-06-p-3b-ui-hiding-vs-real-security-defense-in-depth-field/5-compensation-access-paths.png>)
 
 ## Configuration Walkthrough
 
