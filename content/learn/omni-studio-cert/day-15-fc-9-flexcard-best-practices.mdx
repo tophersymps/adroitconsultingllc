@@ -6,81 +6,125 @@ lesson: 15
 excerpt: "Validate your JSON, keep data sources lean, test every state and channel, and respect FLS. That combination is what separates a card that survives production from one that goes blank."
 date: "August 17, 2026"
 author: "Adroit Consulting"
-readTime: "5 min read"
+readTime: "9 min read"
 tags: [OmniStudio]
 ---
 
+Every FlexCard that fails in production fails for one of a small number of reasons, and all of them are avoidable at build time. The data source returned a shape nobody checked, the query was broad enough to return thousands of records, an edge case hit a state that was never built, or a restricted user saw a field they should not have. FC-9 is the closing lesson of the FlexCard domain and it collects the habits that prevent those failures. Read it as a checklist you apply to every card rather than as a list of facts to memorise, because the exam tests the judgement behind each practice as much as the practice itself.
+
 ## Deep Dive
 
-**Validate the JSON before you build anything.** Most FlexCard defects trace back to a data source that has the wrong shape or is missing fields. Check the source output first. If the shape is wrong, the card fights you the whole way through.
+### Validate the JSON before you build the layout
 
-**Keep data sources lean.** Use filters and parameters to limit records. Avoid N+1-style heavy queries that hammer the server. Push complex logic to a Data Mapper or Integration Procedure instead of trying to do it in the card. The card should render, not compute.
+The first practice is the most frequently skipped and the most expensive to skip: confirm the shape of the data source's output before you place a single element. Most FlexCard defects trace back to a data source whose structure is not what the builder assumed, and when the structure is wrong, every binding built on top of it is built on sand.
 
-**Cache with intent.** Caching is for expensive data that does not change often. For multi-source orchestration, prefer an Integration Procedure that returns one consolidated call over piling several data sources onto the card. Fewer round trips, easier to reason about.
+Concretely, run the data source and inspect the returned JSON. Check three things. First, the *names*: are the fields called what you expect, with the exact casing and spelling? Second, the *nesting*: is the array of records at the level your bindings assume, or is it wrapped one level deeper than you pictured? Third, the *presence*: are the fields you intend to display actually returned, including in the cases where the record is sparse or the relationship is empty?
 
-**Respect security.** Use Data Mapper data sources when field-level security matters. Do not expose sensitive fields through SOQL on a low-privilege channel. FLS is easy to bypass by accident with raw queries, so choose the data source deliberately.
+Why this ordering matters is worth stating plainly. If you build the layout first and then discover the shape is wrong, you have to revisit every binding and every condition, and each fix risks breaking a neighbouring one. If you validate first, the layout is built against reality. In practice a two-minute inspection of the JSON saves an hour of debugging bindings later, which is why the best-practice list puts it first.
 
-**Test every state on every channel.** Default, empty, error, custom. A card that only works when data is perfect will go blank on edge cases. Name elements and bindings consistently so the card stays maintainable when you come back to it.
+**Worked example.** A builder creates a `CaseHistory` card and binds a repeater to `records` with fields `CaseNumber` and `Status`. The card renders blank. The data source actually returns `{"data": {"cases": [...]}}`, so `records` does not exist at the root, the repeater has nothing to iterate, and no error is raised because a binding to a missing node simply resolves to nothing. Validating the JSON first would have shown the wrapper and the real array name in seconds.
 
-**Compose, don't duplicate.** If multiple cards share a piece of UI, use a child FlexCard or a custom LWC rather than copying the layout. Use actions and events for coordination. Duplication is where drift and bugs come from.
+### Keep data sources lean
+
+A FlexCard renders data. It is not a computation engine and it is not a bulk data viewer. The second practice follows directly: use filters and parameters to limit how much data the card pulls, and push heavy logic out of the card and into a Data Mapper or an Integration Procedure.
+
+The anti-pattern is a query with no effective filter. A card that a user opens on an account with three open cases should not be designed such that it would happily return every case in the org if a filter were ever missing or mistyped. Broad queries hurt in three ways: they are slower to return, they consume more of the platform's limits, and they put data on screen that the card's layout was never designed to present. Long unfiltered lists in a card also degrade the user experience, since the card becomes a wall of rows.
+
+Lean means the data source asks for exactly what the card shows. If the card displays an account's five most recent cases, the data source filters by account and limits to five. If it displays a count, it does not need to return the rows to compute it. If it needs a value that is derived from several records, that derivation belongs in a Data Mapper or an Integration Procedure, not in a chain of card formulas.
+
+This also connects to performance reasoning that recurs throughout OmniStudio: fewer round trips and smaller payloads. A card that fetches once, with a tight filter, is easier to reason about than a card that fetches broadly and then trims with formulas, because the trimming happens after the data has already crossed the wire.
+
+### Cache with intent
+
+Caching is for expensive data that changes rarely. Reference and configuration data, catalogues, lookup tables, and similar values are the right candidates: they are costly to fetch and stable between fetches, so caching them saves work without serving stale information to anyone.
+
+Caching is the wrong tool for data that is user-specific and volatile, and it is not a substitute for a better data source. If a card is slow because its query is unfiltered, the fix is the filter, not a cache. The disciplined question is whether the data is genuinely expensive *and* genuinely stable; if either answer is no, caching adds complexity for nothing and risks showing a user a value that has already changed.
+
+The exam framing ties caching to the broader practice of consolidating data access: cache the values that justify it, and reach for an Integration Procedure when the card needs several related pieces of information. That combination is what keeps a card fast without making it stale.
+
+### Prefer an Integration Procedure over multiple data sources
+
+When a card needs data that comes from several places, or that requires more than a trivial amount of logic, the recommended pattern is one Integration Procedure that assembles everything and returns it in a single call. The alternative, piling several data sources onto one card, multiplies server round trips and spreads the card's data contract across several independent sources that each need their own testing.
+
+The exam question is direct: how should complex multi-source data reach a FlexCard? The answer is via an Integration Procedure in one call. Multiple SOQL data sources, a hand-written custom JSON blob, and a formula are all distractors. An Integration Procedure consolidates the orchestration server-side, where it can be cached, tested independently, and reused by other cards and by OmniScripts. The card's job in that arrangement is to render one predictable payload, which keeps the card simple and the logic reusable.
+
+This is the same principle that applies to keeping OmniScripts lean: if you find yourself adding a third or fourth data source to a card to fetch related pieces, that is the signal to move the assembly into an Integration Procedure and let the card consume the result.
+
+### Respect security: choose the data source deliberately
+
+Field-level security is easy to bypass by accident, and a FlexCard is a place where that accident is likely, because the same card may serve a high-privilege internal user and a low-privilege portal user. A raw query data source can return fields the running user is not permitted to see, and if those fields are bound into the card's layout, a restricted user sees data they should not.
+
+The practice is to use a Data Mapper data source when field-level security matters, and to decide the data source deliberately rather than by default. A Data Mapper respects field-level security and also transforms data, which is why the exam frames its advantage as applying when FLS or transformation is needed. The SOQL data source remains useful and simple, but for a card exposed to restricted users it is the wrong choice for sensitive fields.
+
+The exam phrasing is worth remembering exactly: a Data Mapper data source beats SOQL in a FlexCard when field-level security or transformation is needed. The distractors are the absolutist positions (always, never) and the unrelated ones (only on mobile). SOQL is not broken, it is simply less appropriate when the card must not expose fields the user cannot see, and when the returned shape needs changing before it reaches the layout.
+
+**Worked example.** A `CustomerBilling` card is planned for a customer portal. Its first data source is a raw query returning the account's invoices together with an internal margin field used by the sales team. In the console the card looks fine because the internal users can see everything. In the portal, the right fix is not to build a second card and not to hide the element with a condition, because the data is still being returned to the client. The right fix is a Data Mapper data source that shapes the payload and respects the portal user's field-level security, so the margin field never leaves the server.
+
+### Test every state on every channel
+
+The fourth practice is a testing discipline that has already been introduced twice in this domain, and it belongs in the best-practice list because it is where most of the remaining defects hide. Every state, default, empty, error, and custom, needs to be exercised with representative data. Every channel needs to be verified, because a card that works on a Lightning record page is not thereby proven on a portal or a phone.
+
+A card that only works when the data is perfect will go blank at exactly the moment a real user needs it: the account with no cases, the query that times out, the portal user with restricted visibility. Testing the happy path proves the layout is pleasing. Testing the edge states proves the card is functional. The two are not the same test, and only one of them is what the exam means by best practice.
+
+Run the states deliberately rather than waiting for them to appear in production. Force the zero-record case by tightening a filter temporarily. Force a failure by pointing a data source at something that cannot succeed and confirm the error state is graceful. Then walk the channels with real permissions.
+
+### Compose, don't duplicate
+
+The final practice is structural. When several cards share a piece of UI, or when part of a card grows large enough to be a component in its own right, compose with a child FlexCard or a custom LWC rather than copying the layout. Use actions and events for coordination between cards rather than wiring them to each other directly.
+
+Duplication is where drift begins. Two copies of the same block start identical and diverge the first time someone fixes a formula or a label in one of them, and after that nobody can tell which copy is authoritative. Composition keeps a single definition, so a fix applies everywhere by construction. The same reasoning that makes child OmniScripts preferable to a fifty-element monolith makes child FlexCards preferable to a copy-pasted layout.
+
+Naming supports this. Element names and bindings should follow a consistent convention, because a card is edited months after it is built, by someone who no longer remembers why a binding called `x1` exists. A consistent, descriptive naming convention is a maintenance practice, not a cosmetic one, and it costs nothing at build time.
+
+## Configuration Walkthrough
+
+The curriculum for FC-9 carries no configuration steps, because it is a judgement lesson rather than a build lesson. The practical walkthrough is the review you run over every card before you call it done:
+
+1. **Validate the data source JSON.** Run each source, inspect the returned structure, and confirm field names, nesting, and presence before building or signing off on bindings.
+2. **Tighten the data sources.** Add filters and parameters so each source returns only what the card displays, and remove any broad query that could return far more rows than the layout expects.
+3. **Cache only the genuinely expensive and stable data.** Remove any cache whose data is volatile or user-specific.
+4. **Consolidate multi-source data into an Integration Procedure.** Replace multiple card data sources with one IP call that returns a single predictable payload.
+5. **Choose the data source with security in mind.** Where field-level security or transformation is needed, use a Data Mapper rather than a raw query.
+6. **Test all states on all channels.** Default, empty, error, custom, on Lightning, Experience Cloud, and mobile, with realistic permissions.
+7. **Compose instead of copying.** Replace duplicated blocks with child cards or LWCs, and confirm element and binding names follow the convention.
 
 ## Exam Traps
 
-- A heavy SOQL query with no filter that returns thousands of records.
-- No empty or error states, so cards go blank on edge data.
-- Duplicating card logic instead of composing with child cards and LWCs.
-
-## Practice Questions
-
-**Q1.** Which is a documented FlexCard best practice?
-
-A. Validate JSON, keep data sources lean, test all states<br/>
-B. Return thousands of records unfiltered<br/>
-C. Skip state testing<br/>
-D. Hardcode all values
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: A.** Best practices: validated JSON, lean sources, caching, state and channel testing.
-</details>
-
-**Q2.** When does a Data Mapper data source beat SOQL in a FlexCard?
-
-A. When field-level security or transformation is needed<br/>
-B. Always. SOQL never works<br/>
-C. Never<br/>
-D. Only on mobile
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: A.** Data Mappers respect FLS and transform data. SOQL is simpler but insecure for restricted users.
-</details>
-
-**Q3.** How should complex multi-source data reach a FlexCard?
-
-A. Via an Integration Procedure in one call<br/>
-B. Multiple SOQL data sources<br/>
-C. Custom JSON<br/>
-D. A formula
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: A.** IPs consolidate orchestration into one server call. This is the recommended pattern for complex data.
-</details>
+- **A heavy query with no filter returning thousands of records.** Slow, limit-hungry, and a poor user experience. Lean data sources are a named best practice, and an unfiltered query is its direct opposite.
+- **No empty or error states, so cards go blank on edge data.** Already the FC-7 trap; here it is framed as an omission from the best-practice set, and it stays the most common real failure.
+- **Duplicating card logic instead of composing with child cards and LWCs.** Copies drift. Compose with children and coordinate with actions and events.
+- **Choosing a raw query for a card that serves restricted users.** Field-level security can be bypassed by accident, which is why the Data Mapper data source is the right choice when FLS or transformation matters.
+- **Reaching for multiple data sources when one Integration Procedure would do.** Complex multi-source data belongs in an IP returning one consolidated call, not in a growing pile of card data sources.
 
 ## Exam Tip
 
-Lean source + validated JSON + all states tested + FLS respected = a card that survives production.
+Lean source plus validated JSON plus all states tested plus FLS respected equals a card that survives production. For the three FC-9 questions specifically: the documented best practice is the trio of validating the JSON, keeping data sources lean, and testing all states; a Data Mapper data source beats SOQL when field-level security or transformation is needed; and complex multi-source data should reach a FlexCard through an Integration Procedure in one call.
+
+## Try It
+
+Take the card you built in Lesson 13, the one with the empty state, and put it through the review above.
+
+Start with the JSON. Run its data source and print the response, then trace every binding in the layout to a node you can actually see in that response. Any binding you cannot trace is a latent blank element; fix it before moving on.
+
+Next, exercise the states. Force zero records with a temporary filter and confirm the empty state shows. Point the source at something that cannot succeed and confirm the error state is graceful rather than blank. Restore both.
+
+Then widen the review to structure and security. If the card has more than one data source, work out what a single Integration Procedure call returning the same information would look like. If any field on the card would be sensitive for a portal user, plan the Data Mapper version of that source.
+
+Finally, find one block on the card that a second card could plausibly want, and extract it into a child FlexCard. The extraction is small; the point is the habit of recognising duplication before it drifts.
+
+## What's Next
+
+You have finished the FlexCard domain. Lesson 16 opens the OmniScript domain with OmniScript Elements and Dynamic Interactions, which turns from a card that displays a situation to a script that guides a user through changing it. Much of what you just practised carries over: declarative components over data, context declared as inputs rather than assumed, and every branch tested rather than trusted. The mechanisms differ, the discipline is the same.
 
 ## Related Requirements
 
-- Day 7, Data Sources
-- Day 13, States
-- Day 22, IP Design
+- Day 7, FlexCard Data Sources and Testing JSON
+- Day 13, Conditional Rendering with States
+- Day 22, Integration Procedure Design: Server-Side Orchestration
 
 ## References
 
-- [Official exam guide](https://help.salesforce.com/s/articleView?id=005298971&language=en_US&type=1)
-- [Trailhead trailmix](https://trailhead.salesforce.com/content/learn/trails/prepare-for-your-salesforce-omnistudio-developer-certification)
-- [OmniStudio Trailhead org](https://trailhead.salesforce.com/en/promo/orgs/omnistudiotrails)
-- [OMS435 take-home guide](https://developer.salesforce.com/files/OMS435%20OmniStudio%20Student%20Take%20Home%20Guide%20v1.0.pdf)
+[^1]: [FlexCard Designer, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_flexcard_designer.htm&language=en_US&type=5)
+[^2]: [OmniStudio Data Mappers, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptors.htm&language=en_US&type=5)
+[^3]: [Integration Procedures, Salesforce Help](https://help.salesforce.com/s/articleView?id=sf.os_integration_procedures.htm&type=5)
+[^4]: [Integration Procedure Best Practices, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_integration_procedure_best_practices.htm&type=5)

@@ -6,89 +6,116 @@ lesson: 11
 excerpt: "Configure advanced FlexCard properties: Event Listeners, Session Variables, Public Attributes, multi-language, child FlexCards, and custom LWC integration."
 date: "August 13, 2026"
 author: "Adroit Consulting"
-readTime: "6 min read"
+readTime: "9 min read"
 tags: [OmniStudio]
 ---
 
+A FlexCard that shows the same three fields on every record is a decoration. A FlexCard becomes a real application component the moment it can receive context from whatever is hosting it, react when something else on the page changes, share state with its neighbours, render in the user's language, and host other components inside itself. Those five capabilities are exactly what the FC-5 requirement lists, and the exam tests whether you can match each capability to the right mechanism. This lesson walks through the mechanisms one at a time, with a concrete Service Console scenario so the distinction between "data coming in", "events going between", and "state shared across" stops being fuzzy.
+
 ## Deep Dive
 
-**Event Listeners:** card-side subscriptions to events fired elsewhere (other cards, OmniScripts, the page), enabling refresh-on-change and cross-component coordination.
+### Four kinds of context, four different mechanisms
 
-**Session Variables:** values shared across components within the session (e.g., logged-in user context), available to cards for display or conditions.
+FlexCards are hosted. They live inside a Lightning record page, an Experience Cloud page, an OmniScript, a mobile app, or another FlexCard. Because the host owns the page and the card only owns its own tile, the card needs explicit channels to learn anything about its surroundings. OmniStudio gives you four, and they are easy to confuse because they all end in "the card gets a value it did not hardcode":
 
-**Public Attributes:** the card's public API. The host page passes values IN (e.g., recordId, accountId) so the card renders in context. Essential for reuse across pages.
+- **Public Attributes** carry values from the host page INTO the card. This is the card's public API.
+- **Event Listeners** carry a signal from somewhere else on the page into the card so it can react. This is the "between components" channel.
+- **Session Variables** carry values that many components on the page can read because they live in a shared session scope.
+- **Translations** carry the same label or value in different languages, selected per user locale.
 
-**Multi-language:** cards support translations so labels/values render per locale.
+The one-line memory aid that the exam rewards is: public attributes are *in*, events and listeners are *between*, session variables are *shared*, translations are *per locale*. When a question asks which mechanism does a thing, locate the direction of the data flow first and the answer usually falls out.
 
-**Integration points:** embed a child FlexCard inside a parent card; launch/integrate with OmniScripts; embed custom LWCs as elements for UI beyond the standard set.
+### Public Attributes: the card's public API
 
-Together these make cards context-aware, coordinated, and embeddable: the difference between a static card and a real application component.
+A public attribute is a named input you declare on the FlexCard. The host page is responsible for supplying a value; inside the card, bindings, conditions, and data source parameters can all reference that attribute name. Nothing about the card is hardcoded to one record, so the same card instance renders correctly wherever it lands.
+
+The classic attributes are `recordId` and `accountId`. On a Lightning record page, the record context supplies `recordId` automatically, which is why a card dropped onto an Account page can show "this account" without any wiring. Where the host is not a record page, or where you want a related record's id rather than the current one, you pass the value explicitly. In App Builder you do that by mapping the card's attribute to a page-level property; in Experience Builder you map it to a page input or a URL parameter; in an OmniScript you map it to the parent script's data node.
+
+**Worked example.** You build an `AccountHealth` FlexCard with one public attribute, `accountId`. Its data source filters Accounts by `Id = accountId` and returns renewal date, open case count, and owner. On the Account record page you bind `accountId` to the record id. On the Contact record page you bind `accountId` to the contact's `AccountId`. On an OmniScript used by a collections agent you bind `accountId` to a variable the agent selected in an earlier step. One card definition, three hosts, no duplication. The moment you hardcode a single record id into that card instead, it stops being reusable and every new host needs a copy.
+
+Public attributes are also where you should declare anything the card needs to *know* about its host context: the source of the record, a mode flag such as `readOnly`, a channel flag such as `isPortal`, or an id for a related list. Declaring them up front is what lets the card behave correctly in a console and a portal at the same time.
+
+### Event Listeners: reacting to changes elsewhere on the page
+
+A FlexCard does not automatically notice when something else changes. If a user edits an account in a record page's detail section, or an OmniScript in a side panel writes a new value, a card on that page will happily keep showing stale data until it is told otherwise. That telling is the job of event listeners.
+
+An event listener is a subscription the card registers for a named event. When a publisher fires that event, the listener runs. OmniStudio FlexCards use the standard Lightning event channel mechanism, so the publisher can be another FlexCard, an OmniScript, a custom LWC, or any component able to fire the named event. The listener's payload is the event data, and the listener's configured actions decide what happens next: refresh a data source, re-evaluate a state, set a value, show a message, or chain several of these in order.
+
+On the publishing side, a FlexCard action can itself fire an event. The Salesforce help pages literally name this pattern: *Trigger a Pubsub Event from an Action on a Flexcard* and *Trigger Sequential Actions from an Event Listener on a Flexcard*. The sequential-actions page matters because a listener is not limited to one reaction. A single incoming event, such as "ContactUpdated", can first refresh the account card's data source, then re-run a state condition, then display a toast.
+
+**Worked example.** A Service Console page shows three cards: `CaseList` in the left rail, `CaseDetail` in the centre, and `AccountSummary` at the top. When the agent clicks a case in `CaseList`, that card fires a `CaseSelected` event carrying the case id. `CaseDetail` listens for `CaseSelected` and refreshes its data source with the new id. `AccountSummary` also listens, and uses the payload's account id to refresh its own data source. One click, two independent cards updated, no page reload and no coupling between the cards beyond the shared event contract.
+
+The exam trap here is quiet failure. If nothing listens for an event that is fired, there is no error, no red text in the designer, and no console warning. The page simply does not update. When you build the publisher, always confirm that at least one listener exists and that the event name matches exactly, since event names are string comparisons.
+
+### Session Variables: shared, and only for the session
+
+Session variables hold values that multiple components on the page can read without being wired to one another. Think of them as a small shared scratchpad scoped to the user's session: the signed-in user's id, the selected branch or region, a chosen product line, a flag the user toggled earlier. Where a public attribute is a value pushed to one card by its host, a session variable is a value any component can read by name, which makes it the right tool when the value is genuinely page-wide rather than card-specific.
+
+Two properties define how you use them. First, they are *session-scoped*: they exist for the duration of the user's session and disappear afterwards. Second, they are not a persistence layer. If you need data to survive a page reload, a new session, or another user, session variables are the wrong tool and the correct answer is a data source reading the record itself, or an Integration Procedure writing to Salesforce.
+
+Inside a FlexCard you reference session variables in bindings, in conditions, and as data source parameters, exactly where you would use a public attribute. That is precisely the source of the most common confusion: both are readable names that resolve to a value. The difference is who supplies them. A public attribute is supplied by the host page for that specific card. A session variable is shared state that any component can set or read.
+
+**Worked example.** A regional sales manager has a `RegionSelector` LWC on a console page. When she picks "Northeast", the component writes the selected region code into a session variable, `selectedRegion`. Four FlexCards on the page, all with data sources parameterised by `selectedRegion`, re-evaluate and show Northeast data. No card passes the value to another card and no card owns the value.
+
+### Multi-language: translations per locale
+
+FlexCards support translations so that labels and values render in the viewer's language. Each translatable string on the card carries a value per supported language, and the platform picks the entry matching the user's locale at render time. This matters most in Experience Cloud, where the audience frequently spans countries.
+
+The practical rule is to treat user-visible strings as translatable content from the start, not as an afterthought. Data-derived values, such as a picklist label read from a record, follow the record's own translation behaviour, so the card's job is to translate its own static text and to render record values as-is. Do not use a formula to concatenate a translated string with a value unless you have checked that the pieces render correctly together in every locale, because word order differs between languages.
+
+### Integration points: children, OmniScripts, and custom LWCs
+
+Three integrations extend a card beyond the standard element set, and each solves a different problem.
+
+**Child FlexCard.** A child FlexCard is a FlexCard embedded inside another FlexCard. The parent renders it as part of its own layout, and the child behaves like any other element in the parent, so you compose a detail view out of smaller, testable cards instead of building one enormous layout. This is the answer to "which advanced integration lets you nest one card inside another".
+
+**OmniScript integration.** A card can launch an OmniScript, and an OmniScript can host a FlexCard as a contextual element. Cards are good at showing data and firing actions; OmniScripts are good at collecting and validating input across steps. Putting them together gives you the common pattern of a card that displays a summary and launches a guided flow to change something.
+
+**Custom LWC.** When the standard element set cannot render what you need, for example a chart, a map, or a signature pad, you embed a custom Lightning web component as a card element and drive it with the card's data.
+
+Together these five capabilities are what separate a static card from a component you can drop into a page, wire to its neighbours, hand a value to, translate, and extend. That is the whole of FC-5.
 
 ## Configuration Walkthrough
 
-1. Define public attributes for context the host page passes in.
-2. Add event listeners for coordination with other components.
-3. Reference session variables in bindings/conditions.
-4. Add translations for multi-language support.
-5. Embed a child FlexCard or custom LWC where needed.
+A concrete path for turning a static card into a context-aware one:
+
+1. **Define the public attributes first.** List every value the card needs from its host (`accountId`, `mode`, `isPortal`) and declare each as a public attribute before you build any layout. Bindings and data sources will reference these names, so they need to exist up front.
+2. **Add event listeners for coordination.** For each thing the card must react to, register a listener on the matching event name and configure the actions the listener runs, in order: refresh the data source, then re-evaluate state, then show feedback.
+3. **Reference session variables in bindings and conditions.** Where a value is truly page-wide, read it from the shared session scope rather than threading it through properties. Do not use session variables for anything that must outlive the session.
+4. **Add translations for every user-visible string.** Populate the per-locale values for the card's labels, so the same definition serves every language you support.
+5. **Embed a child FlexCard or custom LWC where needed.** If the layout is getting large, or if part of it needs UI the standard elements cannot produce, extract that part into a child card or an LWC element.
 
 ## Exam Traps
 
-- Hardcoding context instead of using public attributes kills reuse.
-- No listener for a fired event: coordination silently fails.
-- Assuming session variables are available cross-session (they are session-scoped).
-
-## Practice Questions
-
-**Q1.** Which mechanism passes data from a host Lightning page INTO a FlexCard?
-
-A. Public Attributes / Session Variables<br/>
-B. A hardcoded JSON file<br/>
-C. Platform Cache only<br/>
-D. Reports
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: A.** Public attributes (and session variables) expose entry points for host context.
-</details>
-
-**Q2.** How does a card react to changes elsewhere on the page?
-
-A. Event Listeners<br/>
-B. A new data source<br/>
-C. A Calculation Matrix<br/>
-D. Manual refresh
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: A.** Event listeners subscribe to events and trigger card reactions.
-</details>
-
-**Q3.** Which advanced integration lets you nest one card inside another?
-
-A. Child FlexCard<br/>
-B. SOQL data source<br/>
-C. Formula<br/>
-D. Streaming API
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: A.** Child FlexCards nest inside parent cards for composed displays.
-</details>
+- **Hardcoding context instead of using public attributes.** A card with a record id baked into it cannot be reused. The exam links hardcoded context directly to lost reuse: the value should have arrived through a public attribute.
+- **No listener for a fired event.** The card fires the event, nothing reacts, and nothing errors. Cross-component coordination fails silently, which is why you verify listener names as deliberately as you verify data sources.
+- **Assuming session variables are available cross-session.** They are session-scoped. Anything that needs to survive a reload or reach another user must come from the record or a server-side call, not from a session variable.
+- **Confusing the inward and outward channels.** Public attributes bring values in from the host; event listeners react to changes elsewhere. Read the direction of the data before you pick.
 
 ## Exam Tip
 
-Public attributes = in, events/listeners = between, session variables = shared, translations = per locale.
+Public attributes equal *in*, events and listeners equal *between*, session variables equal *shared*, translations equal *per locale*. That ordering is the fastest way to answer FC-5 questions: decide whether the value is being pushed into the card, signalled between components, shared across the page, or selected by language, and the mechanism is determined.
+
+## Try It
+
+In a Trailhead OmniStudio org, open the FlexCard Designer and create a card named `AccountHeader` with a single public attribute `accountId`. Give it a data source that returns Account Name, Industry, and Owner Name for `Id = accountId`. Drop the card onto the Account record page in App Builder and map `accountId` from the record context. Then add the same card to a Contact record page and map `accountId` from the contact. Watch the same definition render two different records without a single change.
+
+Next, add a listener to the card for an event named `AccountUpdated` and configure it to refresh the data source. From a second card or an LWC, fire that event with a test payload and confirm the first card re-renders. Finally, declare a session variable holding the current user's role, reference it in a condition that changes the card's subtitle, and confirm it resolves on both pages. That sequence teaches the difference between in, between, and shared more clearly than reading the definitions.
+
+## What's Next
+
+This lesson covered what a card can *do*. The next one covers how it *looks*. Lesson 12, FlexCard Styling and Themes, covers the two levels of appearance control, element-level inline styling and shared themes, and the precedence rule that decides which wins when both are present. Once you have wired context and coordination, appearance is the next thing a reviewer notices.
 
 ## Related Requirements
 
-- Day 10, Card Actions
-- Day 13, States & Conditional Rendering
-- Day 17, Child OmniScripts & LWCs
+- Day 10, Complex Card Actions: Launch, Fire, Update
+- Day 13, Conditional Rendering with States
+- Day 17, Child OmniScripts, FlexCards, and Custom LWCs
 
 ## References
 
-- [Official exam guide](https://help.salesforce.com/s/articleView?id=005298971&language=en_US&type=1)
-- [Trailhead trailmix](https://trailhead.salesforce.com/content/learn/trails/prepare-for-your-salesforce-omnistudio-developer-certification)
-- [OmniStudio Trailhead org](https://trailhead.salesforce.com/en/promo/orgs/omnistudiotrails)
-- [OMS435 take-home guide](https://developer.salesforce.com/files/OMS435%20OmniStudio%20Student%20Take%20Home%20Guide%20v1.0.pdf)
+[^1]: [FlexCard Designer, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_flexcard_designer.htm&language=en_US&type=5)
+[^2]: [Trigger Sequential Actions from an Event Listener on a Flexcard, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_trigger_sequential_actions_from_an_event_listener_on_a_flexcard.htm&language=en_US&type=5)
+[^3]: [Trigger a Pubsub Event from an Action on a Flexcard, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_trigger_a_pubsub_event_from_an_action_on_a_flexcard.htm&language=en_US&type=5)
+[^4]: [Base UI and Card Templates, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_base_ui_and_card_templates.htm&language=en_US&type=5)
+[^5]: [OmniStudio Settings, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_omnistudio_settings.htm&language=en_US&type=5)

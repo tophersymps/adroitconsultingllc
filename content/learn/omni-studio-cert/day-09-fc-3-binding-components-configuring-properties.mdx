@@ -6,49 +6,143 @@ lesson: 9
 excerpt: "Bind essential components to construct FlexCards and configure their properties."
 date: "August 11, 2026"
 author: "Adroit Consulting"
-readTime: "6 min read"
+readTime: "9 min read"
 tags: [OmniStudio]
 ---
 
+A FlexCard element without a binding is decoration. The moment you connect a text element to a JSON path, you have turned a payload into information a user can act on, and the connection is a string comparison: the path you typed against the key in the payload, character for character. That exactness is why so many FlexCard bugs look like nothing happened. When the comparison fails, the element does not warn you. It renders empty, and the card still looks structurally correct.
+
 ## Deep Dive
 
-**FlexCard elements:** text, number, currency, date/time, image, icon, link, button, and containers. Each displays a value or triggers an action.
+### The element types you build a card from
 
-**Binding** connects an element to a field in the data JSON: direct binding to a field path (e.g., `Name`) or an expression that computes a value. The binding path must match the JSON key EXACTLY. Case and nesting matter.
+FlexCard gives you a set of display elements plus containers to organize them. Knowing the list matters for the exam because a question may ask what a card can display, and the answer is broader than most people assume.
 
-**Element properties:** label, format (date/currency masks), visibility, value source, alignment, styling. Buttons additionally bind to card actions.
+- **Text.** The general-purpose element. Names, statuses, subjects, any string value.
+- **Number.** Numeric values that are not money, such as a count of open cases or a quantity. Set the format the number should use.
+- **Currency.** Money values. The element carries a currency format, so a raw payload value renders as a formatted amount rather than a string of digits.
+- **Date and time.** Date and datetime values. The element applies a format, so an ISO timestamp in the payload becomes a readable date.
+- **Image.** A picture, bound either to a URL in the payload or to a static resource path.
+- **Icon.** A standard icon reference, commonly used alongside text to signal status or category.
+- **Link.** Text that navigates somewhere when selected.
+- **Button.** A control that triggers an action. Buttons bind to card actions, which is the subject of the next lesson.
+- **Container.** A structural element that holds other elements so they can be positioned and styled as a group.
 
-**Expressions** enable computed display values (concatenation, conditionals) without code. Keep them simple; complex logic belongs in the data layer (Data Mapper formulas).
+Each of these either displays a value from the payload or triggers something. Text, number, currency, date, image, and icon display values. Link and button trigger behavior. Containers do neither; they organize.
 
-**Test bindings** against the previewed JSON: a blank value is almost always a path mismatch or a null field.
+### What binding actually does
+
+Binding connects an element to a value. There are two forms.
+
+**Direct binding to a field path.** The element displays whatever the payload holds at that path. A text element bound to `Name` displays the account name from the current record. This is the form you use for most elements on a card.
+
+**An expression.** Instead of a single path, you give the element a small expression that computes a display value. Expressions handle things like concatenation (a first name and a last name joined with a space) and simple conditionals (show one label when a status equals a given value, another otherwise). They let you present a derived value without writing code and without changing the data source.
+
+The path is a reference to a key in the JSON. Two consequences follow, and they are the ones the exam tests.
+
+**The path must match the key exactly.** JSON keys are case-sensitive. If the payload calls the field `AccountName` and you bound to `accountName`, the binding does not resolve. Nothing errors. The element is blank.
+
+**Nesting has to be accounted for.** A path that crosses an array has to be inside a repeater context, and once inside, it is relative to the item the repeater is rendering. You saw that rule in the repeaters lesson; it applies here as the reason a nested field comes back empty.
+
+### Why a binding goes blank
+
+The exam presents this as a scenario: a text element shows blank even though you know the data exists. The first suspect is the binding path, and specifically a mismatch between the path and the JSON key, whether that is a difference in case, a difference in nesting, or a wrong repeater context. Work through the possibilities in this order:
+
+1. **Is the key spelled and cased exactly as the payload has it?** Compare against the previewed JSON, not against the Salesforce field label.
+2. **Does the path account for any wrapper in the response?** If records arrive under a named node, a root-level path will not resolve.
+3. **Is the element inside a repeater, and if so is the path relative?** Inside a repeater bound to `Cases`, the element binds to `Subject`, not `Cases.Subject`.
+4. **Is the field present but null for this record?** A correctly bound element over a null value also renders blank. That is a data question, not a binding question, and the fix belongs in the data source (a default value or a filter) rather than in the card.
+5. **Does the running user have field-level security access to the field?** If the source is FLS-aware, the value may be correctly absent.
+
+Notice that the theme is checking the payload against the binding, not editing the layout. A blank element is almost never a styling problem.
+
+### Binding patterns, side by side
+
+The same element behaves differently depending on what the path resolves to and where the element sits. Reading a few cases together is the fastest way to internalize the rule.
+
+| Payload key | Where the element sits | Binding | Result |
+| --- | --- | --- | --- |
+| `Name` | On the card body, outside any repeater | `Name` | Resolves, shows the value |
+| `name` | On the card body, outside any repeater | `Name` | Blank, because JSON keys are case-sensitive |
+| `Accounts` is the array, each item has `Name` | On the card body, no repeater | `Name` | Blank, the key is not at the record level here |
+| Array `Cases`, item has `Subject` | Inside a repeater bound to `Cases` | `Subject` | Resolves, once per case |
+| Array `Cases`, item has `Subject` | Inside a repeater bound to `Cases` | `Cases.Subject` | Blank, the path is absolute where it should be relative |
+| Array `Cases`, item has `Subject` | Outside the repeater | `Cases.Subject` | Ambiguous at best; move the element into the repeater |
+| Response wraps records as `{"records":[...]}` | On the card body | `Name` | Blank, the wrapper was not accounted for |
+
+The table is worth reconstructing from memory. Every row is a real failure someone has spent an afternoon on, and every fix is in the binding rather than in the layout.
+
+### Element properties
+
+Every element carries properties that control how it presents and whether it presents at all. The ones the exam expects you to know:
+
+- **Label.** The caption or heading associated with the element, when the element type supports one.
+- **Format.** The mask applied to the value. This is where a date becomes readable, a number gets thousands separators, and a money value is displayed as currency. Format is a property of the element, not something you do to the data.
+- **Visibility.** Whether the element renders. Visibility lets you keep an element configured but hidden under conditions, which is more maintainable than deleting and rebuilding it.
+- **Value source.** What the element reads: the binding path or expression. For image elements this is a URL or asset reference.
+- **Alignment.** Where the value sits within the element's area.
+- **Styling.** The visual treatment applied to the element.
+
+Buttons carry one more: they bind to card actions, so a button is configured with both a display and a behavior.
+
+The formatting property deserves a specific example because it is a quiz answer. To show a formatted currency value in a card, you bind a field and set that element's format property to currency. You do not hardcode the value, you do not use an image, and you do not need a repeater. A currency element bound to `AnnualRevenue` with the currency format renders `48200000` from the payload as a formatted amount. Similarly, a date element bound to a datetime field with a date format renders that timestamp in a readable form.
+
+That is the clean split to remember: the data source decides what value arrives, and the element's format property decides how it looks.
+
+### Keep expressions small
+
+Expressions are useful and easy to overuse. A concatenation or a two-branch conditional belongs in the element. Anything with real logic in it does not.
+
+The reason is testability and reuse. Logic in a Data Mapper formula runs in one place, can be unit tested, and is available to every component that reads that mapping. Logic buried in a FlexCard expression is visible only in the designer for that one card. If a second card needs the same computed value, you copy the expression, and now two expressions can drift.
+
+The working rule: express for presentation, compute in the data layer. When you find yourself nesting conditionals inside a card element, that value wants to be a Data Mapper formula or an Integration Procedure output instead.
+
+### Test bindings against the previewed JSON
+
+The discipline that prevents most of this: keep the previewed payload open while you bind. Read the key from the preview and paste it, rather than typing it from memory. Then, after every few elements, run the card and check the rendered values against the payload you are looking at.
+
+Verification is cheap here. A binding that resolves shows the value. A binding that does not resolve shows nothing. You are checking presence, and blank means the path is wrong until you have ruled out a null value and a field-level security exclusion.
 
 ## Configuration Walkthrough
 
-1. Add display elements (text, number, date...) to the card body.
-2. Bind each element to its JSON field path.
-3. Configure properties: label, format, visibility, styling.
-4. Add buttons/links and bind them to card actions.
-5. Verify against preview JSON. Fix any blank paths.
+1. **Add display elements to the card body.** Choose text for strings, number for counts and quantities, currency for money, date for temporal values, image or icon for visual content, and link or button where the user needs to act.
+2. **Bind each element to its JSON field path.** Take the path from the previewed payload and match case and nesting exactly. Inside a repeater, use a path relative to the current item.
+3. **Configure the properties.** Set the label where the element supports one, choose the format (currency, date, number) for the value type, set alignment and styling, and set visibility if the element should render conditionally.
+4. **Use an expression only for presentation-level derivation.** Concatenating two names or picking one of two labels is fine. Anything heavier belongs in the data layer.
+5. **Add buttons and links and bind them to card actions.** A button's display configuration and its action configuration are separate, and the next lesson covers the action side.
+6. **Verify against the previewed JSON.** Open the card and check that every element shows a value. For each blank element, compare the binding path against the payload key before changing anything else.
 
 ## Exam Traps
 
-- Typo/case mismatch in binding paths (JSON keys are case-sensitive).
-- Binding to a nested path without the repeater context. The path must be relative to the item.
-- Using expressions where the data layer could compute the value more cleanly.
+- **Case or nesting mismatch in a binding path.** JSON keys are case-sensitive. A path that does not match the key exactly renders blank, with no error.
+- **Binding to a nested path outside or wrongly inside a repeater.** The path inside a repeater must be relative to the item being rendered.
+- **Using expressions for logic that belongs in the data layer.** Complex computation in one card's expression is invisible, untested, and will be duplicated.
+- **Forgetting that format is an element property.** A date or a money value does not format itself. The element's format property does it.
+- **Assuming a blank element is a styling problem.** The first suspect is the binding, then a null value, then field-level security. Layout is the last thing to check, not the first.
 
 ## Exam Tip
 
-Binding = JSON path. If it's blank, the path is wrong. Check case, nesting, and repeater context.
+Binding equals JSON path. If it is blank, the path is wrong: check the case, check the nesting, and check the repeater context. Element types cover text, number, currency, date, image, icon, link, button, and containers, and format is the element property that turns a raw value into currency, a number, or a date.
+
+## Try It
+
+In a sandbox, open the FlexCard you built in the previous lesson. Keep the data source preview open beside the card designer. Add a date element bound to a datetime field and set its format to a readable date, then confirm the card no longer shows a raw timestamp. Add a currency element bound to the account's annual revenue and set the format to currency. Now deliberately change one binding's case (bind to `name` instead of `Name`) and observe the blank result, then fix it and watch the value return. Finally, add an expression that joins two text fields into one display value, and write a note about which of your card's values you would rather compute in a Data Mapper formula.
+
+## What's Next
+
+Every element so far displays a value. Lesson 10 makes the card act: launching an OmniScript with the selected record in context, firing events that other components listen for, and coordinating cards so one card's save refreshes another.
 
 ## Related Requirements
 
-- Day 7, Data Sources
-- Day 8, Layouts & Repeaters
-- Day 10, Card Actions
+- Day 7, FlexCard Data Sources and Testing JSON
+- Day 8, Single and Multi-Level Cards, Layouts and Repeaters
+- Day 10, Complex Card Actions: Launch, Fire, Update
+- Day 38, Resolve FlexCard Display State Issues
 
 ## References
 
-- [Official exam guide](https://help.salesforce.com/s/articleView?id=005298971&language=en_US&type=1)
-- [Trailhead trailmix](https://trailhead.salesforce.com/content/learn/trails/prepare-for-your-salesforce-omnistudio-developer-certification)
-- [OmniStudio Trailhead org](https://trailhead.salesforce.com/en/promo/orgs/omnistudiotrails)
-- [OMS435 take-home guide](https://developer.salesforce.com/files/OMS435%20OmniStudio%20Student%20Take%20Home%20Guide%20v1.0.pdf)
+[^1]: [FlexCard Designer, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_flexcard_designer.htm&language=en_US&type=5)
+[^2]: [OmniStudio Developer Certification Exam Guide, Salesforce Help](https://help.salesforce.com/s/articleView?id=005298971&language=en_US&type=1)
+[^3]: [Data Mapper Extract Overview, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_extract_overview.htm&language=en_US&type=5)
+[^4]: [Prepare for Your Salesforce OmniStudio Developer Certification, Trailhead](https://trailhead.salesforce.com/content/learn/trails/prepare-for-your-salesforce-omnistudio-developer-certification)
+[^5]: [OmniStudio Trailhead Org](https://trailhead.salesforce.com/en/promo/orgs/omnistudiotrails)

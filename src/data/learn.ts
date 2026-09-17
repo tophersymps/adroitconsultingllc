@@ -21,7 +21,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Describe the OmniStudio solution as it applies to common customer use case scenarios in different industries (telco, energy, healthcare, public sector, etc.). Day 1 of the OmniStudio Developer exam prep.",
         "date": "August 03, 2026",
         "author": "Adroit Consulting",
-        "readTime": "6 min read",
+        "readTime": "9 min read",
         "tags": [
           "OmniStudio"
         ],
@@ -35,7 +35,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Determine a project's needs by evaluating a customer's requirements, assumptions, risks, and constraints. Day 2 of the OmniStudio Developer exam prep.",
         "date": "August 04, 2026",
         "author": "Adroit Consulting",
-        "readTime": "6 min read",
+        "readTime": "9 min read",
         "tags": [
           "OmniStudio"
         ],
@@ -49,7 +49,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Explain Managed Package Runtime vs. Standard Runtime, Automatic Upgrades, and Manual Intervention Upgrade. Day 3 of the OmniStudio Developer exam prep.",
         "date": "August 05, 2026",
         "author": "Adroit Consulting",
-        "readTime": "6 min read",
+        "readTime": "9 min read",
         "tags": [
           "OmniStudio"
         ],
@@ -63,7 +63,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Explain OmniStudio license requirements, Permission Set licenses and Permission Sets. Day 4 of the OmniStudio Developer exam prep.",
         "date": "August 06, 2026",
         "author": "Adroit Consulting",
-        "readTime": "6 min read",
+        "readTime": "9 min read",
         "tags": [
           "OmniStudio"
         ],
@@ -77,7 +77,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Describe the tools required to complete the end-to-end implementation process (SFCLI, VBT, Migration, etc.). Day 5 of the OmniStudio Developer exam prep.",
         "date": "August 07, 2026",
         "author": "Adroit Consulting",
-        "readTime": "6 min read",
+        "readTime": "9 min read",
         "tags": [
           "OmniStudio"
         ],
@@ -91,7 +91,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Explain testing, versioning, and cloning through OmniStudio components. This covers save vs. publish, cloning workflows, and version snapshots for deployment.",
         "date": "August 8, 2026",
         "author": "Adroit Consulting",
-        "readTime": "10 min read",
+        "readTime": "9 min read",
         "tags": [
           "OmniStudio"
         ],
@@ -105,7 +105,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Configure data sources such as SOQL, Data Mapper, Integration Procedure, Custom, etc. and test resulting JSON structure.",
         "date": "August 9, 2026",
         "author": "Adroit Consulting",
-        "readTime": "8 min read",
+        "readTime": "9 min read",
         "tags": [
           "OmniStudio"
         ],
@@ -119,7 +119,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Construct single and multi-level FlexCards, organizing data using layouts, and repeaters.",
         "date": "August 10, 2026",
         "author": "Adroit Consulting",
-        "readTime": "6 min read",
+        "readTime": "9 min read",
         "tags": [
           "OmniStudio"
         ],
@@ -133,7 +133,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Bind essential components to construct FlexCards and configure their properties.",
         "date": "August 11, 2026",
         "author": "Adroit Consulting",
-        "readTime": "6 min read",
+        "readTime": "9 min read",
         "tags": [
           "OmniStudio"
         ],
@@ -147,7 +147,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Define and implement complex card actions, including launching OmniScripts, firing events, and updating other components.",
         "date": "August 12, 2026",
         "author": "Adroit Consulting",
-        "readTime": "6 min read",
+        "readTime": "9 min read",
         "tags": [
           "OmniStudio"
         ],
@@ -161,7 +161,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Configure advanced FlexCard properties: Event Listeners, Session Variables, Public Attributes, multi-language, child FlexCards, and custom LWC integration.",
         "date": "August 13, 2026",
         "author": "Adroit Consulting",
-        "readTime": "6 min read",
+        "readTime": "9 min read",
         "tags": [
           "OmniStudio"
         ],
@@ -175,7 +175,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Control FlexCard appearance two ways: element-level inline styling for one-off tweaks and shared themes for consistent branding.",
         "date": "August 14, 2026",
         "author": "Adroit Consulting",
-        "readTime": "5 min read",
+        "readTime": "9 min read",
         "tags": [
           "OmniStudio"
         ],
@@ -189,7 +189,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Use FlexCard states and element-level conditions to show, hide, or restyle content when expressions against card data evaluate true.",
         "date": "August 15, 2026",
         "author": "Adroit Consulting",
-        "readTime": "5 min read",
+        "readTime": "9 min read",
         "tags": [
           "OmniStudio"
         ],
@@ -203,7 +203,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Embed one FlexCard definition across Lightning pages, Experience Cloud sites, OmniScripts, and mobile, and design it for reuse with public attributes.",
         "date": "August 16, 2026",
         "author": "Adroit Consulting",
-        "readTime": "5 min read",
+        "readTime": "9 min read",
         "tags": [
           "OmniStudio"
         ],
@@ -217,7 +217,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Validate your JSON, keep data sources lean, test every state and channel, and respect FLS. That combination is what separates a card that survives production from one that goes blank.",
         "date": "August 17, 2026",
         "author": "Adroit Consulting",
-        "readTime": "5 min read",
+        "readTime": "9 min read",
         "tags": [
           "OmniStudio"
         ],
@@ -231,7 +231,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "OmniScripts are guided journeys built from named elements that all land in one data JSON. If you understand that JSON contract, formulas, actions, and debugging all follow. If you don't, nothing else works.",
         "date": "August 18, 2026",
         "author": "Adroit Consulting",
-        "readTime": "6 min read",
+        "readTime": "9 min read",
         "tags": [
           "OmniStudio"
         ],
@@ -245,7 +245,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Child OmniScripts handle reuse, FlexCards handle display, and custom LWCs handle custom UI. Pick the right embed for the job, wire its data back into the script JSON, and complex flows compose cleanly.",
         "date": "August 19, 2026",
         "author": "Adroit Consulting",
-        "readTime": "5 min read",
+        "readTime": "9 min read",
         "tags": [
           "OmniStudio"
         ],
@@ -259,7 +259,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Themes define the design system across OmniScripts; element-level styling handles one-off exceptions. Use the theme as the source of truth, override sparingly, and verify responsive widths on desktop and mobile.",
         "date": "August 20, 2026",
         "author": "Adroit Consulting",
-        "readTime": "5 min read",
+        "readTime": "9 min read",
         "tags": [
           "OmniStudio"
         ],
@@ -273,7 +273,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Configure the advanced properties that carry an OmniScript beyond a bare flow: multi-language translations, Save Options for draft-and-resume, Knowledge Articles for in-flow help, and the Messaging Framework for SMS and email. Match the property to the scenario.",
         "date": "August 21, 2026",
         "author": "Adroit Consulting",
-        "readTime": "5 min read",
+        "readTime": "9 min read",
         "tags": [
           "OmniStudio"
         ],
@@ -287,7 +287,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "One OmniScript definition embeds across Lightning pages, Experience Cloud, mobile, and web. Pass record context so it opens pre-populated, drop it in via the auto-generated LWC wrapper, and verify context per channel.",
         "date": "August 22, 2026",
         "author": "Adroit Consulting",
-        "readTime": "5 min read",
+        "readTime": "9 min read",
         "tags": [
           "OmniStudio"
         ],
@@ -6478,7 +6478,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "One OmniScript definition embeds across Lightning pages, Experience Cloud, mobile, and web. Pass record context so it opens pre-populated, drop it in via the auto-generated LWC wrapper, and verify context per channel.",
     "date": "August 22, 2026",
     "author": "Adroit Consulting",
-    "readTime": "5 min read",
+    "readTime": "9 min read",
     "tags": [
       "OmniStudio"
     ],
@@ -6540,7 +6540,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Configure the advanced properties that carry an OmniScript beyond a bare flow: multi-language translations, Save Options for draft-and-resume, Knowledge Articles for in-flow help, and the Messaging Framework for SMS and email. Match the property to the scenario.",
     "date": "August 21, 2026",
     "author": "Adroit Consulting",
-    "readTime": "5 min read",
+    "readTime": "9 min read",
     "tags": [
       "OmniStudio"
     ],
@@ -6600,7 +6600,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Themes define the design system across OmniScripts; element-level styling handles one-off exceptions. Use the theme as the source of truth, override sparingly, and verify responsive widths on desktop and mobile.",
     "date": "August 20, 2026",
     "author": "Adroit Consulting",
-    "readTime": "5 min read",
+    "readTime": "9 min read",
     "tags": [
       "OmniStudio"
     ],
@@ -6663,7 +6663,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Child OmniScripts handle reuse, FlexCards handle display, and custom LWCs handle custom UI. Pick the right embed for the job, wire its data back into the script JSON, and complex flows compose cleanly.",
     "date": "August 19, 2026",
     "author": "Adroit Consulting",
-    "readTime": "5 min read",
+    "readTime": "9 min read",
     "tags": [
       "OmniStudio"
     ],
@@ -6725,7 +6725,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "OmniScripts are guided journeys built from named elements that all land in one data JSON. If you understand that JSON contract, formulas, actions, and debugging all follow. If you don't, nothing else works.",
     "date": "August 18, 2026",
     "author": "Adroit Consulting",
-    "readTime": "6 min read",
+    "readTime": "9 min read",
     "tags": [
       "OmniStudio"
     ],
@@ -6787,7 +6787,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Validate your JSON, keep data sources lean, test every state and channel, and respect FLS. That combination is what separates a card that survives production from one that goes blank.",
     "date": "August 17, 2026",
     "author": "Adroit Consulting",
-    "readTime": "5 min read",
+    "readTime": "9 min read",
     "tags": [
       "OmniStudio"
     ],
@@ -6849,7 +6849,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Embed one FlexCard definition across Lightning pages, Experience Cloud sites, OmniScripts, and mobile, and design it for reuse with public attributes.",
     "date": "August 16, 2026",
     "author": "Adroit Consulting",
-    "readTime": "5 min read",
+    "readTime": "9 min read",
     "tags": [
       "OmniStudio"
     ],
@@ -6895,7 +6895,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Use FlexCard states and element-level conditions to show, hide, or restyle content when expressions against card data evaluate true.",
     "date": "August 15, 2026",
     "author": "Adroit Consulting",
-    "readTime": "5 min read",
+    "readTime": "9 min read",
     "tags": [
       "OmniStudio"
     ],
@@ -6941,7 +6941,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Control FlexCard appearance two ways: element-level inline styling for one-off tweaks and shared themes for consistent branding.",
     "date": "August 14, 2026",
     "author": "Adroit Consulting",
-    "readTime": "5 min read",
+    "readTime": "9 min read",
     "tags": [
       "OmniStudio"
     ],
@@ -6987,7 +6987,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Configure advanced FlexCard properties: Event Listeners, Session Variables, Public Attributes, multi-language, child FlexCards, and custom LWC integration.",
     "date": "August 13, 2026",
     "author": "Adroit Consulting",
-    "readTime": "6 min read",
+    "readTime": "9 min read",
     "tags": [
       "OmniStudio"
     ],
@@ -7033,7 +7033,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Define and implement complex card actions, including launching OmniScripts, firing events, and updating other components.",
     "date": "August 12, 2026",
     "author": "Adroit Consulting",
-    "readTime": "6 min read",
+    "readTime": "9 min read",
     "tags": [
       "OmniStudio"
     ],
@@ -7079,7 +7079,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Bind essential components to construct FlexCards and configure their properties.",
     "date": "August 11, 2026",
     "author": "Adroit Consulting",
-    "readTime": "6 min read",
+    "readTime": "9 min read",
     "tags": [
       "OmniStudio"
     ],
@@ -7125,7 +7125,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Construct single and multi-level FlexCards, organizing data using layouts, and repeaters.",
     "date": "August 10, 2026",
     "author": "Adroit Consulting",
-    "readTime": "6 min read",
+    "readTime": "9 min read",
     "tags": [
       "OmniStudio"
     ],
@@ -7171,7 +7171,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Configure data sources such as SOQL, Data Mapper, Integration Procedure, Custom, etc. and test resulting JSON structure.",
     "date": "August 9, 2026",
     "author": "Adroit Consulting",
-    "readTime": "8 min read",
+    "readTime": "9 min read",
     "tags": [
       "OmniStudio"
     ],
@@ -7217,7 +7217,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Explain testing, versioning, and cloning through OmniStudio components. This covers save vs. publish, cloning workflows, and version snapshots for deployment.",
     "date": "August 8, 2026",
     "author": "Adroit Consulting",
-    "readTime": "10 min read",
+    "readTime": "9 min read",
     "tags": [
       "OmniStudio"
     ],
@@ -7262,7 +7262,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Describe the tools required to complete the end-to-end implementation process (SFCLI, VBT, Migration, etc.). Day 5 of the OmniStudio Developer exam prep.",
     "date": "August 07, 2026",
     "author": "Adroit Consulting",
-    "readTime": "6 min read",
+    "readTime": "9 min read",
     "tags": [
       "OmniStudio"
     ],
@@ -7308,7 +7308,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Explain OmniStudio license requirements, Permission Set licenses and Permission Sets. Day 4 of the OmniStudio Developer exam prep.",
     "date": "August 06, 2026",
     "author": "Adroit Consulting",
-    "readTime": "6 min read",
+    "readTime": "9 min read",
     "tags": [
       "OmniStudio"
     ],
@@ -7354,7 +7354,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Explain Managed Package Runtime vs. Standard Runtime, Automatic Upgrades, and Manual Intervention Upgrade. Day 3 of the OmniStudio Developer exam prep.",
     "date": "August 05, 2026",
     "author": "Adroit Consulting",
-    "readTime": "6 min read",
+    "readTime": "9 min read",
     "tags": [
       "OmniStudio"
     ],
@@ -7399,7 +7399,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Determine a project's needs by evaluating a customer's requirements, assumptions, risks, and constraints. Day 2 of the OmniStudio Developer exam prep.",
     "date": "August 04, 2026",
     "author": "Adroit Consulting",
-    "readTime": "6 min read",
+    "readTime": "9 min read",
     "tags": [
       "OmniStudio"
     ],
@@ -7429,7 +7429,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Describe the OmniStudio solution as it applies to common customer use case scenarios in different industries (telco, energy, healthcare, public sector, etc.). Day 1 of the OmniStudio Developer exam prep.",
     "date": "August 03, 2026",
     "author": "Adroit Consulting",
-    "readTime": "6 min read",
+    "readTime": "9 min read",
     "tags": [
       "OmniStudio"
     ],

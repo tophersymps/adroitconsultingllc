@@ -6,48 +6,120 @@ lesson: 6
 excerpt: "Explain testing, versioning, and cloning through OmniStudio components. This covers save vs. publish, cloning workflows, and version snapshots for deployment."
 date: "August 8, 2026"
 author: "Adroit Consulting"
-readTime: "10 min read"
+readTime: "9 min read"
 tags: [OmniStudio]
 ---
 
+Save, publish, clone, version. Four verbs that sound interchangeable and are not. Most of the questions in this requirement are really asking one thing: do you know which action makes a change visible to end users, which action preserves a change so you can undo it, and which action saves you from rebuilding something that already exists. Get those three straight and the requirement answers itself. Miss them and you will ship a fix that nobody can see, or rebuild a component you already had.
+
 ## Deep Dive
 
-**Testing:** validate each component's behavior against requirements with realistic test data. Use debug mode (OmniScript), the Debug Console (request/response logs), and the OmniStudio testing framework; test the happy path AND error/empty states.
+### Save and publish are two different gates
 
-**Versioning:** OmniStudio components carry versions; you can snapshot, retrieve, and deploy specific versions. Version control (git) treats component JSON as source files. Review diffs, tag releases, roll back.
+When you edit an OmniScript, a FlexCard, a Data Mapper, or an Integration Procedure, the designer writes your work into the component definition when you save. Saving persists the change. Saving does not change what users see.
 
-**Cloning:** duplicate an existing component as a starting point for a variant (e.g., new loan product from an existing flow). Cloning preserves configuration that can be adjusted, which is far faster and safer than rebuilding.
+Publishing, which OmniStudio calls activation for most component types, is the second gate. Only after a component is activated do end users run the new definition. The curriculum lists this as the single most common cause of "the fix is in but users still see the old behavior" tickets. A developer saves a formula change on Friday, tells the business it is live, and on Monday the support queue fills with reports of the old behavior, because the component was never activated.
 
-**Publishing is separate from saving:** components must be published/activated for end users to see changes. 'Saved but not published' is the top reason users see old versions.
+The mechanism is worth understanding instead of memorizing. OmniStudio keeps a working definition (what you are editing) separate from the active definition (what runs wherever the component is embedded, whether that is a Lightning page, an Experience Cloud site, or a mobile app). Saving moves your edits into the working definition. Activating promotes the working definition to the active one. The separation is deliberate: it lets you edit a component that is already live without half-finished changes leaking to users while you work.
 
-**Testing discipline:** create test data to validate component functionality or behavior; verify across channels and permission sets, not just as admin.
+A practical consequence: activation is a deployment step, not a typing step. Treat it the way you would treat a production release. Confirm the change, confirm who reviewed it, then activate.
+
+### Cloning: branch a component instead of rebuilding it
+
+Cloning duplicates an existing component definition into a new component. The copy arrives with its data sources, element tree, formulas, actions, and configuration intact. You then adjust what differs and leave the rest alone.
+
+This is the answer to a specific exam scenario: a developer needs a new OmniScript that is 90% identical to one that already exists. The fastest supported approach is to clone the existing component and adjust it. Rebuilding from scratch means retyping fifty elements and every formula that references them, with a guarantee that two of the formulas will come out subtly different from the original. The clone starts from a known-working definition.
+
+A worked example. A lender has a Personal Loan Application OmniScript. The business now wants an Auto Loan Application. The two share the identity check, the income capture, and the consent step, and differ in the collateral and vehicle sections. Cloning the personal loan script gives you a new component with the shared 80% already built and tested. You rename it, strip the parts that do not apply, and add the vehicle block.
+
+Two rules keep cloning from turning into a maintenance problem. First, once a clone has been adjusted, it is a separate component. Fixing a bug in the original does not fix the clone, and vice versa. If you expect the two to share logic long term, the shared logic belongs in a reusable child component embedded by both parents, which is the modularity pattern from the OmniScript best practices guidance. Second, never clone at all when the original is still changing. You will be copying a moving target.
+
+### Versioning: snapshots you can retrieve, deploy, and roll back
+
+OmniStudio components carry versions. A version is a snapshot of the component definition at a point in time. The practical capability that matters for the exam is that a snapshot is retrievable: you can look at the history of a component, pull up a prior version, and deploy a specific one instead of whatever happens to be current.
+
+That is what versioning buys you, and it is the true statement the exam is looking for: versioning snapshots component definitions, which enables controlled deployment and controlled rollback. A definition you can pin is a definition you can ship on purpose, to the org you chose, at the moment you chose, and revert if it goes wrong.
+
+Versioning is not a FlexCard-only feature and it is not a license-gated one. It applies across the OmniStudio component types you build: OmniScripts, FlexCards, Integration Procedures, and Data Mappers. Treat any answer that scopes versioning to one component type as wrong.
+
+A snapshot is most useful when it is tied to a deployment decision. "Version 8 of the loan application is the one that passed UAT" is a statement that lets you promote a release and, later, put the org back the way it was.
+
+### Git as the long-term record
+
+The in-product version history covers a component. It does not cover a release of ten components that had to go out together. That is what the implementation toolchain from Day 5 is for: the export and retrieve tooling writes component definitions out as JSON files, so a repository can hold them as source. Once component JSON lives in git, you get clean diffs on what changed between releases, tags that mark the release that went to production, and a rollback path that is a checkout away.
+
+The workflow the curriculum describes is the one to remember:
+
+1. Retrieve the components from the org into the repository.
+2. Review the diff before committing, because component JSON changes can be large and you want to know what moved.
+3. Commit and tag the release.
+4. Deploy a pinned version of that tag forward, so what arrives in the target org is what you reviewed.
+
+The reason this matters is that git gives you something the designer cannot: a review surface. A developer changing one element name in an OmniScript can touch formulas, actions, and conditions across five steps. The diff makes that visible before it reaches production.
+
+### Testing: debug mode, the Debug Console, and the testing framework
+
+OmniStudio gives you tools to test a component before anyone else touches it, and the exam expects you to name them.
+
+Debug mode in the OmniScript designer lets you run the script element by element and inspect the JSON as it accumulates. You see the data at each step, which is how you catch a formula returning the wrong type, a merge field pointing at a node that does not exist, or an action dropping data that should have flowed forward.
+
+The Debug Console shows the request and the response for each action the component fires. This is the tool for anything that talks to another system. If an OmniScript calls an Integration Procedure and the result comes back empty, the request and response pair tells you whether the script sent a malformed request or the service returned nothing. The Salesforce help page on viewing and debugging action request and response data documents this workflow.
+
+OmniStudio also ships a testing framework for components, which lets you capture a test and assert on its output rather than eyeballing results in a preview. Integration Procedures in particular can be unit tested, which means a change to a service can be checked mechanically instead of by a person clicking through a UI.
+
+Use all three, and use them in this order: preview the component's behavior in debug mode while you build it, check action-level request and response pairs when something crosses a boundary, and keep framework tests for the components you expect to keep changing.
+
+### Testing discipline: the tests you actually have to run
+
+The tooling is only half of the requirement. The other half is what you test, and the curriculum names three cases:
+
+- **The happy path.** The component runs start to finish with valid data and produces what downstream expects. This is the test everyone runs, and it is the one that proves the least.
+- **Empty and error states.** A record with no related data, a blank input, a user who skips an optional step, a service that times out. A component that only works when everything goes right is not finished.
+- **Realistic test data.** Test data created for the purpose, covering the record shapes the component will meet in production: an account with forty contacts, an account with none, a name with an apostrophe in it.
+
+Then the discipline that is easiest to skip: test as someone who is not an administrator. Administrators typically hold permissions that hide problems real users hit. A FlexCard that renders fine for you can render empty for a sales rep whose profile cannot see the field you bound to. Run the component as a low-privilege user, on each channel it will be embedded in, before you call it done. Access layers hide real user issues, and the only way to find them is to be the real user.
 
 ## Configuration Walkthrough
 
-1. Save a component, then publish/activate it for users.
-2. Clone a component from the OmniStudio UI to branch a variant.
-3. Retrieve/commit versions to git; tag releases; deploy pinned versions.
-4. Run component tests + debug console checks before promoting.
+1. **Clone when a variant exists.** Open the component list or designer, use the clone action on the source component, and name the new component. Adjust only what differs.
+2. **Test the component.** Run it in debug mode, step through the data JSON, and inspect action request and response pairs in the Debug Console. Cover the happy path, empty states, and error states, and repeat as a non-admin user.
+3. **Save, then activate.** Saving persists your edits to the working definition. Activating it is what makes the change visible to end users.
+4. **Retrieve to the repository.** Export the component definitions as JSON through your implementation toolchain and commit them.
+5. **Review the diff, then tag.** Read what changed across formulas and actions before you commit, then tag the release.
+6. **Deploy a pinned version.** Promote the tagged version forward so the target org gets exactly what you reviewed. If it misbehaves, roll back to the prior version or tag.
 
 ## Exam Traps
 
-- **Equating save with publish:** they are separate steps.
-- **Rebuilding from scratch** instead of cloning when a variant exists.
-- **Testing only as System Administrator:** access layers hide real user issues.
+- **Treating save as publish.** They are separate gates. Saving a component does not make it live; the component has to be activated before users see the change. This is the trap the exam leans on hardest.
+- **Rebuilding instead of cloning.** When a new component is mostly an existing component, cloning is the fastest supported route. Rebuilding duplicates work and guarantees drift.
+- **Only testing as System Administrator.** Admin access hides field-level and object-level problems. Test as a real, low-privilege user on every channel the component serves.
+- **Scoping versioning too narrowly.** Versioning snapshots component definitions for controlled deployment and rollback, and it applies across OmniStudio component types, not to FlexCards alone.
+- **Cloning a component that is still changing.** A clone taken from a moving source carries whatever half-finished state the source was in. Clone from a settled definition, or extract the shared logic into a child component.
 
 ## Exam Tip
 
-Version = snapshot, Clone = branch, Publish = ship. Three verbs, three different actions.
+Version = snapshot, Clone = branch, Publish = ship. Three verbs, three different actions. Versioning captures a definition you can retrieve and roll back to; cloning branches an existing definition into a variant; publishing or activating is the step that puts a change in front of users. If you can say which verb a scenario is asking for, you can answer the question.
+
+## Try It
+
+In a sandbox, open an OmniScript you built earlier. Clone it and give the clone a new name, then change one label in the clone and notice that the original is untouched. Now edit the clone's data JSON in debug mode and run it partway, stopping before the end, so you see what the data looks like mid-flow. Activate the clone and embed it on a page. Then activate nothing on the original, refresh, and confirm the original still shows its previous behavior: that is save without publish, demonstrated. Finally, retrieve both components to a git repository, commit, and read the diff for the label change you made. That diff is the review surface you rely on in a real release.
+
+## What's Next
+
+This lesson covered keeping a component trustworthy: test it, version it, clone it, and publish it deliberately. The next lesson moves into FlexCards and starts where every FlexCard starts, with data. Lesson 7 covers FlexCard data sources and the JSON they return, which is the payload every binding in the remaining FlexCard lessons depends on.
 
 ## Related Requirements
 
-- [Day 3, Runtime & Upgrades](/atlas/omni-studio-cert/day-03-f3-managed-package-vs-standard-runtime-upgrades)
-- [Day 5, Implementation Tools](/atlas/omni-studio-cert/day-05-f5-implementation-toolchain-sfcli-vbt-migration)
-- [Day 45, Publishing & Deployment](/atlas/omni-studio-cert/day-45-publishing-and-deployment) *(forthcoming)*
+- Day 5, Implementation Tools: sf cli, VBT, and migration
+- Day 3, Managed Package versus Standard Runtime and Upgrades
+- Day 45, Publishing and Deployment
+- Day 15, FlexCard Best Practices
 
 ## References
 
-- [Official exam guide](https://help.salesforce.com/s/articleView?id=005298971&language=en_US&type=1)
-- [Trailhead trailmix](https://trailhead.salesforce.com/content/learn/trails/prepare-for-your-salesforce-omnistudio-developer-certification)
-- [OmniStudio Trailhead org](https://trailhead.salesforce.com/en/promo/orgs/omnistudiotrails)
-- [OMS435 take-home guide](https://developer.salesforce.com/files/OMS435%20OmniStudio%20Student%20Take%20Home%20Guide%20v1.0.pdf)
+[^1]: [OmniScript Best Practices, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_omniscript_best_practices_8368.htm&language=en&type=5)
+[^2]: [View and Debug Action Requests and Response Data, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_view_and_debug_action_requests_and_response_data.htm&type=5)
+[^3]: [OmniStudio Developer Certification Exam Guide, Salesforce Help](https://help.salesforce.com/s/articleView?id=005298971&language=en_US&type=1)
+[^4]: [Prepare for Your Salesforce OmniStudio Developer Certification, Trailhead](https://trailhead.salesforce.com/content/learn/trails/prepare-for-your-salesforce-omnistudio-developer-certification)
+[^5]: [OmniStudio Trailhead Org](https://trailhead.salesforce.com/en/promo/orgs/omnistudiotrails)
+[^6]: [Test Integration Procedures for Unit Testing, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_test_proceduresintegration_procedures_for_unit_testing_55410.htm&type=5)

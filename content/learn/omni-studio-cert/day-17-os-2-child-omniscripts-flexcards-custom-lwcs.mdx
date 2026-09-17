@@ -6,76 +6,96 @@ lesson: 17
 excerpt: "Child OmniScripts handle reuse, FlexCards handle display, and custom LWCs handle custom UI. Pick the right embed for the job, wire its data back into the script JSON, and complex flows compose cleanly."
 date: "August 19, 2026"
 author: "Adroit Consulting"
-readTime: "5 min read"
+readTime: "9 min read"
 tags: [OmniStudio]
 ---
 
+The standard element palette covers most of what a business process needs, but it stops short in three specific places. The same sub-process appears in several scripts and you do not want to build it twice. A step needs to show live data rather than collect it. A step needs a UI that no standard input can produce. Each of those three gaps has a designated fill, and the exam asks you to pick the right one and to know how data gets in and back out. Confusing the three is the most reliable way to lose points in this requirement.
+
 ## Deep Dive
 
-**Child OmniScripts are reusable sub-processes.** Address capture, consent, payment: invoke the same child from any parent script. They modularize logic. Change it once, and every parent picks it up. Data passes parent to child via context, then merges back.
+### One problem, three extensions
 
-**FlexCards inside OmniScripts embed context.** A FlexCard is a display element within a step. Drop in an account summary or an eligibility card and show real-time data without leaving the flow.
+Before the mechanics, fix the mapping, because every exam question in this area is a scenario that points at one of three answers.
 
-**Custom LWCs handle what standard elements cannot.** Specialized pickers, maps, dashboards. When a standard input element cannot meet the UI requirement, embed an LWC as an element. It communicates with the OmniScript through its data contract.
+- **The requirement is reuse.** The same sub-process (address capture, consent capture, payment) is needed in two or more scripts. The answer is a **child OmniScript**.
+- **The requirement is display.** The user needs to see contextual, real-time information inside the flow (an account summary, an eligibility indicator, a recent activity panel) without collecting it. The answer is a **FlexCard** embedded as an element.
+- **The requirement is custom interaction.** The user needs to do something the standard inputs cannot express: a specialized picker, a map, an embedded dashboard, a signature pad, a custom calculator. The answer is a **custom LWC** embedded as an element.
 
-**Complex UI configurations compose all three.** A single step may hold a FlexCard for context, an LWC for specialized input, and a child OmniScript launch for a nested process.
+The three are not competing approaches to the same problem, and the exam relies on you knowing that. "Two OmniScripts both capture an address" is not a FlexCard question and not an LWC question. Read the verb in the scenario: duplicate work means reuse, seeing means display, and a UI that does not exist means custom.
 
-**The integration pattern is consistent.** Embed, exchange data, merge the results. Know what each embed type returns so downstream actions receive the right JSON.
+### Child OmniScripts: reuse without duplication
+
+A child OmniScript is a complete, standalone OmniScript that a parent script embeds. The parent ships with a dedicated element for this, the OmniScript action, which references the child by type and sub-type. Salesforce documents the pattern as embedding an OmniScript in another OmniScript.
+
+The design payoff is the same as any well-factored code. Build address capture once as a child named `AddressCapture`. A mortgage script embeds it, a claim intake script embeds it, a supplier onboarding script embeds it. When the postal validation rule changes, or a new field is added for a country that did not exist when the child was written, you fix the child. All three parents pick up the change without redeployment of the parent definitions. Duplicating those steps in three parents means three places to remember, and the third one is always the one that gets missed.
+
+**Context is the exchange mechanism.** The parent passes data into the child, the child runs, and the child's results merge back so the parent can keep going. Concretely, before invoking the child you set values into the child's context nodes: the account to look up, the country code, the existing address if there is one. Inside the child, those context values are already present in the child's own data JSON, and the child's inputs and actions read them as if a user had entered them. When the child finishes, its result nodes appear back in the parent's data JSON under the child's element name, which means downstream formulas, conditions, and actions in the parent can read the child's output exactly as they read any other node.
+
+That merge is the part to be careful about. The child produces its own JSON shape, and the parent needs to know that shape. If the child's output node is `Address__Line1` and the parent's Data Mapper Load expects `AddressLine1`, the child will have worked perfectly and the parent will still save nothing. Document the child's output contract the way you would document an API response, and test the parent after any change to the child.
+
+A related warning: do not use a child OmniScript for something that is not actually a reusable sub-process. Nesting adds an indirection layer, and a "child" used by exactly one parent is just a harder way to read your own script.
+
+### FlexCards inside an OmniScript: display, not capture
+
+A FlexCard is OmniStudio's card component: a configured container that pulls data from a data source and renders it in a structured layout. Inside an OmniScript, a FlexCard embeds as an element within a step, which means the context the script already holds can be handed to the card and the card renders live data inside the flow.
+
+The scenario the exam uses is the claim flow: the user is filing a claim and needs to see an account summary, or the customer's current coverage, or the policy status. Embedding a FlexCard bound to the account context gives them that view without leaving the script, without a second browser tab, and without building a custom display from scratch. The card is a display element. It shows; it does not collect.
+
+FlexCard data can come from an Integration Procedure or a Data Mapper Extract, and the card renders according to its configured states and layout. The important operational detail is context. A card that needs an account number but is never given one renders empty or errors, and the most common misconfiguration in this area is embedding a contextual card into a script whose data does not actually contain the context the card expects. Pass the identifier before the card renders, and structure the script so the pass happens before the user reaches the step that displays the card.
+
+### Custom LWCs: when the palette runs out
+
+Standard OmniScript input elements cover the ordinary cases. They do not cover a drag-and-drop scheduling widget, a geographic map with selectable service areas, a document viewer, or a bespoke multi-column pricing table. When the UI requirement cannot be met with a standard element, you build a Lightning Web Component and register it so it can be embedded in an OmniScript as an element.
+
+The reason to be precise here is that the exam question is worded as a permission: custom LWC elements are used **when standard elements are insufficient for the UI requirement**. They are not an always-on alternative, not a mobile-only feature, and not restricted to test mode. If a standard text input will do, use the standard text input.
+
+**The LWC talks to the script through its data contract.** The component declares what it accepts in and what it emits out, and the OmniScript element is configured against that contract. This is where the operational trap lives: LWC data does not merge into the script JSON automatically just because the component is embedded. If the component collects a selected appointment time, the script has no idea unless the component emits that value through its contract and the element is wired so the value lands in a named node in the data JSON. A perfectly working LWC whose output goes nowhere looks, from the save action's perspective, exactly like a user who never answered.
+
+Treat the LWC like any other element once it is wired: its output node has a name, formulas can reference it, conditions can test it, and the Data Mapper Load can map it. The work is in the wiring, not in the component.
+
+### Composing all three in one step
+
+Complex UI configurations are not a choice among these three, they are a composition. A single step in a large service flow can plausibly hold all of them at once.
+
+Picture a step in an insurance claim script for an adjuster. At the top of the step sits an embedded FlexCard showing the policy summary and the claim's current status, bound to the claim context the script already holds. In the middle sits a custom LWC that renders an interactive damage diagram where the adjuster taps the areas affected. At the bottom sits an OmniScript element that launches a child script to capture the repair shop's address and contact details. The step delivers context, custom input, and a nested process, and every one of the three writes into the same data JSON.
+
+The pattern that makes this work is identical in all three cases, which is why the exam phrases it as a general integration pattern rather than three separate techniques: **embed, exchange data, merge results.** You embed the child, the card, or the component. You pass the context it needs in. You make sure its output comes back into the script JSON under a name you can reference. Know what each embed type returns before you build the step that depends on it, because a downstream action that receives the wrong JSON shape fails quietly.
+
+### Two mistakes that look like bugs elsewhere
+
+The first is duplicating sub-process steps instead of using a child OmniScript. It is tempting because it is faster today, and it is disastrous because the copies diverge. The second is embedding a FlexCard or an LWC and assuming the data flow happens for free. A card with no context and a component with no wired output both produce the same symptom: a step that looks right, renders right, and produces nothing downstream. Both mistakes are diagnosed the same way, by reading the data JSON after the step and asking which node should have gained a value and did not.
 
 ## Configuration Walkthrough
 
-1. For reuse: create a child OmniScript and invoke it with context from the parent.
-2. For display: embed a FlexCard element bound to contextual data.
-3. For custom UI: register and embed an LWC element.
-4. Verify data flows back (child results, card data, LWC payloads).
+1. **For reuse, create the child OmniScript.** Build the reusable sub-process as its own script with clear input context nodes and a predictable output shape. Test it standalone in preview mode before any parent depends on it.
+2. **Invoke the child from the parent with context.** Add the OmniScript element to the parent, reference the child's type and sub-type, and set the context values the child expects before it runs. The child inherits them as its own data.
+3. **For display, embed a FlexCard element bound to contextual data.** Configure the card's data source, confirm the context node it needs is present in the parent script at the point of render, and place the card where the user needs the information rather than at the end of the flow.
+4. **For custom UI, register and embed an LWC element.** Build or obtain the component, confirm it is registered for OmniScript use, and configure the element against the component's data contract.
+5. **Wire the outputs.** For each embed, confirm which node in the script JSON receives the result. For the LWC especially, verify that the emitted value lands in a named node rather than only inside the component.
+6. **Verify data flows back.** Run the parent in preview, walk to the step, complete the child or the custom element, and read the data JSON. Confirm child results, card data, and LWC payloads are all visible where the next action expects them.
 
 ## Exam Traps
 
-- Duplicating sub-process steps instead of using child OmniScripts.
-- Embedding a FlexCard that needs context you never pass.
-- Assuming LWC data merges automatically. Wire its output to the script JSON.
-
-## Practice Questions
-
-**Q1.** Two OmniScripts both need to capture an address. What is the best approach?
-
-A. Duplicate the steps in both<br/>
-B. One child OmniScript invoked from both parents<br/>
-C. An Apex trigger<br/>
-D. A FlexCard
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: B.** Child OmniScripts modularize reusable sub-processes, so one change flows to every parent.
-</details>
-
-**Q2.** During a claim flow, the user should see a live account summary. What do you embed?
-
-A. A FlexCard inside the OmniScript<br/>
-B. A second OmniScript<br/>
-C. A formula field<br/>
-D. A report
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: A.** FlexCards embedded in OmniScripts provide contextual, real-time display inside the flow.
-</details>
-
-**Q3.** When can custom LWC elements be used in an OmniScript?
-
-A. Never<br/>
-B. When standard elements are insufficient for the UI requirement<br/>
-C. Only on mobile<br/>
-D. Only in test mode
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: B.** Custom LWCs extend the OmniScript UI when standard elements are not enough.
-</details>
+- **Duplicating sub-process steps instead of using a child OmniScript.** The duplicate works on day one and diverges by month three. Reuse is the entire reason child scripts exist.
+- **Embedding a FlexCard that needs context you never pass.** A contextual card with no context renders empty or fails. Pass the identifier before the card renders.
+- **Assuming LWC data merges automatically.** It does not. The component emits through its data contract and the element must be wired so the value lands in a named node in the script JSON.
+- **Reaching for an LWC when a standard element works.** Custom components are for UI requirements the standard palette cannot meet. Using them as a default adds maintenance burden for nothing.
+- **Losing track of what the child returns.** The child's output shape is a contract. If the parent maps output nodes that the child never produces, the child succeeds and the parent saves nothing.
 
 ## Exam Tip
 
-Reuse goes to a child OmniScript. Display goes to a FlexCard. Custom UI goes to an LWC. Compose all three for complex flows.
+Reuse goes to a child OmniScript. Display goes to a FlexCard. Custom UI goes to an LWC. Compose all three in a single step for complex flows, and remember the shared pattern: embed, exchange data, merge results. When the scenario says "the same thing in two scripts," you are being tested on child scripts. When it says "the user should see," you are being tested on FlexCards. When it says "a UI that standard elements cannot produce," you are being tested on LWCs.
+
+## Try It
+
+In a sandbox, build a minimal `AddressCapture` child OmniScript with four text inputs (line 1, city, state, postal code) and one context input for a country code that pre-selects the state list. Test it alone in preview mode and note its output node shape.
+
+Then build a parent script with two steps. In step one, embed the child with the country code set from a select input. In step two, add a FlexCard configured to show a related account summary, bound to an account identifier the parent script sets as context. Walk the parent in preview mode and inspect the data JSON after each step. Confirm that the child's address values appear under the child's element name in the parent JSON, and confirm the card rendered with the account context you passed and not with an empty one. Then deliberately break it: remove the context assignment before the card and watch what a context-starved card does. That failure mode is worth seeing once so you recognize it in production.
+
+## What's Next
+
+You can now extend a script with reuse, display, and custom UI. The next requirement is about how all of it looks: themes applied across many scripts versus element-level styling for one-off exceptions, and why responsive behavior has to be verified rather than assumed. Lesson 18 covers OmniScript styling and themes.
 
 ## Related Requirements
 
@@ -85,7 +105,9 @@ Reuse goes to a child OmniScript. Display goes to a FlexCard. Custom UI goes to 
 
 ## References
 
-- [Official exam guide](https://help.salesforce.com/s/articleView?id=005298971&language=en_US&type=1)
-- [Trailhead trailmix](https://trailhead.salesforce.com/content/learn/trails/prepare-for-your-salesforce-omnistudio-developer-certification)
-- [OmniStudio Trailhead org](https://trailhead.salesforce.com/en/promo/orgs/omnistudiotrails)
-- [OMS435 take-home guide](https://developer.salesforce.com/files/OMS435%20OmniStudio%20Student%20Take%20Home%20Guide%20v1.0.pdf)
+[^1]: [Embed an OmniScript in Another OmniScript, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_embed_an_omniscript_in_another_omniscript_20581.htm&language=en_US&type=5)
+[^2]: [LWC OmniScript Designer Overview (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_lwc_omniscript_designer_overview.htm&language=en_US&type=5)
+[^3]: [Configure Your FlexCard, Trailhead (OmniStudio FlexCard Fundamentals module)](https://trailhead.salesforce.com/content/learn/modules/omnistudio-flexcard-fundamentals/configure-your-flexcard)
+[^4]: [View and Debug Action Requests and Response Data, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_view_and_debug_action_requests_and_response_data.htm&type=5)
+[^5]: [OmniScript Best Practices, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_omniscript_best_practices_8368.htm&language=en&type=5)
+[^6]: [Official exam guide, Salesforce Help](https://help.salesforce.com/s/articleView?id=005298971&language=en_US&type=1)

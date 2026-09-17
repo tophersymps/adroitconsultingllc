@@ -6,86 +6,127 @@ lesson: 12
 excerpt: "Control FlexCard appearance two ways: element-level inline styling for one-off tweaks and shared themes for consistent branding."
 date: "August 14, 2026"
 author: "Adroit Consulting"
-readTime: "5 min read"
+readTime: "9 min read"
 tags: [OmniStudio]
 ---
 
+Appearance is not cosmetic in an OmniStudio build, it is a maintenance decision. A FlexCard that looks right because fifty elements each carry their own colours is a card that nobody can restyle without opening all fifty. A card that looks right because it inherits a shared theme can be rebranded by editing one place. The FC-6 requirement asks you to customize FlexCard appearance using styling or themes, and the exam's angle is almost always the trade-off between the two rather than the specific CSS properties. This lesson covers both levels, the precedence rule that decides which wins, and the accessibility constraints that keep a styled card usable.
+
 ## Deep Dive
 
-**Two levels of appearance control.** Element-level styling applies inline CSS per element (colors, fonts, spacing, alignment). Theme-level styling applies a shared theme across components for consistent branding.
+### Two levels of appearance control
 
-**Themes centralize look-and-feel.** Define CSS variables (colors, font stacks, radii) and component styles once. Cards and OmniScripts consume them. Changing a theme restyles everything that uses it, which keeps branding consistent without touching each card.
+OmniStudio gives you exactly two places to influence how a FlexCard looks, and they operate at different scopes.
 
-**Inline styling is the exception.** It overrides theme defaults for one-off tweaks. Use it sparingly, because scattering inline styles across elements drifts away from the theme and gets hard to maintain.
+**Element-level styling.** Every element in the card (a block, a field, a button, a repeater) exposes style properties you can set directly: background colour, text colour, font family and size, spacing and padding, border and radius, alignment. These values are applied inline to that one element. This is the local, surgical level.
 
-**Styling affects usability.** Contrast, touch targets, and responsive widths all matter. The exam rewards sensible, accessible styling choices over flashy ones.
+**Theme-level styling.** A theme is a named, reusable collection of design values and component styles that lives outside any single card. When a card is assigned a theme, it consumes the theme's variables and component styles. This is the global, shared level.
 
-**Precedence order.** Component-level inline styles beat theme-level styles. Both beat platform defaults.
+The distinction matters because it maps directly onto how you answer appearance questions. Anything that should be the same everywhere belongs in the theme. Anything that is genuinely a one-off exception belongs inline. Get that split wrong in either direction and the build degrades: too much inline styling and you have no consistent identity and no single place to change it; too much theme and you cannot express the deliberate exceptions that real designs need.
+
+### Themes centralize look and feel
+
+A theme defines CSS variables for the things a brand actually cares about: colours (primary, secondary, neutral, success, warning, error), font stacks, font sizes, spacing scales, and border radii. It also carries component styles, meaning the default presentation of card elements, so that a standard field or button already looks correct without any per-element work.
+
+Once a theme exists, cards and OmniScripts consume it. On the FlexCard you assign the theme, and from that point the card's colours and typography come from the theme rather than from the platform defaults. Change a colour variable in the theme, and every card assigned to that theme picks up the new value. That is the whole benefit: one change restyles all components using the theme.
+
+**Worked example.** A bank has twelve FlexCards live in an internal console and four more in a customer portal. Marketing rebrands and the primary colour moves from a dark blue to a teal, and the heading font changes. If the cards use a shared theme, one edit to the theme's primary colour variable and one to the heading font stack covers all sixteen cards. If the cards were built with per-element inline colours, that rebrand is a hunt through sixteen cards and hundreds of elements, with the near-certainty that two or three will be missed and quietly keep the old blue.
+
+There is a second benefit that the exam sometimes asks about indirectly. Themes keep a build *consistent* by default. When a designer or developer adds a new element to a themed card, it inherits the theme's styling automatically, so it looks like it belongs. On an unthemed card, every new element starts from platform defaults and has to be styled by hand, and hand-styled defaults drift.
+
+### Themes carry two kinds of thing, and the difference matters
+
+A theme is not just a palette. It carries two related but distinct kinds of content, and knowing which one you are editing tells you how far a change will reach.
+
+The first kind is **design variables**: named values such as the primary colour, the heading font stack, a spacing unit, or a corner radius. These are the raw ingredients. They hold no opinion about where they are used; they simply define what "primary" or "large spacing" means in this build.
+
+The second kind is **component styles**: the presentation rules that say how a card element looks by default. A block's default background, a field's default text treatment, a button's default fill. Component styles are where those raw variables get applied to actual UI.
+
+The distinction explains a behaviour that confuses builders constantly. Changing a colour variable can restyle a hundred elements at once, because every component style that referenced it now resolves to a new value. Changing a component style restyles only the components that use that style. So when someone asks "if I change this, what else moves?", the answer depends entirely on which of the two you touched. Variables are the broad lever; component styles are the narrow one. Reach for the variable when the intent is a brand-wide shift, and for the component style when the intent is to correct one kind of element.
+
+That is also why building a theme as an afterthought rarely works. If the cards are already styled inline and someone retrofits a theme, they end up creating variables that duplicate values already baked into elements, and the precedence rule then hides the theme anyway. Building the theme first, and letting components consume it, is what produces the single-point-of-change behaviour the exam associates with themes.
+
+### Inline styling is the exception, not the rule
+
+Element-level inline styling exists so you can override a theme for a specific element. That is its legitimate use: one field on one card needs emphasis that the theme should not apply globally. The misuse is using inline styles as the primary styling mechanism, which is the single most common FC-6 trap.
+
+Two costs follow from inline-styling everything. First, inconsistency: with no shared source of values, ten elements styled by hand produce ten slightly different blues and three different font sizes, because nobody remembers the exact value from last week. Second, unmaintainability: a change that should be one edit becomes a search across the whole card, and every element that was missed becomes a visible defect.
+
+A useful discipline is to ask, for any style you are about to set inline, "would any other card plausibly want this value?" If yes, it belongs in the theme, even if only one card uses it today. Inline styling is for the deliberate, defensible exception.
+
+### Precedence: who wins when both are present
+
+Style resolution follows a strict order. Component-level inline styles beat theme-level styles, and both beat platform defaults. Three tiers, from strongest to weakest:
+
+1. **Element-level inline styling** (the strongest). A colour set on the element itself overrides everything below it.
+2. **Theme-level styling.** The theme's variables and component styles apply wherever the element does not set its own value, and they override the platform's out-of-the-box look.
+3. **Platform defaults** (the weakest). What you get with no theme and no inline styling.
+
+This is why a card can look mostly correct under a theme while one specific element sits there in the wrong colour, and the fix is to look at that element's inline style rather than at the theme. The theme is being overridden, not ignored. Experienced builders treat a stubborn style as a specificity question first: find the closest, most local style that is setting the value, and remove it rather than adding more.
+
+The same ordering is worth remembering for accessibility work. If you fix contrast by setting an inline colour on one element, you have fixed one element. If you fix it in the theme's colour variable, you have fixed every card on that theme and prevented the next element from reintroducing the problem.
+
+### Styling and usability are the same conversation
+
+Styling decisions are usability decisions, and the exam rewards sensible, accessible choices over flashy ones. Three constraints come up repeatedly.
+
+**Contrast.** Text must remain readable against its background. A light grey caption on a white card, or white text on a pale accent, looks refined in a mockup and fails in a sunlit office. When you introduce a custom colour pair, check the contrast ratio rather than trusting the eye.
+
+**Touch targets.** Buttons and tappable elements need enough size and spacing to be hit reliably, which matters more on mobile than on a desktop console. Squeezing three small action buttons onto one row saves space and costs accuracy.
+
+**Responsive widths.** Cards are hosted in containers of unknown width. A layout that assumes a fixed width breaks inside a narrow side panel or on a phone. Lean on the theme's spacing and sizing values, and verify at narrow widths rather than designing only at desktop size.
+
+A styled card that scores well in a design review but is unreadable for a low-vision user is not a finished card. Accessibility is part of the requirement, not a follow-up ticket.
+
+### Where themes apply, and where they do not
+
+The most persistent misunderstanding about themes is expecting them to apply where they were never assigned. A theme changes the appearance of the components that are assigned to it. It is not a global setting that reaches every card, OmniScript, and page automatically.
+
+Two consequences follow. First, a new card built without a theme assigned will render with platform defaults even though a house theme exists, which is the classic "why does this one card look different" report. Second, if you assign a theme to a card but the environment has not been set up to serve it, or the card renders in a channel that does not have the theme available, you get the defaults again. When appearance is inconsistent across components, check assignment before you check CSS.
+
+Themes are shared across FlexCards and OmniScripts in OmniStudio, which is the point: the same design language governs both, so a card and the OmniScript it launches do not look like two different products.
 
 ## Configuration Walkthrough
 
-1. Create or select a theme with your palette and fonts.
-2. Apply the theme to the FlexCard.
-3. Adjust element-level styles for one-off emphasis.
-4. Verify on mobile and desktop widths.
+A practical sequence for styling a set of cards consistently:
+
+1. **Create or select a theme with your palette and fonts.** Populate the design variables first (colours, font stack, sizes, radii) rather than styling elements and reverse-engineering the variables later.
+2. **Apply the theme to the FlexCard.** Assign the theme on each card that should share the identity. Confirm it renders with the theme's colours before you add any element-level styling.
+3. **Adjust element-level styles for one-off emphasis.** Now add inline styles only where a single element genuinely needs to differ from the theme, and keep the list of exceptions short enough to remember.
+4. **Verify on mobile and desktop widths.** Resize, check contrast on the actual colour pairs, and confirm touch targets are comfortably sized.
 
 ## Exam Traps
 
-- Inline-styling everything instead of using themes. It is inconsistent and unmaintainable.
-- Ignoring contrast and readability in custom styles.
-- Expecting theme changes to apply where the theme is not assigned.
-
-## Practice Questions
-
-**Q1.** How do you apply consistent branding across many FlexCards at once?
-
-A. A shared theme applied to the cards<br/>
-B. Inline styles on every element<br/>
-C. A custom LWC<br/>
-D. Platform Cache
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: A.** Themes centralize appearance; inline styles are per-element exceptions.
-</details>
-
-**Q2.** Which takes precedence when both exist?
-
-A. Element-level inline styling<br/>
-B. Theme styling<br/>
-C. Platform defaults<br/>
-D. Random
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: A.** Component or inline styles override theme defaults.
-</details>
-
-**Q3.** What is a benefit of themes over inline styling?
-
-A. One change restyles all components using the theme<br/>
-B. Faster page loads<br/>
-C. No CSS needed<br/>
-D. Better security
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: A.** Themes give centralized, consistent appearance with single-point changes.
-</details>
+- **Inline-styling everything instead of using themes.** It produces inconsistency across cards and makes a rebrand a manual sweep. The theme is the central place; inline is the exception.
+- **Ignoring contrast and readability in custom styles.** A custom colour pair that fails contrast is an accessibility defect, not a style preference.
+- **Expecting theme changes to apply where the theme is not assigned.** Themes change what they are assigned to. A card without the theme keeps the defaults no matter what you edit.
+- **Forgetting the precedence order.** When both exist, the element-level inline style wins. If a themed value seems to be ignored, look for an inline style overriding it before you suspect the theme.
 
 ## Exam Tip
 
-Theme = global branding, inline = local exception. Prefer themes for consistency.
+Theme equals global branding, inline equals local exception, and when both are present the inline style wins. For any FC-6 question, first work out the scope the question is describing. "Across many cards at once" points at the theme. "This one element" points at inline styling. "Which takes precedence" points at the element-level inline style, because component styles override theme styles, and both override platform defaults.
+
+## Try It
+
+In a sandbox, take a FlexCard you built earlier and assign it to a theme. Pick two colours into the theme's variables: the primary accent used by the card's buttons and the background used by its blocks. Confirm the card restyles without touching an element.
+
+Now deliberately introduce the conflict. Set an inline background colour on one block, then change the theme's background variable and observe that the block does not move. That is precedence in action. Remove the inline colour and watch the block rejoin the theme. Finally, duplicate the card, assign no theme, and compare the two side by side: that comparison is the clearest possible demonstration of why unassigned components drift away from the house style.
+
+Before you finish, check the primary and text colours for contrast and resize the card to a narrow width to see whether the layout holds. If it does not, fix it in the theme rather than with more inline styles.
+
+## What's Next
+
+You now control a card's appearance at both levels and know which one wins. The next capability is deciding what the card shows at all. Lesson 13, Conditional Rendering with States, covers states (default, empty, error, custom), the conditions that select them, and element-level conditions that change a single element's visibility or appearance. Styling decides how a card looks; states decide whether it should be showing something else entirely.
 
 ## Related Requirements
 
-- Day 9, Binding & Properties
-- Day 18, OmniScript Styling
-- Day 38, Display Issues
+- Day 9, Binding Components and Configuring Properties
+- Day 18, OmniScript Styling and Themes
+- Day 38, Resolving FlexCard Display State Issues
 
 ## References
 
-- [Official exam guide](https://help.salesforce.com/s/articleView?id=005298971&language=en_US&type=1)
-- [Trailhead trailmix](https://trailhead.salesforce.com/content/learn/trails/prepare-for-your-salesforce-omnistudio-developer-certification)
-- [OmniStudio Trailhead org](https://trailhead.salesforce.com/en/promo/orgs/omnistudiotrails)
-- [OMS435 take-home guide](https://developer.salesforce.com/files/OMS435%20OmniStudio%20Student%20Take%20Home%20Guide%20v1.0.pdf)
+[^1]: [FlexCard Designer, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_flexcard_designer.htm&language=en_US&type=5)
+[^2]: [Base UI and Card Templates, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_base_ui_and_card_templates.htm&language=en_US&type=5)
+[^3]: [OmniStudio Settings, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_omnistudio_settings.htm&language=en_US&type=5)
+[^4]: [LWC OmniScript Designer Overview, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_lwc_omniscript_designer_overview.htm&language=en_US&type=5)

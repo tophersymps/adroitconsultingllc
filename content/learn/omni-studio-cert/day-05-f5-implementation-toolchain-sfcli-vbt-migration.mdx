@@ -6,38 +6,108 @@ lesson: 5
 excerpt: "Describe the tools required to complete the end-to-end implementation process (SFCLI, VBT, Migration, etc.). Day 5 of the OmniStudio Developer exam prep."
 date: "August 07, 2026"
 author: "Adroit Consulting"
-readTime: "6 min read"
+readTime: "9 min read"
 tags: [OmniStudio]
 ---
-# Implementation Toolchain: SFCLI, VBT, Migration
 
-**Exam guide requirement:** Describe the tools required to complete the end-to-end implementation process (SFCLI, VBT, Migration, etc.).
-
-**Domain:** OmniStudio Fundamentals (18%)
+Building a component in a sandbox is not the end of an implementation. The end is a working component in production that got there repeatably, and that is what this requirement is about. It asks you to describe the tools required to complete the end-to-end implementation process, and the exam guide names them directly: Salesforce CLI, VBT, and Migration Tooling. Underneath those three names sits a single rule that decides most of the answers, and that rule is the difference between metadata and records. Get that rule and the entire toolchain becomes a matter of sorting each artifact onto the correct side.
 
 ## Deep Dive
 
-- Salesforce CLI (SF CLI) with the OmniStudio plugin is the modern deployment path: `sf project deploy/retrieve` moves OmniStudio components as source-format metadata between orgs and version control.
-- VBT (Vlocity Build Tool) is the legacy CLI for Vlocity/OmniStudio metadata: package-style commands (`vlocity pack`, `vlocity deploy`) still relevant in Managed Package Runtime orgs.
-- Migration Tooling covers org-to-org movement of OmniStudio definitions and supporting data. Components as metadata, and the data those components process (use Data Mapper Load or Data Loader for records).
-- Critical distinction: components = METADATA (CLI/source/package tooling); records = DATA (Data Loader, Data Mapper Load, migration tooling). Mixing these is a classic exam trap.
-- End-to-end flow: develop in sandbox → retrieve/commit to version control → CI/CD deploy → validate in UAT → promote to production. Source tracking and scratch orgs make this repeatable.
+### The central rule: metadata versus records
+
+Everything in this lesson reduces to one sentence. OmniStudio components are metadata, and the data those components process are records. The two kinds of artifacts move with different tools, and mixing them up is the classic exam trap.
+
+Metadata is the definition of the components: an OmniScript, a FlexCard, a Data Mapper, an Integration Procedure, a Calculation Matrix. Metadata describes what the components do and how they are shaped. Records are the data the components read and write: the Account records, the Case records, the custom object rows a user fills in through a form. A component is not a row of data. A row of data is not a component.
+
+Because they are different kinds of things, they travel differently. Metadata moves with metadata tooling: the Salesforce CLI, source-format deployment, or package tooling. Records move with data tooling: Data Loader, Data Mapper Load, or migration tooling. If you try to move a component with a data tool, it fails, because the data tool has no idea what a component definition is. The exam leans on this rule repeatedly, and it is the deciding fact for two of the three questions in this lesson.
+
+### Salesforce CLI with the OmniStudio plugin
+
+Salesforce CLI, often written SF CLI, is the modern deployment path. With the OmniStudio plugin it treats OmniStudio components as source-format metadata, which means you can retrieve them, store them in version control, and deploy them like any other Salesforce metadata.
+
+The two commands that matter are the project retrieve and deploy family. `sf project retrieve start` pulls component metadata out of an org as source files. `sf project deploy start` pushes those source files into a target org. This is the pattern that makes components first-class citizens of a modern development workflow. The source files live in a repository, changes are reviewed, and deployment flows through environments on a release pipeline.
+
+One deployment detail is worth knowing even though the exam frames it lightly. Deploying a component with the CLI places its metadata in the target org, but it does not necessarily activate the component for use. In many cases the component must be activated in the OmniStudio Designer after it lands, or it will not run for end users. This is why the end-to-end flow includes a validation step after each deploy, and why a deploy that succeeds at the metadata layer can still look like a failure at runtime until activation is handled. Keeping deploy and activate as two distinct steps prevents a confusing class of post-deploy failures.
+
+### How to choose between SF CLI and VBT
+
+A practical way to hold the toolchain is to know when each tool applies, and the deciding factor is the runtime. If the org is on Standard Runtime, reach for the Salesforce CLI. Components are native source-format metadata there, and the retrieve and deploy commands move them cleanly through version control and CI/CD. If the org is on Managed Package Runtime, reach for VBT. Components travel as DataPacks there, and the pack and deploy commands are the tools built for that model.
+
+The exam can hand you a scenario and ask which tool fits. When the org runs the modern source-driven model, the answer is SF CLI. When the org runs the legacy managed package model, the answer is VBT. When the question is about moving the data the components process, the answer is Data Loader or Data Mapper Load, regardless of runtime. Naming the runtime and the artifact type together gives you the tool with no guessing, and that combination is exactly what this requirement is designed to test.
+
+Deploying via the Salesforce CLI implies Standard Runtime, as lesson three covered. Source-format CLI deployment is the Standard Runtime pattern, while managed package orgs use package installs instead. The two runtimes are the reason the toolchain splits into modern and legacy.
+
+### VBT, the Vlocity Build Tool
+
+VBT, the Vlocity Build Tool, is the legacy CLI for Vlocity and OmniStudio metadata. Where SF CLI moves source-format metadata, VBT works with package-style commands. It is still relevant in Managed Package Runtime orgs, where components travel as DataPacks rather than source files.
+
+The commands are the giveaway. VBT uses commands like `vlocity packExport` and `vlocity packDeploy`. The word "pack" in both names is the signal that VBT operates on packages, the unit of delivery in the managed package model. In a Managed Package Runtime org, this is the tool you reach for to pack and deploy component bundles. The exam names VBT as the tool for package-style component bundles in managed-package orgs, and that association is worth committing exactly.
+
+The practical reason teams use VBT is that it understands how components connect. A FlexCard depends on a Data Mapper, which depends on an Integration Procedure, and VBT moves them together as a DataPack instead of forcing you to track the dependency graph by hand. Change sets and data loaders do not handle those nested relationships reliably, which is why VBT stays the standard for managed package orgs even as SF CLI becomes the standard for source-driven orgs.
+
+### Migration Tooling
+
+Migration Tooling covers org-to-org movement of OmniStudio definitions and the supporting data those definitions process. The distinction from the central rule applies here directly. The component definitions move as metadata with CLI or package tooling. The records those components process move as data with Data Mapper Load or Data Loader.
+
+A complete migration has both sides. You deploy the OmniScripts, FlexCards, Data Mappers, and Integration Procedures with the metadata tooling, and you load the reference data and business records with the data tooling. Doing only one side leaves a half-migrated org, where the components exist but have nothing to act on, or the data exists but no component reads it.
+
+### Worked example: moving a component the right way
+
+The metadata-versus-records rule is easiest to hold with a worked example. You build an OmniScript called Loan Application, and it reads and writes rows on a custom object called Loan. To move this work between a development sandbox and production, you have two separate movements.
+
+First, the OmniScript itself. It is a component, so it is metadata. On Standard Runtime you retrieve it as source with `sf project retrieve start`, commit it to git, and deploy it with `sf project deploy start`. On Managed Package Runtime you pack it into a DataPack and deploy it with the Vlocity Build Tool. Either way, the component travels with metadata tooling.
+
+Second, the loan records. These are data, the rows an end user creates through the form. They move with Data Loader or Data Mapper Load, whichever fits the volume and shape. You never put the component in a data loader and you never put the loan records in the CLI, because each tool understands only its own side. The moment you sort the artifact correctly, the tool choice stops being a guess and becomes a consequence of what the artifact is.
+
+### Why change sets are a weak path for OmniStudio
+
+The exam expects you to know the toolchain and to recognize why some common tools are not the right answer. Change sets, the classic way to move standard Salesforce metadata between sandboxes, struggle with OmniStudio components. A change set does not reliably pick up the nested relationships inside an OmniScript or an Integration Procedure. If one sub-component is missed, the whole component fails in the target org.
+
+This is why the toolchain exists. SF CLI moves components as source with the dependency graph intact, and VBT moves them as DataPacks that understand how a FlexCard connects to a Data Mapper and an Integration Procedure. These tools were built to handle the deep JSON relationships inside OmniStudio components, where a change set can silently drop a piece. When a question offers a change set as the tool for moving OmniStudio definitions, it is the wrong answer, and the right answer is the metadata tooling that understands the full component structure.
+
+### Source tracking and scratch orgs
+
+Two platform features make the source-driven lifecycle repeatable. Source tracking lets the Salesforce CLI know which components have changed since the last retrieve, so a retrieve pulls exactly the files that moved rather than a whole org. That precision is what makes committing incremental changes to version control practical instead of overwhelming.
+
+Scratch orgs give you a disposable environment for each change. You can validate a single OmniScript change in a fresh org, discard it, and repeat for the next change, without polluting a shared sandbox. The combination is the difference between a disciplined pipeline and a series of one-off pushes. The exam frames the expected workflow as a lifecycle: develop in a sandbox, retrieve to version control, deploy through environments, validate in UAT, and promote to production. Source tracking and scratch orgs are the mechanism that makes that lifecycle run.
 
 ## Configuration Walkthrough
 
-1. Set up SF CLI + OmniStudio plugin and authenticate to the org.
-2. Retrieve components as source (`sf project retrieve start`), commit to git.
-3. Deploy with `sf project deploy start` through sandbox → UAT → prod.
-4. For Managed Package orgs, use VBT pack/deploy commands for component bundles.
+Setting up the toolchain follows the sequence of the end-to-end flow itself.
+
+1. Set up Salesforce CLI with the OmniStudio plugin and authenticate to the org you will work with.
+2. Retrieve the components as source with `sf project retrieve start`, and commit the retrieved files to version control.
+3. Deploy with `sf project deploy start`, moving the components through sandbox, then UAT, then production on your release cadence.
+4. For a Managed Package Runtime org, use the VBT pack and deploy commands to move component bundles as DataPacks.
+5. Move any supporting data separately with Data Loader or Data Mapper Load, keeping the metadata side and the data side clearly separated.
 
 ## Exam Traps
 
-- **Trap:** Using Data Loader to move OmniStudio COMPONENTS. It moves records, not metadata. Components are metadata that belong in CLI/source tooling.
-- **Trap:** Believing there is one CLI for everything. SFCLI (modern), VBT (legacy package), and migration tooling each have roles. Know which to use when.
-- **Trap:** Skipping version control. The exam expects a lifecycle, not one-off pushes. Develop in sandbox, retrieve to VC, deploy through environments.
+- **Using Data Loader to move OmniStudio components.** Data Loader moves records, not metadata. Components are metadata and belong in the CLI or source tooling. Trying to export a component definition with a data loader fails because the tool does not understand metadata.
+- **Believing there is one CLI for everything.** SF CLI, VBT, and migration tooling each have a role. SF CLI is the modern source-driven path, VBT is the legacy package tool for managed package orgs, and migration tooling handles the org-to-org movement. Know which to use when.
+- **Skipping version control.** The exam expects a lifecycle, not a one-off push. Develop in the sandbox, retrieve to version control, and deploy through environments on a repeatable pipeline.
 
 ## Exam Tip
 
-Metadata → SFCLI/VBT. Records → Data Loader / Data Mapper Load. Know which side your artifact lives on.
+Sort every artifact by what it is. Metadata, the components, moves with SF CLI or VBT. Records, the data, moves with Data Loader or Data Mapper Load. Know which side your artifact lives on and the toolchain questions answer themselves, because nearly every wrong answer in this requirement is a metadata-record mix-up.
 
-**Related requirements:** Day 3, Runtime & Upgrades; Day 6, Versioning & Cloning; Day 45, Deployment Issues
+## Try It
+
+In a sandbox on Standard Runtime, enable source tracking and run `sf project retrieve start` against the OmniStudio metadata types, retrieving an OmniScript and its Data Mapper. Commit the retrieved source files to a local git repository. Then create a second sandbox and deploy those same components with `sf project deploy start`, and confirm they appear in the designer. Note that after the deploy you must activate the components in the target org before they run. That exercise reproduces the retrieve, commit, deploy loop that the end-to-end flow describes, and it makes the metadata-versus-records rule concrete because you are moving components with metadata tooling, not a data loader.
+
+## What's Next
+
+This lesson covered moving components between orgs. The next lesson narrows the focus to the lifecycle of a single component once it exists. Lesson 6 covers testing, versioning, and cloning, which is how you keep a component stable as it changes over time. The toolchain tells you how to move the work, and versioning tells you how to keep the moving versions straight.
+
+## Related Requirements
+
+- Day 3, Managed Package vs Standard Runtime; Upgrades
+- Day 6, Versioning & Cloning
+- Day 45, Publishing & Deployment Issues
+
+## References
+
+[^1]: [vlocityinc/vlocity_build, GitHub](https://github.com/vlocityinc/vlocity_build)
+[^2]: [Fetching OmniStudio Metadata with sf CLI, Software Insights](https://softwareinsights.dev/posts/salesforce-admin-fetch-omnistudio-metadata)
+[^3]: [Migrate from Managed Package Runtime to the OmniStudio Standard Runtime, Salesforce Developers Blog](https://developer.salesforce.com/blogs/2026/08/migrate-from-managed-package-runtime-to-the-omnistudio-standard-runtime)

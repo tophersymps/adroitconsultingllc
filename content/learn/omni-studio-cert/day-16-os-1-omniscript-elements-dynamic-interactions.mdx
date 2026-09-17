@@ -6,77 +6,129 @@ lesson: 16
 excerpt: "OmniScripts are guided journeys built from named elements that all land in one data JSON. If you understand that JSON contract, formulas, actions, and debugging all follow. If you don't, nothing else works."
 date: "August 18, 2026"
 author: "Adroit Consulting"
-readTime: "6 min read"
+readTime: "9 min read"
 tags: [OmniStudio]
 ---
 
+An OmniScript is the part of OmniStudio that a person actually touches. FlexCards, Integration Procedures, and Data Mappers all exist to feed it data or to store what it collects. The exam treats the OmniScripts domain as the largest single block of the certification, and the questions in it concentrate on one underlying idea: an OmniScript is a guided experience for completing a business process, assembled in a drag-and-drop designer from elements that together form a JSON data structure. Get the element taxonomy and the JSON contract straight and everything else in this domain becomes detail. Skip them and the traps below will find you.
+
 ## Deep Dive
 
-**OmniScripts are guided journeys built from elements.** Each element has a job. Steps are pages. Groups and Blocks are containers that organize elements and can repeat. Input elements (Text, Number, Date, Select, Checkbox, Radio, File, and more) capture data. Action elements do the work: Data Mapper Extract/Load, Remote Action, HTTP, Save, and Set Values.
+### What an OmniScript actually is
 
-**Every element has a NAME, and that name becomes a key in the OmniScript's data JSON.** Names must be unique and path-safe. Formulas, actions, and downstream systems all reference these names, so a bad name breaks everything that depends on it.
+Salesforce defines an OmniScript as a configurable, guided experience for completing a business process. A loan application, an insurance claim intake, a service cancellation, a new customer onboarding: each is a multi-step conversation between a system and a person, where data collection, validation, conditional questions, and background work are stitched together into a designed order.
 
-**Dynamic interactions are how the journey reacts to answers.** Formulas compute values from other elements. Set-values populates elements. Visibility conditions show or hide elements based on data. Navigation rules route between steps based on what a user answers.
+Two properties carry the definition, and both appear in the answer choices on the exam.
 
-**The JSON data structure is the contract.** The OmniScript's data object holds every element value, and actions read and write that JSON. Understanding the JSON is the key to formulas and to debugging. When something fails, the JSON is where you start looking.
+**Guided.** The user moves through a sequence someone designed. They are not dropped into a blank form with forty fields and told to have at it. The script decides what to ask, in what order, and what to do with each answer. Ask an applicant whether they own property, and only if they say yes does the property value step appear.
 
-**It is a drag-and-drop, no/low-code builder with built-in debug tools.** The front-end (UI) is separated from back-end functionality (actions), which lets the UI and logic evolve independently.
+**Declarative.** You assemble it in a drag-and-drop designer. No Apex, no LWC markup, no JavaScript to build the flow itself. You drop elements into a tree on the left, configure properties on the right, and preview the result.
+
+That second property is why the correct answer to "what is an OmniScript best described as" is a guided experience for completing a business process, built with drag-and-drop elements. The wrong answers are all real OmniStudio things wearing the wrong label. A server-side orchestrator is an Integration Procedure. A data transformation tool is a Data Mapper. A dashboard is closer to a FlexCard or a Lightning report than to an OmniScript. When you see three answers that each describe a genuinely different OmniStudio component, the exam is checking whether you know which component is which, not whether you memorized a sentence.
+
+### The element taxonomy
+
+Elements come in a few families, and placing a requirement in the right family is most of the design work. If you open the OmniScript Designer and expand the element palette, this is the shape of what you see.
+
+**Steps are pages.** A step holds a coherent unit of the process. "Applicant details" is a step. "Employment history" is a step. "Review and submit" is a step. Users generally move forward and backward through steps, and the step boundary is where validation and navigation decisions usually live.
+
+**Groups and Blocks are containers.** They organize elements inside a step so the layout is readable and the JSON is nested sensibly. They can also repeat, which matters more than it sounds: a repeatable block lets you capture an array of records, such as three prior employers or five vehicles on a policy, without designing three or five separate sections.
+
+**Input elements capture data.** This is the family the exam means when it asks which elements collect user input: Text, Number, Date, Select, Checkbox, Radio, File, and the rest of the standard inputs. An input element is where a value enters the script. Inputs live inside Steps and Groups. They are not the same thing as actions, and they are not Integration Procedures or Calculation Matrices, both of which are separate OmniStudio components outside the OmniScript definition entirely.
+
+**Action elements execute work.** Data Mapper Extract pulls data in to pre-fill the script. Data Mapper Load (and the Save action) persists data out. Remote Action calls Apex. HTTP Action calls an external system. Set Values writes values into the data JSON without user interaction. Actions are where the script stops being a form and starts being a process.
+
+Here is the clean line to hold onto: Steps organize, Groups nest, Inputs capture, Actions execute. A requirement that says "the user should enter" points at an input family element. A requirement that says "the system should fetch" points at an action.
+
+### Element names are JSON keys, and the JSON is the contract
+
+Every element you drop has a Name property. That name is not a label. It becomes a key in the OmniScript's data JSON. This is the single most consequential fact in the lesson.
+
+Say you build a step called `ApplicantDetails` with a text input named `ApplicantName`, a date input named `DateOfBirth`, and a select named `LoanPurpose`. When the user fills the form, the script's data object looks roughly like this:
+
+```json
+{
+  "ApplicantDetails": {
+    "ApplicantName": "Maria Alvarez",
+    "DateOfBirth": "1989-04-12",
+    "LoanPurpose": "HomePurchase"
+  }
+}
+```
+
+Now watch what depends on those names. A formula that greets the applicant by name references `%ApplicantDetails:ApplicantName%`. A visibility condition that hides a co-applicant section unless the purpose is a joint product tests `%LoanPurpose%`. An Integration Procedure call passes individual nodes as input parameters. A Data Mapper Load maps `ApplicantDetails:ApplicantName` onto `Contact.FirstName`. The debug log shows the JSON with those keys. The saved draft is that JSON on a record.
+
+Because the name is the contract, two rules follow immediately. Names must be unique: two elements called `Notes` in the same scope produce one key holding whichever value was written last, and the user's second answer silently overwrites the first. Names should also be path-safe. Spaces and special characters make formulas harder to write and references easier to break.
+
+None of the distractors for the naming question are close. Names do not determine licensing, do not control styling, and are not cosmetic. They are the addressing scheme for every value the script carries.
+
+The practical discipline is to name elements the way you would name fields in an API: descriptive, consistent, and decided before you build rather than renamed later. `ApplicantNameInput` tells a debugger what it holds three weeks from now. `input1` does not.
+
+### Dynamic interactions: how the script reacts to answers
+
+A guided experience is not a fixed questionnaire. Elements react to what has already happened, and the exam groups those reactions under dynamic interactions. There are four mechanisms worth knowing cold.
+
+**Formulas compute values from other elements.** A formula element does not ask the user anything; it derives a value. If `MonthlyIncome` is 6,500 and `MonthlyDebt` is 1,800, a formula named `DebtToIncome` can return 0.28. Downstream steps and actions read the computed value like any other node in the JSON, because that is exactly what it is. Formulas are the right tool for arithmetic, string assembly, date math, and any value that is a function of data the script already holds.
+
+**Set Values populates elements.** The Set Values action writes into the JSON without user input. A common pattern: an Extract action retrieves the contact's phone number, then a Set Values action pushes it into the `ContactPhone` text input so the user sees a pre-filled field they can correct. The value now exists in the element, not only in the extracted response, which means it participates in validation and is submitted with everything else.
+
+**Visibility conditions show and hide elements.** Every element can carry a condition that evaluates against the data JSON. Hide the "co-signer employment" block until the user selects a co-signed product. Hide the "previous address" group until they answer that they have moved in the last two years. Visibility is presentation: the value may still exist in the JSON if it was set earlier, so conditions and validation need to agree with each other.
+
+**Navigation rules route between steps.** Conditional navigation changes the path based on an answer. A script that asks "is this a business or personal loan" can route business applicants through a tax identifier step and skip it entirely for personal applicants. The result is one script definition with multiple paths, rather than two scripts that drift apart over time.
+
+**Choosing between a formula and an action is a classic trap.** If a value can be computed from data already in the script, a formula does the job with no server round trip and no governor-limit exposure. If the value must come from Salesforce or an external system, that is an action. Reaching for an action to do arithmetic adds latency and complexity. Reaching for a formula to fetch a record does not work at all.
+
+### The designer, debug tools, and separation of concerns
+
+The OmniScript Designer gives you the element tree and the property panels, plus preview and debugging tools. Preview mode runs the script in the designer so you can step through it and watch the data JSON as it builds, element by element. The debug log shows the JSON, the action request payloads, and the action responses, which is how you find the difference between what you expected an Extract to return and what it actually returned.
+
+This is also where the front-end and back-end split becomes visible. The UI is the element tree: steps, groups, inputs, labels, conditions. The back end is the work: extracts, loads, remote calls, HTTP. Because they are separated, you can restyle a step without touching the logic, and you can change where data comes from without redesigning the page. The script is the seam between the two, and the JSON is what crosses it.
+
+### A worked example, end to end
+
+Take a mortgage pre-qualification script for a retail bank.
+
+1. **Step: Applicant.** Group `ApplicantInfo` with text input `FirstName`, text input `LastName`, date input `DateOfBirth`, number input `AnnualIncome`.
+2. **Step: Requested Loan.** Select `LoanPurpose` (HomePurchase, Refinance, HomeEquity), number input `RequestedAmount`, number input `TermYears`.
+3. **Formula: `MonthlyPaymentEstimate`.** Computes from `RequestedAmount`, `TermYears`, and `AnnualIncome`. No callout, because all three inputs are already in the JSON.
+4. **Visibility condition on the `PropertyDetails` group.** Visible only when `LoanPurpose` is HomePurchase or HomeEquity. A refinance applicant never sees it.
+5. **Action: Data Mapper Extract on step entry.** Retrieves the contact record for the logged-in user and any existing applications, writing into `ExistingApplications`.
+6. **Navigation rule.** If `ExistingApplications` contains a pending application, route to a "Here is your open application" step instead of the full form.
+7. **Action: Save.** Persists the completed JSON as an application record.
+
+Nothing here is exotic, and that is the point. Every behavior traces back to an element with a unique name writing into a shared JSON, and every bug you would hit would be visible in the debug log: an extract that returned nothing, a formula referencing a node that never got set, a condition testing a value with the wrong case.
 
 ## Configuration Walkthrough
 
-1. Create an OmniScript and add Steps for the journey.
-2. Add Groups/Blocks to organize inputs.
-3. Add Input elements. Name them uniquely, because they become JSON keys.
-4. Add Action elements for data operations (Extract to pre-fill, Load/Save to persist).
-5. Add formulas, visibility conditions, and navigation rules for dynamic behavior.
+1. **Create the OmniScript.** Choose the type (standard or one of the context-specific types), the sub-type, and the language. Pick a naming convention for the script itself before you start, since the script name shows up everywhere downstream.
+2. **Add Steps for the journey.** Outline the process first on paper. Each coherent unit of the process becomes a step, and the step order is the default path.
+3. **Add Groups and Blocks to organize.** Nest related inputs so the page reads cleanly and the JSON nests logically. Mark any collection that can have more than one entry as repeatable.
+4. **Add Input elements and name them uniquely.** This is the step to slow down on. Every name here becomes a JSON key that formulas, conditions, actions, and downstream systems will reference. No duplicates, no spaces, and a consistent convention such as camelCase.
+5. **Add Action elements for data operations.** Data Mapper Extract to pre-fill the script, Data Mapper Load or Save to persist it, Remote Action or HTTP Action when the work lives outside Salesforce. Attach each action where the data is needed, not all at the top.
+6. **Add the dynamic layer.** Formulas for derived values, Set Values to populate elements, visibility conditions to show and hide, navigation rules to route between steps.
+7. **Debug in preview.** Run the script, step through it, and read the data JSON at each point. Confirm every action request and response carries the nodes you expect. Check the happy path and at least one path that skips a step.
 
 ## Exam Traps
 
-- Duplicate element names cause data corruption, because names are JSON keys.
-- Using actions where a formula suffices (and vice versa).
-- Ignoring the data JSON when debugging. The JSON explains most failures.
-
-## Practice Questions
-
-**Q1.** What is an OmniScript best described as?
-
-A. A server-side orchestrator<br/>
-B. A guided experience for completing a business process, built with drag-and-drop elements<br/>
-C. A data transformation tool<br/>
-D. A dashboard
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: B.** OmniScripts are configurable guided experiences for business processes.
-</details>
-
-**Q2.** Which elements collect user input in an OmniScript?
-
-A. Action elements only<br/>
-B. Input elements (Text, Number, Date, Select...) inside Steps/Groups<br/>
-C. Integration Procedures<br/>
-D. Calculation Matrices
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: B.** Input elements capture data; Steps/Groups organize; Actions execute logic.
-</details>
-
-**Q3.** Why must element names be chosen carefully?
-
-A. They determine the license tier<br/>
-B. They become keys in the OmniScript's JSON data structure<br/>
-C. They control styling<br/>
-D. They are cosmetic
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: B.** Element names map to JSON keys, so they affect formulas, actions, and downstream data.
-</details>
+- **Duplicate element names.** Names are JSON keys. Two elements sharing a name in the same scope write to the same key, and one value silently wins. The corruption is invisible until someone downstream reads the wrong value.
+- **Using actions where a formula suffices.** An action that computes something from data already in the script adds a server round trip and governor-limit exposure for no benefit. Formulas are local and free.
+- **Using a formula to fetch data.** This is the mirror error. A formula cannot call out to Salesforce or an external system. If a value has to come from a record, it is an action.
+- **Ignoring the data JSON when debugging.** Nearly every OmniScript failure is explained by the JSON: a node that was never set, a key with an unexpected name, a value of the wrong type. Reading the JSON first saves an hour of guessing.
+- **Mistaking a sibling component for an OmniScript responsibility.** Server-side orchestration belongs to Integration Procedures and transformation belongs to Data Mappers. If an answer choice names one of those as the thing that "collects user input," it is the wrong answer.
 
 ## Exam Tip
 
-Element name equals JSON key. Everything else (formulas, actions, debugging) hangs off that JSON.
+Element name becomes JSON key. Everything else, formulas, actions, conditions, navigation, and debugging, hangs off that JSON. Memorize the taxonomy line: Steps organize, Groups nest, Inputs capture, Actions execute. When a question describes a user typing something, the answer is an input element inside a step or group, and when it asks what an OmniScript fundamentally is, the answer is a guided, declarative business process experience built from drag-and-drop elements.
+
+## Try It
+
+In a sandbox, create a new OmniScript and build a three-step "update my contact details" script. Step one holds a group with text inputs for first and last name. Step two holds an email input and a phone input. Step three is a review step. Add a Data Mapper Extract on the first step that retrieves the running user's contact, and a Set Values action that populates the name and phone inputs from the extract response. Then open preview mode and read the data JSON after each step.
+
+Two things to pay attention to while you work. First, watch the JSON grow and notice that every node is named exactly what you called the element in the designer. Rename one input mid-build and watch the formula that referenced the old name break. Second, deliberately create a duplicate name in two different groups and observe what the JSON looks like at the end. That experiment is the fastest way to internalize why naming is not cosmetic.
+
+## What's Next
+
+You now know the elements and the JSON they produce. The next question is what to do when the same sub-process appears in several scripts, or when a step needs a UI or a display that standard elements cannot provide. Lesson 17 covers child OmniScripts, FlexCards embedded inside scripts, and custom LWCs, which are the three ways to extend a script beyond what the palette ships with.
 
 ## Related Requirements
 
@@ -86,7 +138,9 @@ Element name equals JSON key. Everything else (formulas, actions, debugging) han
 
 ## References
 
-- [Official exam guide](https://help.salesforce.com/s/articleView?id=005298971&language=en_US&type=1)
-- [Trailhead trailmix](https://trailhead.salesforce.com/content/learn/trails/prepare-for-your-salesforce-omnistudio-developer-certification)
-- [OmniStudio Trailhead org](https://trailhead.salesforce.com/en/promo/orgs/omnistudiotrails)
-- [OMS435 take-home guide](https://developer.salesforce.com/files/OMS435%20OmniStudio%20Student%20Take%20Home%20Guide%20v1.0.pdf)
+[^1]: [Dig Into the OmniScript Designer, Trailhead (OmniStudio OmniScript module)](https://trailhead.salesforce.com/content/learn/modules/omnistudio-omniscript/dig-into-the-omniscript-designer)
+[^2]: [Create an Effective OmniScript Step by Step, Trailhead (OmniStudio OmniScript module)](https://trailhead.salesforce.com/content/learn/modules/omnistudio-omniscript/create-a-simple-omniscript)
+[^3]: [Design and Build a Branching OmniScript, Trailhead (OmniScripts with Branching module)](https://trailhead.salesforce.com/content/learn/modules/omniscripts-with-branching/design-and-build-a-branching-omniscript)
+[^4]: [View and Debug Action Requests and Response Data, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_view_and_debug_action_requests_and_response_data.htm&type=5)
+[^5]: [OmniScript Best Practices, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_omniscript_best_practices_8368.htm&language=en&type=5)
+[^6]: [Validate Data and Handle Errors, Salesforce OmniStudio Exercises](https://developer.salesforce.com/files/OmniStudio/pdf/OmniStudio_Validate_Data_and_Handle_Errors.pdf)

@@ -6,86 +6,126 @@ lesson: 10
 excerpt: "Define and implement complex card actions, including launching OmniScripts, firing events, and updating other components."
 date: "August 12, 2026"
 author: "Adroit Consulting"
-readTime: "6 min read"
+readTime: "9 min read"
 tags: [OmniStudio]
 ---
 
+A card that only displays information is a report. A card becomes part of an application when a user can select something on it and something happens: a guided process opens pre-filled with that record, a detail panel expands, or another card on the page updates because this one changed. Actions are how FlexCards cross that line, and the exam tests the three patterns by name: launch, fire, and update.
+
 ## Deep Dive
 
-**Actions make a card DO something:** launch an OmniScript (passing record context like Id and attributes), open a flyout (drill-down detail), fire events (custom/platform/pubsub), navigate, or update other components on the page.
+### What an action is
 
-**Launching an OmniScript** from a card action passes context so the flow opens pre-populated for the selected record: the standard 'act on this record' pattern.
+An action is configuration attached to an interactive element, almost always a button or a link, that specifies what happens when the user selects it. Actions do the outbound work of a card. The main types:
 
-**Events are the communication bus:** a card fires an event (e.g., 'record updated'), and other cards/components with event listeners react (refresh, change state, update data).
+- **Launch an OmniScript.** Opens a guided process, in the context of a record.
+- **Open a flyout.** Expands a detail view over the page rather than navigating away from it, which is the drill-down pattern: the card shows the summary, the flyout shows the detail.
+- **Fire an event.** Publishes a named event that other components on the page can listen for.
+- **Navigate.** Moves the user to a page, record, or URL.
+- **Update other components.** Refreshes or changes the state of another component, either directly where the platform supports it or through an event and a listener.
 
-**Updating other components:** via event → listener, or direct component updates where the platform supports it. This is card-to-card coordination without code.
+The distinction between display and behavior sits in the configuration. A text element displays a value. A button carries both a look and an action, and the action is where the parameters live.
 
-**Action parameters carry the data:** which record, which values, which navigation target. Configure parameters precisely: a missing Id breaks the downstream flow.
+### Launching an OmniScript from a card
+
+This is the pattern the exam describes as the standard "act on this record" interaction. A button on the card is configured with a Launch OmniScript action, and the action passes the record's context into the flow: the record Id and whatever attribute values the OmniScript needs. The OmniScript opens pre-populated for the record the user was looking at, so the user does not search for it again.
+
+A worked example. A case summary FlexCard sits on a service console page and renders one card per case. Each card has a button labelled Resolve. The button's action launches the Case Resolution OmniScript and passes the case Id. Because the Id arrives as an input, the OmniScript's first step already knows which case it is working on: the detail fields are populated and the save at the end writes back to the right record. Without that Id, the flow opens empty and the user has to pick a case they already selected once.
+
+### Action parameters carry the data
+
+The parameters on an action are the mechanism that moves context from the card into whatever it launches or fires. Parameters answer three questions: which record, which values, and which target.
+
+**Which record.** The Id of the record the card is showing, taken from the card's data JSON rather than typed in. This is the parameter whose absence breaks the most flows.
+**Which values.** Additional attributes the launch or the event needs. A case severity, an account industry, a flag that selects a different branch in the OmniScript.
+**Which target.** The name of the OmniScript to launch, the URL to navigate to, or the event name to fire.
+
+Configure these precisely. An action with a missing or wrong Id does not fail loudly at the card level. It launches a flow that opens empty, or fires an event whose listeners receive nothing useful, and the symptom shows up far away from the cause.
+
+### Anatomy of an action configuration
+
+An action is a small set of decisions, and writing them out makes the exam scenarios easier to reason about. A Resolve button on a case card carries something close to this configuration:
+
+- **The interactive element:** the button, with its own label and styling.
+- **The action type:** launch an OmniScript.
+- **The target:** the name of the OmniScript to open, for example Case Resolution.
+- **The parameters:** the case Id, taken from the card's data JSON, plus any attribute the OmniScript's first step expects, such as the case severity or the record type.
+- **The presentation:** whether the process opens in a flyout, inline, or as a full page.
+
+Now change the requirement. If the button must instead signal that the record changed, the action type becomes fire event, the target becomes an event name such as `caseUpdated`, and the parameters become a small payload carrying the record Id and whatever a listener needs to know. The element, the target, and the parameters are the same three decisions in a different configuration.
+
+This is why the parameter list is where the failures live. The action type is a dropdown and the target is a name, and both are hard to get subtly wrong. A parameter, by contrast, is a reference into the card's JSON, and a reference that resolves to nothing produces no error at the card level. The flow opens empty or the event payload arrives hollow, and the developer looking at the button sees a button that appears configured.
+
+The check that catches it: after you configure an action, test it with a real record and confirm the downstream component received what it needed. Do not accept "the button is there" as evidence that the action works.
+
+### Events: the communication bus
+
+An event is a named message that a component publishes for anyone who is listening. Firing an event is how one component tells the rest of the page that something changed, without knowing or caring which components those are.
+
+The pattern has two sides, and both must exist:
+
+1. **The publisher** fires an event with a name and, usually, a small payload.
+2. **The listener** is configured on another card or component to react when that event name arrives, by refreshing its data, changing its display state, or updating its values.
+
+Worked example. A page has two cards side by side. Card B is an edit card with a Save button. Card A is a summary card showing metrics derived from the same records. The requirement is that Card A reflects the change as soon as Card B saves. The correct configuration is not to give Card A a second data source and it is not to reach for Platform Cache. The correct configuration is: Card B fires an event when the save completes, and Card A has an event listener bound to that event that refreshes its data. Fire on the change, listen and react on the other side.
+
+The trap that follows from this is firing an event that nobody listens for. An event with no listener is simply lost. Nothing errors, because nothing failed: a publisher with no subscribers is a valid state. The card announces the change and the page ignores it, and the developer concludes that events do not work. Before you debug the event, confirm that a listener exists.
+
+The types of events available include platform events, where the event is defined on the platform and can cross page boundaries, and the page-level and publish subscribe mechanisms that components use to talk to each other within an application. For card-to-card coordination on one page, the lighter mechanisms are usually enough. Reach for a platform event when the information genuinely has to travel beyond the current page or be consumed by an asynchronous subscriber.
+
+### Updating other components
+
+Coordination between cards has two shapes.
+
+**Through an event and a listener.** The publisher fires, the subscriber reacts. This is the decoupled form, and it is the one to prefer when the two cards are peers: neither has to know about the other, and a third card can join later by listening to the same event without touching the first two.
+
+**Direct component updates, where the platform supports them.** The card action updates another component on the page itself, which is simpler to configure but couples the two components. Use it when the relationship is fixed and the order of operations is unambiguous.
+
+Either way, the exam's framing is worth keeping: actions are outbound, listeners are inbound, and card-to-card coordination is a pairing of the two. There is no code in this pattern. That is the point of it.
+
+### When an action is the wrong tool
+
+Not everything needs an action. If the requirement is a static link to a documentation page or an external site, a plain URL is simpler, more transparent, and easier to maintain than a card action that navigates. Reserve actions for interactions that carry context, trigger a process, or coordinate with other components. An action that does nothing except go somewhere a URL could have gone adds configuration that a future maintainer has to read and decode.
 
 ## Configuration Walkthrough
 
-1. Select a button/link element in the card.
-2. Add an action: Launch OmniScript / Fire Event / Flyout / Update component.
-3. Configure parameters: record Id, attribute values, event name, payload.
-4. On the receiving side, add an event listener to react.
+1. **Select the button or link element** on the card that the user will interact with. The action attaches to the element, and the element's display properties are configured separately.
+2. **Add the action and choose its type.** Launch OmniScript when the requirement is a guided process, Flyout for a detail drill-down, Fire Event when other components need to react, and the update options when another component on the page has to change.
+3. **Configure the parameters.** For a launch, pass the record Id from the card's data JSON plus any attribute values the OmniScript expects, and name the OmniScript to run. For an event, name the event and define the payload. For a flyout, specify which content it opens.
+4. **On the receiving side, add the listener.** Give the other card or component an event listener bound to the same event name, and configure the reaction: refresh the data, change a display state, or update specific values.
+5. **Test the interaction with real records.** Confirm the launched OmniScript opens with the record already populated, and confirm the listening card visibly updates when the publishing card completes its action. A card that looks correct in the designer and does nothing on selection usually has a missing parameter or a missing listener.
 
 ## Exam Traps
 
-- Firing an event with no listener anywhere: the event is lost.
-- Launching an OmniScript without passing the record Id: the flow opens empty.
-- Using actions for static links when a simple URL would do.
-
-## Practice Questions
-
-**Q1.** How does a FlexCard launch a guided process in context of the selected record?
-
-A. Action → Launch OmniScript, passing the record Id/context<br/>
-B. Apex trigger<br/>
-C. URL redirect only<br/>
-D. Cloning the card
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: A.** Card Actions launch OmniScripts with context so the flow opens pre-populated.
-</details>
-
-**Q2.** Card A must refresh when Card B saves data. What do you configure?
-
-A. Card A fires no event; Card B listens<br/>
-B. Card B fires an event; Card A has an event listener that refreshes<br/>
-C. A second data source<br/>
-D. Platform Cache only
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: B.** Events + listeners coordinate cards: fire on change, listen and react on the other side.
-</details>
-
-**Q3.** What carries the data when a card action launches an OmniScript?
-
-A. Action parameters (record Id, attributes)<br/>
-B. The card's theme<br/>
-C. The browser URL<br/>
-D. A hardcoded file
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: A.** Action parameters define what context the launched flow receives.
-</details>
+- **Firing an event with no listener anywhere.** The event is published and lost. Nothing errors. Confirm a listener exists before debugging anything else.
+- **Launching an OmniScript without passing the record Id.** The flow opens empty, so the user re-selects a record they already chose. The Id comes from the card's data JSON and belongs in the action parameters.
+- **Using an action for a static link.** A plain URL is the right tool when no context or coordination is involved. Save actions for interactions that carry data.
+- **Putting the event on the wrong card.** In a two-card refresh scenario, the card whose change should propagate fires the event, and the card that must reflect the change holds the listener. Reversing the two produces silence.
+- **Assuming a card-to-card refresh needs a second data source or Platform Cache.** It needs an event on the publisher and a listener on the subscriber.
 
 ## Exam Tip
 
-Actions = outbound (launch, fire, navigate). Listeners = inbound (react). Pair them for card-to-card coordination.
+Actions are outbound: launch, fire, navigate. Listeners are inbound: they react. Pair them for card-to-card coordination. And when a scenario asks what carries the data into a launched process, the answer is the action parameters, meaning the record Id and the attributes you configured on the action.
+
+## Try It
+
+In a sandbox, build two FlexCards on one Lightning page. Give the first card a button whose action is Launch OmniScript, and pass the record Id from the card's data JSON into an OmniScript that displays that record's details in its first step. Confirm the flow opens pre-populated; then remove the Id parameter and confirm it opens empty, which shows you exactly what the parameter was doing. On the second card, add a button that fires a named event when selected, and give the first card an event listener bound to that name that refreshes its data. Select the button and watch the first card reload. Then temporarily remove the listener and confirm that nothing happens, which is the missing-listener trap in its purest form.
+
+## What's Next
+
+Cards now display, nest, bind, and act. Lesson 11 goes deeper into the advanced properties that control how a FlexCard behaves across states and contexts, which is where the configuration you have built so far gets refined rather than replaced.
 
 ## Related Requirements
 
-- Day 7, Data Sources
-- Day 11, Advanced Properties
-- Day 16, OmniScript Elements
+- Day 7, FlexCard Data Sources and Testing JSON
+- Day 9, Binding Components and Configuring Properties
+- Day 11, Advanced FlexCard Properties
+- Day 16, OmniScript Elements and Dynamic Interactions
 
 ## References
 
-- [Official exam guide](https://help.salesforce.com/s/articleView?id=005298971&language=en_US&type=1)
-- [Trailhead trailmix](https://trailhead.salesforce.com/content/learn/trails/prepare-for-your-salesforce-omnistudio-developer-certification)
-- [OmniStudio Trailhead org](https://trailhead.salesforce.com/en/promo/orgs/omnistudiotrails)
-- [OMS435 take-home guide](https://developer.salesforce.com/files/OMS435%20OmniStudio%20Student%20Take%20Home%20Guide%20v1.0.pdf)
+[^1]: [FlexCard Designer, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_flexcard_designer.htm&language=en_US&type=5)
+[^2]: [Embed an OmniScript in Another OmniScript, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_embed_an_omniscript_in_another_omniscript_20581.htm&language=en_US&type=5)
+[^3]: [OmniStudio Developer Certification Exam Guide, Salesforce Help](https://help.salesforce.com/s/articleView?id=005298971&language=en_US&type=1)
+[^4]: [Prepare for Your Salesforce OmniStudio Developer Certification, Trailhead](https://trailhead.salesforce.com/content/learn/trails/prepare-for-your-salesforce-omnistudio-developer-certification)
+[^5]: [OmniStudio Trailhead Org](https://trailhead.salesforce.com/en/promo/orgs/omnistudiotrails)

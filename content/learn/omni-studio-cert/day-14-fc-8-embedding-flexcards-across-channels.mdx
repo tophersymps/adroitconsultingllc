@@ -6,87 +6,118 @@ lesson: 14
 excerpt: "Embed one FlexCard definition across Lightning pages, Experience Cloud sites, OmniScripts, and mobile, and design it for reuse with public attributes."
 date: "August 16, 2026"
 author: "Adroit Consulting"
-readTime: "5 min read"
+readTime: "9 min read"
 tags: [OmniStudio]
 ---
 
+The value of a FlexCard is not that it renders data, it is that one definition renders that data wherever you need it. FC-8 is about placing a single card across Lightning pages, Experience Cloud sites, OmniScripts, and mobile without rebuilding it per channel. The exam asks which channels are supported, what makes one card work in a console and a portal at the same time, and what the platform generates so you can drag the card onto a page. Underneath those three questions is a single design principle: build the card around context it receives rather than context it assumes, and it will travel.
+
 ## Deep Dive
 
-**One card definition, many channels.** FlexCards embed on Lightning pages (App Builder), Experience Cloud sites (Communities), OmniScripts (as a contextual element), and mobile. You build the card once and drop it wherever it belongs.
+### One definition, many channels
 
-**Channel context works differently.** Embedding on a record page passes record context automatically. Experience Cloud and mobile may need public attributes or session context configured. That extra setup is the main thing that trips people up.
+An OmniStudio FlexCard is channel-agnostic. The same card definition, with the same data sources, layout, and states, can be embedded in four families of host:
 
-**Reuse is the point.** Design the card with public attributes so the same card renders correctly on an internal console and a customer portal. If you hardcode context, you lose that.
+- **Lightning pages** via App Builder, including record pages, app pages, and home pages.
+- **Experience Cloud sites** via Experience Builder, so the card can appear to customers and partners in a portal or community.
+- **OmniScripts**, where the card appears as a contextual element inside a guided flow, showing data alongside the questions the script asks.
+- **Mobile**, through the Salesforce mobile app and mobile experiences built on the same components.
 
-**Channel constraints.** Experience Cloud needs the license. Data sources can behave differently per channel. Component behavior changes too: mobile touch targets, offline handling. None of these are free.
+Because the card is a definition and not a page, what changes between channels is the *host*: what context the host supplies, what the user's permissions are, what the screen size is, and what the network can be relied upon to do. What does not change is the card. That is the reuse story, and everything else in FC-8 exists to protect it.
 
-**LWC wrappers.** FlexCards auto-generate Lightning web component wrappers for use in App Builder and Experience Builder. That's how the drag-and-drop embedding works.
+**Worked example.** A telecom builds one `CustomerPlan` FlexCard showing plan name, monthly cost, data allowance, and contract end date. Internally, it sits on the Account record page in a service console so agents can answer billing questions instantly. Externally, the same card sits on an Experience Cloud page so customers see their own plan details after logging in. The card is not duplicated between the two. The only differences are the context the two hosts supply and the data the two user profiles are permitted to see.
+
+### How channel context differs, and why it breaks things
+
+The single most common reason a card that works internally fails in a portal is context. Embedding on a Lightning record page passes record context automatically: the page already knows which record is open, and the card receives that record's id without any explicit wiring. That automatic behaviour is a convenience that hides a dependency. The card gets its id from the host, and the host happens to be a record page.
+
+Move the same card to Experience Cloud and the automatic record context is gone. A portal page is not necessarily bound to a single record, and the user's relationship to the data is different. The card now needs the id to arrive some other way: a public attribute supplied by the page, a value read from the URL, a session-scoped value for the logged-in user, or an input the user selects. If the card was built with the record id baked in or assumed, there is nothing to supply and the card renders nothing useful.
+
+Mobile adds a further layer. The context may be available, but the rendering environment is narrower: less horizontal space, touch rather than pointer input, and the possibility of intermittent connectivity. A card designed at desktop width with dense rows and small action buttons may be technically working on mobile while being unusable there.
+
+The lesson is to treat context as an input the card declares rather than a fact it assumes. A card whose only dependency is a declared public attribute can be hosted anywhere, because every host has some way to supply that attribute.
+
+### Public attributes are what make reuse real
+
+This is the same mechanism covered in FC-5, restated for a different purpose. A public attribute is a named value the card exposes for its host to fill. On a record page, the host fills it from the record. In Experience Builder, the page configuration or a URL parameter fills it. In an OmniScript, a data node from the script fills it. As a nested card, the parent fills it.
+
+Designing for reuse therefore means sitting down before the build and asking what context this card needs in every place it will appear, then declaring each of those as a public attribute. An `AccountHealth` card might declare `accountId` and `isPortal`. A `CaseSummary` card might declare `caseId` and `readOnly`. With those declared, the same card renders correctly internally and externally, and a new host is a wiring task rather than a rebuild.
+
+The exam phrases the reusable pattern as "public attributes for context plus per-channel verification". Both halves matter. Public attributes make the card *capable* of working across channels; verification makes you *sure* it does.
+
+### Channel constraints you have to plan for
+
+Reuse across channels is not free, and three constraints come up repeatedly.
+
+**Licensing.** Experience Cloud requires the appropriate license to host the experience and for the users who access it. Confirming that licensing exists before promising a portal embed is the difference between a plan and a problem. A card that renders beautifully in a sandbox says nothing about whether the portal it is destined for is licensed to serve it.
+
+**Data source availability and behaviour.** Some data sources behave differently depending on the channel, and some depend on services that must be enabled for the environment. A card that reads data through a service that is not available in a portal will fail there while working perfectly in the console. When a card behaves differently per channel but the layout is identical, the data source is the first suspect.
+
+**Component behaviour per channel.** Mobile touch targets need to be larger than pointer targets. Offline and slow-network handling affects how a card should load. Long lists that scroll comfortably on a desktop may need a tighter layout on a phone. These are not bugs in the card, they are the card meeting a different environment.
+
+There is also the question of *what the user should see*, which is a security question rather than a rendering one. The same card serving an internal agent and an external customer may need to hide fields for the external case. That is handled by the data source respecting field-level security, not by building two cards.
+
+### The generated LWC wrapper
+
+FlexCards auto-generate a Lightning web component wrapper. That wrapper is what you drag onto a Lightning page in App Builder and onto an Experience Cloud page in Experience Builder. It is also why embedding does not require you to write Apex or hand-author a component: the generated wrapper presents the card as a standard Lightning component to the page builder, and the page builder treats it like any other component with properties to configure.
+
+The practical consequences are worth holding onto. First, the wrapper is generated from the card definition, so it reflects the card's current public attributes as configurable properties in the page builder. Declaring an attribute on the card is what makes it appear as something you can wire in App Builder or Experience Builder. Second, because the wrapper is a Lightning component, it composes with the page the way other components do, which is why event listeners and session variables work across a page that mixes FlexCards, OmniScripts, and custom LWCs.
+
+The exam question that tests this asks what a FlexCard auto-generates for App Builder and Experience Builder embedding, and the answer is the LWC wrapper. An Apex class, a Flow, and a report are the distractors, and none of them is the drag-and-drop unit.
+
+### Embedding inside an OmniScript and inside another card
+
+Two of the four channels deserve a closer look because they are not page builders.
+
+**Inside an OmniScript.** A FlexCard can be embedded as a contextual element in an OmniScript, which is how a guided flow shows the user relevant data without leaving the flow. The card receives its context from the script's data, so attributes such as the current record id are bound to script variables. This is the natural pattern for a flow that collects information while the user can see the record it affects.
+
+**Inside another FlexCard.** A child FlexCard is embedded inside a parent card, as covered in FC-5. The parent supplies the child's public attributes from its own data, and the child renders as part of the parent's layout. This is composition rather than a separate channel, but it follows the same rule: the child declares what it needs and the parent supplies it.
+
+Both cases reinforce the same discipline. The card is not reaching out for context, it is declaring context it needs and letting the host supply it. That is why the same card works in a console, a portal, a script, and a phone.
 
 ## Configuration Walkthrough
 
-1. Design the card with public attributes for context.
-2. Add the FlexCard LWC to a Lightning page (App Builder).
-3. Add it to an Experience Cloud page (Experience Builder).
-4. Embed inside an OmniScript or another card as needed.
-5. Verify per channel (desktop, mobile, portal).
+1. **Design the card with public attributes for context.** Decide what the card needs to know (`recordId`, `accountId`, `isPortal`) and declare each attribute before building the layout. This is the step that makes every later step possible.
+2. **Add the FlexCard LWC to a Lightning page in App Builder.** Drag the generated wrapper onto the page, then wire each public attribute to a page context or property. Confirm it renders with real data.
+3. **Add it to an Experience Cloud page in Experience Builder.** Place the same wrapper on the portal page and supply the attributes the way that channel allows, whether through page configuration, a URL parameter, or the logged-in user's context. Confirm the licensed experience serves it.
+4. **Embed inside an OmniScript or another card as needed.** Bind the card's attributes to the script's data nodes or to the parent card's data, and verify the card renders the right record.
+5. **Verify per channel (desktop, mobile, portal).** Check rendering, data, and permissions in each channel rather than assuming that working in one means working in all. Channel verification is half of the answer to the reuse question.
 
 ## Exam Traps
 
-- Building for Lightning only, then discovering portal/mobile context gaps.
-- Forgetting Experience Cloud licensing before promising a portal embed.
-- Hardcoding record context instead of public attributes. This breaks reuse.
-
-## Practice Questions
-
-**Q1.** Which statement about embedding FlexCards is TRUE?
-
-A. They only run on desktop Lightning pages<br/>
-B. They embed across Lightning, Experience Cloud, OmniScripts, and mobile<br/>
-C. They can't embed in OmniScripts<br/>
-D. They require Apex to embed
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: B.** FlexCards are channel-agnostic: Lightning, Experience Cloud, OmniScript, mobile.
-</details>
-
-**Q2.** What makes the same FlexCard work on both an internal console and a customer portal?
-
-A. Public attributes for context + per-channel verification<br/>
-B. Two separate cards<br/>
-C. A custom LWC<br/>
-D. An Apex trigger
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: A.** Public attributes make cards context-driven and reusable across channels.
-</details>
-
-**Q3.** What does a FlexCard auto-generate for App Builder / Experience Builder embedding?
-
-A. An LWC wrapper<br/>
-B. An Apex class<br/>
-C. A Flow<br/>
-D. A report
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: A.** FlexCards generate LWC wrappers for drag-and-drop embedding.
-</details>
+- **Building for Lightning only, then discovering portal or mobile context gaps.** A card built around a record page's automatic context has no way to receive context elsewhere. Design for the least automatic channel first.
+- **Forgetting Experience Cloud licensing before promising a portal embed.** The embed requires a licensed Experience Cloud environment. Confirm it early rather than during the portal build.
+- **Hardcoding record context instead of using public attributes.** Hardcoded context breaks reuse and is the direct cause of the "works internally, blank in the portal" failure.
+- **Assuming data sources behave identically per channel.** They may depend on services or context that differ by channel, so verify the data, not just the layout.
+- **Treating one successful embed as proof.** Verify each channel. They are not identical, which is exactly the phrase the exam tip uses.
 
 ## Exam Tip
 
-Design for context (public attributes), then embed everywhere. Verify each channel. They're not identical.
+Design for context with public attributes, then embed everywhere; verify each channel because they are not identical. For any FC-8 question, remember that FlexCards are channel-agnostic (Lightning, Experience Cloud, OmniScripts, mobile), that the public-attribute-plus-verification combination is what makes one card serve an internal console and a customer portal, and that the drag-and-drop unit in App Builder and Experience Builder is the auto-generated LWC wrapper.
+
+## Try It
+
+In a sandbox with OmniStudio, create a `RecordSnapshot` FlexCard with two public attributes, `recordId` and `isPortal`, and one data source that reads Name and two other fields for `Id = recordId`.
+
+Embed it on a Lightning record page in App Builder and wire `recordId` from the record context, setting `isPortal` to false. Confirm it renders the open record.
+
+Now add the same card to an Experience Cloud page in Experience Builder. Supply `recordId` the way that page allows and set `isPortal` to true. If the portal is licensed, the card should render the same layout against the portal user's permitted data. Note the two places verification mattered: the context you had to supply manually, and the fields the portal user can actually see.
+
+Finally, embed the card inside an OmniScript as a contextual element, binding `recordId` to a script node, and open the script in preview to confirm the card renders inside the flow. One card, three hosts, no duplicate definitions. If any host fails, the failure is context or permissions, not the card.
+
+## What's Next
+
+You can now place a card anywhere. The last lesson in the FlexCard domain, Day 15, is FlexCard Best Practices, which collects the habits that keep the cards you have built maintainable and reliable: validating the JSON, keeping data sources lean, caching with intent, respecting field-level security, testing every state on every channel, and composing rather than duplicating. The individual mechanisms are behind you; the best-practices lesson is about the judgement that ties them together.
 
 ## Related Requirements
 
-- Day 7, Data Sources
-- Day 20, Embedding OmniScripts
-- Day 11, Advanced Properties
+- Day 7, FlexCard Data Sources and Testing JSON
+- Day 20, Embedding OmniScripts Across Channels
+- Day 11, Advanced FlexCard Properties
 
 ## References
 
-- [Official exam guide](https://help.salesforce.com/s/articleView?id=005298971&language=en_US&type=1)
-- [Trailhead trailmix](https://trailhead.salesforce.com/content/learn/trails/prepare-for-your-salesforce-omnistudio-developer-certification)
-- [OmniStudio Trailhead org](https://trailhead.salesforce.com/en/promo/orgs/omnistudiotrails)
-- [OMS435 take-home guide](https://developer.salesforce.com/files/OMS435%20OmniStudio%20Student%20Take%20Home%20Guide%20v1.0.pdf)
+[^1]: [FlexCard Designer, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_flexcard_designer.htm&language=en_US&type=5)
+[^2]: [Base UI and Card Templates, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_base_ui_and_card_templates.htm&language=en_US&type=5)
+[^3]: [OmniStudio Settings, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_omnistudio_settings.htm&language=en_US&type=5)
+[^4]: [Integration Procedures, Salesforce Help](https://help.salesforce.com/s/articleView?id=sf.os_integration_procedures.htm&type=5)

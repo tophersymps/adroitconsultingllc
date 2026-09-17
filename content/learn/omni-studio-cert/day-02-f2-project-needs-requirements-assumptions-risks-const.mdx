@@ -6,40 +6,104 @@ lesson: 2
 excerpt: "Determine a project's needs by evaluating a customer's requirements, assumptions, risks, and constraints. Day 2 of the OmniStudio Developer exam prep."
 date: "August 04, 2026"
 author: "Adroit Consulting"
-readTime: "6 min read"
+readTime: "9 min read"
 tags: [OmniStudio]
 ---
-# Project Needs: Requirements, Assumptions, Risks, Constraints
 
-**Exam guide requirement:** Determine a project's needs by evaluating a customer's requirements, assumptions, risks, and constraints.
-
-**Domain:** OmniStudio Fundamentals (18%)
+Every scenario on the OmniStudio exam is a constraint puzzle, and this requirement is where that fact becomes explicit. It asks you to determine a project's needs by evaluating a customer's requirements, assumptions, risks, and constraints. The exam gives you a story about a customer and a requirement, then hides the real difficulty inside one unstated constraint. The candidate who reads only the surface requirement picks the flashiest answer. The candidate who reads for the constraint picks the answer that actually works. This lesson teaches you to separate the four inputs and treat the constraints as the deciding factor.
 
 ## Deep Dive
 
-- Separate functional requirements (what the flow must do: capture X, call Y, display Z) from non-functional ones (performance, security, usability, channel). The exam scenarios hide both. Read for the hidden constraint.
-- Assumptions must be validated early: external system availability, authentication model (Named Credential vs OAuth), data volume, record access. An assumption that 'the API returns flat JSON' is a risk until checked.
-- Risks: external API downtime, licensing gaps (no OmniStudio license for a channel), field-level security restrictions, org limits (callout timeouts, DML limits), sandbox-to-production differences.
-- Constraints shape the solution: license tier (which channels/components are allowed), org edition, legacy Managed Package Runtime vs Standard Runtime, no Communities license (blocks Experience Cloud embedding), security policy (no raw SOQL where FLS matters).
-- The decision output is fit-gap: declarative OmniStudio config where it fits, programmatic (Apex/LWC/Remote Action) where it doesn't. Scope control means delivering the requirement, not the ideal architecture.
+### Functional versus non-functional requirements
+
+A requirement states what the flow must do. The exam splits requirements into two kinds, and missing the difference costs points. Functional requirements are about behavior: capture this data, call that service, display that result. Non-functional requirements are about how that behavior is delivered: performance, security, usability, and the channel it runs on.
+
+A functional requirement might read, "Capture the applicant's income and credit score, then return an approval decision." A non-functional requirement might read, "The decision must return in under two seconds," or "The form must render on mobile." The functional requirement tells you which components you need. The non-functional requirement tells you how to constrain those components. Both are always present in a real scenario, and the exam deliberately hides the non-functional ones. The discipline is to read the scenario twice, once for what it does and once for the unspoken performance, security, or channel constraint.
+
+### Assumptions and why they must be validated
+
+An assumption is a belief you hold about the environment until you verify it. The curriculum names several that recur in real OmniStudio projects and on the exam. External system availability, the authentication model, data volume, and record access are all assumptions until you confirm them against the actual environment.
+
+Authentication is a concrete example. You might assume you can call an external REST API with a Named Credential, or with OAuth, or without authentication at all. Each model is a different configuration in OmniStudio, and choosing the wrong one fails at runtime. The assumption needs to be checked before you design the callout, not after it is in production.
+
+Data volume is another. You assume an Integration Procedure returns a few rows, so you design the response to fit in memory and render quickly. If the customer's system returns thousands of rows, the design changes. The curriculum gives a crisp example: an assumption that "the API returns flat JSON" is a risk until you check it. If the API actually returns nested JSON, every Data Mapper and every formula that reads the response has to account for the nesting. The assumption is not a fact until it is validated.
+
+### Risks and how to treat them
+
+A risk is a threat that something will go wrong. The exam wants you to recognize the common OmniStudio risks and, more importantly, to know that the correct treatment is a mitigation, not hope.
+
+External API downtime is the classic risk. When your Integration Procedure calls a REST system whose availability is uncertain, you design for failure. You wrap the call in error handling so a failure produces a controlled error response instead of aborting the whole transaction. You confirm service-level agreements with the vendor. You might add a retry or a fallback path. The exam phrasing is blunt about this: uncertain external dependencies are managed with error handling and validated assumptions, not by assuming they will work.
+
+Licensing gaps are a risk. If a channel needs OmniStudio access but no license covers it, the component fails for users on that channel even though it works in the designer. Field-level security restrictions are a risk because a data source that bypasses FLS can leak fields to users who should not see them. Org limits are a risk: callout timeouts, DML limits, and governor limits all bite when a component runs on real data instead of a clean sandbox. Sandbox-to-production differences are a risk because data volumes, connected systems, and licenses differ between environments.
+
+### Constraints shape the solution
+
+A constraint is a hard boundary that the solution must respect. Constraints are the heart of this requirement because they disqualify answers. If a solution violates a stated constraint, it is wrong no matter how elegant it is.
+
+License tier is a constraint. It determines which channels and components are allowed. If the customer does not hold the license for a given channel, you cannot put a component there. Org edition is a constraint. The features available depend on the edition. The runtime is a constraint: a legacy Managed Package Runtime org and a Standard Runtime org deploy and upgrade differently, which matters for day three's lesson. Whether the customer has a Communities license is a constraint, because without it you cannot embed OmniStudio in Experience Cloud. Security policy is a constraint. If the org enforces field-level security, you cannot use a raw SOQL data source that ignores FLS.
+
+The critical trap with constraints is field-level security. FlexCards can pull data from several sources. A raw SOQL Query data source runs as a direct query that does not respect the running user's field-level security, so a low-privilege user can see fields they should not. A Data Mapper Extract, by contrast, respects FLS. When a requirement demands FLS enforcement on data shown in a FlexCard, the data source that satisfies the constraint is a Data Mapper, not a SOQL Query or SOSL Search. That specific distinction is exactly what the exam tests, and it is why reading the constraint beats reading the surface requirement.
+
+### Worked example: reading the hidden constraint
+
+A scenario pulls all four inputs together, and working one makes the method clear. A financial services customer asks for a loan application that captures applicant details, checks their credit, and shows a summary on the application record. Read for the functional requirement and you see an OmniScript for the guided capture, an Integration Procedure for the credit check, and a FlexCard for the summary. That is the natural reading and it is correct as far as it goes.
+
+Now reread for the rest. Does the requirement say the credit bureau's availability is uncertain? Then the credit call is a risk and the answer must include error handling and a confirmed SLA, not a bare HTTP Action. Does the requirement say the summary must respect field-level security because applicants do not see each other's data? Then the FlexCard data source must be a Data Mapper, not a raw SOQL query. Does the requirement say the form must run on Experience Cloud? Then the customer must hold a Communities license and an OmniStudio entitlement for that channel, or the component fails at the access layer.
+
+Each added sentence in the scenario is a constraint or a risk that reshapes the answer. The exam is written so that the most obvious answer violates one of them. That is the entire skill this requirement tests.
+
+### Fit-gap: the decision output
+
+All four inputs converge on a single output, a fit-gap analysis. A fit means OmniStudio declarative configuration covers the requirement cleanly. A gap means it does not, and programmatic code fills the space. The exam frames the goal as delivering the requirement within the assumptions, risks, and constraints, not delivering the ideal architecture.
+
+The fit-gap decision is not a vote for the best-looking architecture. It is a sober read of where declarative OmniStudio stops and code must begin. OmniScripts, FlexCards, Integration Procedures, and Data Mappers handle the vast majority of capture, display, orchestration, and data movement. Apex fills the gaps where the platform requires a custom algorithm, an LWC fills the gaps where the UI needs behavior a card cannot express, and a Remote Action calls server-side logic from a component when a direct declarative action does not fit. Naming the specific gap and the specific code that fills it is the difference between a real solution approach and a vague wish.
+
+Scope control is the discipline that keeps fit-gap honest. When the customer asks for a rich, ideal flow but the constraint set only supports a simpler one, the needs determination output delivers the simpler flow that fits, clearly flagging what was traded away. A consultant who delivers the ideal architecture beyond the stated need has violated the constraint even if the result is prettier. The exam rewards the answer that respects the stated limits, and the correct option is the one that converts the requirements and constraints into a feasible approach rather than a fixed architecture chosen up front.
+
+A fixed architecture chosen up front is not the output of needs determination, because needs determination converts requirements and constraints into a feasible approach. A list of questions with no decisions is not an output either. A copy of the customer's RFP is input, not output. The output is the solution approach that fits.
+
+### How the four inputs change the answer independently
+
+Treating the four inputs as one blob is the mistake this requirement punishes. Requirements, assumptions, risks, and constraints each change the answer in a different direction, and the exam scenarios are built so that each one pulls toward a different component. The requirement pulls toward the component that does the work. The assumption pulls toward verifying a dependency before you commit to it. The risk pulls toward a mitigation such as error handling or caching. The constraint pulls toward disqualifying options that cross a hard boundary.
+
+Working an example shows the independence. A requirement to capture an address and present a quote pulls you toward an OmniScript and a FlexCard. The assumption that the quoting engine returns flat JSON pulls you toward confirming the response shape before you design the Data Mapper. The risk that the quote service is sometimes unavailable pulls you toward wrapping the call in error handling with a retry or a cached fallback. The constraint that the whole flow must run on an Experience Cloud site without a Communities license pulls you toward either removing the site requirement or flagging it as unsatisfiable. Were any one of the four absent, the answer would be simpler, and the exam keeps all four in play so that an answer which satisfies only the requirement looks good and is wrong.
 
 ## Configuration Walkthrough
 
-1. Elicit: who, what, when, where, how. Capture functional + non-functional requirements.
-2. Validate assumptions against the actual environment (auth, data shape, volumes, limits).
-3. Rank risks by likelihood/impact; design mitigations (retry, fallback, cache, error states).
-4. Check constraints (license, runtime, channels, security) before choosing components.
-5. Produce the solution approach: declarative-first, code where gaps exist.
+Needs determination happens before you open the designer, but it follows a repeatable sequence.
+
+1. Elicit the requirements. Capture who the users are, what the flow must do, when it runs, where it runs, and how it behaves. Record both functional and non-functional requirements.
+2. Validate assumptions against the actual environment. Confirm the authentication model, the shape of the API response, the data volumes, and the access model before you design against them.
+3. Rank risks by likelihood and impact. Design a mitigation for each significant risk, using retry, fallback, caching, or controlled error states.
+4. Check constraints before choosing components. Confirm license tier, runtime, channels, and security policy, then select components that respect them.
+5. Produce the solution approach. Lead with declarative OmniStudio configuration, and identify where programmatic Apex, LWC, or a Remote Action is required to fill a gap.
 
 ## Exam Traps
 
-- **Trap:** Ignoring field-level security as a constraint. SOQL-backed cards leak fields to low-privilege users.
-- **Trap:** Assuming sandbox equals production (data volumes, connected systems, licenses differ).
-- **Trap:** Choosing a component that works on Lightning but the requirement says Experience Cloud without a license for it.
+- **Ignoring field-level security as a constraint.** A SOQL-backed card leaks fields to low-privilege users because raw SOQL does not respect FLS. When the requirement demands FLS, the data source must be a Data Mapper, which respects it.
+- **Assuming sandbox equals production.** Data volumes, connected systems, and licenses all differ between sandbox and production. A component that works in a clean sandbox can fail on real data or lack a license it had in development.
+- **Choosing a component that works on Lightning when the requirement is Experience Cloud.** If the customer has no Communities license, embedding the component in Experience Cloud fails regardless of how well it performs on Lightning.
 
 ## Exam Tip
 
-Exam scenarios are constraint puzzles. The 'best' answer always respects the stated constraint, even if a fancier option exists.
+Treat every exam scenario as a constraint puzzle. The best answer always respects the stated constraint, even when a fancier option exists. Read the scenario for the hidden non-functional requirement and the hard limit, then pick the answer that survives both.
 
+## Try It
 
-**Related requirements:** Day 1, OmniStudio & Industries; Day 3, Runtime & Upgrades; Day 4, Licensing & Permission Sets
+Take a sample customer requirement from your own work and run it through the five-step walkthrough. Write down the functional and non-functional requirements, then list every assumption you are making about the environment. For each assumption, write how you would validate it. List the risks and a mitigation for each, then list the constraints that would disqualify an otherwise reasonable component. End with a one-paragraph fit-gap statement that names the OmniStudio components you would use and where you would need code. That statement is the deliverable the exam's "determine a project's needs" questions are asking for.
+
+## What's Next
+
+This lesson treated the runtime as a constraint without explaining it. The next lesson removes that shorthand. Lesson 3 covers the difference between Managed Package Runtime and Standard Runtime, plus how automatic and manual-intervention upgrades behave. That distinction is one of the four inputs you just learned to evaluate, and understanding it lets you read a constraint like "legacy managed package org" and know exactly what it means downstream.
+
+## Related Requirements
+
+- Day 1, OmniStudio Solution & Industry Use Cases
+- Day 3, Managed Package vs Standard Runtime; Upgrades
+- Day 43, Permissions & Access Issues
+
+## References
+
+[^1]: [Code Reviews: Data Transform Without Field-Level Security, Gearset Docs](https://docs.gearset.com/en/articles/15971148-code-reviews-rule-data-transform-without-field-level-security)
+[^2]: [Data Mapper Integration within OmniStudio, Salesforce Trailhead](https://trailhead.salesforce.com/content/learn/modules/omnistudio-data-mapper-fundamentals/explore-data-mapper-integration-within-omnistudio)
+[^3]: [Your Trust is Our Foundation, Salesforce Blog](https://salesforce.com/blog/introduction-your-trust-is-our-foundation)

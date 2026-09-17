@@ -6,48 +6,126 @@ lesson: 7
 excerpt: "Configure data sources such as SOQL, Data Mapper, Integration Procedure, Custom, etc. and test resulting JSON structure."
 date: "August 9, 2026"
 author: "Adroit Consulting"
-readTime: "8 min read"
+readTime: "9 min read"
 tags: [OmniStudio]
 ---
 
+A FlexCard has no data of its own. Everything it shows arrives from a data source as JSON, and every binding you configure later points at a path inside that JSON. That ordering is the whole lesson: the data source decides the shape of the payload, the payload decides what the card can display, and the card's layout is the last thing you build. Developers who ignore that order bind a card to paths that do not exist and then spend an afternoon staring at blank fields.
+
 ## Deep Dive
 
-**Data source options:** SOQL Query (simple, fast, but does *not* apply field-level security), SOSL Search (text search against the index), Data Mapper Extract (FLS-aware, transforms, parameterized), Integration Procedure (complex orchestrated data in one call), Apex Remote (Apex class implementing `VlocityOpenInterface`), Apex REST, REST (Named Credential or plain web endpoint), Streaming/Platform Event/PushTopic (event-driven data), and Custom (embedded sample JSON for prototyping).
+### What the data source is actually for
 
-**Cards loop records:** FlexCards loop over the records their data source returns. Each record renders as one card. A single-record source yields one card; a list yields many.
+A FlexCard data source is a query or a service call that returns a JSON payload. The card consumes that payload in two ways. It uses the top level of the response to decide how many cards to draw, and it uses the fields inside each record to fill the elements you place on the card body. There is no separate "fetch" step and no code to write unless you deliberately choose a code-backed source.
 
-**Test JSON before layout:** preview the data source output, verify field names and nesting, then bind elements to those exact paths. Wrong JSON shape is the #1 cause of blank cards.
+The payload shape is the contract. When you preview a data source in the designer, you are reading the contract before you sign it. Do that first.
 
-**Security judgment:** when field-level security matters (low-privilege users), choose Data Mapper over SOQL. Data Mappers fully support FLS.
+### The data source options, and when each one is right
 
-**Custom JSON is a placeholder:** sample JSON is for prototyping. Replace it with a real source before publishing to production.
+**SOQL Query.** You write a SOQL statement against a Salesforce object, usually with a filter that references an input rather than a hardcoded value. This is the fastest option to configure and the simplest to reason about. It is the wrong choice whenever field-level security matters, because a SOQL data source does not apply field-level security when it retrieves the records. If a low-privilege user opens the card, the query still returns the fields it asked for. Use SOQL for internal admin-facing cards and for prototyping, not for a card that renders in a partner or customer channel.
+
+**SOSL Search.** Full-text search against the search index. Use it when the requirement is "find records containing this term" rather than "fetch records satisfying this filter." It behaves like search, so results are ranked and governed by the search index rather than a query plan. It also does not apply field-level security for you, so the same caution as SOQL applies.
+
+**Data Mapper Extract.** A Data Mapper Extract reads Salesforce data through a mapping you define, which means you control exactly which fields come back and what they are named in the output. It is FLS-aware: it respects field-level security. It can transform the shape of the data on the way out, and it can be parameterized so the card passes in a record Id or a filter value at runtime. When the requirement mentions low-privilege users, or when you need the payload reshaped before the card sees it, Data Mapper Extract is the answer.
+
+**Integration Procedure.** An IP returns orchestrated data in a single server call. If the card needs an account plus its contacts plus open cases plus a value computed from a second system, one IP can assemble all of it and hand the card one payload. This is the right tool for complex cards, and it pairs with a Response Action that trims the output to only the nodes the card uses.
+
+**Apex Remote.** An Apex class that implements the OmniStudio interface known as VlocityOpenInterface, invoked directly as a data source. Choose it when the logic is genuinely procedural and cannot be expressed as a query or a mapping.
+
+**Apex REST.** Call an Apex REST resource you or the team have exposed. Useful when the service already exists for other consumers and you do not want a second implementation of it.
+
+**REST.** A call to an HTTP endpoint, either through a Named Credential (the preferred route, because the credential holds the endpoint and the authentication) or against a plain web endpoint. Use this for external systems.
+
+**Streaming, Platform Event, and PushTopic.** Event-driven data. The card receives data as events arrive rather than reading a snapshot once. Choose it when the card has to reflect changes that happen after the page loaded.
+
+**Custom.** An embedded JSON sample that you type into the designer. It is a prototyping placeholder. There is no query behind it and no org data in it.
+
+### Cards loop over records
+
+A FlexCard iterates over the records its data source returns. One record produces one card. Ten records produce ten cards, using the same layout and the same bindings.
+
+That single behavior explains two exam scenarios. If a card must render one card per Account from a list, you need a data source that returns multiple records; nothing else is required, because the loop is built in. And if you design a layout for one record while the source is returning forty, the card will render forty times with the same layout, which is not what anyone wanted. Check the cardinality of the payload before you design.
+
+The behavior also means a card that should show one record, such as a record-detail card on a Lightning record page, needs a source filtered to that record (a record Id parameter), not a source that returns a list.
+
+### Choosing a data source: how to decide
+
+Most exam scenarios in this requirement give you a constraint and expect you to pick the source that satisfies it. Work through the constraints in this order.
+
+1. **Does field-level security matter?** If the card is shown to partner users, customer users, or any population whose access differs from yours, the answer is Data Mapper Extract. SOQL and SOSL are out, no matter how simple the query would be.
+2. **Does the card need more than one object or an external system?** If so, an Integration Procedure assembles the payload in a single call, and the card stays a rendering layer.
+3. **Is there existing Apex that already answers the question?** If the service exists for other consumers, call it rather than building a second implementation. Apex Remote is the route when you want the OmniStudio interface to invoke your class directly.
+4. **Does the data change while the user is on the page?** If the requirement is to reflect changes as they happen, the event-driven sources are the right family.
+5. **Is the data real yet?** If not, Custom JSON lets you build the design, and the swap is a task you owe before publish.
+
+The pattern to notice is that simplicity is not the only criterion. SOQL is the fastest source to configure and it is the wrong answer in a large share of scenarios, because the constraint that matters is who sees the card, not how short the query is.
+
+### Preview the JSON before you build the layout
+
+The number one cause of blank FlexCards is a shape mismatch between the payload and the bindings. The card asks for a field at a path that does not exist, so the element renders with nothing in it and no error.
+
+Preventing it is mechanical: open the data source preview, read the response, and note three things.
+
+1. **The record shape.** Is the top level an array of records, a single object, or an object that wraps an array under a named node? A response shaped `{"records":[...]}` is not the same as a bare array, and bindings have to account for that wrapper.
+2. **The field names.** Not the labels you see in the Salesforce UI, the API names in the payload. A field labelled "Annual Revenue" may arrive as `AnnualRevenue`, and the payload may have renamed it outright if the source is a Data Mapper.
+3. **The nesting.** Which arrays sit inside each record. This is what tells you where a repeater will be needed, which is the subject of the next lesson.
+
+Then bind elements to those exact paths. Bindings are case-sensitive, so `AccountName` and `accountName` are different paths and only one of them resolves.
+
+### Security judgment: pick the source the user can live with
+
+The decision that carries the most professional weight in this requirement is the FLS one. Field-level security exists so a user who cannot see a field does not see the field, on any surface. A SOQL or SOSL data source reads the records without applying those rules, which means a card built on SOQL will happily display a field the running user has no right to see. On an internal page where every user has the same access, nobody notices. On a partner portal or a customer site, it becomes a data exposure.
+
+Data Mapper Extract respects field-level security, so choose it whenever the card is shown to users whose access differs from yours. If the requirement says "low-privilege users," "partner community," or "respect FLS," you have found the answer.
+
+### Custom JSON is scaffolding, not a source
+
+Custom JSON exists so you can design a card before the data exists. You paste in a sample that matches the shape you expect, build the layout against it, and prove the design. That is genuinely useful, because it decouples front-end work from back-end availability.
+
+It is also the trap. Sample JSON contains sample records. If it survives to production, the card shows mock data to real users, and it will keep showing it after the real source lands because nothing is reading the real source. Replace the Custom data source with a real one before the card is published. Treat the swap as a task on the checklist, not as a thing you will remember.
 
 ## Configuration Walkthrough
 
-1. In the FlexCard editor, add a data source (SOQL / Data Mapper / Integration Procedure / etc.).
-2. Preview the returned JSON: check the record shape, field names, and array nesting.
-3. Adjust filters/parameters so the payload matches the intended card layout.
-4. Swap the Custom JSON for a real source before publishing.
+1. **Open the FlexCard in the designer and add a data source.** Choose the type from the options above: SOQL for a simple internal read, Data Mapper Extract when field-level security matters or the payload needs reshaping, Integration Procedure when the card needs orchestrated data from several places, Custom while prototyping.
+2. **Define the query, mapping, or procedure call.** Add parameters for anything that varies at runtime, such as the record Id the card is displayed for.
+3. **Preview the returned JSON.** Read the record shape, the field names, and where the arrays sit. Confirm the cardinality: does this source return one record or many?
+4. **Adjust filters and parameters until the payload matches the layout you intend.** It is cheaper to change the source now than to rebuild bindings later.
+5. **Bind card elements to the exact paths you just read.** Nothing appears in this lesson's configuration if you bind from memory.
+6. **Test as a low-privilege user** if the card will be shown to anyone who is not an administrator. A source that ignores field-level security looks perfect when you test it as System Administrator.
+7. **Replace Custom JSON with a real data source before publishing.** Then activate the card.
 
 ## Exam Traps
 
-- Choosing SOQL when FLS is required. SOQL data sources bypass field-level security.
-- Forgetting the card loops records. Designing a layout for one record when the source returns many.
-- Building bindings before validating the JSON shape.
+- **Choosing SOQL when field-level security is required.** SOQL data sources do not apply field-level security. Data Mapper Extract does.
+- **Forgetting that the card loops over records.** A FlexCard renders one card per record in the payload. A layout designed for one record against a source returning many produces a page of duplicates.
+- **Building bindings before validating the JSON shape.** Wrong shape is the top cause of blank cards, and every binding you write against a guessed path is wasted work.
+- **Shipping with Custom JSON still attached.** Sample JSON is a prototyping placeholder with no connection to org data. Replace it before publish.
+- **Ignoring a wrapper in the response.** If records arrive under a named node, paths and repeaters have to account for it.
 
 ## Exam Tip
 
-JSON first, layout second. Preview the payload, then bind to real field paths.
+JSON first, layout second. Preview the payload, then bind to real field paths. When the scenario mentions field-level security, the answer is Data Mapper Extract. When it mentions sample data, the answer is that the Custom source must be replaced with a real one before publish.
+
+## Try It
+
+In a sandbox, create a FlexCard with a SOQL data source against Account that returns the name, industry, and annual revenue for accounts in a given industry. Preview the JSON and write down the record shape and field paths. Now add the same card with a Data Mapper Extract source over the same object, but map one field to a new output name on the way out, then preview again and compare the two payloads. Then add a Custom data source with three hardcoded records and watch the card render three times, which demonstrates the loop. Finish by converting the SOQL card to use the Data Mapper source, so you have done the swap the exam cares about.
+
+## What's Next
+
+You now have a payload and a set of paths. Lesson 8 takes the next step: arranging elements on the card with layouts, and handling the arrays inside a record with repeaters, which is how a card shows a list without becoming a list of cards.
 
 ## Related Requirements
 
-- [Day 8, Layouts & Repeaters](/atlas/omni-studio-cert/day-08-fc-2-single-multi-level-cards-layouts-repeaters)
-- [Day 31, Data Mapper Extract](/atlas/omni-studio-cert/day-31-dm-2-data-mapper-extract) *(forthcoming)*
-- [Day 38, FlexCard Display Issues](/atlas/omni-studio-cert/day-38-t-1-flexcard-display-issues) *(forthcoming)*
+- Day 8, Single and Multi-Level Cards, Layouts and Repeaters
+- Day 31, Data Mapper Extract: Multi-Object, Filters, Parameters
+- Day 38, Resolve FlexCard Display State Issues
+- Day 26, Caching in Integration Procedures
 
 ## References
 
-- [Official exam guide](https://help.salesforce.com/s/articleView?id=005298971&language=en_US&type=1)
-- [Trailhead trailmix](https://trailhead.salesforce.com/content/learn/trails/prepare-for-your-salesforce-omnistudio-developer-certification)
-- [OmniStudio Trailhead org](https://trailhead.salesforce.com/en/promo/orgs/omnistudiotrails)
-- [OMS435 take-home guide](https://developer.salesforce.com/files/OMS435%20OmniStudio%20Student%20Take%20Home%20Guide%20v1.0.pdf)
+[^1]: [FlexCard Designer, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_flexcard_designer.htm&language=en_US&type=5)
+[^2]: [Configure an Integration Procedure Data Source on a FlexCard, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_configure_an_integration_procedure_data_source_on_a_flexcard.htm&type=5)
+[^3]: [Data Mapper Extract Overview, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_extract_overview.htm&language=en_US&type=5)
+[^4]: [Data Mappers and Integration Procedure Security Settings, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_and_integration_procedure_security_settings_56587.htm&language=en_US&type=5)
+[^5]: [OmniStudio Developer Certification Exam Guide, Salesforce Help](https://help.salesforce.com/s/articleView?id=005298971&language=en_US&type=1)
+[^6]: [OmniStudio Trailhead Org](https://trailhead.salesforce.com/en/promo/orgs/omnistudiotrails)

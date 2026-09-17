@@ -6,76 +6,120 @@ lesson: 19
 excerpt: "Configure the advanced properties that carry an OmniScript beyond a bare flow: multi-language translations, Save Options for draft-and-resume, Knowledge Articles for in-flow help, and the Messaging Framework for SMS and email. Match the property to the scenario."
 date: "August 21, 2026"
 author: "Adroit Consulting"
-readTime: "5 min read"
+readTime: "9 min read"
 tags: [OmniStudio]
 ---
 
+A script that collects data and saves it is functionally complete and still not production ready for most institutions. A bank serving customers in two languages needs the labels translated. A long application that nobody finishes in one sitting needs a way to save and come back. A user stuck on a question needs help without abandoning the form. A completed submission usually needs to tell someone it happened. Each of those is a feature-level property on the OmniScript, and the exam in this requirement is almost entirely a matching exercise: read the scenario, name the property. The failure mode is not a lack of knowledge, it is reaching for the wrong one of the four.
+
 ## Deep Dive
 
-**Multi-language.** OmniScripts support translations, so labels and element text render per locale. Configure translation workbench entries for the script's elements, and the same script serves users in every language without a second definition.
+### Four properties, four scenarios
 
-**Save Options.** Draft, save-as, and auto-save patterns let users save their progress and resume later. This matters for partial applications, where a user starts a flow and comes back days later. Resume reloads the saved JSON back into the script so they pick up where they left off.
+The curriculum groups these as multi-language, Save Options, Knowledge Articles, and the Messaging Framework, and it is worth committing the mapping to memory before learning the mechanics.
 
-**Knowledge Articles.** Surface relevant help or knowledge content inside the flow itself. Users get guidance without leaving the OmniScript, which keeps the application path intact instead of forcing them to search elsewhere.
+- **Multi-language** answers "this must work in another language." Translated labels render per locale from one script definition.
+- **Save Options** answers "users must be able to stop and come back." Draft and save-as patterns persist partial work and resume reloads it.
+- **Knowledge Articles** answer "the user needs help inside the flow." Relevant article content surfaces without leaving the script.
+- **Messaging Framework** answers "something must be sent to someone." SMS and email go out from within the script using configured templates.
 
-**Messaging Framework.** Send SMS and email from within the script using configured templates, triggered by actions. Typical use cases are a confirmation after submission or a follow-up to the applicant.
+Translate, resume, help, notify. Four properties, four verbs. When a scenario names a verb, you have your answer, and the most common exam miss is confusing one verb for another: applying Save Options to a translation requirement, or reaching for translations when the real ask is that a customer receives a confirmation.
 
-**Recognize the property.** These are feature-level configurations on the OmniScript, and the exam tests whether you can match a scenario to the right capability: translation, resume, notify, or help. Confusing them is the classic miss.
+### Multi-language: one definition, many locales
+
+An OmniScript is built once and can render in multiple languages. The mechanism is translation of the text that appears to the user: element labels, step names, help text, and the other strings the designer carries. You configure translations for the script's elements so the same script definition serves a user in one locale and a user in another, with each seeing labels in their own language.
+
+The design consequence is significant. Without translation support, an organization with a Spanish-speaking customer base faces a bad choice: maintain two nearly identical scripts (which then drift), or ask Spanish speakers to work in English (which is a service quality problem and sometimes a compliance one). Multi-language removes the choice. There is one script, one set of formulas, one set of conditions, one set of actions, and a translation layer over the display strings.
+
+The exam scenario for this is usually explicit about the languages. "A global bank needs its loan OmniScript presented in English and Spanish" is a multi-language requirement. The distractors in that question are all answers to different questions: Save Options addresses resuming, Knowledge Articles address in-flow help, and a custom LWC addresses UI that standard elements cannot produce. None of them render a label in a second language.
+
+A practical note worth carrying into implementation: translation coverage is per string, so the work is not finished when the mechanism is switched on. Every label that matters to a user has to be translated, and the ones that go untranslated show up as English text in the middle of an otherwise localized flow, which users notice immediately.
+
+### Save Options: draft, save-as, and resume
+
+Long business processes collide with real human behavior. An applicant starts a mortgage pre-qualification on a phone during a commute, gets interrupted, and cannot finish. If the script has no way to hold partial work, that applicant either rushes and produces bad data or abandons the process entirely. Save Options exist to solve this.
+
+The properties cover a family of related patterns: save a draft of the work in progress, save the current state under a name via save-as, and where configured, auto-save so progress is captured without the user asking. What makes these features more than a "save" button is what happens on the other side.
+
+**Resume reloads the saved JSON into the script.** A draft is not a screenshot; it is the OmniScript's data structure persisted somewhere it can be read back. When the user returns, the script loads that saved data into the same element tree, which means the user's previous answers reappear in the same fields, formulas recompute against them, and conditions re-evaluate. The user lands back where they left off rather than starting over.
+
+That reload behavior is why configure-the-entry-point matters. A draft-save that writes data with no resume path is a half-built feature: the work is captured but no user journey leads back to it. The exam calls this out as a trap, and it looks like this in practice: the save works, the record exists with the JSON on it, and the user has no way in from the outside. Configuring Save Options means configuring both the write and the way back in.
+
+A second consideration is where the partial state lives and who can reach it. A saved draft contains whatever the user had entered, which for a financial or healthcare process may include sensitive values. The draft storage is subject to the same security, sharing, and retention thinking as any other record holding that data.
+
+### Knowledge Articles: help inside the flow
+
+Knowledge Articles surface relevant help content within the script. A user reaches a question about documentation requirements, and instead of leaving the flow to search a help site, the relevant article appears or is linked right there.
+
+The benefit is continuity. Every time a user leaves a guided flow to find information, some of them do not come back, and the ones who do return with less patience. Surfacing the article inside the flow keeps the application path intact and shortens the distance between "I do not know what to enter here" and the answer.
+
+The implementation shape is to configure the association between the script and the knowledge content so the article displays where the user needs it. The design question is which steps genuinely generate questions, since scattering articles everywhere turns help into noise.
+
+On the exam, this is the "help" verb. A scenario describing users who need guidance, documentation, or answers without leaving the flow is a Knowledge Articles requirement. It is not a Save Options requirement, and it is not a substitute for validation.
+
+### Messaging Framework: SMS and email from the flow
+
+The Messaging Framework lets an OmniScript send messages: SMS, email, or both, using templates that are configured outside the script. In the script, the sending happens through an action, which is the piece people forget.
+
+The typical use cases are transactional and predictable. A confirmation when the user submits, so there is a record of the interaction in their hands. A follow-up that goes out after submission to tell the applicant what happens next. A notification to an internal team that a case has arrived. The message content comes from templates, which keeps the wording consistent across every script that sends it and keeps the wording reviewable without touching the script.
+
+Two implementation details account for nearly all failures in this area.
+
+The first is the template. A Messaging Framework integration without a configured template has nothing to send. The template defines the message body and how the script's data nodes get substituted into it, so a send action with no template behind it does nothing visible.
+
+The second is the send action. Support for messaging is a capability; an action in the script is what actually invokes it. Configure the template and add a send action, and place the action where the triggering event happens, which is usually the step where the user submits. If a scenario says an OmniScript must send a confirmation SMS after submission, the answer is a Messaging Framework action, not a formula, not a card state, and not a streaming feature.
+
+There is a sequencing subtlety worth knowing: a confirmation message should describe something that actually completed. If the send action fires before the save or the load finishes, the user can receive a confirmation for a submission that then fails. Order the actions so the message follows the work it is confirming.
+
+### Reading the scenario correctly
+
+The reason this requirement is a matching exercise rather than a knowledge dump is that all four properties are configured on the same OmniScript, and a large production script may use all four at once. The exam question will isolate one requirement and hand you four plausible-sounding capabilities. The technique that works is to find the verb.
+
+- "Presented in English and Spanish" or "must support multiple locales": translations, which is multi-language support.
+- "Save a partially completed application and resume later" or "pick up where they left off": Save Options, including the resume path.
+- "Users need guidance" or "show relevant documentation without leaving the flow": Knowledge Articles.
+- "Send a confirmation SMS" or "email the applicant after submission": the Messaging Framework, invoked by an action.
+
+If a scenario contains two of those verbs, read carefully for which one the question is actually asking about, because the properties compose and the exam knows it.
 
 ## Configuration Walkthrough
 
-1. Multi-language: add translations for the script's labels.
-2. Save Options: enable draft/save-as and map the resume entry point.
-3. Knowledge: configure article association/display.
-4. Messaging: configure templates and add a send action.
+1. **Multi-language: add translations for the script's labels.** Configure translation entries for the element text that users see, covering the labels, step names, and help text that matter in each supported locale. Then verify by previewing in each language rather than trusting that a translation was captured.
+2. **Save Options: enable draft, save-as, and auto-save as the process requires.** Decide how much partial state needs to persist, and remember that sensitive values in a draft are sensitive values in a record.
+3. **Map the resume entry point.** Configure how a returning user gets back into the script and how the saved JSON is loaded into the element tree. Without this step the save works and nobody can use it.
+4. **Knowledge: configure article association and display.** Associate the relevant knowledge content and place it at the steps that generate questions. Resist scattering articles where they add noise.
+5. **Messaging: configure templates.** Define the message content, including how script data is substituted into the body, and confirm the template exists before wiring anything to it.
+6. **Messaging: add the send action.** Add the Messaging Framework action to the script, place it at the event that triggers the message, and sequence it after the work it confirms.
+7. **Test the full cycle.** Run a partial application, save it, close the session, and resume it. Send a message and confirm the template rendered with the right data. Preview in a second language and read every label.
 
 ## Exam Traps
 
-- Using Save Options when the requirement is translations (and vice versa).
-- Assuming draft-save works without configuring the resume flow.
-- Messaging configured but no template/send action, so nothing ever goes out.
-
-## Practice Questions
-
-**Q1.** A global bank needs its loan OmniScript in English and Spanish. What do you configure?
-
-A. Multi-language support with translations<br/>
-B. Save Options<br/>
-C. Knowledge Articles<br/>
-D. A custom LWC
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: A.** Multi-language renders translated labels per locale.
-</details>
-
-**Q2.** Users must save a partially completed application and resume later. Which property?
-
-A. Save Options (draft/save-as)<br/>
-B. Messaging Framework<br/>
-C. Knowledge Articles<br/>
-D. A theme
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: A.** Save Options enable draft/resume patterns.
-</details>
-
-**Q3.** An OmniScript must send a confirmation SMS after submission. Which capability?
-
-A. Messaging Framework action<br/>
-B. Formula element<br/>
-C. FlexCard state<br/>
-D. Streaming API
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: A.** Messaging Framework sends SMS/email from OmniScript actions.
-</details>
+- **Using Save Options when the requirement is translations, or the reverse.** These are the two most confusable properties because both are about the script's lifecycle rather than its content. A language requirement is multi-language; a pause-and-return requirement is Save Options.
+- **Assuming draft-save works without configuring the resume flow.** The save is only half the feature. If nothing loads the saved JSON back into the script, the user has no way to continue.
+- **Messaging configured with no template and no send action.** Capability without content and without an invocation produces no message. Both halves are required.
+- **Firing the confirmation before the work completes.** A message that confirms a submission that then fails is worse than no message.
+- **Treating Knowledge Articles as a substitute for validation.** Surfacing help does not make a field required or check a value. Those remain element-level and action-level concerns.
+- **Assuming translation is automatic.** Translation coverage is per string. Untranslated labels surface as the original language inside a localized flow.
 
 ## Exam Tip
 
-Translate → multi-language. Resume → Save Options. Help → Knowledge. Notify → Messaging. Four flags, four scenarios.
+Translate goes to multi-language. Resume goes to Save Options. Help goes to Knowledge. Notify goes to the Messaging Framework. Four flags, four scenarios, and the fastest way to answer is to find the verb in the question and name the property attached to it. If you remember nothing else, remember that the confirmation SMS question is a Messaging Framework action question, and that the paused application question is a Save Options question with a resume path attached.
+
+## Try It
+
+In a sandbox, build a short three-step application script with a name, an amount, and a review step. Then configure each of the four properties against it in turn.
+
+First, add a translation for the labels in a second language and preview the script in that locale. Notice which strings switched and which did not, because the ones that did not are the ones you would have missed in a real project.
+
+Second, enable Save Options, submit a partial application, and then prove the resume path works by reloading the saved JSON into the script and confirming the earlier answers reappear. If you cannot find the resume entry point, you have just reproduced the exact trap the exam warns about.
+
+Third, associate a knowledge article with one step and confirm it displays without pushing the user out of the flow.
+
+Fourth, configure a message template, add the send action on the review step, and send yourself a confirmation. Then deliberately remove the template and run it again to see what a send action with nothing behind it actually does.
+
+## What's Next
+
+You have now built a script that adapts, reuses components, looks consistent, and carries translations, drafts, help, and messaging. The remaining question is where it lives. Lesson 20 covers embedding OmniScripts across channels: Lightning pages, Experience Cloud sites, mobile, and external web contexts, plus how record context reaches the script so it opens pre-populated.
 
 ## Related Requirements
 
@@ -85,7 +129,8 @@ Translate → multi-language. Resume → Save Options. Help → Knowledge. Notif
 
 ## References
 
-- [Official exam guide](https://help.salesforce.com/s/articleView?id=005298971&language=en_US&type=1)
-- [Trailhead trailmix](https://trailhead.salesforce.com/content/learn/trails/prepare-for-your-salesforce-omnistudio-developer-certification)
-- [OmniStudio Trailhead org](https://trailhead.salesforce.com/en/promo/orgs/omnistudiotrails)
-- [OMS435 take-home guide](https://developer.salesforce.com/files/OMS435%20OmniStudio%20Student%20Take%20Home%20Guide%20v1.0.pdf)
+[^1]: [OmniScript Best Practices, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_omniscript_best_practices_8368.htm&language=en&type=5)
+[^2]: [Dig Into the OmniScript Designer, Trailhead (OmniStudio OmniScript module)](https://trailhead.salesforce.com/content/learn/modules/omnistudio-omniscript/dig-into-the-omniscript-designer)
+[^3]: [Validate Data and Handle Errors, Salesforce OmniStudio Exercises](https://developer.salesforce.com/files/OmniStudio/pdf/OmniStudio_Validate_Data_and_Handle_Errors.pdf)
+[^4]: [OmniScript Advanced Concepts, ApexHours](https://www.apexhours.com/omnistudio-omniscript-advanced-concepts/)
+[^5]: [Official exam guide, Salesforce Help](https://help.salesforce.com/s/articleView?id=005298971&language=en_US&type=1)

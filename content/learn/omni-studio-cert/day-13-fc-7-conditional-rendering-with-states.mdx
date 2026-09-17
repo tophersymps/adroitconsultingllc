@@ -6,86 +6,115 @@ lesson: 13
 excerpt: "Use FlexCard states and element-level conditions to show, hide, or restyle content when expressions against card data evaluate true."
 date: "August 15, 2026"
 author: "Adroit Consulting"
-readTime: "5 min read"
+readTime: "9 min read"
 tags: [OmniStudio]
 ---
 
+A data-driven component has to answer a question that a static layout never faces: what should this look like when the data is not what I assumed? Zero records, a failed call, an overdue invoice, a priority flag. FC-7 is about that question. States are the card-level answer, element conditions are the item-level answer, and the exam tests whether you can tell which one a scenario needs. It also tests a quieter point: a condition that never evaluates true produces no error at all, so understanding how conditions are evaluated against live data is the difference between a card that works and a card that silently shows the wrong thing.
+
 ## Deep Dive
 
-**States drive card-level conditional rendering.** A card changes what it shows based on conditions. Common states: default, empty (no records), error (data source failure), and custom states (high-priority, overdue, approved). When a condition evaluates true, that state's layout renders.
+### What a state actually is
 
-**Conditions are expressions over card data.** They evaluate fields, expressions, and session variables. The state whose condition is true renders its layout. If more than one matches, the first matching state wins, so ordering matters.
+A state is a named alternative rendering of a FlexCard, selected at runtime by a condition. You define the states on the card, you give each one a condition expression, and you lay out what that state shows. When the card's data loads, the platform evaluates the state conditions and renders the state whose condition is true.
 
-**Element-level conditional rendering is separate.** You can show or hide an element, or alter its appearance (color, emphasis), based on a condition. This powers dynamic forms and alerts.
+States are evaluated at the card level, which is the first thing to hold onto. A state is not an element you toggle, it is a whole configuration of the card that can differ from the default in layout, content, and styling. That is why states are the right tool for "the card as a whole should look different when X".
 
-**Timing matters.** State evaluation happens on data load and on relevant events. A condition on a field that loads later may flash or never trigger, so verify against when the data actually arrives.
+Designers commonly build four families of state:
 
-**Common bugs.** A condition that is never true (wrong field path or value type), a missing empty state (users see a blank card), and state ordering issues.
+- **Default state.** The normal case, with data present and nothing exceptional. Most cards ship a default and stop there, which is exactly the trap this requirement warns about.
+- **Empty state.** The data source returned no records. The card should say so plainly: "No records found", or something more specific like "No open cases for this account".
+- **Error state.** The data source or a dependent call failed. The card should present a controlled message rather than a broken layout or a stack trace.
+- **Custom states.** Anything domain-specific that changes the card's meaning: high priority, overdue, approved, escalated, expired. A custom state exists when the business has a distinguishable situation that deserves its own presentation.
+
+### Conditions: expressions evaluated against card data
+
+Each state is selected by a condition, which is an expression evaluated against the card's data. The ingredients available to a condition are the fields the data source returned, expressions built from them, and shared values such as session variables.
+
+The mechanics are simple and the consequences are not. A condition is a boolean test. If it evaluates true, that state is a candidate. If the expression references a field path that does not exist in the returned data, or compares a value in the wrong shape, the condition will not be true, and nothing about that failure is surfaced to the user. There is no red banner saying "condition never matched". The card simply renders whatever state did match, usually the default.
+
+Two evaluation facts drive most of the confusion.
+
+**Type matters.** A condition that compares a text value to a number is comparing two different kinds of thing, and it will not evaluate as true even when the text reads like the number. If a returned `Priority__c` field arrives as the string `"High"`, then a condition such as `priority = 3` is a type mismatch and can never match. Comparing a string field to the expected string, or casting before comparing, is what makes the condition work.
+
+**Ordering matters.** When more than one state's condition evaluates true, the first matching state wins. Ordering is therefore part of the design, not an incidental detail. If a broad condition such as "record count is greater than zero" is placed above a specific condition such as "status equals Escalated", the broad one captures the case and the specific state never renders even though its condition is genuinely true. Put the narrow, specific states first and the broad catch-alls last.
+
+### The empty state deserves its own paragraph
+
+The empty state is the single most commonly omitted piece of the requirement and the one the exam tests most directly. When a data source returns zero records, a card with no empty state has nothing to render in its default layout. Depending on the elements, the user gets either a blank container or an awkward half-populated card. Neither tells the user anything, and both look broken.
+
+The mechanism for handling it is exactly the same as any other state: define an empty state whose condition detects the zero-record case, then lay out the message. The condition is typically a test on the record count of the data source, for example counting the records in the returned array and comparing to zero. The exam phrases this as needing to show "No records found" when the data source returns nothing, and the answer is an empty state with a condition on the record count. Two other answers in that question are worth recognising as distractors: a second FlexCard, and an OmniScript step. Neither is conditional rendering; both are ways to avoid solving the actual problem.
+
+An error state is the same idea for the failure case. Data calls fail, and when they do, a card without an error state either renders stale content or renders nothing. A defined error state lets you present a clear message and, if useful, a retry action.
+
+### Element-level conditional rendering
+
+States answer "what should the whole card show". The second half of FC-7 is finer-grained: showing or hiding a single element, or changing its appearance, based on a condition. This is the item-level version of conditional rendering, and it powers dynamic forms and inline alerts.
+
+Two modes are worth distinguishing. In the first, the condition controls *visibility*, so an element only appears when the condition is true; that is how you build a card that asks for a reason code only when a status is Rejected. In the second, the condition controls *appearance* rather than existence: the element is always present, but its colour, weight, or emphasis changes when the condition holds.
+
+**Worked example.** A card shows an account's `CreditScore__c`. The business rule is that a score below 600 should render in red and above 750 in green. You do not build three cards or three states for this, because the card's overall structure is unchanged. You add element-level conditions to the score element that alter its appearance, so one element expresses the rule. The exam phrases this as a field turning red when its value exceeds a threshold, and the correct mechanism is an element-level condition that alters the element's appearance, not a repeater, a SOQL filter, or a theme change. Those distractors all do something else: a repeater repeats rows, a filter changes which rows exist, and a theme changes appearance globally rather than conditionally.
+
+### Timing, and why conditions seem flaky
+
+State evaluation happens when the card's data loads and again on the relevant events. That timing is why a condition that looks correct in the designer can behave strangely in a live page.
+
+If a condition tests a field that arrives later than the initial render, the card may first render the default state and then switch once the value lands, producing a visible flash. Worse, if the field never arrives through the path the condition expected, the condition is evaluated against an absent value and simply never matches. The practical rule is to verify when the data actually arrives and to test the condition against the real payload rather than against what you assumed the payload would contain.
+
+Custom states are also worth testing against realistic edge values rather than the tidy demo record. A state conditioned on `Status__c = "Escalated"` may work perfectly in a sandbox where every case is Escalated and then never appear in production where the API returns the value with different casing or additional whitespace. Normalising the comparison, or confirming the exact returned value, is what makes the condition reliable.
+
+### Diagnosing a state that never displays
+
+The exam gives you a specific failure shape: a custom state never displays even though the data looks right. The answer is always the same family of causes, and it is worth being able to reason through it rather than recall it.
+
+First, check the condition expression itself. Does the field path it references exist in the actual returned data, using the same spelling and nesting? A path of `records[0].status` when the data source nests the records one level differently resolves to nothing, and comparisons against nothing are not true.
+
+Second, check the value type and format. A string compared to a number, a date compared to a formatted date string, a value with different casing than the condition expects. Each of these makes a condition that reads correctly on screen evaluate false against live data.
+
+Third, check ordering. A broader state above the specific one can absorb the case. Fourth, check that the state was actually saved and that its condition is not empty; an empty condition may be treated as always-true or never-true depending on context, and either behaviour produces nonsense. Working the list in order finds the cause in almost every real case.
 
 ## Configuration Walkthrough
 
-1. Add states (default, empty, error, custom) to the card.
-2. Define conditions with expressions on card data.
-3. Set element-level visibility and appearance conditions.
-4. Test each state with representative data, including empty and error.
+1. **Add states to the card.** Start with the default state laid out for the normal case, then add an empty state, an error state, and any custom states the business needs. Adding the empty and error states first, before the happy-path polish, is the habit that prevents blank cards later.
+2. **Define conditions with expressions on card data.** Write each condition against a field path that exists in the real payload, and use the correct type for the comparison. Order custom and specific states above broad catch-alls.
+3. **Set element-level visibility and appearance conditions.** For behaviour that affects one element rather than the whole card, add a condition to that element: hide it when it should not appear, or restyle it when a threshold is crossed.
+4. **Test each state with representative data, including empty and error.** Force the zero-record case and a failing data source deliberately, rather than waiting for them to happen in production.
 
 ## Exam Traps
 
-- Missing empty state, so users get a blank card on zero records.
-- Condition compares a string to a number, a type mismatch that is never true.
-- Testing only the happy path, so states fail silently on edge data.
-
-## Practice Questions
-
-**Q1.** A card must show "No records found" when the data source returns nothing. What do you use?
-
-A. An empty state with a condition on record count<br/>
-B. A second FlexCard<br/>
-C. An OmniScript step<br/>
-D. A Remote Action
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: A.** States enable conditional rendering; the empty state triggers on zero records.
-</details>
-
-**Q2.** A field should turn red when its value exceeds a threshold. Which mechanism handles that?
-
-A. An element-level condition altering appearance<br/>
-B. A repeater<br/>
-C. A SOQL filter<br/>
-D. A theme change
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: A.** Conditional rendering can alter element appearance based on conditions.
-</details>
-
-**Q3.** A custom state never displays even though the data looks right. What is the likely cause?
-
-A. The condition doesn't match the actual data (path or type)<br/>
-B. The theme is dark<br/>
-C. The card has no data source<br/>
-D. The page is in a Community
-
-<details>
-  <summary>Show answer</summary>
-  **Correct: A.** Conditions must evaluate true against live data; mismatches block the state.
-</details>
+- **Missing empty state, so users get a blank card on zero records.** The most-tested trap in FC-7. Zero records is a normal outcome, not an edge case, and a card with no empty state has nothing to say.
+- **A condition that compares a string to a number.** A type mismatch that is never true. The condition looks plausible in the designer and fails silently against live data.
+- **Testing only the happy path, so states fail silently on edge data.** Conditions do not raise visible errors when they do not match, which means untested states look fine until someone real hits them.
+- **Getting the ordering wrong.** When several conditions are true, the first match wins, so a broad state above a specific one hides the specific state permanently.
+- **Reaching for the wrong tool for a single element.** A field that should change colour needs an element-level condition, not a new state, a repeater, or a theme change.
 
 ## Exam Tip
 
-States handle card-level conditional rendering; element conditions work at the item level. Always build the empty state.
+States handle card-level conditional rendering; element conditions handle item-level rendering. Always build the empty state. When a state never displays, suspect the condition before the theme or the channel: check the field path, then the value type, then the state ordering, because a condition only fires when it evaluates true against the data as it actually arrives.
+
+## Try It
+
+In a sandbox, open a FlexCard that has a single data source and build out its states deliberately, in this order.
+
+First, add an empty state with the text "No records found" and condition it on the data source returning zero records. To test it, temporarily tighten the data source filter so no record can match, then confirm the card shows the message rather than an empty shell. Restore the filter.
+
+Second, add a custom state called Overdue, conditioned on a date field being earlier than today, and place it above the default state. Confirm it renders for an overdue record only. Now deliberately break it: change the condition to compare the date field to a numeric value and watch the state stop appearing with no error. That is the silent failure mode the exam describes. Fix the comparison.
+
+Third, on a numeric field in the default state, add an element-level condition that turns its text red when the value exceeds a threshold, and confirm the field stays in place while its colour changes. Finally, reorder a broad condition above your custom state and watch the custom state vanish, then put the order back.
+
+## What's Next
+
+You can now control what a card shows for any data condition. The next lesson moves from a single card to where the card lives. Lesson 14, Embedding FlexCards Across Channels, covers dropping one card definition onto Lightning pages, Experience Cloud sites, OmniScripts, and mobile, the context each channel supplies, and the constraints each channel imposes. Conditional rendering determines which state a card is in; embedding determines where a user ever sees it.
 
 ## Related Requirements
 
-- Day 11, Advanced Properties
-- Day 38, FlexCard Display Issues
-- Day 28, Response Actions
+- Day 11, Advanced FlexCard Properties
+- Day 38, Resolving FlexCard Display State Issues
+- Day 28, Response Action and the Integration Procedure Output Contract
 
 ## References
 
-- [Official exam guide](https://help.salesforce.com/s/articleView?id=005298971&language=en_US&type=1)
-- [Trailhead trailmix](https://trailhead.salesforce.com/content/learn/trails/prepare-for-your-salesforce-omnistudio-developer-certification)
-- [OmniStudio Trailhead org](https://trailhead.salesforce.com/en/promo/orgs/omnistudiotrails)
-- [OMS435 take-home guide](https://developer.salesforce.com/files/OMS435%20OmniStudio%20Student%20Take%20Home%20Guide%20v1.0.pdf)
+[^1]: [FlexCard Designer, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_flexcard_designer.htm&language=en_US&type=5)
+[^2]: [Base UI and Card Templates, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_base_ui_and_card_templates.htm&language=en_US&type=5)
+[^3]: [View and Debug Action Requests and Response Data, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_view_and_debug_action_requests_and_response_data.htm&type=5)
+[^4]: [OmniStudio Data Mappers, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptors.htm&language=en_US&type=5)
