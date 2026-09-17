@@ -24,6 +24,8 @@ An **LLM router** (or gateway) sits between your application and the provider AP
 
 That last distinction trips up more people than it should, and it is worth being explicit. A destination is a place a request can execute: OpenAI's API, Anthropic's API, a Groq endpoint, a self-hosted server. A router is the logic that decides *which* destination to send a given request to. Groq can be very fast, but nothing about Groq chooses requests for you; something upstream has to decide to send a request there. When people say "we use a router," they mean there is a decision layer in front of the destinations. If you only ever call one provider directly, you do not have a router, you have an integration.
 
+![A three-part diagram: the application calls a single router, which fans the request out to five provider destinations, with a note that a destination executes requests while the router decides which one](</diagrams/choosing-models-providers-routing-fallbacks/1-router-vs-destination.png>)
+
 The layer design pays off the moment anything changes. A provider releases a new flagship: you update a config entry, not the routing code. A provider raises prices: you shift a tier's mapping to a cheaper alternative. A provider has an outage: your fallback logic, already in place, absorbs it. Because the router is decoupled from your application logic, none of these require a code change or a redeploy. That is the operational argument for a router even before you consider cost.
 
 Braintrust's guide breaks routing into **three jobs**, each with a different success measure: [^2]
@@ -33,6 +35,8 @@ Braintrust's guide breaks routing into **three jobs**, each with a different suc
 3. **Quality routing.** Choose models based on measured performance on real traffic (evals, traces, scorers). It's the most durable discipline, because selection follows evidence.
 
 Keep the three jobs separate in your head, because they optimize different things and you can run them in tension. Resilience routing wants more providers in the mix so there is always somewhere to fail over. Cost routing wants the cheapest model that passes a quality bar. Quality routing wants the model that scores best on real evals, which is often not the cheapest. A router that only optimizes one job will quietly fail the other two. The mature approach runs all three and recognizes them as different success measures: uptime for resilience, spend-without-quality-loss for cost, and evidence-driven selection for quality.
+
+![A table of the router's three jobs, resilience, cost, and quality routing, each with what it does and the success measure it is judged by](</diagrams/choosing-models-providers-routing-fallbacks/2-three-jobs.png>)
 
 ## Capability tiers: stop naming models, start naming tiers
 
@@ -45,6 +49,8 @@ Tiers decouple routing logic from model specifics. When a provider releases a ne
 The tier abstraction is the single highest-leverage idea in this lesson, so it is worth pushing on why it works. The problem with routing to model names is that names are unstable. A flagship that is expensive and slow today is matched or beaten by a cheaper competitor in a quarter, and your routing logic, full of hard-coded names and assumptions about their relative quality, is suddenly wrong. Tiers fix this by separating the *decision* from the *implementation*. Your application logic says "this step needs a large-tier model," and the config maps large to a specific model+provider that can be changed without touching the logic. The routing rule is stable; the thing it resolves to is not. That is why tiers, not names, are the durable unit of routing.
 
 The `role_defaults` idea deserves emphasis because it connects tiers to the agent loop from Lesson 1. Different loop steps have different capability needs. A planner decomposing a vague goal into concrete subtasks benefits from the largest tier, because the reasoning is hard and errors are expensive downstream. An implementer executing a well-scoped subtask needs good but not frontier capability, so medium works. A monitoring step that just checks status signals needs almost no intelligence, so small is right. Assigning tiers to roles, rather than to individual one-off calls, makes the routing policy legible and maintainable: you can look at a role and see which tier it uses and why.
+
+![A diagram mapping planner, implementer, and monitoring roles to large, medium, and small tiers, and showing config resolving each tier to a model and provider pair](</diagrams/choosing-models-providers-routing-fallbacks/3-tier-mapping.png>)
 
 ## What actually drives the routing decision
 
@@ -80,6 +86,8 @@ The end-of-chain decision is the one teams forget until the incident happens. Yo
 One warning from the tooling itself: fallbacks handle **provider errors**, not low-quality answers that return successfully. A router can't detect a bad answer unless you add a quality check on top. [^2]
 
 This is the sharpest limitation in the whole lesson and it deserves to be stated plainly. Fallback logic reacts to transport-level failures: 5xx, timeouts, rate limits. What it cannot see is a request that returned HTTP 200 with a confident-sounding but wrong answer. A router has no idea whether the output is any good, because it never looks at the content, it only observes whether the call succeeded. If you want to catch bad answers, you need a separate quality check: a validator, an eval, a scorer that runs on the output. Without that, a cheap model can be confidently wrong all day and your router will happily keep sending it traffic, because from the router's perspective everything is fine.
+
+![Two panels contrasting what a fallback chain can see, 5xx errors, timeouts, and rate limits, against what it cannot see, an HTTP 200 response carrying a confident but wrong answer](</diagrams/choosing-models-providers-routing-fallbacks/4-fallback-blind-spot.png>)
 
 ## Where the router lives: build vs. buy
 
