@@ -1,0 +1,124 @@
+---
+title: "Lesson 44: Enterprise Integration: Connecting Agents to Salesforce, ERP, CRM, and Data Warehouses"
+slug: enterprise-integration-salesforce-erp-crm-data-warehouse
+series: "agentic-ai"
+lesson: 44
+excerpt: "Lesson 43 ended the case study run with the agent that writes code, and this lesson turns outward to the systems a company actually runs on. Connecting an agent to Salesforce, an ERP, a CRM, or a data warehouse is rarely a networking problem. The hard part is governance: deciding who the agent is, what that identity may read and write, and how to make its effects in live business data reversible. This lesson separates the read path from the write path, walks the connection shapes from direct APIs through MCP servers to managed agent platforms, and shows why identity is the security boundary on every one of them. A worked example connects one support agent to a data warehouse for history and a CRM for case updates, with the permission and guardrail choices made explicit."
+date: "September 17, 2026"
+author: "Adroit Consulting"
+readTime: "19 min read"
+tags: [LLMs, AI Agents, Enterprise Integration, CRM, ERP, Data Warehousing]
+---
+
+# Lesson 44: Enterprise Integration: Connecting Agents to Salesforce, ERP, CRM, and Data Warehouses
+
+Lesson 43 built the coding agent that operates on a filesystem and a shell, and the loop closed because the tests ran themselves. This lesson makes the agent operate on the systems of record a company depends on: Salesforce, an ERP, a CRM, and a data warehouse. That changes almost everything about how you design the seam. Writing to a repo is reversible, a diff is inspectable, and a test either passes or fails. Writing to a customer record is a business action with consequences, an audit trail, and a real owner who may have to unwind it.
+
+Most teams approach this as an integration problem: which connector, which SDK, which API endpoint. That is the small part. The large part is deciding what the agent is allowed to see and do once the connection works. Enterprise integration fails far more often on permissions, identity, and reversibility than on bit rate.
+
+The one idea to carry out: **separate the read path from the write path, connect each with the narrowest identity that can do that path's job, and make every write reversible or gated. The connection is the interface that makes the agent useful; the identity and the guardrails are the interface that make it safe. Design both, and design identity first.**[^7]
+
+## The seam: agents and systems of record
+
+A system of record is the authoritative source for a given fact about the business. The CRM owns the customer relationship, the ERP owns orders, inventory, and finance, and the data warehouse holds the analytical store that these operational systems feed. When an agent needs a fact to reason over or an action to take, it reaches through a connector into one of these systems, and the connector is where the design decisions actually live.[^2]
+
+The first decision is which direction the call goes. Reading accepts a narrower identity and a smaller blast radius. Writing changes live data and needs the reverse. A support agent that reads order history through a governed warehouse query is a different risk profile from the same agent that closes a case in the CRM. Treat them as different integrations even when they sit in the same agent, because they need different permissions, different credentials, and different guardrails.
+
+The second decision is that connectors are not just plumbing. Anthropic's notes on building effective agents describe the augmented LLM as the foundation: a model given retrieval, tools, and memory, with the tool interface tailored to the specific use case and documented well for the model.[^1] In an enterprise integration the tool is a connector, and the interface the model sees is what you write. The same discipline that helps a coding agent pick the right file helps an enterprise agent pick the right record and the right action, but the stakes of a wrong pick are higher because the target is shared state.
+
+## Three shapes of connection
+
+Enterprise systems connect to agents in three recognizable shapes. Most real deployments use a mix of all three, and picking which shape fits a given system is most of the architecture.
+
+**Direct APIs.** Salesforce exposes a REST API that any client can call, and its Agent API is the version built for agents: it gives you access to a goal-oriented Agentforce agent from anywhere that can call a REST endpoint, including for websites, headless automation, and even other agents invoking Agentforce agents from an agentic ecosystem.[^2] A direct API gives you total control over the tool you expose to your model. You pay for that control with the effort of building and maintaining the tool surface yourself. For a small number of well understood operations, this is often the right call and it keeps the model one hop from the system rather than two.
+
+**MCP servers.** The Model Context Protocol standardizes the way agents discover and invoke tools, and the major platforms now ship managed servers so you do not assemble the client by hand. Snowflake's managed MCP server sits alongside your data and serves governed tools over the protocol, which lets an agent retrieve from Snowflake without deploying separate integration infrastructure.[^3] The appeal is consistency: one protocol, many tools, with the access control inherited from the system behind the server. The tradeoff is that you are trusting a vendor's server implementation, and the server's tool list is the surface an agent can reach, so that list needs real review.
+
+**Managed agent platforms.** Salesforce's Agentforce is the extreme of this shape: instead of you bolting tools onto a model, the platform provides the reasoning engine, the actions, the guardrails, and the connectors. Salesforce describes Agentforce as the AI agent platform that delivers autonomous support at enterprise scale, and notes that you can use MuleSoft API connectors to connect its agents to any system.[^4] The benefit is that actions are built and governed inside the same platform that owns the data, so a deployment in Salesforce has a shorter guardrail gap. The cost is that you operate inside a vendor's model for prompts, actions, and limits.
+
+The rough guidance: use a direct API when you have a small, stable set of operations and want full control; use an MCP server when the system already governs its data and you want to inherit that governance without rebuilding it; and use a managed platform when the business context you need lives in that platform and you want actions, reasoning, and data governed together. Do not default to the newest shape. Default to the one that lets the agent inherit the most existing governance with the least new surface you have to defend.
+
+## The read path: a governed query into the data warehouse
+
+The cleanest read path in enterprise integration is the data warehouse, and the cleanest version of that path is a governed query tool, not a raw SQL shell. Snowflake's managed MCP server is the current reference for why.
+
+The Snowflake server can expose Cortex Analyst, Cortex Search, and Cortex Agents as tools on the MCP interface, and it can also expose a SQL execution tool. The docs make a recommendation that is worth treating as doctrine: expose a Cortex Agent as the client-facing tool when you want governed orchestration, and the agent then selects and orchestrates Analyst, Search, and custom tools itself. And they are explicit about the alternative: exposing the SQL execution tool on the same server lets an MCP client bypass the agent's semantic views, verified queries, and orchestration. If you need direct SQL, the docs say expose it through a separate server with a dedicated least-privileged role.[^3]
+
+That single sentence captures the whole read-path lesson. The warehouse already knows how to govern its data, through role-based access control, masking, and views. Your job is to keep the agent inside that existing boundary rather than giving it a way around it. Three concrete moves from the Snowflake docs make that literal:
+
+- **Keep execution read-only by default.** The SQL execution tool supports a `read_only` setting that defaults to true, so only select statements run unless you deliberately widen it.[^3] State read-only explicitly per tool rather than trusting a default.
+- **Give the tool a least-privileged role.** When you authorize with a programmatic access token, the docs recommend setting it to the least-privileged role that still does the work, so a leaked secret cannot reach a privileged role.[^3] The identity the agent authenticates with should be a role, not a god account.
+- **Grant per tool, not per server.** Snowflake notes that access to the MCP server does not grant access to the tools; each tool needs its own grant.[^3] Scope discovery just as tightly, because tool lists are how an agent learns what it can reach.
+
+The read path has a second risk that is easy to miss. High tool counts and broad tool descriptions degrade selection. The Snowflake server caps each MCP server at 50 tools and warns that higher counts can degrade tool-selection accuracy, and it flags that untrusted third-party MCP servers can carry tool poisoning or tool shadowing, so you should verify every tool a third-party server offers.[^3] In our own pipeline we treat a tool surface as attack surface: the fewer tools an agent can see, the fewer it can misuse, and the more accurate its choice is when it does pick.
+
+## The write path: actions in a CRM or ERP
+
+Writing is where enterprise integration earns its reputation. A write into Salesforce is not return data, it is a commitment in shared business state, and the consequences of an incorrect write are not confined to the agent's run.
+
+The first discipline is to prefer platform actions over raw record writes. Salesforce's Agentforce models write work as actions, which can respect business logic and rules rather than directly mutating fields. Salesforces's developer guidance frames the Agent API as a way to connect to goal-oriented autonomous agents from anywhere, which means the provoking of an action happens inside a governed agent rather than via an open write endpoint.[^2] Where you can, have the agent request an action the platform executes under its own rules, and reserve raw record writes for cases where no governed action exists.
+
+The second discipline is human confirmation at the blast-radius boundary. Your own path covered human-in-the-loop design and kill switches in detail, and enterprise writes are the textbook case for them: an agent drafts a case or an order change, a person confirms before it commits, and the expensive or destructive operation never fires without a human hand. The write tool should take a confirmation token or an approval callback rather than committing immediately.
+
+The third discipline is that the write tool is where the agent's authority is the easiest to overgrant, and where least privilege pays off most. The Salesforce and Anthropic partnership work is a useful reference for how the platform itself thinks about this. The two companies announced, in the context of letting Claude act inside Salesforce, that the setup should route actions through Salesforce so business rules are always enforced when an action is taken, with authentication and permissions managed centrally rather than re-audited account by account.[^5] The same instinct applies to any agent you build: keep the permission model centralized at the platform, scope the agent's write tools to exactly the actions it needs, and let the system of record apply its own business logic rather than bypassing it.
+
+The partnership also illustrates why the same systems appear again and again in regulated work. The expanded Anthropic and Salesforce arrangement made Claude a preferred model in Agentforce for financial services, healthcare, and life sciences, keeping sensitive data inside Salesforce's trust boundary, and the two companies point to advisors using the integration to summarize portfolios and automate consent tracking rather than to move money directly.[^6] That is the pattern worth copying: the agent gathers context and prepares an action, and the human or the governed platform commits it.
+
+## The security boundary is identity, not connectivity
+
+Every claim this lesson has made about tools comes back to one point: the connection is how the agent gets in, and the identity is what it is allowed to do once inside. Enterprise integrations are not secured by firewalls and VPNs. They are secured by scoped identities, and the agent's identity must be scoped exactly like the most dangerous user of that system, because from the system's perspective it is a user.
+
+Three rules hold across every shape of connection in this lesson.
+
+- **Give the agent a narrow identity, and say which role it is.** The tool authenticates as a least-privileged role with read-only where possible and minimal write scopes. When you can pass the end user's own role through, do it, so the agent inherits the same permissions that user already has; when you cannot, use a dedicated service role with the smallest grant that completes the task.[^3][^5]
+- **Extend playback to the tool surface.** A tool that can read must also be able to say what it read. The extractor discipline from earlier lessons applies wholesale: the agent should return the query it ran, the records it saw, and the action it is about to take, so a human can verify the effect rather than trust the exit status.
+- **Watch for recursive tool calls.** The Snowflake docs warn that an external client calling a Cortex Agent through MCP, which in turn invokes another server that calls back, can produce expensive unbounded loops, and they enforce a maximum recursion depth of ten.[^3] Enterprise agent graphs that span multiple systems make this easy to build by accident. Audit your tool graph for cycles the way you audit your data flows.
+
+None of this is new security. It is the existing discipline of least privilege and reversible changes applied to a new kind of actor that acts fast and gets its permissions from you. The agent does not expand what the system allows. It expands how fast a given allowed action can happen.
+
+## Worked example: the order-support agent
+
+A support agent answers a customer's question about a late order. It needs two facts and one action: the order history from the warehouse, the account status from the CRM, and, when the customer is eligible, a case opened in the CRM. Here is the integration, with the governance on each path.
+
+**Path one, the read into the warehouse.** The agent gets one tool, a governed query onto an MCP server that exposes Cortex Analyst against a semantic view over the orders tables. The tool is read-only by default, the programmatic identity is a least-privileged role that can only read the orders schema, and the semantic view masks anything the role cannot see. When the agent asks "what is the status and delivery window for order SO-88213", the Analyst tool translates it to SQL against the view and returns the result, alongside intermediate reasoning and citations.[^3] The agent never sees a raw SQL shell, so it cannot ask for data the view blocks. If it tries, the warehouse itself refuses.
+
+**Path two, the read into the CRM.** The agent calls a read tool that returns the account's standing and eligibility, built over the CRM API under an identity that can only read account records for cases and can do nothing else. The tool is scoped so the agent can look for a case but cannot update one through this path. Reading and writing are separate tools, separate identities, separate grants, which is exactly the split this lesson calls for.
+
+**Path three, the write.** When the agent determines the customer is eligible for an escalation, it drafts the case subject and body and calls a write tool that creates a pending case, not a live one. The write tool's identity is the only one with create permission for cases, the case lands with an approval-required status, and no case commits until a service rep confirms it. The agent returns the proposal, the confirmation step it is waiting on, and the case number it generated, so the human can verify before anything lands.[^2]
+
+The whole example fits in one mental model: the agent can see exactly what it needs to see, read through governed tools that cannot expose more, and its only write is a reversible proposal awaiting a human hand. That is not overengineering. It is the shape of an integration that operations teams can trust with a real codebase, and it is exactly where the agent's usefulness and its safety come from the same choices.
+
+## A checklist for your first enterprise seam
+
+Run these before you connect anything live.
+
+1. **Name the read path and the write path separately.** Different identities, different grants, different guardrails. Never share a connection across both.[^7]
+2. **Give every path a least-privileged role, and say its name out loud.** The identity the agent uses should be a role a person could name and a permission review could sit in front of.[^3]
+3. **Make reads read-only explicitly, and keep them inside governed views or analyst tools.** Do not hand the agent a raw execution tool that can bypass the system's own governance. If direct access is unavoidable, isolate it behind a dedicated least-privileged role.[^3]
+4. **Make writes reversible or gated.** Prefer a platform action that applies business rules, and put a human confirmation on anything destructive or expensive.[^2][^5]
+5. **Review the tool surface like it is attack surface.** Fewer tools is better, and verify every tool a third-party MCP server offers for poisoning or shadowing.[^3]
+6. **Check the graph for cycles.** A span of systems invites recursive tool calls that loop and burn money. Audit for them and set a depth cap.[^3]
+
+## Try it
+
+1. **Map one real system's read and write paths.** Pick a CRM, ERP, or warehouse in your environment and write down, for one task, which facts are reads, which are writes, and the least-privileged role each could use. If the same role today does both, that is your first finding. Separate them on paper before wiring anything.[^7]
+2. **Replace a raw query surface with a governed view.** If your agent talks to a database, put the analyst or view in front of it, confirm the tool is read-only, and verify that asking for data outside the view is refused by the system rather than by your prompt. That refusal coming from the data store is the test that your governance is real, not decorative.[^3]
+3. **Put confirmation on one write.** Take the single most dangerous thing your agent can do today and make it a pending proposal that a human confirms. Then run the happy path and the declined path and confirm both leave the system in the expected state.[^5]
+
+## Summary
+
+Connecting an agent to Salesforce, an ERP, a CRM, or a data warehouse is a governance problem wearing an integration costume. Separate the read path from the write path and give each its own least-privileged identity. On the read side, keep the agent inside the system's existing governance: read-only query tools, semantic views, and role-based access, so the store refuses what the agent should not see rather than trusting the prompt to. On the write side, prefer governed platform actions over raw record writes, and put a human confirmation on anything destructive or irreversible, because the effect is a change to live business data, not a diff in a repo. Then treat the tool surface as attack surface: fewer tools, verified third-party servers, and a check for recursive loops across the graph. Identity is the security boundary on every shape of connection, direct API, MCP server, or managed platform, and it is the choice you make first, not last.[^1][^2][^3][^7]
+
+The reframing that makes enterprise integration tractable is that you are not giving an agent access to a system. You are granting a given action to a narrow identity, and the action is small, readable, and reversible. Do that once for the read side and once for the write side, and the agent inherits the governance the enterprise already spent years building.
+
+## What's next
+
+You have now connected agents to the systems of record that hold the business's operational data, and you know that the data warehouse is where the governed read path lives. But the agents on this path that reason over unstructured material rely on a different store: the vector database that holds the embeddings behind retrieval. Lesson 45 turns to how that store behaves at scale, covering what it takes to scale a vector database, how backups and recovery work when the data is a set of high-dimensional vectors, how consistency and freshness are maintained as documents change, and what all of that actually costs. The read path from this lesson reaches a warehouse of rows and agrees with your permissions; the vector store you build next holds the context those agents argue over, and it needs its own operational discipline.
+
+[^1]: Anthropic. [Building effective agents](https://www.anthropic.com/engineering/building-effective-agents)
+[^2]: Salesforce Developer. [Chat With Agents Using Agent API, Agentforce APIs and SDKs](https://developer.salesforce.com/docs/ai/agentforce/guide/agent-api.html)
+[^3]: Snowflake Documentation. [Snowflake-managed MCP server](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents-mcp)
+[^4]: Salesforce. [Agentforce: The AI Agent Platform](https://www.salesforce.com/agentforce/)
+[^5]: Salesforce Newsroom. [Salesforce and Anthropic Announce Claudeforce](https://www.salesforce.com/news/press-releases/2026/08/26/salesforce-and-anthropic-announce-claudeforce/)
+[^6]: Anthropic. [Anthropic and Salesforce expand partnership to bring Claude to regulated industries](https://www.anthropic.com/news/salesforce-anthropic-expanded-partnership)
+[^7]: Anthropic. [Writing effective tools for agents](https://www.anthropic.com/engineering/writing-tools-for-agents)
