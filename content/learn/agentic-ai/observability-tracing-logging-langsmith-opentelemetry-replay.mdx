@@ -36,6 +36,8 @@ A trace is structured as a tree, not a flat list. The outer span is the request.
 
 In LangSmith the hierarchy has three levels for a multi-turn session. A run is one unit of work. A trace is all the runs for one turn, one user message and everything the agent does in response. A thread is the sequence of traces that make up a multi-turn session, grouped by a shared `thread_id`. A fourth view, the trajectory, flattens the whole session into an ordered list of messages, human, AI, and tool, with the nesting removed, which is what you read when you want the story of the conversation rather than the execution details. [^2]
 
+![A trace shown as a nested tree of spans under one request, beside the four levels LangSmith names: run, trace, thread, and trajectory](</diagrams/observability-tracing-logging-langsmith-opentelemetry-replay/1-trace-tree.png>)
+
 The trace is the record you debug against. It is also the raw material for everything else: a golden dataset of failures, a replay session, a training set for evals. Nothing in the rest of this lesson works without it.
 
 ## OpenTelemetry: the shared shape for telemetry
@@ -54,6 +56,8 @@ Two stability notes matter before you build on this. First, content capture is o
 
 The pragmatic split, and it is a real one in the field: LangSmith and tools like it give you a polished, agent-specific tracing UI out of the box, with native tracing for popular agent frameworks plus OpenTelemetry support. OpenTelemetry gives you a vendor-neutral telemetry backbone that feeds whatever backend you already run, so agent telemetry joins the rest of your infrastructure in one system. You are not forced to choose one. LangSmith supports sending its trace data to your OTel tools and ingesting OTel data into itself, so you can start with whichever fits your stack and bridge to the other. [^7] [^1]
 
+![The gen_ai conventions split into spans, metrics, and content events, with the six standard span attributes and the two stability tiers underneath](</diagrams/observability-tracing-logging-langsmith-opentelemetry-replay/2-otel-genai-attributes.png>)
+
 ## What a good trace actually contains
 
 Not every run is worth keeping, and not every detail belongs in a trace. The value of a trace comes from what it captures, and the discipline is knowing what that is.
@@ -71,6 +75,8 @@ Tracing tells you what happened. Logging tells you why, and only if you log the 
 Structured logging means writing each log entry in a consistent, parseable format, JSON being the default, with named fields you can filter on. For an agent, the fields that earn their keep are: a trace or run ID so the log line can be joined back to the trace it belongs to, the tool name and status, the input and output of the step, the agent or user ID, and the error code when one exists. [^8] When a log line carries a run ID, you can jump from the log to the full trace and back, and that join is the whole game: the log tells you which step and why, the trace shows you the surrounding context.
 
 There is a real tension here that the field names explicitly. Logging everything at debug level in production is an anti-pattern: it floods the store and makes the signal unfindable. But logging nothing about prompts and tool inputs leaves you blind exactly when the model does something surprising. The middle path is to log what you need to reconstruct the decision, mask or hash the sensitive payloads, and keep verbose capture behind a toggle you can flip on for a specific run when you are chasing a bug. [^9] The trace gives you the reconstruction; the log gives you the signal to search. [^8]
+
+![An unstructured log string that cannot be joined to anything beside a structured JSON record whose run ID links it back to its trace](</diagrams/observability-tracing-logging-langsmith-opentelemetry-replay/3-structured-logging.png>)
 
 ## Replay: turning a trace into a repeatable bug
 
@@ -95,6 +101,8 @@ Let me put the whole stack together on one concrete system. You are building an 
 **Step five, replay and fix.** You save the trace into a dataset so it survives past retention. [^2] You reproduce the run, confirm it fails the same way, and then change the retrieval config to filter out results below a relevance threshold, or add a reranking step as Lesson 14 covered. You re-run the same input. The bad document no longer reaches context, the answer is grounded, and you have turned a 2 a.m. report into a fixed, verified regression test.
 
 That is the whole loop. Trace captures the run, structured logging makes the failure class searchable, replay makes it reproducible, and the fix lands back in a dataset that guards the regression forever. [^3]
+
+![Five steps from turning on tracing to replaying and fixing the failure, ending in a golden dataset that guards the regression](</diagrams/observability-tracing-logging-langsmith-opentelemetry-replay/4-replay-loop.png>)
 
 ## The Fortress angle: observability already runs here
 
