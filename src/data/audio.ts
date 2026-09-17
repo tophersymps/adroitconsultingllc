@@ -92,6 +92,7 @@ export const articleAudio: ArticleAudio[] = [
   { slug: "state-of-the-stack-september-2026", voice: "af_heart", storagePath: "blog/state-of-the-stack-september-2026/af_heart.mp3" },
   { slug: "structured-output-tool-calling-reliability-2026", voice: "af_heart", storagePath: "blog/structured-output-tool-calling-reliability-2026/af_heart.mp3", timingsStoragePath: "blog/structured-output-tool-calling-reliability-2026/af_heart.timing.json" },
   { slug: "supabase-agent-skills-2026", voice: "af_heart", storagePath: "blog/supabase-agent-skills-2026/af_heart.mp3", timingsStoragePath: "blog/supabase-agent-skills-2026/af_heart.timing.json" },
+  { slug: "supabase-edge-functions-2026", voice: "af_heart", storagePath: "blog/supabase-edge-functions-2026/af_heart.mp3", timingsStoragePath: "blog/supabase-edge-functions-2026/af_heart.timing.json" },
   { slug: "supabase-pipelines-cdc-bigquery", voice: "af_heart", storagePath: "blog/supabase-pipelines-cdc-bigquery/af_heart.mp3", timingsStoragePath: "blog/supabase-pipelines-cdc-bigquery/af_heart.timing.json" },
   { slug: "supabase-realtime-binary-payloads", voice: "af_heart", storagePath: "blog/supabase-realtime-binary-payloads/af_heart.mp3", timingsStoragePath: "blog/supabase-realtime-binary-payloads/af_heart.timing.json" },
   { slug: "test-drive-qwen-local", voice: "af_heart", storagePath: "blog/test-drive-qwen-local/af_heart.mp3", timingsStoragePath: "blog/test-drive-qwen-local/af_heart.timing.json" },
