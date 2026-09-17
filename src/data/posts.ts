@@ -2,6 +2,28 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "supabase-edge-functions-2026",
+    "title": "Supabase Edge Functions in 2026: What Fits in the Envelope",
+    "excerpt": "Edge Functions run TypeScript at the edge under a hard envelope: 2s CPU, 256MB, a wall clock. The envelope decides what fits; @supabase/server owns the auth.",
+    "category": "React & Web Dev",
+    "categoryColor": "react",
+    "categoryGradient": "from-emerald to-emerald-dark",
+    "date": "September 17, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12",
+    "featured": false,
+    "tags": [
+      "Web Development",
+      "TypeScript",
+      "Supabase",
+      "Edge Functions",
+      "Serverless"
+    ],
+    "bannerImage": "/banners/supabase-edge-functions-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "agent-loop-spend-guardrails-2026",
     "title": "Bound the Loop: Your Agent's Step Limit Is Not a Budget",
     "excerpt": "A framework turn cap counts steps, not dollars. The three budget layers that stop a runaway agent, and how to size the ceiling from your own traffic.",

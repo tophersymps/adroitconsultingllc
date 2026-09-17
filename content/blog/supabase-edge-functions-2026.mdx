@@ -1,0 +1,138 @@
+---
+title: "Supabase Edge Functions in 2026: What Fits in the Envelope"
+slug: supabase-edge-functions-2026
+excerpt: "Edge Functions run TypeScript at the edge under a hard envelope: 2s CPU, 256MB, a wall clock. The envelope decides what fits; @supabase/server owns the auth."
+category: "React & Web Dev"
+categoryColor: react
+categoryGradient: "from-emerald to-emerald-dark"
+date: "September 17, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: 12
+tags: [Web Development, TypeScript, Supabase, Edge Functions, Serverless]
+bannerImage: "/banners/supabase-edge-functions-2026.png"
+---
+
+The most common serverless failure I see is a team rebuilding a function to fit a limit it never read. A webhook handler works in staging, it pushes toward a hot database table in production, and one of three numbers ends the day: the two-second CPU cap, the 256-megabyte memory ceiling, or the wall-clock timer. Supabase Edge Functions run inside a narrow, hard envelope, and reading that envelope before you pick the tool is the difference between a clean deployment and a redesign at six in the evening.
+
+Edge Functions are Supabase's serverless TypeScript layer, built on a Deno-compatible runtime and distributed at the edge, close to users.[^1] They handle the endpoints an app needs at low latency: webhook receivers for Stripe or GitHub, authenticated API calls from the browser, on-demand image or Open Graph generation, small AI tasks that orchestrate an external model, transactional email, and messaging bots.[^2] The docs are precise about the envelope, and almost every surprise I end up debugging lives in the gap between the tutorial and those hard numbers.
+
+What makes this worth writing now is that the plumbing around these functions finally settled into one recommended shape. Supabase's current guidance wraps every handler in the `@supabase/server` SDK, which verifies the caller and hands you a database client already scoped to that caller's Row Level Security rules.[^3] The pieces you used to hand-roll, JWT validation and a second client that respects RLS, are now library code. The same `{ fetch }` handler contract runs unchanged on Cloudflare Workers and Bun, so code written for a Supabase Edge Function is portable beyond Supabase.[^4] The pattern changed, and how to pick the layer and secure it without the old boilerplate is the article you are reading.
+
+This is not a tutorial that stops at hello world. It is the layer decision first: what actually runs inside that envelope, what the limits force elsewhere, how the auth pattern works now, and how to run background work without blowing the request. Start with the envelope, because it is the thing every other decision in this article is a response to.
+
+## The envelope is three numbers, and the props do not lie
+
+An Edge Function request enters an edge gateway that routes traffic and validates JWTs, then executes on an Edge Runtime node closest to the caller, then returns through the same gateway.[^1] You do not get a whole server carried with the request. You get a fixed slice, and Supabase documents that slice precisely.[^5]
+
+- Maximum memory: 256 MB.
+- Maximum wall-clock duration: 150 seconds on the free plan, 400 seconds on paid plans. This is how long a worker stays active and can serve multiple requests or run background tasks.
+- Maximum CPU time: 2 seconds per request. This counts real time spent on the CPU and excludes async I/O.
+- Request idle timeout: 150 seconds. If a function sends nothing in that window, you get a 504 Gateway Timeout.
+
+Two more reach into what you can ship. A single function is capped at 20 MB when bundled by the CLI, or 5 MB when bundled server-side through the Dashboard or API. Your project holds 100 functions on Free, 500 on Pro, 1,000 on Team, and unlimited on Enterprise.[^5]
+
+![A Supabase Edge Function request moves through four stages: a client calls into an edge gateway that routes traffic and validates JWTs, the gateway dispatches to an Edge Runtime worker that executes your TypeScript closest to the user, and that worker queries Postgres with the caller's Row Level Security scope. Around the worker sits the hard envelope that bounds it, the 2 second CPU cap, the 256 megabyte memory ceiling, the 150 second free and 400 second paid wall clock, and the 150 second idle timeout that returns a 504.](</diagrams/supabase-edge-functions-2026/1-execution-envelope.png>)
+
+These numbers do the positioning for you. The 2-second CPU cap is the one that bites most often, because a synchronous handler that waits on an external API, does JSON work, and writes a row can burn 2 seconds faster than people expect. Async I/O does not count against CPU time, so waiting on the network is cheap and the billable work is what the processor actually does. That distinction is why webhooks, which mostly wait on the network and do small transforms, fit naturally, and why sustained local computation does not.
+
+The memory and wall-clock limits bite for a different reason: they surface under load. A function that is fine in one request can blow the memory ceiling when several requests hit the same worker at once, because a worker serves multiple requests over its lifespan.[^5] The idle-timeout 504 is the classic "it works locally, times out in prod," because production remotes are slower and the timeout is fixed. Together the three numbers are the real spec of the tool, and every "what belongs here" judgment in this guide reads against them.
+
+## What belongs there, and what the envelope forces elsewhere
+
+Read from the limits, a short list of things genuinely fit an Edge Function. Receiving and validating a webhook. A low-latency authenticated or public endpoint for a mobile or dashboard client. Generating an image or an Open Graph card on demand. Orchestrating a small AI task, one that calls an external model and streams the answer. Sending a transactional email. Running a bot that answers a Slack or Discord message.[^2] These are all dominated by network I/O, small CPU work, and short lifetimes, so they sit cleanly inside the envelope.
+
+![An Edge Function fits inside the envelope when the work is I/O heavy and short lived: receiving and validating a webhook, low-latency authenticated or public endpoints, on-demand image or Open Graph generation, small AI orchestration, and transactional email. It belongs elsewhere when the work needs sustained CPU over 2 seconds, a long-running batch that outlasts the wall clock, resident state that must stay warm through cold starts, multithreaded libraries like sharp or libvips which the runtime does not support, or bundles over the 20 megabyte and 5 megabyte size caps.](</diagrams/supabase-edge-functions-2026/2-what-fits.png>)
+
+The things the envelope rejects are equally specific. Anything that needs more than two seconds of sustained CPU, a long-running batch that outlasts the wall clock, a resident process that must stay warm, or a bundle that will not fit under the size caps. Supabase's own guidance warns that heavy long-running jobs belong in background workers, and that functions are designed for short-lived, idempotent operations because cold starts happen.[^1]
+
+The sharpest edge case is image processing. Node libraries that require multithreading, like `libvips` and `sharp`, are unsupported, and the runtime exposes neither the Web Worker API nor Node's `vm` API.[^5] A team that built its whole product around sharp-based resize hits a hard no. The fix is not to wedge sharp in. It is to treat resize as a background task or a dedicated service, and keep the Edge Function as the thin receiver that records the job and delegates. Outside a few such hard walls, the decision rule is small. If the work sits inside 2 seconds of CPU and 256 MB and lives for less than the wall clock, it can live at the edge. If any one of the three is close, push it out now rather than after the first wave of 504s.
+
+## The 2026 handler: @supabase/server, auth mode first
+
+The biggest change in how Edge Functions are built is that authentication no longer ships as boilerplate you copy between projects. `@supabase/server` is the SDK that wraps the request, and its entry point flips your handler from a bare `Deno.serve` to a plain exported object.[^4]
+
+```js
+import { withSupabase } from "npm:@supabase/server@^1"
+
+export default {
+  fetch: withSupabase({ auth: "user" }, async (req, ctx) => {
+    // ctx.supabase is scoped to the caller's Row Level Security policies
+    const { data } = await ctx.supabase.from("countries").select("*")
+    return Response.json({ data })
+  }),
+}
+```
+
+The object-handler contract is portable. The same shape, a default export with a `fetch` method, runs unchanged on Cloudflare Workers and Bun, which is what makes Supabase Edge Function code reusable beyond Supabase.[^4] The `withSupabase` wrapper does the work an old `createClient` dance used to. It verifies credentials against a declared auth mode and hands you `ctx.supabase` and `ctx.supabaseAdmin` already configured, along with `ctx.userClaims`, the raw `ctx.jwtClaims`, and `ctx.authMode` for your logic to branch on.[^3]
+
+The auth mode is where the security decision lives, and there are four of them.[^3]
+
+- `auth: "user"` accepts a valid user JWT on the Authorization header. `ctx.supabase` is scoped to that signed-in user's Row Level Security rules, so your queries cannot read a row the caller should not see, even if you forget a filter.
+- `auth: "secret"` accepts a secret key on the `apikey` header, for service-to-service calls from cron, workers, `pg_net`, or another Edge Function. You get `ctx.supabaseAdmin`, which bypasses RLS for privileged work.
+- `auth: "publishable"` accepts a publishable key on the `apikey` header.
+- `auth: "none"` accepts any caller and skips credential checks. It is for genuinely public functions like health checks, and for external webhooks that sign requests with their own secret, which you verify inside the handler.
+
+![Choosing the auth mode in @supabase/server is the security decision. The user mode accepts a valid user JWT on the Authorization header and gives a ctx.supabase client scoped to the caller's Row Level Security. The secret mode accepts a secret key on the apikey header and gives ctx.supabaseAdmin that bypasses RLS for privileged work. The publishable mode accepts a publishable key on the apikey header. The none mode accepts any caller, and is for public health checks and signed webhooks where the provider signature is verified in the handler. verify_jwt defaults to true so the gateway validates the user JWT before the handler runs, and is turned off only for public functions and signed webhooks.](</diagrams/supabase-edge-functions-2026/3-auth-modes.png>)
+
+The split between `ctx.supabase` and `ctx.supabaseAdmin` is the load-bearing security property. The normal client respects the caller's RLS, so it is safe to run against user data, because the database itself enforces who can see what. The admin client bypasses RLS and must be reserved for privileged operations, never defaulted to. Make it a habit to read every query against which of the two you grabbed, because the cost of grabbing the wrong one is silent: an `auth: "user"` function that accidentally uses the admin client reads rows it should not.
+
+There is also a platform-level switch, `verify_jwt`, which defaults to true and tells the gateway to validate the JWT before your handler runs.[^3] For signed-in user calls, keep it on. For `auth: "none"` functions, set `verify_jwt = false` in `config.toml`, or anonymous callers hit a JWT check they cannot pass. Functions that answer both users and internal callers can pass an array, like `auth: ["user", "secret"]`. The SDK tries the modes in order, and `ctx.authMode` reports which one matched so your logic can branch.[^3]
+
+## Webhooks are at-least-once; write them idempotent
+
+The most common real use of an Edge Function is receiving a webhook, and the rule that separates working receivers from flaky ones is that webhooks deliver at least once, which means duplicates are normal and the handler must tolerate them. Stripe and GitHub do not send Supabase credentials. They sign the request body with their own shared secret. So a webhook receiver uses a mode with no credential check and verifies the provider signature itself: `auth: "none"` with `verify_jwt = false`, then `stripe.webhooks.constructEvent` on the body, returning a 400 on a bad signature before touching any data.[^3]
+
+```js
+export default {
+  fetch: withSupabase({ auth: "none" }, async (req, ctx) => {
+    const signature = req.headers.get("stripe-signature") ?? ""
+    const body = await req.text()
+    try {
+      stripe.webhooks.constructEvent(body, signature, Deno.env.get("STRIPE_WEBHOOK_SECRET"))
+    } catch {
+      return new Response("bad signature", { status: 400 })
+    }
+    return Response.json({ received: true })
+  }),
+}
+```
+
+Two habits make this durable. First, treat signature verification as a gate: reject before you write, so a forged or malformed payload never reaches your database. Second, make the write idempotent, keyed on a stable id from the provider, because the same event can arrive twice under retry. Supabase's guidance steers toward short-lived, idempotent operations for exactly this reason, and the cold-start reality means every function should be safe to run twice.[^1]
+
+## Respond now, finish later with EdgeRuntime.waitUntil
+
+An Edge Function can do more than answer one request. The runtime lets you mark a task as background work with `EdgeRuntime.waitUntil(promise)`, which tells the worker to keep running after the response. You reply to the user immediately while an upload, a database update, or a logging event completes behind the response.[^6]
+
+![An Edge Function can answer a request first and finish work later. The client calls the function, the handler responds with Response.json immediately without awaiting the slow work, the background task marked by EdgeRuntime.waitUntil keeps running to complete a Storage upload, a database update, or a logging event, and the worker finally shuts down with a beforeunload event that lets it save progress or log why it was terminated.](</diagrams/supabase-edge-functions-2026/4-background-task.png>)
+
+```js
+EdgeRuntime.waitUntil(asyncLongRunningTask())
+
+export default {
+  fetch: withSupabase({ auth: "user" }, async (req, ctx) => {
+    return Response.json({ ok: true })
+  }),
+}
+```
+
+The `waitUntil` promise is deliberately not awaited, because blocking on it would defeat the point. The function can call it in the handler or at module scope, and the instance keeps running until the promise settles. You also get a `beforeunload` event when the worker is about to shut down, where a function saves progress or logs why it was terminated, plus an `unhandledrejection` listener to catch background promises that reject without a handler.[^6]
+
+The caveat is local testing. The CLI kills instances after a request completes by default, which silently prevents background tasks from finishing when you test locally. The fix is a one-line config change: set `policy = "per_worker"` under `[edge_runtime]` in `supabase/config.toml`, so your local run matches production.[^6] If you check in background-task code and it mysteriously works in the cloud but not locally, this toggle is almost always the reason.
+
+## Secrets share the platform's namespace, not yours
+
+Secrets are the part teams get wrong in subtle ways. Supabase stores them as project secrets you reference as environment variables, and the details have teeth: up to 100 secrets per project, names up to 256 characters, values up to 48 KiB, and no name may start with the reserved `SUPABASE_` prefix.[^5] The prefix is reserved because `@supabase/server` and the platform read their own configuration from a standard set of environment variables like `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEYS`, `SUPABASE_SECRET_KEYS`, and `SUPABASE_JWKS`, all auto-provisioned on the platform and in local development via the CLI.[^3] Define your own secret named `SUPABASE_...` and you collide with the platform's namespace. Name secrets for what they are, set them with `supabase secrets set`, and never hardcode a key in function code.
+
+## The checklist that catches the whole class of failure
+
+The failures that come back to me cluster into four, and each has a small guard. The CPU wall shows up as 5xx around a slow upstream: guard it by keeping heavy compute out of the function and pushing it to a background task or a dedicated worker. The memory ceiling appears under concurrent calls: guard it by testing the function under load rather than one request, and by keeping processed data small in memory. The idle-timeout 504 is the works-locally trap: guard it by testing against the real remote and by reading the timeout before you ship. And the auth hole is the silent one: guard it by defaulting to `ctx.supabase`, reserving `ctx.supabaseAdmin` for privileged work, and treating the declared auth mode as the security design rather than an afterthought.
+
+Edge Functions are the right call for a specific, narrow set of jobs, and a trap for everything else, only because the envelope is so easy to ignore until it catches you. Read the three numbers before you write the handler, reach for `@supabase/server` instead of the auth boilerplate, keep webhook writes idempotent, and push real work out of the request with `waitUntil`. Do that and the layer stops being a source of evening rewrites and starts being the boring, reliable receiver it is meant to be. The same instinct threads through the rest of the stack: keep the TypeScript type system honest across the [client-server boundary](/field-notes/fullstack-type-safety-2026), and in a React and Next.js app, [Server Actions](/field-notes/react-server-actions-mutations-2026) are the natural sibling to an Edge Function for the data mutations you never want in the browser.
+
+[^1]: Supabase, "Edge Functions" overview. The Deno-compatible, TypeScript-first runtime, the request-gateway-runtime flow, and the guidance that cold starts are possible so functions are designed for short-lived, idempotent operations with heavy long-running jobs moved to background workers. [supabase.com](https://supabase.com/docs/guides/functions)
+[^2]: Supabase, "Edge Functions," "When to use Edge Functions." The list of fitting use cases: webhook receivers, low-latency authenticated or public endpoints, on-demand image or Open Graph generation, small AI inference and LLM orchestration, transactional email, and messaging bots. [supabase.com](https://supabase.com/docs/guides/functions)
+[^3]: Supabase, "Securing Edge Functions." The `withSupabase` wrapper from `@supabase/server`, the four auth modes, `ctx.supabase` versus `ctx.supabaseAdmin`, `verify_jwt`, external webhook signature handling, and the auto-provisioned environment variables. [supabase.com](https://supabase.com/docs/guides/functions/auth)
+[^4]: Supabase, "AI Prompt: Writing Supabase Edge Functions." The request-handler contract: export a default object with a `fetch` handler wrapped in `withSupabase`, which also runs unchanged on Cloudflare Workers and Bun. [supabase.com](https://supabase.com/docs/guides/ai-tools/ai-prompts/edge-functions)
+[^5]: Supabase, "Limits." Runtime limits (memory, wall clock, CPU, idle timeout), platform limits (function size, functions per project), the no-multithreading restriction, and the secrets limits including the reserved `SUPABASE_` prefix. [supabase.com](https://supabase.com/docs/guides/functions/limits)
+[^6]: Supabase, "Background Tasks." `EdgeRuntime.waitUntil`, the `beforeunload` and `unhandledrejection` events, and the local-testing `policy = "per_worker"` toggle. [supabase.com](https://supabase.com/docs/guides/functions/background-tasks)
