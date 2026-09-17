@@ -85,6 +85,8 @@ Wire does not happen in a vacuum. When a wire adapter's configuration is complet
 
 The wire service is declarative, but Lightning Data Service is what makes it fast. Records loaded through LDS are cached and shared across components. If a page is composed of different components showing the same record, they all render the same version of the record, and the record is loaded once from the server regardless of how many components request it. That is a real performance win at the page level: ten components on one record page do not mean ten round trips. [^5]
 
+![Lightning Data Service sits between the components and the server: several components that wire the same record share one cached version, the server loads that record once, and a record change or an expired cache entry invalidates the entry so every wired component receives the new value](</diagrams/lightning-web-components-architecture-composition-wire-data-services/1-lds-cache-shares-one-record.png>)
+
 LDS does the undifferentiated data work for you. It loads record data progressively, caches results on the client, invalidates cache entries when dependent Salesforce data and metadata change, and optimizes server calls by bulkifying and deduplicating requests. Because it holds this client-side cache, subsequent reads of the same record are answered from the cache faster than a fresh server call, and LDS re-requests from the server only after the cache lifetime lapses. [^5]
 
 The invalidation is what keeps the cache honest. If LDS detects a change to a record or any data or metadata it supports, every component using a relevant `@wire` adapter receives the new value. Detection triggers when a Lightning web component mutates the record, or when the cache entry expires and a component's `@wire` triggers a read. Because changes are reflected everywhere automatically, a component does not have to coordinate with its neighbors to stay current. [^5]
@@ -103,6 +105,8 @@ When a wired read sits on the same screen as an imperative write, the two must b
 
 The decision rule that keeps a codebase readable: wire the reads that reflect a changing input, call imperatively the writes and the user-triggered actions, and reconcile the two with `refreshApex` after each write. Once you write to a record, never assume a wired read on the same screen refreshed itself.
 
+![Two data paths side by side: read-only reads that react to a changing input are declared with the wire service and cached by LDS, while user-triggered actions and writes are called imperatively with a Promise, and both paths meet at refreshApex after every write](</diagrams/lightning-web-components-architecture-composition-wire-data-services/2-wire-vs-imperative-decision.png>)
+
 ## A worked example: an account header and details view
 
 A sales team needs an account detail screen: a header that shows the account name and industry, a detail section that lists its open opportunities, and a button that changes the account status. These three pieces exercise every mechanism in this lesson.
@@ -116,6 +120,8 @@ A sales team needs an account detail screen: a header that shows the account nam
 4. **Return writes with events.** When a user clicks the status button, `cAccountStatusButton` dispatches a `CustomEvent`, say `statuschange`, with the new status in `detail`. The parent page hears it and calls the imperative Apex update. After the update resolves, the page calls `refreshApex` on the wired results so the header and list re-render with fresh data. [^4] [^7]
 
 5. **Set `bubbles` and `composed` deliberately.** The message only needs to reach the direct parent page, so the event uses `bubbles: true` and skips `composed: true`. The button does not need to announce itself to the whole page's shadow roots. [^7]
+
+![The account detail page drawn as a composition tree: the parent passes the record id down to three children as an api attribute, and the status button sends its change back up as a bubbling CustomEvent with the new status in detail](</diagrams/lightning-web-components-architecture-composition-wire-data-services/3-composition-data-down-events-up.png>)
 
 The result is a screen where each child owns one concern, data flows down as attributes, changes come back up as events, reads are declarative, and writes happen only on user action and then refresh the reads.
 
