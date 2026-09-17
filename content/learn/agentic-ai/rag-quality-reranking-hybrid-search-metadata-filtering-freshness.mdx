@@ -36,6 +36,8 @@ The standard pattern is a two-stage cascade:
 2. **Stage two, precision.** A cross-encoder reranks that shortlist and keeps the top 3 to 5.
 3. **LLM.** Only the reranked top few reach the context window. [^2]
 
+![The two-stage retrieval cascade: recall over the full corpus, a metadata eligibility gate, a cross-encoder rerank down to the top few, and only then the LLM context window](</diagrams/rag-quality-reranking-hybrid-search-metadata-filtering-freshness/1-two-stage-cascade.png>)
+
 This is the architecture lesson 10 sketched and lesson 12 deferred. Total latency stays well under the first stage alone would suggest, because reranking runs on dozens of candidates, not millions. And the quality gain is not marginal. The reference puts a typical production RAG NDCG@10 lift from adding a reranker at 5 to 15 points, and 20 or more on lexically hard datasets, for under 200 ms of added latency on a small model. [^2]
 
 ## Hybrid search: exact terms need a lexical path
@@ -110,6 +112,8 @@ The fixes fall into two buckets, and you usually need both.
 
 **Metadata as the freshness lever.** This is where filtering and freshness meet. Store version, status, and a source timestamp on every chunk. When a document is superseded, you can mark the old chunks as status "superseded" instead of deleting them, and filter them out at query time. That gives you an audit trail of what was in effect when, without ever serving it as current. Versioned metadata is what makes "surface only current published versions" a filter you can express in one line.
 
+![The staleness failure: a source policy updated to version 3.2, an index still serving the old chunk as the top match, and the two fixes, event-driven re-ingestion and versioned metadata filtering](</diagrams/rag-quality-reranking-hybrid-search-metadata-filtering-freshness/2-staleness-and-freshness-loop.png>)
+
 The hard part is knowing when a source changed. That is an integration problem, not a model problem. Your pipeline needs a hook into the source systems, whether a webhook, a file watcher, a change-data-capture feed, or a poller. Enterprise RAG deployed on private data with permission inheritance, evaluation, governance, and observability treats the freshness pipeline as part of the system, not an afterthought. [^13]
 
 ## Worked example: hybrid fusion and reranking from scratch
@@ -168,6 +172,8 @@ print("reranked:", [d for d, _ in rerank(fused, query_terms)])
 
 Run it and watch what happens. The lexical path surfaces A, the exact match on "refund" and "policy." The vector path, simulated, ranks E high because it is semantically about refunds. RRF fuses the ranks so A stays near the top by consistency across both lists, not by a single inflated score. Then the reranker step demotes E, because the cross-encoder catches the negation: E says refunds are *not* issued, which is not what the query asks. The final order is A first, and E drops. That is the whole production pattern in miniature: retrieve by two complementary paths, fuse on ranks so no single scale dominates, then apply a relevance model that reads the query and document together.
 
+![RRF fusion on five documents: the lexical and vector ranks, the fused scores at rank constant k equal to 60, and the reranked order where the negated chunk drops to last](</diagrams/rag-quality-reranking-hybrid-search-metadata-filtering-freshness/3-rrf-fusion-worked-example.png>)
+
 The stand-ins are crude. Real BM25 uses term-frequency saturation and length normalization, real embeddings capture meaning, and a real cross-encoder runs a full transformer over the pair. But the architecture is identical, and the lesson is in the shape: two independent retrievers, rank-only fusion, a precision pass on a shortlist.
 
 ## The pitfall to avoid
@@ -175,6 +181,8 @@ The stand-ins are crude. Real BM25 uses term-frequency saturation and length nor
 Do not reach for these levers in the wrong order, and do not add them blindly. The sequence that works is: confirm your first-stage recall is healthy before you spend on a reranker. A reranker can only reorder what the retriever found. If the right chunk is never in the top 100, no reranker helps, and the answer is hybrid search or better chunking, not a more expensive second pass. [^2] Conversely, if the right chunk is in the top 50 but never at rank 1, the retriever is fine and the reranker is the fix. Measure first: build a labeled set of real queries with judged documents, and measure NDCG@10, Recall@k, and MRR, before and after each change. [^7] The reference advice is blunt: if you cannot move the needle with a fast open-weight reranker on a small labeled set, your eval is broken, or the failure is upstream in chunking or query understanding. [^2]
 
 The other trap is treating freshness as optional. Stale content is the failure users cannot see until it bites, and it produces the most damaging kind of wrong answer: one that is fluent, cited, and confidently outdated. Schedule the freshness pipeline as seriously as you schedule the retriever.
+
+![A decision tree for diagnosing a retrieval miss: is the right chunk in the top 100, is it near the top of the shortlist, and is it in scope and current, with the fix each branch points to](</diagrams/rag-quality-reranking-hybrid-search-metadata-filtering-freshness/4-which-lever-to-pull.png>)
 
 ## Try it
 
