@@ -1,0 +1,289 @@
+---
+title: "Lesson 44: Security Review: OWASP for Apex, SOQL Injection, and Enforcing CRUD and FLS"
+slug: security-review-owasp-apex-soql-injection-crud-fls
+series: "salesforce-architect"
+lesson: 44
+excerpt: "How a security review actually reads Apex: the two shapes of SOQL injection and how bind variables and allowlists close them, why with sharing is not access control, and the enforcement tools (WITH USER_MODE, stripInaccessible, AccessLevel, describe checks) that turn CRUD and field-level security into something a reviewer can verify."
+date: "September 17, 2026"
+author: "Adroit Consulting"
+readTime: "15 min read"
+tags: [Salesforce, Architecture, Security, Apex]
+---
+
+# Lesson 44: Security Review: OWASP for Apex, SOQL Injection, and Enforcing CRUD and FLS
+
+Lesson 11 built the sharing model and lesson 12 built the permission model, and both of them are configuration. An admin can read the org-wide defaults, the role hierarchy, the sharing rules, and the permission sets, and tell you what a user is allowed to see. Apex breaks that promise. Code runs with the platform's access rather than the user's, so a controller can hand a user data the declarative model says they cannot have, and nothing in the Setup UI will tell you it happened.
+
+That gap is what a security review is for. An external reviewer, a penetration tester, or an AppExchange reviewer reading your Apex is not judging whether the design is elegant. They are asking one short question: which user is this code running as, and what can that user reach through it?
+
+API version 67.0 moved the default answer in the right direction. A class compiled at 67.0 runs database operations in user mode and enforces sharing without being asked, and `WITH SECURITY_ENFORCED` does not compile at all. [^1] [^2] That helps, and it does not finish the job. User mode decides who gets an exception; it does not decide what your code does when access is denied, it does not sanitize a payload you deserialize from an untrusted source, and it does not apply to the classes still sitting at 66.0 or earlier in the same org. This lesson is the code-level half of the review: injection, access control, and the habits that keep both honest.
+
+## Define the terms first
+
+- **OWASP Top 10**: the Open Worldwide Application Security Project's list of the most critical web application security risks. The current edition is the 2025 one, which introduced two new categories and two name changes. [^3]
+- **Injection**: a vulnerability class where untrusted data is interpreted as part of a command or query. In Apex, the relevant variant is SOQL injection, where a user controls a portion of a query. [^4]
+- **SOQL injection**: a user directly controls part of a SOQL query, which then runs with more access than the user has. [^5]
+- **Bind variable**: a reference such as `:term` inside a SOQL query that Apex resolves from a variable, so the value is treated as data and never parsed as query syntax. [^5]
+- **Allowlist**: an explicit set of permitted values (field names, object names, sort keys) that user input is compared against before it is allowed into a query string. [^5]
+- **CRUD (object permissions)**: whether a user can create, read, update, or delete records of an object at all. [^6]
+- **Field-level security (FLS)**: whether a user can read or write an individual field. [^6]
+- **Sharing**: record-level access, the layer lesson 11 covered: org-wide defaults, the role hierarchy, sharing rules, manual shares. [^7]
+- **System mode**: the execution context where database operations ignore the running user's object permissions, FLS, and sharing. [^1]
+- **User mode**: the execution context where those same operations enforce the running user's object permissions, FLS, and sharing. [^1]
+- **`AccessLevel`**: the enum that lets an individual DML statement or `Database` method declare user mode or system mode explicitly. [^8]
+- **`Security.stripInaccessible`**: a method that removes fields the running user cannot access from records you hold in memory, returning them in an `SObjectAccessDecision` instead of throwing. [^9]
+- **Apex security review**: the code-level audit an ISV must pass before a managed package can be distributed, and the internal audit any org should run on its own custom code. [^10]
+
+## Where Apex lands on the OWASP Top 10
+
+The 2025 list reordered the categories rather than replacing them. Broken access control stayed at number one, injection dropped from third to fifth, and the two new entries were software supply chain failures and mishandling of exceptional conditions. [^3] Injection is still the category with the greatest number of associated CVEs, and every application tested in the data set was tested for some form of it. [^4] Two categories carry most of the Apex risk, and the rest show up in specific patterns:
+
+| OWASP Top 10:2025 category | How it appears in Apex |
+| --- | --- |
+| A01 Broken access control | Queries and DML that ignore CRUD, FLS, or sharing; `@AuraEnabled` methods that trust the client; record visibility decided in the UI instead of the server |
+| A05 Injection | Dynamic SOQL built by string concatenation; field or object names supplied by user input; SOSL built the same way |
+| A02 Security misconfiguration | Classes that skip sharing by default, guest-user access left wide, debug logs and endpoints that were never cleaned up |
+| A04 Cryptographic failures | Credentials and API keys hardcoded in classes or in unprotected Custom Settings instead of held in a named credential |
+| A08 Software or data integrity failures | Records deserialized from an untrusted payload and inserted without validation |
+| A09 Logging and alerting failures | Access exceptions swallowed with no log, so nobody learns that a user was reaching for data they do not have |
+| A10 Mishandling of exceptional conditions | Empty catch blocks that let a failed permission check fall through to a write that then runs anyway |
+
+The order matters less than the shape. Access control and injection are both "untrusted input reaches the interpreter" problems, one with the query parser as the interpreter and one with the database's permission engine as the thing being bypassed.
+
+## Injection, part one: the two shapes
+
+Salesforce's own guidance splits SOQL injection into two types, because the protections differ. [^5] The first type is a user supplying an object or field name. The second is a user supplying a fragment of the query itself, typically part of a `WHERE` clause, where their input can break out of the quoted string context it was supposed to sit inside. One documented payload for the first type is a field name that arrives as `Name, Secret_Field__c WHERE Secret_Value__c > 1000000; --`, which asks for an extra field and adds a filter on it. [^5]
+
+Here is a controller that has both:
+
+```apex
+public with sharing class AccountSearchController {
+    @AuraEnabled
+    public static List<Account> search(String fieldName, String term) {
+        String soql = 'SELECT Id, Name, ' + fieldName +
+                      ' FROM Account WHERE Name LIKE \'%' + term + '%\'';
+        return Database.query(soql);
+    }
+}
+```
+
+Two problems sit in three lines. `fieldName` is concatenated straight into the select list, so the caller chooses which columns come back. `term` is concatenated inside a string literal, so a value of `%' OR Name != '` turns the filter into `Name LIKE '%%' OR Name != '%'`, which matches every account the query can see. The `with sharing` keyword on the class does nothing about either one: sharing limits which rows the query can return, not which columns, and not whether the filter is the filter you wrote.
+
+The amplifier is the execution context. Before API version 67.0, Apex database operations ran in system mode by default, so an injected query ran with the platform's access rather than the user's, which is how injection turns into privilege escalation. [^1] [^5]
+
+## Injection, part two: what actually closes it
+
+Four techniques are documented, and they are not interchangeable. [^5] [^11]
+
+**Bind variables are the primary defence.** Write static SOQL where the user's value is a bind, not a string fragment:
+
+```apex
+String likeTerm = '%' + term + '%';
+List<Account> results = [
+    SELECT Id, Name, Industry
+    FROM Account
+    WHERE Name LIKE :likeTerm
+    WITH USER_MODE
+];
+```
+
+Because the bind is resolved by the compiler and passed separately from the query text, the value can never be parsed as SOQL, so any quote or wildcard character in it stays data. Note the absence of `String.escapeSingleQuotes` here: escaping a value that reaches the query as a bind adds escape characters to your data and corrupts the match. Escaping is for values concatenated into a literal, which is the pattern the next two techniques exist to avoid.
+
+**Allowlists are the defence for names.** Bind variables cannot protect a field name or an object name, because those are syntax, not values. When user input selects a field, compare it against an explicit set and reject anything that is not in it. `Schema.getGlobalDescribe()` is one documented way to build that set from the org's own metadata. [^5]
+
+**`String.escapeSingleQuotes()` is a fallback, and a narrow one.** It adds an escape character before every single quote, so a value cannot close the literal it sits inside. It does nothing when there is no quoted string to escape, which is exactly the case in a numeric or boolean filter: Trailhead's typecasting exercise removes `escapeSingleQuotes` from a query like `Age__c > 1` precisely because the call has no effect there. [^11]
+
+**Typecasting closes the numeric case.** If the value is logically an integer or a boolean, declare it as one. A payload of `1 limit 1` posted into an `Integer` fails conversion and never reaches the query. [^11]
+
+For dynamic SOQL, `Database.queryWithBinds()` takes a map of bind names to values plus an access level, which keeps the query string free of user input even when the query is built at runtime:
+
+```apex
+Map<String, Object> binds = new Map<String, Object>{ 'term' => likeTerm };
+List<Account> results = Database.queryWithBinds(
+    'SELECT Id, Name FROM Account WHERE Name LIKE :term LIMIT 50',
+    binds,
+    AccessLevel.USER_MODE
+);
+```
+
+Two boundaries are worth stating as rules rather than techniques. Never let a user supply any portion of a query other than an object name, a field name, or a `WHERE` clause value. And avoid executing user-generated query text in Apex at all: if a client genuinely needs to compose its own query, send it through the REST or SOAP API, which handles SOQL safely. [^5]
+
+| Technique | Stops | Does not stop |
+| --- | --- | --- |
+| Static SOQL with a bind variable | Value injection in the `WHERE` clause | Field or object name injection |
+| `Database.queryWithBinds` | Value injection in dynamic SOQL | Field or object name injection |
+| Allowlist of field and object names | Name injection | Value injection |
+| `String.escapeSingleQuotes` | Quotes inside a quoted literal (fallback only) | Anything unquoted: numbers, booleans, identifiers |
+| `WITH USER_MODE` or `AccessLevel.USER_MODE` | Missing access control | Injection, which is what the other rows are for |
+
+## Why `with sharing` is not access control
+
+The single most common review finding is a class that declares `with sharing` and is treated as secure. It is not, because sharing and permissions are different layers that answer different questions. [^6] [^7]
+
+- **Object permissions (CRUD)** decide whether a user can touch Account, Contact, or Invoice__c at all.
+- **Field-level security** decides whether a user can see or edit a given field on an object they can already reach.
+- **Sharing** decides which records a user can see within an object they can reach.
+
+A `with sharing` query on Contact returns the contacts the user can see, including every field in the select list, even fields their profile hides. A class with no permission enforcement returns those fields, and if the class is `without sharing` it returns every contact in the org. Enforcing one layer and calling it done is the mistake; the layers stack.
+
+The historical context explains the tooling. Apex ran in system context by default, so the platform's own guidance was to check permissions before querying, field by field, with calls like `Schema.sObjectType.Contact.fields.Email.isAccessible()`. [^7] That works and it scales badly: it is verbose, it is easy to get wrong in the one branch nobody reviewed, and it becomes unmaintainable in a class with an inner query. The Spring '20 release replaced most of that boilerplate with `WITH SECURITY_ENFORCED` in the query and `Security.stripInaccessible()` around records in memory. [^9] User mode then folded CRUD, FLS, and sharing into a single declaration on the operation itself. [^8]
+
+## The four enforcement tools, and when each one is right
+
+**1. `WITH USER_MODE` (or `WITH SYSTEM_MODE`).** The clause goes on the query and the operation behaves as the running user, checking object permissions, FLS, and sharing together. It also handles polymorphic fields such as `Owner` and `Task.whatId`, checks the `WHERE` clause as well as the select list, and reports every field-level violation rather than only the first. If access is missing, the query raises an exception. [^1] [^8]
+
+**2. `WITH SECURITY_ENFORCED` (legacy).** The pre-67 clause that checked object and field level read access on the fields in the query and threw on failure. It does not compile at API version 67.0 and later, so any query still using it must move to `WITH USER_MODE`, or to `WITH SYSTEM_MODE` where system access is genuinely intended and can be justified in a comment. [^1] [^2]
+
+**3. `Security.stripInaccessible()`.** This is the graceful-degradation option. It removes the fields the running user cannot access and returns the records anyway, wrapped in an `SObjectAccessDecision`:
+
+```apex
+SObjectAccessDecision decision =
+    Security.stripInaccessible(AccessType.UPDATABLE, incoming);
+if (!decision.getModifiedIndexes().isEmpty()) {
+    // something was stripped, decide whether to fail or continue
+    System.debug(LoggingLevel.WARN, 'Stripped: ' + decision.getRemovedFields());
+}
+update decision.getRecords();
+```
+
+The access types are `READABLE`, `CREATABLE`, `UPDATABLE`, and `UPSERTABLE`, and the optional third argument `enforceRootObjectCRUD` defaults to `true`, so the method also checks object-level access unless you turn that off. [^9] Use it when the page should still render with the fields the user can see, and use it for records arriving from outside Apex: a JSON payload from an integration or a client-shaped object is untrusted input, and the platform has no idea what permissions it was assembled under.
+
+**4. `AccessLevel` on DML and `Database` methods, plus the `as user` and `as system` verbs.** These put the access decision at the write:
+
+```apex
+insert new Account(Name = 'Acme') as user;
+Database.insert(records, false, AccessLevel.SYSTEM_MODE);
+```
+
+Reach for `AccessLevel.USER_MODE` on user-facing writes and for `SYSTEM_MODE` only where an integration user or a batch job must process records regardless of who triggered the transaction, with a comment saying why. [^8]
+
+A useful default: user mode everywhere, system mode as an exception you can name. The Summer '26 default makes that the platform's own position for any class at 67.0. [^1]
+
+## The sharing keyword is a code contract
+
+The sharing keyword is not a documentation habit. It decides, per class, whether the sharing model applies:
+
+- `with sharing` enforces org-wide defaults and sharing rules for the code in that class. Default for user-facing controllers and services.
+- `without sharing` bypasses them. Legitimate for system integrations and jobs, and it should be a deliberate, commented decision.
+- `inherited sharing` takes the sharing context of the caller, which is what utility and helper classes usually want.
+- Omitted used to mean effectively `without sharing` in most contexts. At API version 67.0 an omitted keyword defaults to `with sharing`. [^1] [^2]
+
+Two behaviours make this a code-level review item rather than a checkbox. First, the sharing setting of the class where a method is defined is what applies, not the setting of the class that calls it, so a `without sharing` helper called from a `with sharing` controller runs without sharing. [^7] Second, an `@AuraEnabled` method is an entry point the client can call directly, whatever the component's UI does, so hiding a button is presentation and not authorization. [^6] Triggers are the documented exception to the keyword game: a trigger cannot declare a sharing or access mode, which is why the handler class it delegates to is where you settle the access question. [^1] [^2]
+
+## Worked example: the account search screen
+
+A Lightning search screen shipped two releases ago. It calls one Apex method, it declares `with sharing`, and it passes review in the org because the reviewers are the same team that wrote it. An external reviewer reads the code and returns four findings. Here is the walk-through an architect would run.
+
+```apex
+public with sharing class AccountSearchController {
+    @AuraEnabled
+    public static List<Account> search(String fieldName, String term) {
+        String soql = 'SELECT Id, Name, ' + fieldName +
+                      ' FROM Account WHERE Name LIKE \'%' + term + '%\'';
+        return Database.query(soql);
+    }
+}
+```
+
+1. **Establish the execution context.** A class at API version 66.0 or earlier runs its database operations in system mode, so the query ignores FLS and object permissions regardless of the sharing keyword. That is the finding that makes the other three expensive. [^1]
+2. **Reproduce, then fix the injection.** Send `term` as `%' OR Name != '` and confirm the method returns the whole object. The fix is a bind variable for the value and an allowlist for the field name. [^5]
+3. **Fix the access control on the read.** Add `WITH USER_MODE`, or pass `AccessLevel.USER_MODE` to `Database.query`. The query now enforces CRUD, FLS, and sharing, and raises on a field the user cannot read. [^8]
+4. **Fix the authorization on the entry point.** `@AuraEnabled` is a public endpoint, so the method itself has to be safe for any logged-in user, not just the one the component shows. Nothing in the component's markup counts. [^6]
+5. **Bound the result.** The `LIMIT` is a performance and a security control at once: the closest thing to data exfiltration over a UI is an unbounded query behind an unvalidated filter. Lesson 24's selectivity rules and lesson 38's budgets still apply.
+6. **Add a restricted-user test.** Tests run as a broadly-permissioned user by default, so they prove the code works and not that it is safe. Create a user with read access to Account and no access to the restricted fields, run the method as that user, and assert the filtered result. [^2]
+7. **Run static analysis.** Salesforce Code Analyzer scans Apex with PMD, JavaScript with ESLint, libraries with RetireJS, and includes engines aimed at exactly this class of bug, including missing CRUD and FLS checks. It is a CLI plugin, it runs in minutes, and it is the same tool the security review requires for a managed package submission. [^10] [^12]
+
+The fixed method:
+
+```apex
+public with sharing class AccountSearchController {
+    private static final Set<String> SEARCHABLE_FIELDS =
+        new Set<String>{ 'Name', 'BillingCity', 'Industry' };
+
+    @AuraEnabled(cacheable=true)
+    public static List<Account> search(String fieldName, String term) {
+        if (!SEARCHABLE_FIELDS.contains(fieldName)) {
+            throw new AuraHandledException('Unsupported search field.');
+        }
+        if (String.isBlank(term)) {
+            return new List<Account>();
+        }
+        String likeTerm = '%' + term + '%';
+        String soql = 'SELECT Id, Name, ' + fieldName +
+                      ' FROM Account WHERE Name LIKE :likeTerm LIMIT 50';
+        return Database.query(soql, AccessLevel.USER_MODE);
+    }
+}
+```
+
+The allowlist handles the name, the bind variable handles the value, the access level handles the permissions, and the limit handles the blast radius. Four findings, four controls, one method.
+
+## The rest of the OWASP surface you still have to check
+
+Apex reviews rarely stop at injection and access control. These are the patterns that show up next, in the order they tend to appear in findings:
+
+- **Secrets in code.** An API key in a class travels into version control, into every sandbox, and into any debug log that prints the request. Callouts that need authentication should reference a named credential, which holds the endpoint URL and the authentication configuration in one definition, with an external credential specifying the protocol and the permission set the authentication runs as. [^13] [^14]
+- **Untrusted deserialization.** `JSON.deserializeUntyped()` on a request body gives you records built entirely from client input. Run them through `Security.stripInaccessible()` before the DML, and validate the shape before that. [^9]
+- **Exceptions that fail open.** An empty `catch` block around a permission check is worse than no check, because it looks like one. If the code cannot confirm access, it should refuse.
+- **Error messages and logs.** An exception message that echoes a query and a record ID is a data leak into a log your users can often read. Log the access denial, not the data that was denied. Access denials are also the signal worth alerting on, since a run of them from one user is what a probing attack looks like.
+- **The client-side escape hatches.** Visualforce's `escape="false"` and LWC's `innerHTML` both turn user text into markup, which is the cross-site scripting route into the same category as injection. [^4]
+
+For ISV work there is a process layer on top of all of this: a managed package must pass the security review, which requires a Code Analyzer scan submitted with the review, a Checkmarx Source Code Scanner run for any submission containing a package or component, and dynamic testing of any external endpoints that run outside the platform. [^12]
+
+## The review sequence
+
+When an architect is handed an org, a package, or a finding, this is a workable order:
+
+1. Establish the execution context of every class involved: API version, sharing keyword, and whether the database operations are user mode or system mode.
+2. Trace untrusted input to the interpreter. Every string that reaches `Database.query`, `Database.queryWithBinds`, `Search.query`, or a `Database.getQueryLocator` call, and where each fragment came from.
+3. Confirm access enforcement on every read and write that returns or receives user-visible data: `WITH USER_MODE`, `AccessLevel.USER_MODE`, or `stripInaccessible`.
+4. Check the entry points. Every `@AuraEnabled`, `@InvocableMethod`, `@RestResource`, and `global` method is reachable without your UI.
+5. Check the sharing boundary: which class crosses it, whether the crossing is deliberate, and where the authorization check sits relative to it.
+6. Check the payloads: deserialized records, callout responses, and anything else that arrives from outside the platform.
+7. Run Code Analyzer, fix what is real, and document what is a false positive.
+
+## The pitfalls
+
+**Reading `with sharing` as a security control.** It enforces row-level sharing only. A `with sharing` query still returns fields the user cannot read and objects they have no permission to see, unless CRUD and FLS are enforced separately. [^6]
+
+**Believing `escapeSingleQuotes` is a general fix.** It escapes single quotes. In a query with no quoted string to escape, it is a no-op, which is what the typecasting exercise in the Secure Server-Side Development module demonstrates by removing it. [^11]
+
+**Confusing injection prevention with access control.** A bind variable stops an attacker from rewriting your query. It does nothing about the fact that the query runs in system mode and returns fields the user cannot see. The two fixes are independent and both are required. [^1] [^5]
+
+**Using `stripInaccessible` and then ignoring the result.** The method removes fields rather than raising, so a caller that does not check `getRemovedFields()` or `getModifiedIndexes()` will happily write a record with the stripped fields silently absent. That is sometimes correct, and it is never accidental. [^9]
+
+**Trusting tests for security.** Apex tests run as a user with broad access, so a suite that passes proves the code path works, not that a restricted user gets a restricted answer. The Summer '26 migration guidance makes the same point from the other direction: existing coverage was written against the old system-mode defaults and does not validate the new ones. [^2]
+
+**Trusting the client.** Hiding a button, disabling a field, or gating a component is presentation. The Apex method behind it is callable, and the review starts there. [^6]
+
+**Sanitizing after the write.** `stripInaccessible` belongs before the DML, on the records you are about to save, not on the response you send back.
+
+## Try it
+
+A consultant hands you an Apex REST resource that a partner integration posts to. It accepts a JSON body, deserializes it into a list of Contact records, sets the owner from a request parameter, and inserts them. The class is at API version 66.0, has no sharing keyword, and it catches every exception and returns `{ "success": true }`. Answer before reading on.
+
+1. What is the execution context, and what does it mean for the insert? *(API 66.0 with no sharing keyword means the class behaves as `without sharing` in most contexts, and its DML runs in system mode, so the insert ignores the app's object permissions, FLS, and sharing.)* [^1] [^2]
+2. The payload is client-supplied. What protects the write? *(Nothing yet. The records come from untrusted input, so they need validation and `Security.stripInaccessible(AccessType.CREATABLE, records)` before the insert, or `insert records as user`.)* [^8] [^9]
+3. The owner comes from a request parameter. What is the finding? *(Mass assignment: the caller chooses the owner, which is a record-level access decision made by an untrusted party. The server should decide the owner.)* [^6]
+4. The empty catch returns success. Why is that worse than returning an error? *(It reports success for a write that did not happen, and it suppresses the access-denial signal that would have revealed the attempt. Failing open is its own OWASP category.)* [^3]
+5. Where does the request body stop being untrusted? *(Only after validation and access stripping. Deserialization into typed Apex objects does not sanitize anything.)* [^9]
+6. What tool would have flagged findings 2 and 4 before the review did? *(Salesforce Code Analyzer, which includes engines for CRUD and FLS issues and runs in minutes.)* [^10]
+
+## What's next
+
+You can now read Apex the way a reviewer does: find the interpreter, find the untrusted input, find the user context, and check that the access decision is made on the server by code rather than by the client or by omission. Lesson 45 takes the same discipline outside the platform's walls. It is a general systems architecture lesson on security for AI systems: prompt injection as an injection class of its own, tool permissions, and least privilege as the design principle that keeps an agent from being the most privileged user in your stack. [^4]
+
+[^1]: developer.salesforce.com. [The Salesforce Developer's Guide to the Summer '26 Release](https://developer.salesforce.com/blogs/2026/06/the-salesforce-developers-guide-to-the-summer-26-release)
+[^2]: salesforce.com. [Summer '26 Release Highlights for Salesforce Architects](https://www.salesforce.com/blog/summer-26-release-architect-highlights/)
+[^3]: owasp.org. [OWASP Top 10:2025 Introduction](https://owasp.org/Top10/2025/0x00_2025-Introduction/)
+[^4]: owasp.org. [A05 Injection | OWASP Top 10:2025](https://owasp.org/Top10/2025/A05_2025-Injection/)
+[^5]: developer.salesforce.com. [SOQL Injection Due to Insecure Database Query Construction | ISVforce Guide](https://developer.salesforce.com/docs/platform/isvforce/guide/secure-code-violation-soql-injection.html)
+[^6]: developer.salesforce.com. [Securing Data in Apex Controllers: Enforce Object and Field Permissions | Lightning Aura Components Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.lightning.meta/lightning/apex_crud_fls.htm)
+[^7]: developer.salesforce.com. [Apex Security and Sharing | Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_security_sharing_chapter.htm)
+[^8]: developer.salesforce.com. [Set an Access Mode for Database Operations | Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_classes_enforce_usermode.htm)
+[^9]: developer.salesforce.com. [Learn MOAR in Spring '20 with Field Level Security in Apex | Salesforce Developers Blog](https://developer.salesforce.com/blogs/2020/01/learn-moar-in-spring-20-with-field-level-security-in-apex.html)
+[^10]: developer.salesforce.com. [Salesforce Code Analyzer FAQ](https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/faq.html)
+[^11]: trailhead.salesforce.com. [Injection Vulnerability Prevention | Secure Server-Side Development](https://trailhead.salesforce.com/content/learn/modules/secdev_injection_vulnerabilities/secdev_inject_prevent_soql_injection)
+[^12]: developer.salesforce.com. [Test Your Entire Solution | ISVforce Guide](https://developer.salesforce.com/docs/platform/isvforce/guide/security-review-test-all.html)
+[^13]: developer.salesforce.com. [Get Started with Named Credentials | Named Credentials Developer Guide](https://developer.salesforce.com/docs/platform/named-credentials/guide/get-started.html)
+[^14]: resources.docs.salesforce.com. [Secure Coding Guide](https://resources.docs.salesforce.com/latest/latest/en-us/sfdc/pdf/secure_coding.pdf)
