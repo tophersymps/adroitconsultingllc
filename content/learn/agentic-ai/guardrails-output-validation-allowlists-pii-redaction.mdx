@@ -44,6 +44,8 @@ Validation is not one check. It is a stack, and you apply it from the cheapest s
 
 The order matters. Run the cheap checks first, because they reject most of the bad output for almost no cost, and save the expensive model-based check for what survives them.
 
+![The three layers of output validation, stacked from the cheapest structural check up to the most expensive semantic one, with the order mattering because the cheap checks reject most bad output first](</diagrams/guardrails-output-validation-allowlists-pii-redaction/1-output-validation-layers.png>)
+
 ## Allowlists over denylists
 
 This is the single most important design choice in the output gate, and it is the same choice that governs permissions elsewhere in your system. An allowlist denies by default and admits only what you named. A denylist admits by default and blocks only what you named. The difference is what happens to the thing you did not think of. An allowlist fails that thing closed. A denylist lets it through.
@@ -58,6 +60,8 @@ For output this shows up concretely in three places.
 
 The underlying principle is default deny, and it is the safer direction to fail in. [^7] A system that stops and asks because an action was not on the list is annoying in the best way. A system that runs because it was not on the block list is how records get deleted.
 
+![Allowlist versus denylist: an allowlist denies by default and fails the thing you did not think of closed, while a denylist admits by default and lets it through, applied to action names, enum values, and commands](</diagrams/guardrails-output-validation-allowlists-pii-redaction/2-allowlist-vs-denylist.png>)
+
 ## PII redaction before emission
 
 An agent often reads, composes, or summarizes text that contains personal data. When it does, you have a decision about what may leave the system, and you make that decision before the output reaches a user or a downstream service, not after. OWASP's LLM02, sensitive information disclosure, describes the risk: a model can reproduce PII or secrets it saw in context, and output-side filtering is one of the named mitigations. [^9]
@@ -67,6 +71,8 @@ Redaction is the mechanical version of this: detect the sensitive spans and mask
 **Detection.** You can detect PII with pattern-based recognizers, for things with reliable shape like email addresses, phone numbers, and credit card numbers, and with model-based recognizers, for things without fixed shape like names and addresses. Microsoft's Presidio is an open source library that ships both: an analyzer with a library of recognizers, and an anonymizer that replaces the detected spans. [^4] [^5] It reports each match with a confidence score, so you can choose a threshold and decide which spans to act on. Google's Sensitive Data Protection is the managed, cloud-hosted equivalent: you define an inspection config that detects sensitive elements and a de-identification config that decides how to transform each one. [^8]
 
 **Masking.** Once detected, decide what replaces the span. Full removal deletes it, which is safest but can break the sentence. Replacement with a category label, like `[EMAIL]` or `[PHONE]`, keeps the structure readable while stripping the identifying value. Faking, generating a plausible but non-real value, preserves format for downstream parsers but is riskier because a fake value can still look real to the next system. [^5] For an agent summary that a customer will read, the category label is usually the right call.
+
+![Three ways to mask a detected PII span: full removal is safest but can break the sentence, a category label keeps the structure readable, and faking preserves format but a fake value can still look real to the next system](</diagrams/guardrails-output-validation-allowlists-pii-redaction/4-pii-masking-strategies.png>)
 
 **Where to redact.** Redact on both sides of the model. Mask PII in the input before it reaches the model where you can, so the model never sees the real value, and redact the output as a backstop for PII the model reconstructs or that leaked in from retrieved content. The output redaction is the part that protects the reader, and it belongs in the same gate as every other output check. [^9]
 
@@ -99,6 +105,8 @@ Let me put this together in one concrete system. You are building an agent that 
 **Step five, the refusal path.** Suppose the account status was actually `closed` but the notes are contradictory, and the semantic check flags that the summary asserts `active`. The gate refuses. The agent returns the fixed neutral string, "I could not prepare a complete summary for this ticket. A member of our team will follow up." It does not retry five times, because the problem is a data conflict, not a transient glitch, and it does not leak which field failed. The refusal, the input that produced it, and the validation error go to the monitoring log, where a human sees that a closed account's summary was blocked and can resolve the underlying data conflict. [^2] [^3]
 
 That is the whole shape: structural validation, format checks, redaction, a semantic pass, and a designed way to refuse. Every layer is deterministic except the semantic one, and the refusal path makes the deterministic layers safe to fail.
+
+![The five-layer output gate for a customer-facing summary agent: schema, format checks, PII redaction, semantic check, and refusal path, applied in order with the refusal path returning a fixed neutral string on a data conflict](</diagrams/guardrails-output-validation-allowlists-pii-redaction/3-summary-agent-output-gate.png>)
 
 ## The pitfall to avoid
 
