@@ -71,6 +71,8 @@ Two problems sit in three lines. `fieldName` is concatenated straight into the s
 
 The amplifier is the execution context. Before API version 67.0, Apex database operations ran in system mode by default, so an injected query ran with the platform's access rather than the user's, which is how injection turns into privilege escalation. [^1] [^5]
 
+![Two shapes of SOQL injection side by side: a user-supplied field name that lands in the select list, and a user-supplied WHERE fragment that breaks out of its quoted string, each with its documented payload and the query it produces](</diagrams/security-review-owasp-apex-soql-injection-crud-fls/1-two-shapes-of-injection.png>)
+
 ## Injection, part two: what actually closes it
 
 Four techniques are documented, and they are not interchangeable. [^5] [^11]
@@ -116,6 +118,8 @@ Two boundaries are worth stating as rules rather than techniques. Never let a us
 | `String.escapeSingleQuotes` | Quotes inside a quoted literal (fallback only) | Anything unquoted: numbers, booleans, identifiers |
 | `WITH USER_MODE` or `AccessLevel.USER_MODE` | Missing access control | Injection, which is what the other rows are for |
 
+![Map from what an untrusted user is allowed to supply to the control that closes it: a bind variable for a WHERE value, queryWithBinds for a query assembled at runtime, an allowlist for a field or object name, typecasting for numbers and booleans, and no execution in Apex at all for anything else](</diagrams/security-review-owasp-apex-soql-injection-crud-fls/2-which-control-closes-which-slot.png>)
+
 ## Why `with sharing` is not access control
 
 The single most common review finding is a class that declares `with sharing` and is treated as secure. It is not, because sharing and permissions are different layers that answer different questions. [^6] [^7]
@@ -125,6 +129,8 @@ The single most common review finding is a class that declares `with sharing` an
 - **Sharing** decides which records a user can see within an object they can reach.
 
 A `with sharing` query on Contact returns the contacts the user can see, including every field in the select list, even fields their profile hides. A class with no permission enforcement returns those fields, and if the class is `without sharing` it returns every contact in the org. Enforcing one layer and calling it done is the mistake; the layers stack.
+
+![The three access layers stacked: object permissions and field-level security answer what a user can touch, sharing answers which records they can see, and only the sharing layer is what the with sharing keyword enforces](</diagrams/security-review-owasp-apex-soql-injection-crud-fls/3-three-access-layers.png>)
 
 The historical context explains the tooling. Apex ran in system context by default, so the platform's own guidance was to check permissions before querying, field by field, with calls like `Schema.sObjectType.Contact.fields.Email.isAccessible()`. [^7] That works and it scales badly: it is verbose, it is easy to get wrong in the one branch nobody reviewed, and it becomes unmaintainable in a class with an inner query. The Spring '20 release replaced most of that boilerplate with `WITH SECURITY_ENFORCED` in the query and `Security.stripInaccessible()` around records in memory. [^9] User mode then folded CRUD, FLS, and sharing into a single declaration on the operation itself. [^8]
 
@@ -158,6 +164,8 @@ Database.insert(records, false, AccessLevel.SYSTEM_MODE);
 Reach for `AccessLevel.USER_MODE` on user-facing writes and for `SYSTEM_MODE` only where an integration user or a batch job must process records regardless of who triggered the transaction, with a comment saying why. [^8]
 
 A useful default: user mode everywhere, system mode as an exception you can name. The Summer '26 default makes that the platform's own position for any class at 67.0. [^1]
+
+![Four enforcement tools compared by where each one sits and what happens on missing access: WITH USER_MODE raises, WITH SECURITY_ENFORCED no longer compiles at API 67.0, Security.stripInaccessible strips the fields and returns the records, and AccessLevel declares user or system mode at the write](</diagrams/security-review-owasp-apex-soql-injection-crud-fls/4-four-enforcement-tools.png>)
 
 ## The sharing keyword is a code contract
 
@@ -217,6 +225,8 @@ public with sharing class AccountSearchController {
 ```
 
 The allowlist handles the name, the bind variable handles the value, the access level handles the permissions, and the limit handles the blast radius. Four findings, four controls, one method.
+
+![The account search screen as a findings-to-controls map: system-mode execution context, injection through the field name and the term, no access control on the read, and an unbounded result set, each answered by the control added in the fixed method](</diagrams/security-review-owasp-apex-soql-injection-crud-fls/5-worked-example-findings-to-controls.png>)
 
 ## The rest of the OWASP surface you still have to check
 
