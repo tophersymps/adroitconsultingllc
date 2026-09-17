@@ -1,0 +1,130 @@
+---
+title: "OmniStudio T-2: Resolve OmniScript Errors & Rendering"
+slug: day-39-t-2-resolve-omniscript-errors-rendering
+series: omni-studio-cert
+lesson: 39
+excerpt: "Learn the evidence-first way to fix an OmniScript that errors mid-flow or renders wrong. Debug in Preview and read the data JSON at each step to isolate the failing element. Understand that every element name becomes a JSON key, so duplicate names silently overwrite each other's data. Check visibility conditions and element properties before suspecting the platform, because a false condition hides an element by design. Read extract, load, and remote action failures in the Action Debugger for the exact payload, and inspect raw JSON in logs for path typos, malformed payloads, and unescaped characters. Work a full step-by-step diagnosis of a mid-flow failure and a missing field, and sidestep the exam traps: rebuilding instead of debugging the JSON, duplicate names that overwrite data, and assuming a hidden element is broken when a condition hides it."
+date: "September 17, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [OmniStudio, Troubleshooting]
+---
+
+An OmniScript fails mid-flow, or a page renders wrong, and the pressure to rebuild is real. Rebuilding almost never helps, because an OmniScript is a JSON-driven engine: every element on the canvas maps to a key in a live data JSON, and the script fails when that data does not line up with what the elements expect. [^3][^6] Requirement T-2 asks you to resolve OmniScript errors and UI that does not render correctly, and the whole skill compresses into one habit: read the evidence before you change anything. [^1][^6]
+
+This lesson gives you the disciplined order of diagnosis. Run the script in debug mode, inspect the data JSON at the failure point, check element names and visibility conditions, then read the action logs for the exact payload. [^1][^6] That order is load bearing. A mid-flow error, a blank field, a hidden block, all of them trace back to the JSON and how the elements read it, so you resolve them in the same sequence you would use to find them. [^1][^6] Work a full diagnosis with me and you will walk into the exam knowing the first question to ask when an OmniScript breaks.
+
+## Deep Dive
+
+### An OmniScript runs on a live data JSON, not on the canvas
+
+Start with the mental model, because everything in this requirement follows from it. An OmniScript is a guided, multi-step process built from elements: steps, input fields, action elements, functions, and groups. [^2][^3] At runtime the engine keeps the whole state of that process in a single JSON document, called the data JSON, and every element reads from and writes to that document. [^1][^6] When a user types into a field, the value lands in the data JSON under that element's name. When an action runs, its inputs come from the JSON and its outputs are written back into it. [^3][^6]
+
+The exam version of this is the parser. The OmniScript uses a parser to match JSON that comes back from a data source or an action to the inputs in the script based on element names. If the JSON does not match the element name, the field appears empty. [^3] That single sentence explains a huge share of "the script is broken" reports: the data is fine, the element is fine, but the key in the JSON does not match the element name, so nothing binds. [^3]
+
+Why it matters for the exam: T-2 is not about memorizing error codes. It is about reading a JSON document and locating the mismatch between what the script produces and what it expects. [^1][^6] Hold that and the requirement becomes a data problem, not a rebuild problem. [^1]
+
+### Debug mode: step through the elements and read the data JSON at each step
+
+The first tool for a failing OmniScript is debug mode in Preview. In the OmniScript Designer you toggle to Preview to run the script, and Preview is where the debugging panels live. [^1][^2] The two panels you need are the data JSON and the Action Debugger. [^1][^2]
+
+The data JSON provides an easy-to-read JSON format that updates as you interact with the script. Enter a value in a field and the data JSON updates to show it. [^1][^2] Step through the script one element at a time and the data JSON changes at each step, so you can see exactly what the script knows at the moment before it fails. [^1][^6] That is what "debug mode" means in OmniStudio: run the script interactively in Preview, step through elements, and inspect the data JSON at the failure point. [^1][^2][^6]
+
+This isolates a failing element the way nothing else does. Suppose a script crashes on step three. If you watch the data JSON, you see the value that step three expected never arrive, or arrive with the wrong name or type. [^1][^6] You have pinpointed the element and its data state in one pass, without guessing. [^1]
+
+The Action Debugger is the second half. It displays a searchable log of every action that runs, and you expand each node to see the data being sent to and returned from Salesforce or an external server. [^1][^6] A Data Mapper extract, a load, a remote call, an HTTP call, each one logs its request and response, and you copy any node's JSON with one click. [^1][^6] When an action fails, the error and the payload that caused it are in that log. [^1][^6]
+
+The exam taps this directly. When a question asks which approach isolates a failing element in an OmniScript, the answer is debug mode: step through the elements and inspect the JSON. [^1][^2] Rebuild the script, change the theme, and ask the user to retry all address symptoms, not evidence. [^1]
+
+### Element names are JSON keys, so duplicate names silently overwrite data
+
+Here is the root cause behind a surprising number of "data is wrong" reports: element names must be unique in an OmniScript, because each name becomes a key in the data JSON. [^3] If two elements share a name, they share a key, and whichever writes last overwrites the other. [^3][^6] There is no error, no warning, just the earlier value gone and the later value sitting in its place.
+
+The naming guidance in the official docs makes the intent clear. Use Pascal Case with no spaces, such as StepAccount. Use object and field names for clarity, such as AccountName. Specify the object for IDs, such as AccountId. [^3] A Set Values element's name is the variable name that shows up in the JSON node. [^5] When you duplicate a name, you are not creating a second variable, you are pointing two elements at the same slot in the JSON, and the second write wins. [^3]
+
+Why it matters for the exam: T-2 has a direct question on this. Two elements share a name and data is overwriting. The root cause is duplicate element names, because names are JSON keys. [^3] The distractors, a slow network, a license issue, a FlexCard state, all describe unrelated failure modes. [^3] The fix is to rename for uniqueness, and to confirm the rename by reading the data JSON so the duplicate key is gone.
+
+A related variant is a name that collides with a key the platform already uses, or a name that a parser cannot map cleanly. Keep names unique, Pascal Case, and object-qualified, and you eliminate this entire class of bug before it starts. [^3]
+
+### UI not rendering: check visibility conditions and element properties first
+
+A common trap in this domain is a field, a block, or a step that does not show, and the designer assumes the platform is broken. Often the platform is doing exactly what it was told. OmniScripts use conditional display logic to hide or show an element, a group, elements in a block, or an entire step based on user input or other data conditions. [^4] A condition that evaluates false hides the element by design. [^4][^5]
+
+The mechanism is the Conditional View property on a step or block element. [^5] Within it you pick a Condition Type, and the relevant ones for visibility are Show Element if True, Disable Read Only if True, and Set Element to Required if True. [^5] If you attach Show Element if True and the condition is not true at runtime, the element stays hidden, and that is correct behavior, not a platform fault. [^4][^5]
+
+So the diagnostic step for "the UI is not rendering" is to read the element's conditions and properties before you suspect anything else. Is the element under a Conditional View whose condition is false? [^4][^5] Is it inside a block that is hidden because a radio button selected a different option? [^4] Is the field itself set to be hidden, or disabled, or required? [^5] Answer those and you usually find the element is hidden on purpose. [^4][^5]
+
+The exam traps this hard. A question presents an element that is missing from the render, and the disciplined answer is to check the visibility conditions and element properties, because a false condition hides an element by design. [^4][^5] Rebuilding, changing the theme, or toggling security settings address a problem that does not exist. [^1]
+
+### Action failures surface in the Action Debugger with the exact payload
+
+When the script errors at an action, an extract, a load, a remote call, the evidence is in the Action Debugger. [^1][^6] The debugger logs the request the action sent and the response it received, and you read both. [^1][^6] A Data Mapper extract that failed returns its error and its input in the log. A load action that rejected a record shows the payload it tried to save. A remote action that threw an Apex exception shows the class, the method, and the data passed in. [^1][^6]
+
+The lesson here is to fix the data or the contract, not the UI. If a load action fails because it received a malformed payload, restyling the page does nothing. [^6] You read the exact payload in the log, see what the action expected versus what it got, and fix the mapping, the formula, or the path that produced the wrong shape. [^1][^6]
+
+### Broken JSON in formulas and actions: path typos, malformed payloads, unescaped characters
+
+The last class of failure is broken JSON itself. [^6] Three defects dominate. Path typos: an action reads a node at a path that does not exist, so it gets null and either errors or writes a blank. [^3][^6] Malformed payloads: a formula or an expression produces JSON that is not valid, so the parser cannot consume it and the output is missing or blank. [^6] Unescaped characters: a value with a quote, a backslash, or an unescaped control character breaks the JSON so the node never parses. [^6]
+
+The fix is to inspect the raw JSON in the logs. [^1][^6] The data JSON shows you the structure the script built; the Action Debugger shows you what each action sent and received. [^1][^6] Copy the JSON out, open it in a JSON editor, and the syntax error or the bad path becomes visible immediately. [^1][^6]
+
+The exam taps this directly. When a question asks which symptom points to broken JSON in an action, the answer is missing or blank output with a malformed payload in the log. [^6] The theme changing, the language switching, and a card width changing are unrelated UI symptoms. [^6] The malformed payload in the log is the signature of broken JSON. [^6]
+
+### Order of diagnosis: debug mode, data JSON, names and conditions, action logs
+
+Compress the whole requirement into a sequence and it fits in four steps. [^1][^6] Debug mode first, because stepping through elements in Preview with the data JSON open pinpoints the failing element and its data state. [^1][^2] The data JSON second, because you inspect it at the failure point to see what the script actually holds, and because element names are JSON keys, so duplicates overwrite and paths must match exactly. [^1][^3] Names and visibility conditions third, because duplicate names corrupt the JSON and a false condition hides an element by design. [^3][^4][^5] Action logs last, because extract, load, and remote action failures carry the exact payload in the Action Debugger, and broken JSON shows up as a malformed payload. [^1][^6] Do not rebuild before you read the JSON. [^1]
+
+That order is the exam tip in one line: OmniScript errors resolve through debug mode plus JSON inspection, and duplicates and path typos are the usual suspects. [^1][^3][^6] Hold it and nearly every T-2 question becomes a data question, which step comes first, what the JSON shows, where the mismatch lives. [^1] The discipline is what the exam grades. [^1]
+
+## Configuration Walkthrough
+
+Work one concrete failure end to end. You open an OmniScript in Preview, it runs through step one, then errors on step three, and a field on the final page renders empty. Run the numbered diagnosis below and land on the fix in minutes. [^1][^6]
+
+1. **Run the script in debug mode and step through the elements.** Toggle to Preview and watch the script execute element by element. [^1][^2] Run it with the data JSON panel open so you can see the document change at each step. [^1][^2] Identify the exact element where the flow stops or the data goes wrong. [^1][^6] You are not fixing anything yet, you are locating the failure point with evidence. [^1]
+
+2. **Inspect the data JSON at the failure point.** At the moment the script stops, read the data JSON. [^1][^6] What did the failing element expect, and what does the JSON actually hold at that step? [^1][^3] Is the key there but empty? Is it nested under the wrong parent? Is it missing entirely because a prior action never wrote it? [^3][^6] Answer one question: does the JSON contain what this element needs, under the exact name and path it reads? [^3]
+
+3. **Check element names for duplicates and verify visibility conditions.** Search the element tree for any two elements that share a name, because a duplicate name means a shared JSON key and silent overwrite. [^3] Rename for uniqueness if you find one. [^3] Then check the element's Conditional View and properties. Is the field hidden under Show Element if True with a condition that evaluates false? [^4][^5] Is it inside a block hidden by an earlier choice? [^4] A hidden element is often correct, so confirm the condition is what you intend. [^4][^5]
+
+4. **Review the action logs for payload and contract errors.** Open the Action Debugger and read the request and response for each action that ran. [^1][^6] For an extract that returned nothing, look at the input it was sent. [^1][^6] For a load that failed, read the exact payload it tried to save. [^1][^6] For a remote call that threw, check the method signature against the data passed in. [^1][^6] Copy the JSON, open it in a JSON editor, and look for path typos, a malformed payload, or an unescaped character. [^1][^6] Fix the data or the contract, not the page. [^1]
+
+That is the whole walkthrough, and the order is the point. [^1] You located the failing element, read its data JSON, checked its name and conditions, and only then read the action logs. [^1][^6] When you fix the underlying JSON, the script runs and the page renders without a rebuild. [^1]
+
+## Exam Traps
+
+- **Rebuilding the script instead of debugging the JSON.** The most expensive wrong move. An OmniScript fails when its data JSON does not match what the elements expect, and rebuilding discards the very evidence that names the cause. [^1][^6] Run it in debug mode, step through the elements, and read the data JSON at the failure point instead. [^1][^2]
+
+- **Duplicate names, and data silently overwritten.** Element names are JSON keys, and a duplicate name means two elements share a slot. [^3] The second write silently replaces the first with no error. [^3][^6] Search for duplicate names, rename for uniqueness, and confirm the key is gone in the data JSON. [^3]
+
+- **Assuming a hidden element is broken when a condition hides it.** A field, block, or step that does not render is often under a Conditional View whose condition is false, and hiding it is correct. [^4][^5] Check Show Element if True and the element's properties before you suspect the platform or rebuild. [^4][^5]
+
+## Exam Tip
+
+Compress T-2 into the diagnostic sequence and the lesson writes itself. [^1] Debug mode first: step through the elements in Preview and inspect the data JSON at each step to isolate the failing element. [^1][^2] The data JSON second: it is the live state of the script, and element names are its keys, so duplicate names overwrite and mismatched paths leave fields empty. [^1][^3] Visibility conditions third: a false condition hides an element by design, so check element properties before suspecting the platform. [^4][^5] Action logs last: extract, load, and remote action failures surface in the Action Debugger with the exact payload, and broken JSON shows up as missing or blank output with a malformed payload in the log. [^1][^6] Never rebuild before reading the JSON. [^1] The usual suspects are duplicates and path typos, and the tool that finds them is debug mode plus JSON inspection. [^1][^3][^6]
+
+## Try It
+
+Open an OmniScript in a sandbox and force each failure so you learn to read it. [^1][^6] Start by running it in Preview with the data JSON open and stepping through each element, so you can name the value the JSON holds at every step. [^1][^2] Then clone an element without renaming it, run the script, and watch the duplicate name overwrite the first element's value in the data JSON with no error. [^3] Rename for uniqueness and confirm the key is restored. [^3]
+
+Then add a Conditional View with Show Element if True on a block, leave the condition false, run the script, and see the block hidden by design. [^4][^5] Flip the condition and watch the block appear. [^4][^5]
+
+Finally, break an action on purpose. Send a Data Mapper load a malformed payload, or reference a JSON path that does not exist, and read the Action Debugger log to find the exact request and response. [^1][^6] Copy the JSON into an editor, spot the malformed payload or the path typo, and fix the mapping so the output appears. [^1][^6] Name out loud where each of the four problems lived: the failing element, the data JSON, the duplicate name or condition, or the action payload. [^1] If you can say that for a script that misbehaves, you can resolve any OmniScript error or rendering issue on the exam. [^1]
+
+## What's Next
+
+You now run an OmniScript in debug mode and step through its elements, read the data JSON at the failure point, catch duplicate element names and path typos before they overwrite or blank the data, check visibility conditions before suspecting the platform, and read the Action Debugger for the exact payload behind an action failure. [^1][^3][^4][^6] Lesson 40, Resolve Data Mapper Output & Mapping Issues (T-3), carries the same evidence-first discipline one level deeper, into the Data Mapper: how to find and fix wrong or missing output when a Data Mapper extract or load maps data into an OmniScript, using the same order of diagnosis that made this lesson work. [^1] The habit you just built, read the JSON and locate the mismatch, is exactly the tool you will reach for there. [^1]
+
+## Related Requirements
+
+- OmniScript Elements, lesson 16 of 46 (OS-1)
+- OmniScript Advanced Properties, lesson 19 of 46 (OS-4)
+- Using the Debug Console, lesson 46 of 46 (T-9)
+
+## References
+
+[^1]: [Dig Into the OmniScript Designer, Trailhead (OmniStudio OmniScript module)](https://trailhead.salesforce.com/content/learn/modules/omnistudio-omniscript/dig-into-the-omniscript-designer)
+[^2]: [LWC Omniscript Designer Overview (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_lwc_omniscript_designer_overview.htm&language=en_US&type=5)
+[^3]: [Create an Effective OmniScript Step by Step, Trailhead (OmniStudio OmniScript module)](https://trailhead.salesforce.com/content/learn/modules/omnistudio-omniscript/create-a-simple-omniscript)
+[^4]: [Design and Build a Branching OmniScript, Trailhead (OmniScripts with Branching module)](https://trailhead.salesforce.com/content/learn/modules/omniscripts-with-branching/design-and-build-a-branching-omniscript)
+[^5]: [Validate Data and Handle Errors, Salesforce OmniStudio Exercises](https://developer.salesforce.com/files/OmniStudio/pdf/OmniStudio_Validate_Data_and_Handle_Errors.pdf)
+[^6]: [OmniScript Advanced Concepts, ApexHours](https://www.apexhours.com/omnistudio-omniscript-advanced-concepts/)
