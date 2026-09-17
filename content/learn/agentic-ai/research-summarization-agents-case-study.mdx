@@ -38,6 +38,8 @@ There is real measured support for the multi-agent shape, not just an argument f
 
 Token economics explain the win and the cost at the same time. In their BrowseComp analysis, token usage alone explained 80% of the variance in a browsing agent's ability to locate hard-to-find information, and together with tool-call count and model choice it explained 95%.[^1] That is the mathematical heart of the thesis above: research performance is a function of how many tokens you invest. Multi-agent architectures exist to spend tokens where a single context window cannot.[^1] The graphs in this analysis trace lesson 38's observability story directly, since every one of those tokens is something you pay for and should be able to trace.
 
+![Orchestrator-worker topology: one lead agent hands each independent research thread to a subagent with its own context window, and every subagent returns only a summary plus a pointer to what it stored](</diagrams/research-summarization-agents-case-study/1-orchestrator-worker-topology.png>)
+
 ## Dynamic search beats static retrieval
 
 The agent loop here is not RAG, and it is worth pinning down the difference because people blur them. Anthropic draws the line clearly. Traditional RAG uses static retrieval: you fetch the chunks most similar to a query and generate a response from them, and the source material does not change between queries. Their research architecture instead uses a multi-step search that dynamically finds relevant information, adapts to new findings, and analyzes results to formulate answers.[^1]
@@ -45,6 +47,8 @@ The agent loop here is not RAG, and it is worth pinning down the difference beca
 The academic framing that generalizes this is the arXiv position paper on agentic deep research, which describes the shift from static keyword search toward systems that integrate autonomous reasoning, iterative retrieval, and information synthesis into a single dynamic feedback loop, and offers a test-time scaling law to formalize how computational depth affects reasoning and search quality.[^3] The operative words are feedback and iterative. You do not search once and then write. You search, read, realize you are missing a dimension, search again with a sharper question, and keep going until the coverage is enough or you hit a stop condition.
 
 OpenAI's deep research product is the reference implementation of that loop in shipping form. It conducts multi-step research that can find, analyze, and synthesize hundreds of online sources into a report at the level of a research analyst, and it was trained with reinforcement learning on hard browsing and reasoning tasks so it learned to plan and execute a multi-step trajectory, backtracking and reacting to real-time information as it goes.[^4] The key phrase is backtracking. A good research agent is not a linear reader. It follows a dead end, abandons it, and re-plans. Anything that makes backtracking expensive, like a single crowded context window, directly degrades the result.
+
+![Static RAG compared with dynamic search: retrieval fetches chunks once from a fixed corpus, while a research agent searches, reads, evaluates, and re-plans until coverage is enough](</diagrams/research-summarization-agents-case-study/2-static-rag-vs-dynamic-search.png>)
 
 ## Delegation is the skill the lead has to learn
 
@@ -65,6 +69,8 @@ Anthropic names the failure mechanism the game of telephone. Their early system 
 The structural fix Anthropic adopted is a separate citation phase. When the research loop finishes, the system passes everything to a CitationAgent, a dedicated agent that reads the actual documents alongside the draft report and identifies the specific locations where each claim should be attributed, rather than asking the drafting model to recall them.[^1] You have a reasoner-agent do the synthesis and a different verifier-agent do the sourcing. Separating the two responsibilities keeps the drafting model from being the sole judge of what it just claimed.
 
 Two supporting patterns make this work. First, subagent output should persist to a filesystem rather than round-trip through the lead's context. Anthropic's advice is to let specialized agents write their work to external storage and pass lightweight references back to the coordinator, which prevents information loss during multi-stage processing and reduces the token overhead of copying large outputs through conversation history.[^1] The subagent stores the findings; the lead stores a pointer. Second, the "thinking" between searches should be interleaved, meaning the subagent evaluates each tool result before deciding the next search, rather than batching all its thinking up front. Interleaved thinking is the mechanism Anthropic cites for how subagents evaluate tool results during the loop.[^1]
+
+![The game of telephone failure and its fix: citations degrade when the drafting model reconstructs them from a condensed history, and hold when a separate CitationAgent reads the stored documents alongside the draft](</diagrams/research-summarization-agents-case-study/4-citation-telephone-failure.png>)
 
 This separation is the direct descendant of lesson 18's and lesson 21's message: verify with a mechanism, not with the generator's confidence. A research agent is an extreme case because it generates far more text than a support reply, which means more room to string together plausible but wrong source attributions.
 
@@ -103,6 +109,8 @@ An analyst submits: "Produce a brief on the competitive landscape for enterprise
 **Step six, verify.** A separate CitationAgent reads the stored documents alongside the draft and labels each factual claim with the specific location that supports it.[^1] A claim about Pinecone's pricing only survives if the storing source actually says it. The analyst receives a brief where every load-bearing number resolves to a page she can open.
 
 Runtime, this is thirty to forty minutes of wall clock and a token bill an order of magnitude above a chat. The analyst's decision was worth it. A twenty-page brief with verifyable sources beat a three-paragraph confident summary built from memory, and that is precisely the trade the architecture is designed to make.
+
+![The competitive intelligence brief end to end: plan, delegate, iterate, compress, synthesize, and a separate CitationAgent verify step, with the effort-scaling bands the orchestrator uses to size the run](</diagrams/research-summarization-agents-case-study/3-brief-six-step-walkthrough.png>)
 
 ## Pitfalls that will burn your budget
 
