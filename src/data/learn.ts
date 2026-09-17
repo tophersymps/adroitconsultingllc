@@ -1316,6 +1316,118 @@ export const learnSeries: LearningSeries[] = [
     "curriculumLessons": 90
   },
   {
+    "slug": "salesforce-sharing-visibility-architect",
+    "name": "Platform Sharing and Visibility Architect Certification",
+    "description": "A one-stop prep course for the Salesforce Certified Platform Sharing and Visibility Architect exam. All 18 official objectives split into 36 focused lessons, with config walkthroughs, sharing-model trade-offs, exam traps, and practice questions.",
+    "gradient": "from-violet to-purple-600",
+    "lessons": [
+      {
+        "slug": "day-01-p-1a-object-permissions-crud-system-vs-object-profiles",
+        "title": "Sharing & Visibility Architect P-1a: Object Permissions: CRUD, System vs Object, Profiles vs Permission Sets",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 1,
+        "excerpt": "The bluntest control in the Salesforce security stack: what Read, Create, Edit, and Delete actually grant, why View All Records and Modify All Records are a different decision, how system permissions differ from object permissions, and how a profile baseline plus additive permission sets and permission set groups produce a user's effective access. Includes a worked scenario, a setup walkthrough, and the exam traps.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "18 min read",
+        "tags": [
+          "Salesforce",
+          "Sharing and Visibility",
+          "Permissions",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-02-p-1b-object-permission-scenarios-and-mass-assign-licens",
+        "title": "Sharing & Visibility Architect P-1b: Object-Permission Scenarios and Mass-Assign / License-Based Patterns",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 2,
+        "excerpt": "How an object-permission grant scales from one user to a population: permission set groups as the packaging layer, dynamic assignment so joiners and leavers are covered without manual clicks, and the license rules that decide which object permissions an org can grant at all. Includes a worked 400-user scenario, a setup walkthrough, and the exam traps around mass assignment and license errors. Day 2 of the Platform Sharing and Visibility Architect exam prep.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "19 min read",
+        "tags": [
+          "Salesforce",
+          "Security",
+          "Sharing",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-03-p-2a-field-level-security-fundamentals-field-permission",
+        "title": "Sharing & Visibility Architect P-2a: Field-Level Security Fundamentals: Field Permissions, Standard vs Custom Fields",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 3,
+        "excerpt": "Field-level security in full: the three field permission states and why Hidden is the only one that removes a field from view, how FLS sits independently on top of object permissions, where FLS is honored and where it silently is not, and the programmatic mirror in schema describe, user mode, and stripInaccessible. Includes a worked scenario, a setup walkthrough, and the exam traps. Day 3 of the Platform Sharing and Visibility Architect exam prep.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "18 min read",
+        "tags": [
+          "Salesforce",
+          "Security",
+          "Sharing",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-04-p-2b-fls-scenarios-restricting-standard-fields-fls-vs-r",
+        "title": "Sharing & Visibility Architect P-2b: FLS Scenarios: Restricting Standard Fields, FLS vs Record Types",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 4,
+        "excerpt": "Field-level security in scenario form: how to restrict standard fields like Phone, Name, and Owner when you cannot simply hide them, why read-only is a different requirement from hidden, what a page layout does and does not revoke, and how record types differ from FLS as a control. Includes a worked Phone scenario, a setup walkthrough, the exam traps, and a sandbox try-it. Day 4 of the Platform Sharing and Visibility Architect exam prep.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "Salesforce",
+          "Security",
+          "Sharing",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-05-p-3a-ui-level-hiding-record-types-page-layouts-lightnin",
+        "title": "Sharing & Visibility Architect P-3a: UI-Level Hiding: Record Types, Page Layouts, Lightning Apps, Compact Layouts, Dynamic Forms",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 5,
+        "excerpt": "Every surface that renders a field, and what each one is actually capable of hiding: page layouts and where they stop, record types as the router between profiles, layouts, and picklists, Lightning app navigation and tab visibility, compact layouts and the highlights-panel leak, and dynamic forms as record-page variation beyond the classic layout model. Includes a worked report-leak scenario, a setup walkthrough, and the exam traps. Day 5 of the Platform Sharing and Visibility Architect exam prep.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "Salesforce",
+          "Security",
+          "Sharing",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-06-p-3b-ui-hiding-vs-real-security-defense-in-depth-field",
+        "title": "Sharing & Visibility Architect P-3b: UI Hiding vs Real Security (Defense in Depth), Field Accessibility in Apex",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 6,
+        "excerpt": "Why hiding a field on a page layout protects nothing on its own, and how programmatic enforcement closes the gap: schema accessibility checks with isAccessible and isUpdateable, WITH SECURITY_ENFORCED and its all-or-nothing behavior, Security.stripInaccessible for graceful degradation, the AuraEnabled boundary, and why without sharing and system mode do not enforce field permissions. Includes a worked scenario across four access paths, a five-step configuration walkthrough, exam traps, and a version note on the Summer '26 Apex security default change. Day 6 of the Platform Sharing and Visibility Architect exam prep.",
+        "date": "September 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "18 min read",
+        "tags": [
+          "Salesforce",
+          "Security",
+          "Sharing",
+          "Certification"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 6,
+    "curriculumLessons": 36
+  },
+  {
     "slug": "agentic-ai",
     "name": "Agentic AI Implementation Path",
     "description": "From single-agent prototypes to multi-agent orchestration, a practitioner's curriculum for shipping agentic systems.",
@@ -2812,101 +2924,6 @@ export const learnSeries: LearningSeries[] = [
     "curriculumLessons": 42
   },
   {
-    "slug": "salesforce-sharing-visibility-architect",
-    "name": "Platform Sharing and Visibility Architect Certification",
-    "description": "A one-stop prep course for the Salesforce Certified Platform Sharing and Visibility Architect exam. All 18 official objectives split into 36 focused lessons, with config walkthroughs, sharing-model trade-offs, exam traps, and practice questions.",
-    "gradient": "from-violet to-purple-600",
-    "lessons": [
-      {
-        "slug": "day-01-p-1a-object-permissions-crud-system-vs-object-profiles",
-        "title": "Sharing & Visibility Architect P-1a: Object Permissions: CRUD, System vs Object, Profiles vs Permission Sets",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 1,
-        "excerpt": "The bluntest control in the Salesforce security stack: what Read, Create, Edit, and Delete actually grant, why View All Records and Modify All Records are a different decision, how system permissions differ from object permissions, and how a profile baseline plus additive permission sets and permission set groups produce a user's effective access. Includes a worked scenario, a setup walkthrough, and the exam traps.",
-        "date": "September 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "18 min read",
-        "tags": [
-          "Salesforce",
-          "Sharing and Visibility",
-          "Permissions",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-02-p-1b-object-permission-scenarios-and-mass-assign-licens",
-        "title": "Sharing & Visibility Architect P-1b: Object-Permission Scenarios and Mass-Assign / License-Based Patterns",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 2,
-        "excerpt": "How an object-permission grant scales from one user to a population: permission set groups as the packaging layer, dynamic assignment so joiners and leavers are covered without manual clicks, and the license rules that decide which object permissions an org can grant at all. Includes a worked 400-user scenario, a setup walkthrough, and the exam traps around mass assignment and license errors. Day 2 of the Platform Sharing and Visibility Architect exam prep.",
-        "date": "September 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "19 min read",
-        "tags": [
-          "Salesforce",
-          "Security",
-          "Sharing",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-03-p-2a-field-level-security-fundamentals-field-permission",
-        "title": "Sharing & Visibility Architect P-2a: Field-Level Security Fundamentals: Field Permissions, Standard vs Custom Fields",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 3,
-        "excerpt": "Field-level security in full: the three field permission states and why Hidden is the only one that removes a field from view, how FLS sits independently on top of object permissions, where FLS is honored and where it silently is not, and the programmatic mirror in schema describe, user mode, and stripInaccessible. Includes a worked scenario, a setup walkthrough, and the exam traps. Day 3 of the Platform Sharing and Visibility Architect exam prep.",
-        "date": "September 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "18 min read",
-        "tags": [
-          "Salesforce",
-          "Security",
-          "Sharing",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-04-p-2b-fls-scenarios-restricting-standard-fields-fls-vs-r",
-        "title": "Sharing & Visibility Architect P-2b: FLS Scenarios: Restricting Standard Fields, FLS vs Record Types",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 4,
-        "excerpt": "Field-level security in scenario form: how to restrict standard fields like Phone, Name, and Owner when you cannot simply hide them, why read-only is a different requirement from hidden, what a page layout does and does not revoke, and how record types differ from FLS as a control. Includes a worked Phone scenario, a setup walkthrough, the exam traps, and a sandbox try-it. Day 4 of the Platform Sharing and Visibility Architect exam prep.",
-        "date": "September 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "17 min read",
-        "tags": [
-          "Salesforce",
-          "Security",
-          "Sharing",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-05-p-3a-ui-level-hiding-record-types-page-layouts-lightnin",
-        "title": "Sharing & Visibility Architect P-3a: UI-Level Hiding: Record Types, Page Layouts, Lightning Apps, Compact Layouts, Dynamic Forms",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 5,
-        "excerpt": "Every surface that renders a field, and what each one is actually capable of hiding: page layouts and where they stop, record types as the router between profiles, layouts, and picklists, Lightning app navigation and tab visibility, compact layouts and the highlights-panel leak, and dynamic forms as record-page variation beyond the classic layout model. Includes a worked report-leak scenario, a setup walkthrough, and the exam traps. Day 5 of the Platform Sharing and Visibility Architect exam prep.",
-        "date": "September 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "17 min read",
-        "tags": [
-          "Salesforce",
-          "Security",
-          "Sharing",
-          "Certification"
-        ],
-        "status": "published"
-      }
-    ],
-    "totalLessons": 5,
-    "curriculumLessons": 36
-  },
-  {
     "slug": "ai-at-work",
     "name": "AI at Work",
     "description": "A vendor-agnostic primer for using AI in day-to-day work: foundations, prompting, productivity, small automations, and team adoption. Company-wide training that works for any team and any AI tool.",
@@ -3763,6 +3780,23 @@ export const learnLessons: LearnLesson[] = [
       "Architecture",
       "Security",
       "Apex"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-06-p-3b-ui-hiding-vs-real-security-defense-in-depth-field",
+    "title": "Sharing & Visibility Architect P-3b: UI Hiding vs Real Security (Defense in Depth), Field Accessibility in Apex",
+    "series": "salesforce-sharing-visibility-architect",
+    "lesson": 6,
+    "excerpt": "Why hiding a field on a page layout protects nothing on its own, and how programmatic enforcement closes the gap: schema accessibility checks with isAccessible and isUpdateable, WITH SECURITY_ENFORCED and its all-or-nothing behavior, Security.stripInaccessible for graceful degradation, the AuraEnabled boundary, and why without sharing and system mode do not enforce field permissions. Includes a worked scenario across four access paths, a five-step configuration walkthrough, exam traps, and a version note on the Summer '26 Apex security default change. Day 6 of the Platform Sharing and Visibility Architect exam prep.",
+    "date": "September 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "18 min read",
+    "tags": [
+      "Salesforce",
+      "Security",
+      "Sharing",
+      "Certification"
     ],
     "status": "published"
   },

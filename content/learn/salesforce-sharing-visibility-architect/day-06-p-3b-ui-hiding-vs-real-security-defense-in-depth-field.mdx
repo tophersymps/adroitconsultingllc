@@ -1,0 +1,326 @@
+---
+title: "Sharing & Visibility Architect P-3b: UI Hiding vs Real Security (Defense in Depth), Field Accessibility in Apex"
+slug: day-06-p-3b-ui-hiding-vs-real-security-defense-in-depth-field
+series: salesforce-sharing-visibility-architect
+lesson: 6
+excerpt: "Why hiding a field on a page layout protects nothing on its own, and how programmatic enforcement closes the gap: schema accessibility checks with isAccessible and isUpdateable, WITH SECURITY_ENFORCED and its all-or-nothing behavior, Security.stripInaccessible for graceful degradation, the AuraEnabled boundary, and why without sharing and system mode do not enforce field permissions. Includes a worked scenario across four access paths, a five-step configuration walkthrough, exam traps, and a version note on the Summer '26 Apex security default change. Day 6 of the Platform Sharing and Visibility Architect exam prep."
+date: "September 17, 2026"
+author: "Adroit Consulting"
+readTime: "18 min read"
+tags: [Salesforce, Security, Sharing, Certification]
+---
+
+Objective p-3b asks a scenario question with a single decision hiding inside it: given this requirement and this code path, is hiding the field at the user interface enough, or does the field also need to be enforced in code? The answer is almost always both, and the exam builds the trap around engineers who stop at the layout.
+
+The reason is structural. A page layout is a rendering instruction. It tells Lightning Experience which fields to place on a record page, in what order, in which sections. It does not tell the platform what the user is permitted to read. The permission lives in field-level security, and the enforcement lives wherever the data is actually fetched, which for anything beyond a simple record page is Apex, a report, a list view, an API call, or an integration. Every one of those paths reads permissions, not layouts. A field can be invisible on every page layout in the org and still arrive in a JSON payload five times a day.
+
+This lesson is about the second half of that sentence. It covers what defense in depth means for a single field, how Apex decides whether it is allowed to touch that field, which language constructs enforce the decision, and how to design a sensitive field so that no single layer is the only thing standing between a user and the data.
+
+## Deep Dive
+
+### UI hiding answers a presentation question
+
+Page layouts, compact layouts, record types, and Lightning app navigation all control what renders. They are the right tools for shaping an experience: this profile sees these fields on this page, those users get a condensed highlights panel, this team sees a different picklist layout driven by a record type. Lesson 5 covered each surface and where it stops.
+
+For objective p-3b the relevant fact is narrower. Removing a field from a page layout changes the record page and nothing else. The field remains readable by the user in list views, reports, dashboards, search results, related lists, the REST and SOAP APIs, Salesforce CLI queries, and any Apex that runs as that user. If the requirement is "reps must not see compensation data," a layout change does not satisfy it, and an architect who ships only the layout change has shipped a leak. [^1][^2]
+
+### Defense in depth for one field
+
+The exam language for the correct answer is layered. For a single sensitive field the layers are:
+
+1. Field-level security. The field permission itself. Hide the field from the profiles that should not read it, and set the field to read-only for the profiles that should read but not change it. This is the only layer that governs every declarative surface at once, because list views, reports, search, and the standard APIs all consult field permissions.
+2. Interface consistency. Keep the layouts, compact layouts, and Lightning pages consistent with the field permission, so the interface does not advertise a field the user cannot read, or offer an input the user cannot save.
+3. Programmatic enforcement. Where code runs in a context that does not consult field permissions automatically, add the check explicitly: schema accessibility methods, security enforced queries, or field stripping before data leaves the server.
+4. Sharing, where the exposure is records rather than fields. Record-level access is a separate axis, covered by the sharing model. A user with field access to a field on records they cannot see never sees those records; a user with record access to a field they cannot read is the leak this objective addresses.
+
+Each layer covers a different surface. Field-level security without programmatic enforcement leaves the Apex and API paths open. Programmatic enforcement without field-level security means every new code path has to remember the rule, and the ones that forget leak. Layout changes without either are decoration. [^3][^4]
+
+### How Apex decides what it is allowed to touch
+
+This is the part of the objective candidates get wrong, so state it precisely. Apex database operations (SOQL, SOSL, DML, and Database class methods) have historically run in system mode by default, which means the running user's object permissions, field-level security, and sharing rules were not applied unless the developer added enforcement. The keyword on the class governed record-level sharing, not field permissions, and those are different mechanisms. [^5][^6]
+
+The distinction matters because it explains why a developer can write a query that returns a field the user cannot see and receive no error, no warning, and no log entry. The code did what it was told in a context that ignored the permission. The permission was never consulted.
+
+Two separate decisions are in play:
+
+- Sharing: whether the running user's sharing rules and role hierarchy apply to the records the code touches. Controlled by the class-level sharing declaration.
+- Access mode: whether object permissions (CRUD) and field permissions (FLS) apply to the operation. Controlled by the access mode of the query or DML statement.
+
+A `without sharing` class disables the first and says nothing about the second. This is the single most common misconception in the whole objective: engineers read "without sharing" as "runs as the user's permissions are irrelevant," which is half true, and then conclude the code is either fully permissive or fully locked down. Neither.
+
+### Checking field accessibility with schema describe methods
+
+The old, explicit way to check a field permission in Apex is the schema describe call. Every sObject type exposes its fields through a describe result, and each field describe result answers permission questions.
+
+```apex
+SObjectType accountType = Schema.getGlobalDescribe().get('Account');
+SObjectField phoneField = accountType.getDescribe().fields.getMap().get('Phone');
+
+if (phoneField.getDescribe().isAccessible()) {
+    // safe to read Phone for the running user
+}
+if (phoneField.getDescribe().isUpdateable()) {
+    // safe to write Phone for the running user
+}
+```
+
+The same methods are available in the compact form the exam is most likely to show:
+
+```apex
+if (Schema.SObjectType.Account.fields.Phone.isAccessible()) {
+    // read path
+}
+if (Schema.SObjectType.Account.fields.Phone.isUpdateable()) {
+    // write path
+}
+```
+
+Three things to hold on to about this pattern.
+
+First, the permission methods describe the running user. `isAccessible()` answers "may the user executing this code read this field," not "may some other user read it." If the code will run in a different user's context later, through a queueable chained from a scheduled job, the answer changes with the context.
+
+Second, the check is per field. There is no aggregate "is this record safe" method on the field describe result. A method that touches six fields needs six checks, or a strip, or a security enforced query. Partial coverage is the failure mode: a developer guards the two fields they were thinking about and leaves the rest.
+
+Third, the record level analogue is a separate call. `record.getSObject('Account').get('Phone')` style access through sObject field maps returns null or throws depending on whether the field was populated and whether the describe result permitted it; the field describe result, not the record, is the authority. Checking the record does not substitute for checking the schema. [^7]
+
+This pattern is verbose, which is why the platform added the two declarative mechanisms below. It remains the correct answer when the code must make a decision rather than fail, when the field list is dynamic, or when the enforcement has to be conditional (read the field when the user can see it, and omit it from the response when they cannot). It is also the pattern that keeps working when a newer syntax is unavailable on the API version in play, a point that becomes important in the version note later in this lesson. [^4][^7]
+
+### WITH SECURITY_ENFORCED: enforcement that fails loudly
+
+The second mechanism pushes the check into the query itself. A SOQL statement that ends with `WITH SECURITY_ENFORCED` filters the fields and objects in the query by the running user's access, and throws a `System.QueryException` if the user lacks access to a field or object named in the select or the where clause.
+
+```apex
+List<Account> accounts = [
+    SELECT Id, Name, Phone, Compensation__c
+    FROM Account
+    WHERE Industry = 'Banking'
+    WITH SECURITY_ENFORCED
+];
+```
+
+The behavior to memorize is that it is all or nothing. If the user can read every field in the statement, the query runs. If the user cannot read one field, the entire query fails. There is no partial result, no null-filled column, and no silent drop. Adding `Compensation__c` to a select list that a rep cannot read does not return accounts without compensation; it throws. That strictness is the point. It turns a silent leak into an exception during development, and it is why the exam pairs the clause with user-facing code paths such as Lightning controllers and Experience Cloud components, where the correct outcome is to refuse the operation rather than to return something the user should not have. [^8]
+
+Three practical notes on the clause.
+
+It applies to the statement, so a select list assembled dynamically at runtime gets the same treatment, and a helper query shared by three callers inherits the access requirements of whichever caller runs it. That is usually what you want and occasionally what breaks an integration running under an integration user with a narrower profile than the developer tested with.
+
+A failing query changes the error contract of your method. Roughly translated, the client receives a query exception rather than a curated message. For Lightning and Aura controllers that is the wrong experience, which is why the graceful-degradation alternative below exists and why a well-designed controller chooses between the two deliberately rather than by habit.
+
+The clause is not a substitute for the sharing declaration. It governs field and object access in the query; record visibility still comes from the sharing model and the class's sharing context. An architect answer that mentions only one of the two is incomplete. [^6][^8]
+
+### Security.stripInaccessible: remove instead of fail
+
+The third mechanism is the one that makes Lightning work well. `Security.stripInaccessible(AccessType.READABLE, records)` takes a list of records and returns an `SObjectAccessDecision` whose records have been sanitized: fields the running user cannot read are removed from the records rather than causing an exception. The same method handles the write direction with `AccessType.CREATABLE` and `AccessType.UPDATABLE`, which matters at the boundary where a client sends a record back for save.
+
+```apex
+@AuraEnabled(cacheable=true)
+public static List<Account> getAccounts(Id ownerId) {
+    List<Account> accounts = [
+        SELECT Id, Name, Phone, Compensation__c
+        FROM Account
+        WHERE OwnerId = :ownerId
+    ];
+
+    SObjectAccessDecision decision =
+        Security.stripInaccessible(AccessType.READABLE, accounts);
+
+    return decision.getRecords();
+}
+```
+
+The decision object also reports what it removed through `getRemovedFields()`, which is useful for logging and for telling the client that a field was omitted rather than null. That distinction matters in an integration contract: a null and a missing key mean different things to a consuming system.
+
+The trade-off against `WITH SECURITY_ENFORCED` is the design decision the exam is testing. Stripping degrades gracefully and keeps the feature working for every user; enforcement fails loudly and keeps the contract strict. Choose enforcement when the operation is meaningless without the field (a total that includes a hidden component is not a total). Choose stripping when the operation is still correct with the field omitted (a record list where some users see a column and others do not). Both are correct answers to "how do I enforce field visibility in code," and the scenario tells you which one fits. [^9]
+
+One limit to state plainly: `stripInaccessible` addresses field access on the records you hand it. It does not replace an object permission check or the sharing model, so a method that also creates records still needs a create check, and a method that reads records still needs the sharing context to be correct. [^6][^9]
+
+### The AuraEnabled boundary
+
+Lightning components reach Apex through `@AuraEnabled` methods, and that annotation is a doorway, not a security control. The annotation makes a method callable from the client; it does not make the method respect the user's permissions. If the method body is a plain query, the client receives whatever the query returns, including fields the user cannot see in the interface. [^10]
+
+That asymmetry is what makes the p-3b scenario so exam-friendly. The developer tested as an administrator, saw the expected behavior, and shipped. The manager sees the compensation field in the component and the rep sees it too, because the component is rendering a payload Apex already leaked. The fix is at the query, not the component: strip or enforce before the return statement, then the component receives only what the user may see and no client-side change is needed.
+
+The same reasoning applies beyond Lightning. Apex REST resources, invocable methods called from Flow, and LWC wire adapters all sit behind the same boundary. The question to ask of any of them is what the method does with the running user's permissions before the data crosses back to the caller.
+
+### Why without sharing is not an FLS switch
+
+`with sharing` and `without sharing` control whether the running user's sharing rules and role hierarchy are applied to records the code queries and modifies. They are about record visibility.
+
+Field-level security is a different control with a different switch, and the sharing keyword does not touch it. A `without sharing` class that queries a field the user cannot read returns the field. A `with sharing` class that queries a field the user cannot read also returns the field, because sharing was never the mechanism that governed it. Only the access mode (system mode versus user mode) and explicit checks govern field permissions. [^5][^11]
+
+This is why the exam offers `make the class without sharing` as a distractor for a field visibility problem. It sounds like a security change, it is a security change, and it is the wrong one, because it addresses record sharing while the leak is a field. Read the scenario and identify which axis the exposure is on before selecting a mechanism.
+
+The corollary is the one worth carrying into design reviews: because sharing and field access are separate, a class needs a deliberate position on both. The pattern that holds up: keep data access classes in user mode with enforcement, and reserve `without sharing` for the platform-gated operations that genuinely cannot respect record sharing, such as a service that creates records on behalf of a user who has no access to the records it reads. Document why the bypass exists at the class, and keep the bypass as narrow as the operation, not as broad as the module. [^5][^11]
+
+### System mode code paths are not automatically safe
+
+The contexts that run as the system are the ones a reviewer forgets, because the developer never wrote a bypass, the platform supplied it.
+
+Triggers are the canonical example. Apex triggers run in system mode, and the Salesforce architect guidance is explicit that this is a deliberate, permanent exception. A trigger that queries a sensitive field and writes it into a log object, or that copies it onto a child record the user can read, has moved data the user could not see into a place they can. The handler class the trigger calls inherits the concern: sharing declarations on the handler are a separate question from the trigger's system context, and an omitted declaration used to leave the class behaving as though it were without sharing. [^12][^13]
+
+Scheduled jobs and queueable chains run as the user who scheduled them or as the user the job specifies, and asynchronous Apex that chains a second job can change context between links. Batch jobs running under an integration user with broad permissions read fields and records that a standard end user cannot, which is fine when the batch writes to records the end user cannot see, and not fine when it summarizes a hidden field onto a visible dashboard.
+
+Platform events, flows with a system context, and any managed package code that declares `without sharing` fall into the same category. None of them announce themselves as privileged paths. The audit question to apply is simple: what user context does this code execute in, and does anything it reads end up somewhere that user could not have read it from.
+
+### Choosing the layer for the scenario
+
+Given a scenario, the decision sequence that produces the exam's answer runs in this order.
+
+Is the requirement about a field or a record? A field problem needs field-level security plus programmatic enforcement; a record problem needs the sharing model. Most prompt scenarios describe a field exposure, and the record-level distractors (org-wide default, sharing rules, `without sharing`) are there to catch a misread.
+
+Does the code path consult field permissions on its own? Declarative surfaces (list views, reports, search, the standard APIs) do. Apex does not, unless the code adds an access mode or a check. If the scenario names Apex, a Lightning component, an integration, or a report, ask which of those is permission-aware.
+
+Should the operation fail or degrade? If the field is essential to the result, enforce and let it throw. If the field is optional to the result, strip and let the operation continue.
+
+Is there a bypass in the design, and is it justified? If the code must ignore sharing to do its job, say so explicitly at the class, keep it narrow, and confirm that nothing it touches crosses back into a user-visible surface.
+
+An answer that names one layer is a partial answer. The exam guide's phrase for the complete one is defense in depth, and the worked example below is what that looks like on a single field. [^3][^14]
+
+### A version note that changes how you write this today
+
+This objective is written against a platform behavior that has just moved, and an architect in September 2026 should know which side of the change their code is on.
+
+In API version 67.0 (Summer '26), three changes landed together in the Apex security model. Database operations in Apex now run in user mode by default, which means SOQL, SOSL, DML, and Database methods enforce the running user's object permissions, field-level security, and sharing rules without any keyword. Apex classes without an explicit sharing declaration now default to `with sharing`. And the `WITH SECURITY_ENFORCED` clause was removed from the language: a class compiled at v67.0 or later that still contains it does not compile, and `WITH USER_MODE` is the replacement. [^15][^16][^17]
+
+What that means for the exam and for real work splits cleanly.
+
+For the exam, the mechanism question is unchanged. UI hiding is never sufficient, and the correct answer is to enforce in code, whether by checking accessibility, by enforcing the query, or by stripping the fields before they leave the server. The concept the questions test is that declarative layout changes do not make Apex honor field permissions, and that is true regardless of which clause you write.
+
+For real orgs, the migration is a per-class decision. Classes below v67.0 keep the old defaults, so a query with no access mode still ignores field permissions. Classes at v67.0 or later are enforced by default, which surfaces access errors that were previously silent, and any query that genuinely needs elevated access has to opt out explicitly with `WITH SYSTEM_MODE` or `AccessLevel.SYSTEM_MODE` for same. Declaring the access mode explicitly on both sides is the guidance, because intent written in the code survives the next default change and intent inherited from a version number does not. [^15][^16][^17]
+
+There is a second-order effect worth naming: chained asynchronous code that used to run unnoticed with system privileges now breaks visibly, and integration users with narrow profiles now return fewer records than before. Test the restricted-user case, not only the administrator case, when the class crosses the version boundary.
+
+### What layered enforcement costs
+
+Enforcement is not free, and the exam rewards an architect who says so.
+
+The schema describe call has a cost per invocation in the first call of a transaction, and a loop that re-describes the same field on every record is the common performance mistake. Describe results are cached per transaction by the platform, so the pattern that performs is a single describe before the loop, or a describe result held in a static variable.
+
+`WITH SECURITY_ENFORCED` changes the query plan slightly because the access checks are part of the statement, and it changes your error handling because the failure mode is an exception rather than an empty result. Code that used a try-catch meant for DML exceptions now has a second class of failure flowing through it.
+
+Stripping allocates a second list of records, which matters on large result sets and in batch jobs. The `SObjectAccessDecision` wrapper is lightweight, but the sanitized copy is not free on a hundred thousand rows.
+
+The steadier costs are maintenance ones. Every field added to a select list is a new decision: is this field safe for every caller of this method, and does it belong behind a strip or behind enforcement. On a large org with long-lived code, the answer to that question degrades unless something enforces the habit, which is why the platform ships CRUD and FLS scanner rules and a Security Health Check that scores the org against a baseline, and why a review gate on the class is cheaper than a later audit of the data that already leaked. [^4][^18]
+
+## Worked example: the Compensation field across four access paths
+
+The requirement arrives from HR. Account compensation data is stored in a custom field, `Compensation__c`. Sales managers may read it; sales reps may not. The architect writes one line into the design: the field is hidden in field-level security for the rep profile and read-only for the manager profile.
+
+Four access paths exist in the org. Take them one at a time.
+
+The record page. The rep opens an account. The field is not in the layout, and the field permission says the rep cannot read it, so the page renders without it. The layout change is consistent with the permission, which is what you want, but the permission is what is doing the work. Delete the layout change and the field still does not render for the rep, because Lightning honors field permissions on the standard record detail. The layout was never the control. [^1][^2]
+
+The report. A rep builds a report on Accounts and drags in every field they can find. The field does not appear in the report builder's field list for that user, and a report owned by a manager that includes the field as a column shows nothing useful to the rep. Reports consult field permissions, so the declarative layer holds. [^3]
+
+The list view. Same result, same reason. The field permission governs. [^3]
+
+The Lightning component. A custom Lightning page includes an Aura-enabled method that returns a list of accounts for the rep's dashboard. The method body is:
+
+```apex
+@AuraEnabled(cacheable=true)
+public static List<Account> getMyAccounts() {
+    return [
+        SELECT Id, Name, Compensation__c
+        FROM Account
+        WHERE OwnerId = :UserInfo.getUserId()
+    ];
+}
+```
+
+Run as a rep, this query returns the compensation values. No exception, no stripped field, and no indication in the UI that anything unusual happened, because plain Apex database operations do not consult field permissions. The rep's component renders the field the rep cannot read. That is the leak, and it was created by a method that looks entirely ordinary. [^5][^6][^10]
+
+Two fixes, and the scenario decides which. If the dashboard is useless without compensation, enforce the query and let it fail for anyone who cannot read every field it selects:
+
+```apex
+return [
+    SELECT Id, Name, Compensation__c
+    FROM Account
+    WHERE OwnerId = :UserInfo.getUserId()
+    WITH SECURITY_ENFORCED
+];
+```
+
+If the dashboard should keep working for everyone, with the column present only for those permitted to see it, strip instead:
+
+```apex
+List<Account> accounts = [
+    SELECT Id, Name, Compensation__c
+    FROM Account
+    WHERE OwnerId = :UserInfo.getUserId()
+];
+return Security.stripInaccessible(AccessType.READABLE, accounts).getRecords();
+```
+
+Now the same four paths, and the fifth path a reviewer would have to go looking for. An integration or a batch job running under a broad service user reads the field regardless of any of the above, because the service user is configured to read it. The design answer is not to fight that; the answer is to make sure nothing written into a user-visible surface copies the value across. The batch that rolls compensation totals onto a dashboard tile visible to reps is the real exposure, and it is created by field permissions and visibility decisions on the target object, not by anything in the source query.
+
+The layer count in this example is four: field-level security, layout consistency, programmatic enforcement in the component's controller, and a decision about the asynchronous paths. Any one of them alone leaves a route to the data. That is the whole of objective p-3b.
+
+## Configuration Walkthrough
+
+1. Start with field-level security, since every declarative surface follows it and nothing else does the job for you. For each profile that should not read the field, clear the field's visible and read-only permissions using the object's field list in the permission set or profile, or the Object Manager's Field Accessibility view. Confirm the two intended states: hidden for reps, read-only for managers. [^3]
+2. Add schema accessibility guards at the top of the methods that touch the field, so the code makes an explicit decision instead of inheriting one. Use `Schema.SObjectType.Account.fields.Compensation__c.isAccessible()` before a read and `.isUpdateable()` before a write. Cache describe results in a static variable if the method runs per record. [^4][^7]
+3. Convert the user-facing SOQL to carry an access mode. On classes that will move to API version 67.0 or later, write `WITH USER_MODE` explicitly; on older classes, `WITH SECURITY_ENFORCED` still applies until the version bump. Keep the enclosing class in user mode so the field and record behavior of the code matches the logged-in user. [^6][^8][^15]
+4. Where the operation should degrade rather than fail, wrap the result with `Security.stripInaccessible(AccessType.READABLE, records)` for reads and `AccessType.CREATABLE` or `AccessType.UPDATABLE` for writes, and return `decision.getRecords()`. Log `decision.getRemovedFields()` if the caller needs to distinguish an omitted field from an empty one. [^9]
+5. Confirm the sharing declaration on the class is deliberate. User-facing logic uses `with sharing`, or inherits the org default once the class is on v67.0 or later. Reserve `without sharing` for platform-gated operations, put the reason in a comment at the class, and keep the bypass narrower than the module. [^5][^11][^16]
+6. Test as a user whose profile hides the field, and assert on the stripped result rather than on the administrator's result. Write the assertion as a test method that runs as the restricted user with `System.runAs` and checks that the field is absent from the Apex response, rather than only that the page did not render it. [^19]
+
+## Exam Traps
+
+Trap one: treating `without sharing` as an FLS control. The keyword governs record sharing. It does not enforce or bypass field-level security, and it is the wrong answer to a field visibility scenario. [^5][^11]
+
+Trap two: expecting `WITH SECURITY_ENFORCED` to be forgiving. It is all or nothing. One inaccessible field in the select or where clause makes the entire query fail with a query exception rather than returning the remaining columns. If the scenario wants the feature to keep working, the answer involves stripping fields, not enforcement. [^8]
+
+Trap three: believing the layout is the security. Removing a field from a page layout or a compact layout changes what renders. It does not change a permission, and the field remains reachable through reports, list views, the APIs, and any Apex that runs as the user. Every scenario that offers a layout-only answer is offering a leak. [^1][^2]
+
+Trap four: assuming system mode or a scheduled job is automatically safe because the user never sees the UI. Triggers run in system mode, asynchronous code inherits a context the developer may not have chosen, and a broad service user reads more than any end user. The exposure shows up wherever that data is written, which is usually a different object with different permissions. [^12][^13]
+
+Trap five: checking one field and calling the method secure. Permission checks are per field and per object. A method that touches six fields and guards two is 33 percent enforced, which is another way of saying unenforced. [^4][^7]
+
+Trap six: answering "set the org-wide default to Private" for a field problem. Org-wide defaults and sharing rules govern records. A user who can see the record but not the field is precisely the case they do not solve. [^3][^14]
+
+Trap seven: citing a version-specific behavior as universal. `WITH SECURITY_ENFORCED`, the system-mode default, and the omitted sharing declaration all changed at API version 67.0 in Summer '26. An architect answer that states the current default without naming the version is an answer that will be wrong for half the codebase. [^15][^16][^17]
+
+The exam tip for this objective is worth repeating in the same words the guide uses: treat every question about protecting a field as needing both a permission change and a programmatic enforcement answer, unless the code path is purely a declarative interface that has no Apex, no integration, and no report behind it.
+
+## Try It
+
+Build the leak in a sandbox, then close it, so the difference is a memory rather than a rule.
+
+Create a custom field on Account and give yourself access. Write the four-line Aura-enabled method from the worked example and wire it to a Lightning component, or run the same query body through Anonymous Apex while logged in as a restricted user with `System.runAs` in a test. Confirm that the restricted user receives the field value even though field-level security hides it. The query did not throw. Nothing in the log flagged it. [^5][^6]
+
+Now change the query to enforce and run the same test. The restricted user's call fails with an access error, which is the intended behavior when the operation cannot proceed without the field. Then switch to `Security.stripInaccessible` and run it a third time. The call succeeds, and the field is absent from the response. Compare `decision.getRemovedFields()` against what you expected to be removed. [^8][^9]
+
+Finish with the layer people forget to test. Hide the field for the test user, then call the method and inspect the raw JSON rather than the rendered page, from a client or from the debug log. Rendering tells you what the interface did. The payload tells you what the server sent, and the server is where the leak lives. [^10]
+
+## What's Next
+
+You can now state why interface-level hiding is never sufficient on its own, name the three places enforcement happens in code (schema accessibility checks, security enforced or user mode queries, and field stripping before the response), explain why `without sharing` and system mode do not enforce field permissions, and pick between failing loudly and degrading gracefully based on what the scenario needs. Lesson 7, Sensitive Data: Identify and Classify PCI, PII, and HIPAA, Shield Platform Encryption, Field History, and Data Protection (p-4a), turns from the mechanism to the data itself: how to identify and classify what needs protecting, what Shield Platform Encryption does to a field and what it deliberately does not do, how field history and data protection features fit alongside the access controls, and how to choose controls when the driver is a compliance obligation rather than a role.
+
+## Related Requirements
+
+- Lesson 5 of 36 (p-3a): UI-level hiding, record types, page layouts, Lightning apps, compact layouts, dynamic forms
+- Lesson 7 of 36 (p-4a): Sensitive data, PCI, PII, HIPAA, Shield Platform Encryption, field history
+- Lesson 9 of 36 (p-5a): Programmatic enforcement of CRUD and FLS
+- Lesson 10 of 36 (p-5b): Programmatic with and without sharing, runAs, user mode versus system mode
+
+## References
+
+[^1]: Page Layout Considerations. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.layouts_considerations.htm&language=en_US&type=5)
+[^2]: Customize Page Layouts with the Original Page Layout Editor. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.customize_layoutcustomize_ple.htm&type=5)
+[^3]: Field Permissions (Field-Level Security). [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.users_profiles_field_perms.htm&language=en_US&type=5)
+[^4]: Enforce Object and Field Permissions. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_classes_perms_enforcing.htm)
+[^5]: Using the with sharing, without sharing, and inherited sharing Keywords. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_classes_keywords_sharing.htm)
+[^6]: Apex Security and Sharing. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_security_sharing_chapter.htm)
+[^7]: SObject Describe Methods and Field Describe Results. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_methods_system_sobject_describe.htm)
+[^8]: Filter SOQL Queries Using WITH SECURITY_ENFORCED. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_classes_with_security_enforced.htm)
+[^9]: Security Class: stripInaccessible. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexref.meta/apexref/apex_class_System_Security.htm)
+[^10]: AuraEnabled Annotation. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_classes_annotation_AuraEnabled.htm)
+[^11]: Implicit Sharing and Record-Level Access in Apex Transactions. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/langCon_apex_SOQL_sharing.htm)
+[^12]: Apex Triggers. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_triggers.htm)
+[^13]: Summer '26 Release Highlights for Salesforce Architects. [salesforce.com](https://www.salesforce.com/blog/summer-26-release-architect-highlights/)
+[^14]: Control Who Sees What. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.security_data_access.htm&language=en_US&type=5)
+[^15]: Release Note: Apex Database Operations Run in User Mode by Default. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=release-notes.rn_apex_default_user_mode.htm&language=en_US&release=262&type=5)
+[^16]: Release Note: Apex Classes Without an Explicit Sharing Declaration Default to with sharing. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=release-notes.rn_apex_default_enforce_sharing.htm&release=262&type=5)
+[^17]: Release Note: WITH SECURITY_ENFORCED Removed in API Version 67.0. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=release-notes.rn_apex_removed_withSecurityEnforced.htm&release=262&type=5)
+[^18]: Salesforce Certified Platform Sharing and Visibility Architect Exam Guide. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005298977&language=en_US&type=1)
+[^19]: Testing Apex: Using runAs to Test Record Access and Permissions. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_testing_tools_runas.htm)
