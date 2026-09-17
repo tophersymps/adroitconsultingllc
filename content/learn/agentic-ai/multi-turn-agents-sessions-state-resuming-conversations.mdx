@@ -30,6 +30,8 @@ The cleanest way to see where state lives is to remember what the API call actua
 
 That means the naive multi-turn implementation is just: keep a list of every message so far, and send the whole list back with each new user turn. [^1] It works until it stops working. The list grows, the prompt grows, and you hit the wall from Lesson 15: longer contexts degrade recall, cost more tokens, and slow every call down. So production systems do not blindly replay history. They *curate* it, which is where sessions and state schemas come in.
 
+![The stateless model, the stateful application: the model forgets between turns, so the application layer curates a state slice, sends it to the stateless LLM, and writes a checkpoint to the state store after each turn.](</diagrams/multi-turn-agents-sessions-state-resuming-conversations/1-stateless-model-stateful-app.png>)
+
 Three terms anchor the rest of the lesson, and they are easy to conflate, so keep them separate:
 
 - **A turn** is one exchange in the conversation: a user message plus the agent's response (and any tool calls in between).
@@ -48,6 +50,8 @@ LangChain's LangGraph framework is the clearest reference for how this works. Yo
 - **Stores** persist application-defined data outside the graph state, scoped across threads. They are long-term, cross-thread memory for user preferences, facts, and shared knowledge. [^2]
 
 That split maps almost exactly onto the memory taxonomy from Lesson 14. The checkpointer is episodic and thread-scoped: it remembers *this* conversation. The store is semantic and cross-thread: it remembers *what you know about this user*. The LangGraph guidance is that most applications use both: a checkpointer tracks the current thread, a store tracks durable information across threads. [^2]
+
+![Two complementary memory systems: the checkpointer is thread-scoped episodic memory for the current conversation, while the store is cross-thread semantic memory for durable facts about the user.](</diagrams/multi-turn-agents-sessions-state-resuming-conversations/2-checkpointer-vs-store.png>)
 
 The critical realization is what a checkpointer enables beyond simple recall. LangGraph's docs list it directly: continue a conversation, resume after an interruption, recover from a failure, and remember across interactions. [^2] A checkpoint is a snapshot of the graph's entire state at a point in time. Because you can reload that snapshot, you can resume exactly where you left off, and in advanced cases re-run from an earlier point with modified state. [^3] That is what turns a fragile one-shot call into a durable, resumable unit of work.
 
@@ -111,6 +115,8 @@ The most common failure is conflating "session" with "state" and assuming that o
 The second failure is not sizing the durability to your restart reality. If your agent runs in containers that restart, an in-memory saver is not a shortcut, it is a data-loss incident waiting for a deploy. [^3] Choose the backend that survives the failure mode you actually have, and put a retention policy on the checkpoints before they grow without bound. [^2]
 
 The third is subtler and comes from the 39% number: assuming that because a model is good at single turns, it will be good at conversations. It will not, unless you give it the state to lean on and keep that state coherent. The model is the easiest part of a multi-turn system. The state schema, the persistence layer, and the curate-don't-replay discipline are the hard parts, and they are all your code.
+
+![Three ways a multi-turn agent fails: treating a session as if it were state, sizing durability to the wrong restart reality, and assuming single-turn skill transfers to conversations.](</diagrams/multi-turn-agents-sessions-state-resuming-conversations/3-three-failure-modes.png>)
 
 ## Try it
 
