@@ -27,6 +27,8 @@ Where the rules of thumb break is where the money goes. Structured data, code, a
 
 Why should an implementer care? Because LLM APIs are **billed per token**: input and output priced separately, with rate limits in tokens per minute. [^2] Token count is the unit of both cost and throughput, and you can measure it locally before you spend a cent.
 
+![How a tokenizer splits text into token IDs, and why the same information in JSON costs 12 tokens versus 6 as prose](</diagrams/how-llms-work-tokens-context-inference/1-tokenization-json-cost.png>)
+
 ## Context: the working memory
 
 The **context window** is the maximum number of tokens a model can consider at one time: its working memory. Everything in a request competes for it: the system prompt, retrieved documents, conversation history, your new message, *and* the output, because context is usually a combined input-plus-output budget. [^1] [^5]
@@ -37,6 +39,8 @@ Two facts about context matter more than the spec sheet:
 2. **Models don't use long contexts well.** A 2023 paper found LLMs don't robustly use information in the middle of long inputs (the well-documented **lost-in-the-middle** effect), and Redis's 2026 guidance is blunter: most long-context models show sharp performance drops past ~32K tokens, so benchmark your actual use case rather than trusting the spec sheet. [^6] [^5]
 
 Context windows have grown roughly two orders of magnitude since the original transformer, from a few thousand tokens to 1–2M today, with common configurations around 128K–200K tokens as of early 2026 (GPT-4o and Llama 3.1 at 128K, Claude 3.5 Sonnet around 200K, Gemini 1.5 Pro up to 2M). [^5] [^1] *Note: model versions and windows move fast; check current provider docs before any architecture decision.*
+
+![What competes for the context window budget, why cost grows quadratically with input size, and why long-context models underuse information](</diagrams/how-llms-work-tokens-context-inference/2-context-window-budget.png>)
 
 The architectural consequence: **context engineering beats context size.** Retrieval-augmented generation (RAG) that pulls only relevant sections keeps accuracy stable as your corpus grows, while stuffing an entire corpus into one window degrades and gets expensive. Most production systems combine a reasonable window, RAG, and prompt caching. [^5]
 
@@ -50,6 +54,8 @@ When you call an LLM, two phases run, and they have opposite bottlenecks. This i
 Between the phases sits the **KV cache**: the key/value tensors computed during prefill and reused during decode, growing by one entry per generated token. It's why chatbots feel fast at first and slow down as conversations (and cached state) lengthen, and why long responses with long prompts can exhaust GPU memory. [^5] [^4]
 
 For an implementer this means: sluggish *before* the first token is a prefill problem (prompt too long, or bad prompt design); sluggish *while streaming* is a decode problem (output too long, or the model is memory-bound). Different problems, different fixes. [^8]
+
+![The two inference phases, prefill and decode, their opposite bottlenecks, the KV cache bridge, and how to debug slowness by where it happens](</diagrams/how-llms-work-tokens-context-inference/3-prefill-vs-decode.png>)
 
 ## Temperature: the randomness knob
 
