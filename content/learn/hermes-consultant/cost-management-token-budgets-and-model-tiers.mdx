@@ -1,0 +1,160 @@
+---
+title: "Lesson 22: Cost Management: Token Budgets, Model Tiers, and Predictable Client Pricing"
+slug: cost-management-token-budgets-and-model-tiers
+series: "hermes-consultant"
+lesson: 22
+excerpt: "An agent that works is not yet an agent you can price. This lesson teaches the cost craft: how to measure what a single run costs, how to put reasoning and mechanical work on the right model tiers, how to keep a recurring workload inside a budget, and how to turn a measured unit cost into a client number that survives the month."
+date: "September 17, 2026"
+author: "Adroit Consulting"
+readTime: "13 min read"
+tags: [AI Agents, Consulting, LLMs]
+---
+
+# Lesson 22: Cost Management: Token Budgets, Model Tiers, and Predictable Client Pricing
+
+Lesson 21 gave you observability, which answers "is it still right." This lesson answers the question that arrives later, in an email, from a client's finance team: "why is this invoice bigger than the proposal." If you have not measured that answer before the client asks it, you are already in a bad conversation.
+
+Cost is the one dimension of an agent engagement where a perfectly working system can still lose the client. Nothing fails. Nothing breaks. The bill simply drifts upward because a job that should have been a shell script runs an agent every five minutes, or a looping conversation quietly costs fourteen times what it should, or one model switch re-reads a long context at full price. The craft in this lesson is to make the number measured, put each piece of work on the right tier, budget the recurring load, and then price the engagement from the measurement instead of from a guess. Hermes Agent is the concrete vehicle because it exposes the numbers: per-session token counts, a cost analytics command, a machine-readable usage report, run records per job, and configuration knobs that decide whether a job spends anything at all.
+
+## Define the terms: unit cost, token budget, model tier, predictable pricing
+
+Four terms carry this lesson.
+
+The **unit cost** of an agent workload is what one run costs to produce. One daily digest run. One intake conversation. One weekly report. Everything else in this lesson is built on that number, so it is the first thing you measure. An estimate for the whole month is not a unit cost, it is a wish with arithmetic attached.
+
+A **token budget** is the number you decide in advance that a recurring job is allowed to spend, plus the mechanism that keeps it there. Deciding the number is easy. The mechanism is the work, and it comes in two kinds: jobs that cannot spend at all because they never touch a model, and jobs that can spend but are pinned, gated, or validated so they cannot quietly spend more.
+
+A **model tier** is the capability and price class you route a piece of work to. Reasoning-heavy work (deciding what a report means, handling a tricky intake reply) belongs on a strong model. Mechanical and summarization work (compressing long context, generating a session title, classifying whether a command is safe to auto-approve) belongs on a cheap fast model. Any platform that lets you assign different models to different jobs gives you this ladder, and using only one rung is how consultants overpay for every side-task in the system.
+
+**Predictable pricing** is a number the client can plan against: a fixed monthly figure, a per-unit rate, or a retainer with a stated usage ceiling. Predictable does not mean cheap and does not mean the cost never moves. It means you told the client what drives it, what happens when the driver moves, and how you both find out early.
+
+## Measure the unit before you model anything
+
+The temptation is to open a pricing spreadsheet and start typing assumptions. Do not. Hermes already records what a run costs, and a measured unit cost beats a plausible one every time.
+
+Start with sessions. Every conversation is stored with its model, message history, tool calls and results, token counts, and timestamps. For a one-off workload, run it once and read the tokens off the session. [^1] For a recurring job, the run record is the source: a scheduled run produces a record of what it did, how long it took, and what it cost.
+
+For anything you run in batches or scripts, get the number as data instead of reading it off a screen. The CLI writes a machine-readable usage report after a one-shot run: `estimated_cost_usd`, input, output, cache read, cache write, reasoning and total tokens, plus API call count, model, provider, session id, and service tier. It is written even when the run fails, which matters: a failed batch still cost money, and a pipeline that only accounts for successes will undercount its own spend. [^2] For a fleet-wide view, a token, cost, and activity analytics command covers the installation, [^2] and the dashboard shows recent sessions with their model, message count, and token usage, plus a models page that ranks every model that ran a session in the selected period with token counts and cost. [^3]
+
+Read that sentence again as a consultant, not an operator. The models page ranks by model. That list is the fastest way to find a job you accidentally pointed at an expensive model, because the expensive model shows up with cost next to it and a job name you did not intend.
+
+One rule follows from all of this. Do not price from token math you have not observed. Run the workload a week, read the actual per-run numbers, and then model the month. If the workload is not built yet, build a thin version first. A week of real numbers is cheaper than a proposal you have to renegotiate.
+
+## Tiers: put each job on the model it deserves
+
+Hermes splits models into two kinds of slots. The main model is what the agent thinks with: every user message, every step of the tool-calling loop, every streamed response. The auxiliary slots are smaller side jobs, and there are eleven of them: context compression, vision, web-page summarization, approval scoring, MCP tool routing, session-title generation, skill search, and a few others. Each can be overridden independently. [^4]
+
+By default every auxiliary task is set to `auto`, which means the side job runs on your main model too. That default is fine for a demo and expensive in production, because it puts summarization and title generation on the same premium model that handles reasoning. The fix is one override per task.
+
+The documented example is the compression slot. If you are burning reasoning tokens just to summarize context, a fast chat model does the job at roughly one fiftieth of the cost. Approval scoring is the same story in a different place: when the agent decides whether a command needs a human, an expensive model there is pure waste. [^4] Those two overrides alone move real money, because compression and approval run constantly, not once.
+
+So the tier ladder has three rungs, and the work belongs on one of them.
+
+- **Reasoning tier (main model).** The main loop, judgment calls, client-facing prose, anything where a weaker answer costs more than the tokens saved.
+- **Fast tier (auxiliary overrides).** Compression, vision, extraction, title generation, approval classification, skills search.
+- **Zero tier (no model at all).** Mechanical work that is fully determined by a script and never touched the inference layer in the first place. More on that below. [^5]
+
+Tier decisions are quality decisions, not just cost decisions, and the honest version of that sentence is uncomfortable: moving a job down a rung is a change to what the system can do. Do it where the job is mechanical or summarizes something a stronger model already reasoned about. Do not do it on the main loop of a client-facing agent to shave a small bill, and do not do it without the review habit from the next lesson checking the output afterwards. The saved money is real, and so is the regression you did not notice.
+
+## The cache is the biggest single lever
+
+The largest cost difference in a long-running agent is not the model choice. It is whether the provider is re-reading your context at a discount or at full price.
+
+Providers cache the shared prefix of a conversation, and a cache hit costs roughly 75 to 90 percent less than fresh input tokens. Anything that changes the model serving the request throws that cached prefix away. A mid-session model switch does it. An automatic provider fallback does it. A credential-pool rotation onto a different account does it. When it happens, the next message re-reads the entire conversation at full input price, and on a long session that one re-read can cost more than the per-token difference the switch was supposed to save. [^6]
+
+Lesson 21 told you to pin a model and stop babysitting it. Here is the money reason. Switching models mid-conversation is cheap when the context is short and expensive when it is long, and most consultants make the switch precisely when the context is long, because that is when the session feels slow. Change the model at the start of a session or not at all. For unattended work, pin the provider and model on the job so nothing can drift underneath it.
+
+## Budget the recurring workload
+
+A recurring job is where cost discipline either exists or does not, because nobody is watching it run. Four mechanisms do the work, in order of how much they save.
+
+**Do not invoke a model at all.** For watchdogs, threshold checks, disk and memory alerts, heartbeats, and CI pings, a scheduled job can run a script and deliver its stdout with zero LLM involvement: no tokens, no model, no provider fallback. An empty output means a silent tick, so a healthy system says nothing. [^5] A mechanical job on an agent is the single most common overspend in an unattended setup, and it is invisible on a dashboard because everything reports green.
+
+**Gate the run before it spends.** When a job should exist on a short cadence but only needs the agent when something changed, a pre-check script can return a marker that skips the agent run entirely for that tick. The documented pattern is a script that compares the current state to the last state and returns a skip signal when nothing moved, so a poll every five minutes costs nothing on the ticks where there is nothing to do. Same trick, other way round: a job whose configuration cannot succeed is blocked before dispatch with one alert and no inference call, so a broken job never spends tokens on a doomed run. [^5]
+
+**Pin the model, and pin the thinking level.** A job resolves its model per-job pin first, then a fleet-wide cron default, then your global default, and the per-job pin sticks until you change it. Unpinned jobs also carry a drift guard: if the global default changes underneath them, they fail closed, skip the run, and alert once instead of silently inheriting a switch to a paid model. [^7] Reasoning effort pins the same way, and that one is a budget tool: run heavy scheduled analysis at a high thinking level while cheap recurring jobs run at the minimum. [^7]
+
+**Trim what the job carries.** Every tool the job has enabled is a chunk of tool schema in the prompt on every single call. A tiny "fetch the news" job carrying browser and delegation tools pays for that schema on every turn. Set the enabled tools per job, or set them per platform once for the scheduled-execution platform. This is the cheapest optimization in this lesson and the one most often missed. [^8]
+
+Two more levers apply when the work is large enough to notice. If you route through an aggregator, provider routing can sort available backends by price and exclude ones you do not want to use, which moves the same request onto a cheaper provider without changing the model. [^9] And if you delegate work to subagents, they can be pinned to a different, cheaper model than the main agent, which is usually the right default for research sweeps and bulk edits. [^10]
+
+## Worked example: costing the claims-intake engagement
+
+Put numbers on the engagement you have carried through the series: the intake assistant that answers client questions, the daily digest job, and the weekly report job from lesson 21.
+
+Assume a provider rate of three dollars per million input tokens, fifteen per million output tokens, and a cached input rate of thirty cents per million, which is inside the documented discount band. Replace those with your provider's real published rates before you send anything to a client.
+
+| Workload | Fresh input | Cached input | Output | Cost per run | Runs per month | Monthly |
+|---|---|---|---|---|---|---|
+| Daily digest | 4,000 | 36,000 | 1,500 | $0.045 | 30 | $1.36 |
+| Weekly report | 30,000 | 90,000 | 6,000 | $0.207 | 4 | $0.90 |
+| Intake assistant | 2,000 | 6,000 | 700 | $0.018 | 300 | $5.49 |
+
+Total: about eight dollars a month of inference for the whole engagement. That number is realistic for this shape of work and it is worth sitting with, because it is not the interesting part of the example. Two failure cases are.
+
+**The looping agent.** Suppose the intake assistant's prompt drifts and it starts taking ten tool steps per conversation instead of two, re-sending context at every step. Fresh input per conversation jumps from 2,000 tokens to roughly 80,000. The per-conversation cost goes from under two cents to about twenty-five cents, which is a factor of nearly fourteen. Nothing failed, no alert fired, and the intake line on the invoice goes from five dollars a month to seventy-five. This is why the step-count tripwire from lesson 21 is a cost control as much as a correctness control. [^11]
+
+**The job that should never have run an agent.** Suppose someone sets up a five-minute health check as an agent job instead of a script job. That is 288 runs a day at $0.045 each: roughly $13 a day, about $390 a month, for a check whose entire output is "ok" or "disk is filling up." The same job in script mode costs zero and is more reliable, because there is no model in the path to drift. [^5]
+
+**The careless switch.** The weekly report job carries a 120,000-token context. Switching its model mid-run re-reads that context at full price once: about 36 cents, which is eight daily digest runs and roughly five percent of the engagement's entire monthly inference. [^6] One switch is not a crisis. A habit of switching is a line item you cannot explain.
+
+## Turn the unit cost into client pricing
+
+Now the commercial move. You have a measured unit cost, so you can build a cost model, and once you have a cost model you can choose a pricing shape deliberately instead of defensively.
+
+Build the model in three lines. Per-unit cost from the table. Volume per month from the client's actual traffic. Then a margin line for everything that is not inference, which is most of your cost: your build time, the fleet check you run, the output samples you review, the fixes when a source system changes. Inference is a small number on this engagement and your labor is the large one, so do not price from the inference bill. Price from your labor and let the inference sit inside the fee.
+
+Then pick a shape and say the shape out loud in the proposal:
+
+- **Fixed monthly fee with a stated usage ceiling.** The client gets a predictable number. You name the volume the fee assumes (three hundred intake conversations, thirty digests, four reports) and what happens past it. This is the right default when the workload is genuinely stable.
+- **Retainer plus pass-through with a cap.** The client pays your time and the inference at cost, with a monthly ceiling on the pass-through that triggers a conversation rather than a surprise invoice. This fits clients with variable traffic who want to see the meter.
+- **Per-unit pricing.** A price per conversation or per report. Only use it after you have measured the unit cost across a real month, because you are now the one carrying the variance, including the variance from a looping agent.
+
+Whichever shape you choose, the contract needs four sentences that most consultants skip. Here is the volume the price assumes. Here is the ceiling. Here is what we do when the volume exceeds it (usually: you get told, then we agree). Here is the review trigger, meaning the signal that tells us the workload changed before the invoice does.
+
+That last one is the professional move, and it is the whole reason this lesson comes after observability. Cost surprises are rarely arithmetic failures. They are communication failures, and they happen because nobody wired the cost signal to a human. Your fleet check can carry an alert on a job whose run cost or token count crosses a threshold, so a drift reaches you the day it starts instead of at invoice time. [^3] When you find it that way, you get to send the client a note that says the workload grew by a third and here is the option, instead of answering a question about a mystery.
+
+There is also a sales-side use of this lesson. A prospective client's unspoken worry about agents is that the meter runs. Walking in with a measured unit cost, a stated ceiling, and an alert that fires before the bill does answers that worry with a number instead of a promise, and it does so in a sentence most competitors cannot say.
+
+## The pitfalls to avoid
+
+**Estimating from a demo.** A three-run demo tells you nothing about a month of traffic. Measure a week of real runs before you put a number in a proposal.
+
+**Leaving every auxiliary task on auto.** Compression, title generation, and approval classification will happily run on your premium model. Override them.
+
+**Switching models mid-session for a small difference.** On a long context the cache re-read can cost more than the switch saves. Change tier at the start of a session or not at all.
+
+**Running a mechanical job on an agent.** Watchdogs, heartbeats, and threshold checks belong in script mode, where they cost nothing and cannot drift.
+
+**Pricing from token math.** Inference is small; your labor is large. Price your labor, budget the inference, and put both in writing.
+
+**No ceiling, no alert.** If the contract has no usage ceiling and no cost alert, the first time anyone learns the workload changed is the invoice. That conversation is always worse than the one you could have started.
+
+## Try it
+
+Take the engagement you have been carrying and cost it properly:
+
+1. Measure one unit. Pick the most frequent run in the workload and read its actual token counts and cost. Write the number down.
+2. Build the model. Volume per month times unit cost, for every recurring job and every on-demand surface. Use your provider's published rates, not a guess.
+3. Set the tiers. List every auxiliary task and decide, for each, whether it belongs on the main model or a cheap fast model. Write down the ones you moved and why.
+4. Find the zero-tier work. Which recurring jobs never needed a model in the first place? Move them to script mode and recompute the month.
+5. Write the four sentences. Volume assumed, ceiling, over-ceiling behavior, review trigger. If you cannot write the fourth, you have not finished lesson 21.
+6. Sanity-check the failure cases. What does the month cost if the busiest agent loops ten times per conversation? What does it cost if a five-minute check runs on an agent? If either number would embarrass you in front of the client, that is the guard you build next.
+
+If you can answer all six, you can tell a client what the system costs, why it costs that, and what would change it. That is the difference between an agent that works and an agent a business can actually buy.
+
+## What's next
+
+You now have a system that is observable and priced, which means you can tell a client what it does, whether it is still right, and what it costs. The next lesson closes the loop on quality. It covers who checks the work in an agent delivery and what they check for: the review gates between a job finishing and a client seeing it, the difference between reviewing an artifact and reviewing a decision, and how to build checks that catch the failure the builder is blind to. Where this lesson made the cost visible, the next one makes the standard visible, so quality stops depending on the person who happens to be reviewing that week.
+
+[^1]: Hermes Agent Docs, Sessions: every conversation is saved as a session with its full message history, tool calls and results, the model that ran, token counts, and start and end timestamps. [hermes-agent.nousresearch.com/docs/user-guide/sessions](https://hermes-agent.nousresearch.com/docs/user-guide/sessions)
+[^2]: Hermes Agent Docs, CLI Commands Reference: `hermes insights` shows token, cost, and activity analytics for the installation, and `hermes -z "…" --usage-file /path/report.json` writes a machine-readable usage report with `estimated_cost_usd`, input, output, cache read, cache write, reasoning and total tokens, API call count, model, provider, session id, and service tier, written even when the run fails so batch pipelines can always account for spend. [hermes-agent.nousresearch.com/docs/reference/cli-commands](https://hermes-agent.nousresearch.com/docs/reference/cli-commands)
+[^3]: Hermes Agent Docs, Web Dashboard: the landing page lists the 20 most recent sessions with model, message count, and token usage, the Models page carries usage analytics as ranked cards showing every model that ran a session in the period with token counts and cost, and status warnings surface when the host is under resource pressure. [hermes-agent.nousresearch.com/docs/user-guide/features/web-dashboard](https://hermes-agent.nousresearch.com/docs/user-guide/features/web-dashboard)
+[^4]: Hermes Agent Docs, Configuring Models: Hermes uses a main model for the agent loop plus eleven auxiliary task slots (compression, vision, web extract, approval scoring, MCP routing, title generation, skill search and others), every task defaults to `auto` (the main model), and the documented override pattern routes compression to a fast chat model at roughly one fiftieth the cost, while an expensive model on approval classification is described as waste. [hermes-agent.nousresearch.com/docs/user-guide/configuring-models](https://hermes-agent.nousresearch.com/docs/user-guide/configuring-models)
+[^5]: Hermes Agent Docs, Scheduled Tasks (Cron): `no_agent` mode runs a script and delivers its stdout verbatim with no tokens, no model, and no provider fallback (empty stdout means a silent tick); a pre-run script can emit a skip signal so the agent is not invoked on a tick where nothing changed; and pre-dispatch validation blocks a misconfigured job with one alert and no LLM call, so it never spends tokens on a run that cannot succeed. [hermes-agent.nousresearch.com/docs/user-guide/features/cron](https://hermes-agent.nousresearch.com/docs/user-guide/features/cron)
+[^6]: Hermes Agent Docs, Configuring Models: prompt caches are keyed to the model serving the request, so a mid-conversation model change (an explicit switch, an automatic fallback, or a credential-pool rotation onto a different account) makes the next message re-read the entire conversation at full input-token price instead of the cached rate, which is roughly 75 to 90 percent cheaper. [hermes-agent.nousresearch.com/docs/user-guide/configuring-models](https://hermes-agent.nousresearch.com/docs/user-guide/configuring-models)
+[^7]: Hermes Agent Docs, Scheduled Tasks (Cron): a job's model resolves at fire time as per-job pin, then `cron.model`, then the global default; the model and provider drift guard is on by default so an unpinned job whose global default changes fails closed, skips the run, and alerts once rather than silently inheriting a paid model; and a job can pin its own reasoning effort level independently of the model pin. [hermes-agent.nousresearch.com/docs/user-guide/features/cron](https://hermes-agent.nousresearch.com/docs/user-guide/features/cron)
+[^8]: Hermes Agent Docs, Scheduled Tasks (Cron): per-job `enabled_toolsets` controls which tools the job carries, and the docs call this out for cost control because carrying browser and delegation into every small job inflates the tool-schema prompt on every LLM call. [hermes-agent.nousresearch.com/docs/user-guide/features/cron](https://hermes-agent.nousresearch.com/docs/user-guide/features/cron)
+[^9]: Hermes Agent Docs, Provider Routing: with OpenRouter or Nous Portal as the provider, `provider_routing` can sort backends by `price`, `latency`, or `throughput`, and can whitelist or blacklist providers, so the same request can be routed to a cheaper backend. [hermes-agent.nousresearch.com/docs/user-guide/features/provider-routing](https://hermes-agent.nousresearch.com/docs/user-guide/features/provider-routing)
+[^10]: Hermes Agent Docs, Fallback Providers: subagents spawned by `delegate_task` can be routed to a different primary provider and model for cost optimization via `delegation.provider` and `delegation.model`, and cron jobs accept per-job provider and model overrides. [hermes-agent.nousresearch.com/docs/user-guide/features/fallback-providers](https://hermes-agent.nousresearch.com/docs/user-guide/features/fallback-providers)
+[^11]: Hermes Agent Docs, Event Hooks: lifecycle events include a step event fired on each iteration of the tool-calling loop, and a handler can alert when an agent takes too many steps. [hermes-agent.nousresearch.com/docs/user-guide/features/hooks](https://hermes-agent.nousresearch.com/docs/user-guide/features/hooks)
