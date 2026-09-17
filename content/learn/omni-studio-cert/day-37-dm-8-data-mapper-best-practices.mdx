@@ -16,6 +16,8 @@ Best practices exist because the mechanics are easy to misuse. A Data Mapper tha
 
 Compress the domain into five habits and the whole requirement fits in a hand. Keep security first, so a mapper only ever hands out what the caller is allowed to see. [^1][^4] Parameterize inputs, so a mapper is a reusable tool and not a hardcoded one-off. [^1][^5] Shape outputs deliberately, so the output mapping is the contract every consumer binds against. [^1][^3][^7] Test with sample JSON, so a mapping bug dies in the designer instead of in production. [^7] And keep performance and reuse in view, so one well-built mapper serves many callers without dragging the server down. [^2][^3] Hold those five and the DM-8 questions are nearly free. [^1]
 
+![The five habits of a dependable Data Mapper and the failure each habit prevents: secure it first so an unchecked query cannot leak protected fields, parameterize filters and keys so the mapper is not a one-off, shape the output deliberately as the contract, test with sample JSON in the Preview tab, and keep performance and reuse in view](</diagrams/day-37-dm-8-data-mapper-best-practices/1-five-habits.png>)
+
 ## Deep Dive
 
 ### Security first: respect FLS and CRUD, and prefer a mapper over raw SOQL
@@ -28,6 +30,8 @@ Two claims follow and both are exam material. Field-level security for Data Mapp
 
 The "why it matters" is concrete. A service rep looking up a case must not see a protected field on the account behind it unless their profile allows that field. [^1][^2] A Load that writes an Opportunity must not create a record the caller has no right to create. [^8] You get that protection by choosing the mapped path and by checking its security settings before you ship it, not by writing a query that runs in an unchecked context. [^1][^4] Security first means the mapper is the secure choice, and the careful reading is that you verify the enforcement switch is on. [^4]
 
+![The four Data Mapper security settings and what each one controls: Required Permission decides who can run the mapper and falls open to all users when blank, DefaultRequiredPermission supplies the org-level fallback, EnforceDMFLSAndDataEncryption enforces field-level security for all Data Mappers, and CheckCachedMetadataRecordSecurity adds a record-level check on cached metadata at a cost to the caching benefit](</diagrams/day-37-dm-8-data-mapper-best-practices/2-security-settings.png>)
+
 ### Parameterize inputs: filters and keys come from parameters, not literals
 
 The second habit is about how a mapper gets its filter values. An Extract needs a way to say which records to return. [^2][^5] The wasteful version bakes a specific value into the mapper: it filters on a literal account Id, so the mapper only ever works for that one record and a new mapper is needed for every other account. [^1][^5] The reusable version names an input parameter instead. [^1][^5] The calling component, an OmniScript or an Integration Procedure, supplies the value at run time, and the mapper applies it as the filter. [^2]
@@ -35,6 +39,8 @@ The second habit is about how a mapper gets its filter values. An Extract needs 
 That shift is the heart of the reuse habit. Input parameters for filters and keys turn a one-off into an artifact that any caller can drive. [^1][^5] The classic example is the case lookup. A service rep enters a case number on a screen, and an OmniScript calls an Extract that filters on `inputCaseNumber`, an input parameter, rather than on a literal `5000`. [^2] The same mapper serves an edit form and a read-only details view because neither one is tied to a fixed value. [^2][^7] Add a Load and the pattern extends: lookup values that resolve an existing record come from the input JSON path, set by the caller, not from a hardcoded Id. [^8]
 
 Two failure modes come straight from the exam traps and they both live here. A mapper with a hardcoded Id is not reusable, so the answer to any question about making an Extract reusable across callers is input parameters for filters and keys. [^1][^5] And a query that must page is best driven by values, paging by an account Id or a contact last name from the caller, again so the page boundary is a parameter, not a re-write. [^2] If you remember one line from this habit it is this: the parameter is the seam that makes a mapper a tool instead of a one-off. [^1][^2][^5]
+
+![A hardcoded literal versus an input parameter: filtering on a literal value only ever works for that one record, while filtering on the inputCaseNumber input parameter lets an edit OmniScript and a read-only FlexCard each supply their own case number to the same mapper](</diagrams/day-37-dm-8-data-mapper-best-practices/3-literal-vs-parameter.png>)
 
 ### Shape outputs deliberately: the output mapping is the contract
 
@@ -57,6 +63,8 @@ Performance in Data Mappers is a set of small, deliberate choices, and the exam 
 Three concrete performance facts are likely exam material. Keep the number of Salesforce objects a mapper processes to three or fewer, because each additional object adds server work. [^3][^7] Make sure filtering and sorting operations run on indexed fields, and note that Id and Name are always indexed, so those are safe filter and sort keys. [^3] And for single-object reads, prefer a Turbo Extract, which has the advantages of simpler configuration and better runtime performance over a standard Extract because it skips the heavier mapping machinery. [^2][^6] When a question offers Turbo Extract for a simple single-object read, that is the performant, exam-preferred choice. [^2][^6]
 
 Caching is the last performance tool. Store frequently accessed, infrequently updated data in the mapper cache so repeated calls do not re-run the same query. [^3] That is exactly the "cache expensive results" habit from the deep dive: it spends a little storage to save a lot of repeated work, and it is a documented best practice. [^3] Order the habits by impact: filter early, select only what you need, keep objects few, filter and sort on indexed fields, use the fast path for single objects, and cache what changes slowly. [^2][^3][^7]
+
+![The pre-ship gate for a Data Mapper: preview testing with a happy path, a payload missing optional fields, and edge values before any consumer is wired, then the performance choices of filtering early, selecting only needed fields, keeping objects to three or fewer, filtering and sorting on the indexed Id and Name, preferring a Turbo Extract for single-object reads, and caching infrequently updated data](</diagrams/day-37-dm-8-data-mapper-best-practices/4-pre-ship-gate.png>)
 
 ### Reuse: one well-built mapper serves many callers
 
