@@ -43,6 +43,8 @@ The canonical sequence, in order:
 
 This is the exact order the quiz leans on, and it is worth memorizing as a pipeline rather than as a list: extract, transform, integrate, persist, respond. Data moves forward through the procedure. Each action consumes what the previous action produced and produces what the next one consumes. If you remember nothing else about the shape, remember that flow.
 
+![The typical shape of an Integration Procedure: a forward pipeline of six stages, accept input, extract, transform, integrate, persist, respond, where each action's output feeds the next action's input](</diagrams/day-22-ip-1-ip-design-server-side-orchestration/1-ip-pipeline.png>)
+
 The reason the order matters is that each action's output feeds the next action's input. You cannot call the external system before you have extracted the identifiers that identify what to look up. You cannot load results before the external call has returned them. The order is not cosmetic; it is the data dependency chain of the whole operation.
 
 ### Why one server call is the performance argument
@@ -52,6 +54,8 @@ The single most important property of an IP, and the one the exam keeps circling
 Imagine a FlexCard that must show an account, its open cases, and the status of an external credit check. If the FlexCard does this naively, it makes a separate request for each piece: one to load the account, one to load the cases, one to hit the credit API. Each request is a round trip across the network, each adds latency, and each is a separate place for failure and inconsistent handling to creep in.
 
 An IP collapses all of that into one server call. The FlexCard invokes the IP, the IP extracts the account, extracts the cases, calls the credit system, assembles the JSON, and returns once. One round trip replaces three or more. The latency you save is not trivial, and the consistency you gain matters just as much: because everything runs inside one transaction on the server, the data is gathered and handled together instead of in separate, independently failing requests.
+
+![Why one server call is the performance argument: a FlexCard that needs an account, its open cases, and an external credit check makes three separate round trips, while an Integration Procedure collapses all of it into one server call](</diagrams/day-22-ip-1-ip-design-server-side-orchestration/2-one-call-vs-chatty.png>)
 
 The official best practices are explicit about this. They tell you to use an Integration Procedure for all data calls to Salesforce, keep each IP to a small group of related functions for reuse and performance, and trim the response so you only return what is needed.[^2] "Use an IP for all data calls" is the architectural rule in a sentence. When a FlexCard or OmniScript needs data, route it through an IP and let the IP be the single point of contact with the data.
 
@@ -66,6 +70,8 @@ Designing an IP is not dropping actions until it works. The exam expects you to 
 **Transaction boundaries.** An IP runs as one server-side transaction. That means the work inside it is coordinated, but it also means you should think about scope. A single IP should do one coherent job, not everything your org does. The official guidance warns against both extremes: keep each IP small and focused for reuse, but do not fragment a single operation into a chain of tiny IPs that each add a round trip. Find the boundary where one call completes one logical operation.
 
 **Where logic belongs: IP versus Apex.** This is a real design decision. The exam wants you to know that OmniStudio pushes you toward declarative configuration, and IPs cover a huge amount of orchestration without code. The effort comparison in the official material is striking: a difficult backend service that takes six weeks to build in Apex takes about a day with an Integration Procedure, a roughly 97% reduction in effort.[^3] That is the case for preferring an IP when it can do the job. But not everything belongs in an IP. Complex custom business logic, heavy computation that the declarative actions cannot express, or operations that need the full power of a programming language are still Apex territory. The design rule is: prefer the declarative IP when it covers the requirement, and reach for Apex when the orchestration outgrows what actions can express. The exam tests that you know IPs replace a lot of Apex, not that they replace all of it.
+
+![Where logic belongs: IP versus Apex, a decision tree that prefers the declarative Integration Procedure when it covers the requirement, roughly a 97 percent effort reduction, and reaches for Apex when the orchestration outgrows what actions can express](</diagrams/day-22-ip-1-ip-design-server-side-orchestration/3-ip-vs-apex.png>)
 
 ### How IPs are invoked
 
