@@ -254,6 +254,20 @@ export interface NarrationOptions {
    * real article needs it.
    */
   diagramSource?: (src: SpokenDiagramSource) => string;
+  /**
+   * Lesson-aware section routing (ADR-106/107). When truthy, the narration
+   * reads only LEARNING content: the interactive sections a listener cannot
+   * act on (`Try It`, `Related Requirements`, `References`) are cut — `Try
+   * It` is replaced by a single spoken bridge line, the other two emit
+   * nothing — and the knowledge-check transition is appended once as the
+   * final line. `What's Next` is still read (recap + preview). Articles omit
+   * this; the article path is byte-for-byte unchanged when it is falsy.
+   */
+  lesson?: boolean;
+  /** Spoken line that replaces the `Try It` section body in lesson mode. */
+  tryItBridge?: string;
+  /** Closing knowledge-check hand-off, appended last in lesson mode. */
+  knowledgeCheckTransition?: string;
 }
 
 /**
