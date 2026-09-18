@@ -42,6 +42,8 @@ That single detail is worth sitting with, because it is the answer to the questi
 
 Two consequences follow for your own designs. First, anything that forces a query to span more of the shared structure than necessary is expensive for everyone, which is the deeper reason selective SOQL filters and indexed fields matter beyond their own governor-limit cost. Second, because the physical layer is organized by tenant and by object, the shape of your object model has a performance dimension, not just a reporting dimension. A very large number of tiny custom objects and a very large object with many fields are not equivalent choices, even though both are "just metadata."
 
+![Object and field definitions live in the Universal Data Dictionary while records live in one large MT_Data table, each row carrying a GUID, an OrgID, and an ObjID; all data is partitioned by OrgID so partition pruning touches only one tenant's partitions, with the sharing model enforcing security in the application layer on top of that physical guarantee](</diagrams/multi-tenant-platform-architecture/1-shared-data-layer.png>)
+
 ## The instance model
 
 Each org belongs to a single **instance**. [^2] Two kinds of infrastructure exist:
@@ -56,6 +58,8 @@ You can find your org's instance in **Setup → Company Information** (the Insta
 Why should an architect care? Data residency, latency, compliance, and maintenance windows all hang off the instance. That's why the platform brief explicitly recommends building applications "free from specific data center requirements." [^2]
 
 The naming tell is the kind of small piece of knowledge that pays off disproportionately in a meeting. When a client asks whether their org is on Hyperforce, you do not need a support case. You read the Instance field and count letters. Two letters, first-party. Three letters, Hyperforce. From that one fact you can reason about the encryption posture, the failover model, and how much of the release calendar will be consumed by maintenance windows, before anyone has pulled a single report.
+
+![First-party infrastructure runs on Salesforce-owned data centers with a primary site and an asynchronously replicated paired instance, while Hyperforce runs active/active across three availability zones on AWS and GCP with about a minute of planned maintenance a year; the naming tell is two letters for first-party and three letters for Hyperforce](</diagrams/multi-tenant-platform-architecture/2-first-party-vs-hyperforce.png>)
 
 The "free from specific data center requirements" recommendation deserves an explanation, because it reads like generic advice until you connect it to the rest of this lesson. On a shared, metadata-driven platform, the instance your org runs on is not something your design controls. It is assigned, and it can change as Salesforce introduces new infrastructure. An architecture that encodes an assumption about which data center serves it, whether through hardcoded endpoint expectations, latency budgets that only hold from one geography, or integration patterns that assume same-region network behavior, has quietly taken a dependency on an assignment it does not own. Building free of that dependency means the design keeps working when the platform's infrastructure evolves, which on this platform is a "when," not an "if."
 
@@ -91,6 +95,8 @@ The entitlement column is where environment design turns into a budget conversat
 
 The ladder also encodes a rule that is easy to state and easy to violate: **each environment exists to answer a question the one below it cannot.** A Developer sandbox answers "does this work?" A Partial Copy environment answers "does this work against representative data with the integration switched on?" A Full environment answers "does this work against production reality, and can we operate it?" Production answers nothing, because production is not a test. If your team is asking test questions in production, something in the ladder is missing.
 
+![The environment ladder assigns each test question to the cheapest environment that can answer it: Developer sandboxes ask does this work, a Partial Copy asks does it work against representative data with the integration switched on, a Full Copy asks does it work against production reality, and production answers nothing because it is not a test](</diagrams/multi-tenant-platform-architecture/3-environment-ladder.png>)
+
 ## Worked example
 
 A UK manufacturing client, 200 users, Enterprise edition, is taking over a Salesforce org on a Hyperforce London instance (`GBR10`, three-letter prefix, so Hyperforce). The architecture you propose:
@@ -100,6 +106,8 @@ A UK manufacturing client, 200 users, Enterprise edition, is taking over a Sales
 3. **One Partial Copy** for QA, with a sandbox template that pulls a representative 10k-parent-record sample of Accounts, Opportunities, and Cases.
 4. **One Full sandbox, purchased**, because Enterprise ships zero Full sandboxes by default. It refreshes every 29 days, so you align refresh to the week before each release rehearsal.
 5. **Production** stays isolated. Nothing automated, no integration developer, no direct metadata edits; changes arrive only through the release pipeline.
+
+![The proposed environment design for the UK manufacturing client: three Developer sandboxes for parallel feature work, one Developer Pro for the integration developer, one Partial Copy for QA pulling a 10k-parent-record sample, one purchased Full sandbox refreshing every 29 days for release rehearsal, and an isolated production org that receives changes only through the release pipeline](</diagrams/multi-tenant-platform-architecture/4-worked-example.png>)
 
 The client pushes back on the Full-sandbox purchase. Your answer as an architect: the 29-day Full refresh is the only environment with production-identical data, and UAT before a production deployment is exactly what Salesforce documents Full sandboxes for. This is the difference between "tested" and "validated against reality."
 
