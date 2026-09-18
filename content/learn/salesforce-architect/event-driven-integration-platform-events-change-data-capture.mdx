@@ -18,6 +18,8 @@ Lesson 6 introduced the three outbound archetypes; fire-and-forget was the one w
 
 Event-driven architecture rests on three concepts: the **event producer** (publishes), the **event consumer** (subscribes and acts), and the **event channel** (the distribution vehicle between them). [^2] The point is loose coupling: producer and consumer never talk directly, so either side can scale or change independently, and one event fans out to many subscribers. Producers and consumers don't have to live outside the platform; a trigger, a Flow, or a Lightning component can produce or consume an event. [^2] The bus itself is the decoupling mechanism: "The event bus decouples event publishers from event subscribers." [^3]
 
+![The event bus decouples publishers from subscribers: producers publish once, the bus fans the event out to every subscriber, and neither side knows the other exists](</diagrams/event-driven-integration-platform-events-change-data-capture/1-event-bus-mental-model.png>)
+
 ## Platform Events: you define the message
 
 Platform Events, introduced in 2017, let you define a custom event structure (a message with your fields), publish it, and let subscribers react. They've since evolved into **High Volume Platform Events (HVPEs)**, which "greatly expand the publish/subscribe allocations over the original offering." [^1] New platform events are high-volume by default; the older standard-volume type can no longer be created and is being **retired in Summer '27**, so you should be migrating any legacy standard-volume events. [^4]
@@ -31,6 +33,8 @@ You publish from Apex (`EventBus.publish()`), a Flow (a Create Records element o
 CDC is the fastest way to start publishing: select an object in Setup and Salesforce automatically creates a platform event object for it (`AccountChangeEvent` for Account, `Shipment__ChangeEvent` for a custom `Shipment__c`), then publishes **created, updated, deleted, and undeleted** record changes to it. [^1] It's available in Enterprise, Performance, Unlimited, and Developer editions. [^6]
 
 **What CDC is for: record state.** Keep an external data store "updated in real time" instead of periodic exports or repeated API calls. [^6] You don't design a message; you get the record's fields in the event body, noise included: CDC "publishes platform events for every record created, updated, deleted, and undeleted," including non-user changes from batch Apex, ETL jobs, and data loads, which "can potentially overload your allocations and lead to failed event deliveries." [^1]
+
+![Platform Events carry business intent with a custom payload you define; Change Data Capture carries record state with the record's fields, noise included. Choose by what the message means](</diagrams/event-driven-integration-platform-events-change-data-capture/2-platform-events-vs-cdc.png>)
 
 ### Choosing how to publish
 
@@ -66,6 +70,8 @@ Filtered streams (custom channels with complex filters) went GA in Winter '23 so
 - `commitTimestamp` / `commitNumber`: when the change committed and the system change number (SCN), which increases sequentially.
 
 Here's the trap: `commitNumber` is explicitly documented as **"provided for diagnostic purposes,"** not guaranteed unique in Salesforce (only within a single database instance), and it "might not be unique or sequential" after an org migrates databases. So you can *use* these fields to reconstruct order, but treat commitNumber as a hint, not a contract; never build uniqueness logic on it. [^8]
+
+![Reconstruct order from CDC header fields: group changes by transactionKey, order within the group by sequenceNumber, and order across transactions by commitTimestamp; treat commitNumber as diagnostic only](</diagrams/event-driven-integration-platform-events-change-data-capture/3-cdc-ordering-reconstruction.png>)
 
 Two more CDC realities: change events for the same operation on multiple records of one object in the same second can be **merged** into a single event whose `recordIds` lists all affected records, and under load or oversize you get **gap/overflow events** instead. [^6] [^7]
 
