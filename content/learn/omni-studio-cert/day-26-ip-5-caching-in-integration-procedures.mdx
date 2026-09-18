@@ -24,6 +24,8 @@ Metadata is the definition of an Integration Procedure or Data Mapper: the steps
 
 Data is the content users actually care about: the response of a Data Mapper or the response of an Integration Procedure. This is the part you configure, and it is the subject of this requirement. When data caching is on and a request arrives with the same input it has seen before, OmniStudio returns the cached response instead of re-running the query or the callout. [^1] The two configurable cache types are Org Cache and Session Cache, and both are part of the Salesforce Platform Cache. [^1][^2] That lineage matters because the platform cache comes with hard capacity limits that are shared org-wide, so an aggressive cache design can starve other features that also rely on the cache partition. Cache is a finite resource, not an infinite one.
 
+![A two-column split showing OmniStudio caches metadata internally and data in a configurable Org or Session cache, both part of the shared Salesforce Platform Cache](</diagrams/day-26-ip-5-caching-in-integration-procedures/1-metadata-vs-data.png>)
+
 ### Org Cache versus Session Cache: shared versus per-user
 
 The single most important judgment in this requirement is scope, and it maps to one question: who is allowed to see a cached answer?
@@ -36,11 +38,15 @@ The warning attached to Org Cache is the load-bearing one for the exam's data-le
 
 The tradeoff is efficiency. Session Cache saves work only when the same user comes back with the same request within one session. It does nothing for the far more common pattern where a thousand different users all ask for the same catalog. That pattern wants Org Cache. Choosing between them is not a preference; it is a direct consequence of whether the data is shared or user-specific. Shared and non-sensitive means Org Cache. User-specific, permission-dependent, or sensitive means Session Cache or no cache at all.
 
+![A comparison of Org Cache and Session Cache across scope, best use, examples, efficiency, and lifetime, with the org-cache leakage warning](</diagrams/day-26-ip-5-caching-in-integration-procedures/2-org-vs-session.png>)
+
 ### Time To Live: the freshness dial
 
 Time To Live (TTL) decides how long a cached result is allowed to sit before it is treated as stale and recomputed. In the Procedure Configuration this is the Time To Live In Minutes property. [^3] Every cache type has a floor and a ceiling that Salesforce enforces. [^3]
 
 For Session Cache, the default Time To Live is 5 minutes and the maximum is 480 minutes, which is 8 hours. The cache clears when the user's session expires no matter what value you set, because a session cache cannot outlive its session. [^3] For Org Cache, the default is 1440 minutes (24 hours) and the maximum is 2880 minutes (48 hours). [^3] The minimum for both is 5 minutes. [^3]
+
+![The Time To Live defaults, maximums, and minimums for Session Cache and Org Cache, and the freshness tradeoff between cache misses and stale data](</diagrams/day-26-ip-5-caching-in-integration-procedures/3-ttl-freshness.png>)
 
 Here is the mental model that ties TTL to correctness. TTL is a freshness contract between you and the data. If the source data changes rarely, a long TTL is fine, because the stored copy stays accurate for a long time and you collect the performance savings the whole way. If the source data changes often, a long TTL is a bug, because users keep getting a version that stopped being true hours ago. This is the classic stale-data failure mode, and it is exactly what quiz question 3 is testing. When users report outdated values right after reference data changed, the first suspect is a TTL that outlived the data's relevance, or an invalidation that never fired. The remedy is either to shorten the TTL so the cache re-reads the source sooner, or to clear the cached entry when the source changes so the next request rebuilds it.
 
@@ -71,6 +77,8 @@ Every exam scenario in this requirement ultimately reduces to one sentence, and 
 Unpack the three adjectives. Stable means the value does not change often, so a stored copy stays accurate and a long TTL is safe. Expensive means computing it is costly enough that avoiding the recompute is worth the cache's complexity and its share of platform cache capacity: an external callout, a heavy multi-object extract, a transform over thousands of rows. Shared means the same answer serves many users, so the org cache's efficiency is real and no user-specific boundary is crossed. Product catalogs, pricing and tax rates, configuration tables, and reference lookups clear all three bars at once. [^2]
 
 The data that fails the test is the data the traps warn about. Volatile values, such as random values or anything that changes on every read, defeat the entire purpose: they are stale the moment they are cached, so a cache hit is a wrong answer. User-specific data in a shared cache is inefficient, and worse, it is a data leakage risk, because the org cache is shared across users. [^2] And anything sensitive, confidential, or regulated is disqualified outright. Salesforce warns not to cache confidential or regulated information unless the security settings that would protect it are enforced, and to use org cache only for non-sensitive data. [^2][^3] When in doubt about scope or sensitivity, the correct default is often no cache at all.
+
+![A decision flow for what belongs in the cache: stable, expensive, shared data is cached, while volatile, user-specific, or sensitive data is not](</diagrams/day-26-ip-5-caching-in-integration-procedures/4-cache-decision.png>)
 
 ## Configuration Walkthrough
 
