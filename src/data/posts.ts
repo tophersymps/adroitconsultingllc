@@ -2,6 +2,30 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "computer-use-agents-production-harness-2026",
+    "title": "Computer Use in Production: The Harness Beats the Model",
+    "excerpt": "Benchmarks put computer-use agents near 20 percent on real work. The vendors' own tool docs show why the harness, not the model, decides what ships.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "September 18, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "AI Agents",
+      "Computer Use",
+      "Browser Automation",
+      "Agentic Frameworks",
+      "AI Infrastructure",
+      "Reliability",
+      "Prompt Injection"
+    ],
+    "bannerImage": "/banners/computer-use-agents-production-harness-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "salesforce-ldv-query-performance-2026",
     "title": "The Sandbox Has 4,000 Rows. Production Has 40 Million.",
     "excerpt": "Spring '26 added Apex cursors and Winter '27 raised heap limits. Neither helps a query the optimizer refuses to index. Here is the selectivity arithmetic to check first.",

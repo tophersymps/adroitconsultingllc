@@ -1,0 +1,132 @@
+---
+title: "Computer Use in Production: The Harness Beats the Model"
+slug: computer-use-agents-production-harness-2026
+excerpt: "Benchmarks put computer-use agents near 20 percent on real work. The vendors' own tool docs show why the harness, not the model, decides what ships."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "September 18, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "12 min read"
+tags: [AI Agents, Computer Use, Browser Automation, Agentic Frameworks, AI Infrastructure, Reliability, Prompt Injection]
+bannerImage: "/banners/computer-use-agents-production-harness-2026.png"
+---
+
+Google shut down Project Mariner on May 4, 2026. The landing page that once demonstrated an agent booking flights now says the technology "voyaged to other Google products," and reporters had already found the team reassigned months earlier.[^9] It is the most useful data point in the browser-agent conversation, because the product died while the capability was still improving. On the benchmark that made computer use a category, the best model scored 12.24% when the suite launched, against a human baseline of 72.36%.[^6] In June 2026 the same research group published a harder version, and the strongest configuration finished 20.6% of its tasks.[^7]
+
+That is not a story about labs failing. Models are better at this than they have ever been. It is a story about delivery, and the vendors' own documentation explains where the work moved. A model that can look at a screen and choose a click is one component. What turns that component into something you leave running on a Tuesday morning is the harness around it: the decision about which workflows should never be driven through a UI, the turn contract that keeps a batch of actions from being silently half-executed, the pixel budget that decides what a run costs, and the containment boundary that decides what a hijacked session can reach.
+
+## What the benchmark numbers mean for a workflow
+
+OSWorld is the closest thing this field has to a ruler. The first version shipped 369 real tasks across web and desktop applications, with execution-based scoring rather than a screenshot comparison, and the launch results were unkind: people completed 72.36% of the tasks, the best model 12.24%.[^6] The suite was later cleaned up and republished as OSWorld-Verified, and in June 2026 it was superseded by OSWorld 2.0.[^6]
+
+OSWorld 2.0 is where the honest number lives. It holds 108 long-horizon workflows, each grounded in a real end-to-end job across 31 self-hosted sites. A median task takes a skilled human about 1.6 hours, and 69.6% of tasks take more than an hour. The strongest configuration reported, Claude Opus 4.8 at maximum thinking with batched tool calls, averages 318 tool calls per task, against roughly 30 in the first version. It completes 20.6% of tasks under the benchmark's binary metric within a 500-step budget, with a 54.8% partial score. GPT-5.5, far more token-efficient, plateaus near 14%.[^7]
+
+The failure anatomy matters more than the score. The benchmark authors found that agents do not stumble on basic GUI control or on writing code. They "lose track of constraints, miss information that arrives mid-task, guess rather than ask the user, and skip verification," and they fail hardest "when a task hinges on hidden state they must recover."[^7] In one documented walkthrough, an agent worked a purchase-request flow across a spreadsheet, a finance channel, and direct messages, noticed that late approvals had arrived, integrated exactly one of them, then submitted a sheet it had rebuilt from memory. Its final self-check passed, because the check validated the agent's own five-row story rather than the completeness of the task.[^7]
+
+A benchmark from a different domain lands in the same place. APEX-Agents, built by Mercor from tasks written by investment banking analysts, management consultants, and corporate lawyers, ran eight agents against 480 cross-application tasks in realistic file-and-tool environments. The best result was 24.0% on a first attempt, from Gemini 3 Flash at high thinking; the open-source models tested scored under 5%.[^8] Two independently built suites, one measuring desktops and one measuring professional deliverables, converge on a first-attempt ceiling near a quarter.
+
+![Two independent benchmark suites against the human baseline: OSWorld 1.0 put the best model at 12.24 percent against 72.36 percent for people, and APEX-Agents put the best agent at 24.0 percent on a first attempt](</diagrams/computer-use-agents-production-harness-2026/1-benchmark-gap.png>)
+
+## The decision ladder: refuse the GUI when something better exists
+
+The highest-value decision in this whole area happens before a line of agent code is written, and the vendors now document it as an explicit order. Web fetch and web search are server tools that the API runs for you, with no browser to operate. The browser use toolset sits above them for pages that build their content with JavaScript or where the task means acting on the page rather than only reading it. The computer use toolset sits above that, for work that leaves the browser and spans a desktop.[^2]
+
+The difference between the two toolsets is the difference between structure and pixels. Browser use works with a page both through its structure (the accessibility tree, elements, forms, and tabs) and through pixels (screenshots and viewport coordinates). When it reads a page, every element comes back with a reference, so the next turn can click `ref_2` without first locating that link inside a screenshot. Computer use works through screenshots and coordinates alone, on a whole desktop.[^1][^2]
+
+That distinction is not academic. The docs recommend references over coordinates explicitly, because a reference survives the layout shifts and reflows that make pixel coordinates fragile, and it lets the model act on controls that are hard to hit with a pointer. The fallbacks are named too: canvas-rendered interfaces, embedded video or remote-desktop surfaces, heavily virtualized lists, and elements inside cross-origin iframes often expose no useful node, so the agent drops back to screenshots and coordinate clicks, and your executor has to resolve which frame a coordinate lands in.[^2] That fallback is where flake rates come from, and it is a property of the page you chose to automate, not of the model you chose to run.
+
+So the scoping rule is blunt. If a system exposes an API, a scheduled export, a webhook, or a vendor connector, driving its interface with an agent is the wrong instrument, because you pay a perception and reasoning cycle for every interaction that a deterministic call would get for free. Reach for the UI in two cases: the workflow lives in a portal that offers nothing else, or the job is perception rather than action, such as reading numbers off a dashboard and reporting them, where there is no state to change and the failure surface is a single screen.
+
+![A decision ladder for agent work: prefer a connector or API, then server-side fetch and search tools, then the browser toolset that reads page structure and pixels, and only then full desktop computer use](</diagrams/computer-use-agents-production-harness-2026/2-decision-ladder.png>)
+
+## The turn contract that most loops get wrong
+
+Both toolsets plan in batches. One assistant turn can carry several member calls, for example a click, then a type, then a screenshot, and the documentation specifies exactly how those batches must be run.[^1][^2] Four rules matter.
+
+Run the blocks in order, in the order they appear, because later actions in a batch usually depend on earlier ones. The click focuses the field that the type then fills.
+
+Stop at the first failure. Returning an error for the failed block is not enough on its own. The remaining blocks in that batch must be answered with a fixed message, "Not executed: an earlier computer action in this turn failed," because those actions were planned on the assumption that everything before them worked.[^1]
+
+Answer every block in the batch. The docs are direct about the consequence: a request that leaves any call unanswered is rejected with an `invalid_request_error`, "so an agent loop that reads only the first block fails on its next call."[^1] Every result must also carry the toolset name, or the API rejects the result as misrouted.
+
+End the batch with a screenshot so the model can see the outcome before deciding what to do next. You can also attach a screenshot to the last result in a batch to save a round trip, which is the difference between one call and two per step.[^1]
+
+Two more responsibilities sit in your executor rather than in the API. Inputs are stated to the model, not enforced by the API, so coordinate bounds and other conventions have to be validated by your code.[^2] And you resize the images. Toolset images are never downscaled for you, so an oversized screenshot is rejected with a validation error, and because coordinates come back in the pixel space of the image the model actually saw, any resize factor you applied has to be reversed before the click is dispatched.[^1][^3]
+
+One member deserves a warning label. `javascript_exec` runs the expression the model writes in the page's context, with that page's full privileges, including its cookies, storage, and same-origin requests. The guidance is to enable it only in sessions that hold no credentials, keep the domain allowlist in force, treat the returned value as untrusted input, and log the code the model emits.[^2]
+
+![The turn contract: an assistant turn returns a batch of member calls, the executor runs them in order, halts the rest at the first failure, answers every block with its toolset name, and ends with a screenshot](</diagrams/computer-use-agents-production-harness-2026/3-turn-contract.png>)
+
+## The pixel budget is a design decision
+
+Anthropic prices images in patches. Each patch is a 28 by 28 pixel block, so an image costs the ceiling of width divided by 28, multiplied by the ceiling of height divided by 28, in visual tokens. A 1920 by 1080 screenshot comes to 2,691 visual tokens on a high-resolution model, and 1,560 once it is downscaled to the standard tier's 1,568-pixel long edge.[^3]
+
+Now multiply. The best OSWorld 2.0 configuration averaged 318 tool calls per task.[^7] If only a third of those calls return a screenshot, a single 1080p run still pushes past 250,000 image tokens, and a run that returns one screenshot per step reaches roughly 856,000, which is more than four times a 200,000-token context window. Screenshot history is therefore a design problem rather than a tuning knob: the model needs the recent state of the screen and nothing older.
+
+The toolset declaration is its own line item. Declaring the computer toolset adds about 4,500 input tokens to a request, covering the member tool definitions and the tool-use system prompt, and disabling zoom removes about 410 of them. The browser toolset is heavier at about 6,600 tokens, with roughly 880 more if you enable all four optional members.[^1][^2] Both are paid on every request, so a 300-step run pays that overhead 300 times.
+
+Three levers, in order of effect. Resolution first: a 1280 by 800 screenshot is 1,334 visual tokens, roughly half of 1080p, and what matters is that the screenshot stays legible, not that it is maximal. Consistency second: the browser toolset declares no display dimensions and infers the viewport from the screenshots you return, so a stream that mixes sizes distorts every coordinate the model produces.[^2] Ceilings third: past 20 images in a single request, a stricter per-image limit applies to every image in that request, so long histories need pruning rather than accumulation.[^3]
+
+The number that decides whether a workflow is worth automating is cost per completed task, not cost per call. A flow that completes a fifth of the time after 318 model calls is not the cheap alternative to the integration you declined to build.
+
+![Where the tokens go in a computer-use run: a toolset definition of 4,500 or 6,600 input tokens paid on every request, plus up to 2,691 visual tokens for each 1080p screenshot, multiplied across hundreds of steps](</diagrams/computer-use-agents-production-harness-2026/4-token-budget.png>)
+
+## Injection turns text into clicks
+
+The most honest security numbers in this category come from the vendor's own red team. During the browser extension pilot, Anthropic evaluated 123 test cases representing 29 attack scenarios. Without mitigations, prompt injection succeeded 23.6% of the time. With the mitigations in place, 11.2%.[^4] On a challenge set of four browser-specific attack types, including hidden malicious form fields in the document object model and injections hidden in URL text and tab titles that only an agent would read, the same mitigations took the rate from 35.7% to 0%.[^4]
+
+The follow-up research is equally direct. "A 1% attack success rate, while a significant improvement, still represents meaningful risk. No browser agent is immune to prompt injection."[^5] The paper explains why the browser is a harder surface than a chat window: the attack surface is every page, embedded document, advertisement, and dynamically loaded script, while the action surface runs from navigation and form filling to downloads. A successful injection does not need exotic reach either. Read access plus navigation is enough to move page content somewhere it should not go.
+
+You cannot fix this with a better prompt, and containment is what you actually control. The tool documentation's own advice: isolate the agent from sensitive data and actions, use a dedicated low-privilege account if a task cannot avoid a logged-in session, and keep human confirmation on account-changing actions.[^2] The product side adds blocklists for whole high-risk categories and site-level permissions that act as a boundary rather than a preference.[^4] And because the browser runs in your environment, the sites the agent visits see your executor's network identity, which makes the egress path part of the design rather than an afterthought.[^2]
+
+Here is the test I use before approving any browser agent: assume the session is stolen, then ask what that session can reach. A dedicated profile with no saved passwords and no payment methods, a domain allowlist, and no route to administrative consoles turns a successful injection from an incident into a non-event.
+
+![Containment layers around a browser agent: a dedicated profile with no saved credentials, a domain allowlist, blocked site categories, confirmation on account-changing actions, and an audit trail of every action](</diagrams/computer-use-agents-production-harness-2026/5-containment.png>)
+
+## A runbook that survives a real portal
+
+Seven items, drawn from the documentation and from where the benchmarks say these agents break.
+
+Name the flow, the entry state, and the finish condition before writing a prompt. "File the expense report" is not a finish condition. "The claim appears in the Claims table with status Submitted and the amount matches the receipt" is.
+
+Pick the rung and write down why. Connector, API, export, page structure, screen pixels. The scoping document that names the rung is also the document that tells you when to stop.
+
+Instrument for structure. Prefer references to coordinates, and record which pages fall back to pixels. Canvas surfaces, virtualized lists, and cross-origin iframes are where the flake rate comes from, and they belong in the scoping document rather than in a postmortem.[^2]
+
+Verify independently. The purchase-request failure in OSWorld 2.0 was not a comprehension failure, it was a verification failure: the agent checked its own summary against a stale working set.[^7] Verification has to read the system of record and it has to be deterministic. It cannot be the agent's report of what it did, which is the same reason an [eval layer](/field-notes/agent-eval-infrastructure-2026) beats watching dashboards.
+
+Gate irreversible actions behind a human. Purchases, sends, deletions, permission changes, and anything that moves money. This is the same boundary that matters when a tool call is the unit of risk, which is why scope and egress deserve the same design attention as a [sandboxed agent's reach](/field-notes/agent-sandbox-scope-egress-state-2026).
+
+Log everything. Every member call, every halt decision, every line that `javascript_exec` ran, and the screenshots. An unattended agent without a replayable trace cannot be audited, and it cannot be debugged either.
+
+Cap the retries and keep them meaningful. Browser flake repeats, so a retry policy needs a ceiling and a handoff path. The spend side needs a ceiling too: a browser agent is the most expensive way to run a loop, and the budget logic that keeps an [unbounded agent loop](/field-notes/agent-loop-spend-guardrails-2026) from draining an account applies here with a larger multiplier.
+
+This is the discipline our own delivery pipeline runs on. Our agents work through named tool contracts and explicit handoffs rather than free-form action, because a handoff that declares its inputs and outputs can be tested while a click cannot. That principle decides browser-agent scope better than any framework comparison. Anything you can express as a named tool with a declared input is code. Anything that exists only as pixels is a photograph of a workflow, and photographs drift.
+
+## What to do with it
+
+The tooling has settled. The browser toolset is generally available on the Claude API with no beta header, the execution loop is documented contract by contract, and the executor is yours to build on whatever browser automation you already trust.[^2] The open-source side has caught up on the operational parts as well: browser-use ships a production path that runs the agent in a sandbox beside the browser, with authentication, cookies, and profiles managed as first-class objects instead of a folder you hope is still logged in.[^10]
+
+What is left is scoping and measurement, and measurement is where most programs stop early. Track three numbers per flow: completion rate, cost per completed task, and how often a human had to intervene. If you cannot produce those three, you are not running a browser agent in production. You are demoing one, and the benchmark evidence says the distance between those two states is the whole job.
+
+[^1]: Anthropic, "Computer use tool," Claude docs. The `computer_toolset_20260801` client toolset and its 17 member tools, the request shape that needs no beta header, batch actions with the halt rule and the exact "Not executed" text, the rejection of unanswered blocks, the instruction to end a batch with a screenshot, the toolset definition overhead of roughly 4,500 input tokens (about 410 saved when zoom is disabled), the classifiers that steer the model to request confirmation, client-side data with ZDR eligibility, and the implementation guidance to resize screenshots and scale coordinates back. [platform.claude.com](https://platform.claude.com/docs/en/agents-and-tools/tool-use/computer-use-tool)
+
+[^2]: Anthropic, "Browser use tool," Claude docs. The `browser_toolset_20260801` toolset with 27 default members plus four optional ones, the split between structure (accessibility tree, element references) and pixels, the recommendation to prefer references over coordinates and the fallback list (canvas interfaces, video, virtualized lists, cross-origin iframes), the toolset overhead of roughly 6,600 input tokens and 880 more for the optional members, the note that inputs are stated to Claude and not enforced by the API, the `javascript_exec` privileges and handling guidance, the preference order that places server-side fetch and search below browser use and browser use below computer use, and the security guidance on isolation, dedicated low-privilege accounts, and network identity. [platform.claude.com](https://platform.claude.com/docs/en/agents-and-tools/tool-use/browser-use-tool)
+
+[^3]: Anthropic, "Vision," Claude docs. The patch-based token cost of the ceiling of width divided by 28 multiplied by the ceiling of height divided by 28, the resolution tiers (a 2,576-pixel long edge and 4,784 visual tokens for high-resolution models, 1,568 pixels and 1,568 tokens for the standard tier), the 2,691-visual-token cost of a 1920 by 1080 image on the high-resolution tier, the rule that toolset images are rejected rather than downscaled, and the stricter per-image limit that applies once a request holds more than 20 images. [platform.claude.com](https://platform.claude.com/docs/en/build-with-claude/vision)
+
+[^4]: Anthropic, "Piloting Claude in Chrome." The 123 test cases across 29 attack scenarios, the 23.6% attack success rate without mitigations and 11.2% with them, the browser-specific challenge set that went from 35.7% to 0%, site-level permissions, action confirmations, and the blocks on financial services, adult, and pirated content categories. [claude.com](https://www.claude.com/blog/claude-for-chrome)
+
+[^5]: Anthropic, "Mitigating the risk of prompt injections in browser use." The reinforcement-learning approach to injection robustness, the classifiers that scan untrusted content entering the context window, the internal and external red-teaming, and the statement that a 1% attack success rate still represents meaningful risk because no browser agent is immune. [anthropic.com](https://www.anthropic.com/research/prompt-injection-defenses)
+
+[^6]: OSWorld, project site. The 369-task benchmark across Ubuntu, Windows, and macOS with execution-based evaluation, the 72.36% human completion rate against 12.24% for the best model at launch, the 8 Google Drive tasks that may be excluded for a 361-task evaluation, the OSWorld-Verified update, and the June 2026 release of OSWorld 2.0. [osworld-v1.xlang.ai](https://osworld-v1.xlang.ai/)
+
+[^7]: OSWorld 2.0, project site and paper. The 108 long-horizon tasks across 31 self-hosted sites, the 69.6% share taking a skilled human more than an hour, the roughly 1.6-hour median, the more than 250 average agent steps and 318 tool calls for the best configuration, the 20.6% binary and 54.8% partial scores under a 500-step budget, the plateau near 14% for GPT-5.5, the challenge-phenomenon tags, the failure analysis about constraints, mid-task information, guessing instead of asking, skipped verification, and hidden state, and the purchase-request walkthrough in which the agent's self-check validated an incomplete list. [osworld-v2.xlang.ai](https://osworld-v2.xlang.ai/)
+
+[^8]: Mercor, "APEX-Agents," arXiv:2601.14242. The 480 long-horizon cross-application tasks built by investment banking, consulting, and legal professionals, the eight-agent evaluation under Pass@1, the 24.0% top score from Gemini 3 Flash at high thinking, and the sub-5% results for the open-source models tested. [arxiv.org](https://arxiv.org/abs/2601.14242)
+
+[^9]: Reporting on the Project Mariner shutdown, quoting the retired product page ("It was shut down on May 4th, 2026 and its technology voyaged to other Google products") as first reported by Wired's Maxwell Zeff, plus the March 2026 reporting that staff had been moved off the project before the shutdown. [techbuzz.ai](https://www.techbuzz.ai/articles/google-shuts-down-project-mariner)
+
+[^10]: Browser Use documentation. The open-source install path, the models tuned for browser automation, and the production sandbox path that runs an agent beside the browser with profiles, cookies, and authentication managed by the platform. [docs.browser-use.com](https://docs.browser-use.com/open-source/quickstart)
