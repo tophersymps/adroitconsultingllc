@@ -52,6 +52,8 @@ Governor limits are the ones your code bumps into every day. They reset for each
 | Maximum CPU time | 10,000 ms | 60,000 ms |
 | Maximum execution time per transaction | 10 minutes | 10 minutes |
 
+![Governor limits budget: the per-transaction table compares the synchronous and asynchronous ceilings for DML rows, statements, SOQL, callouts, CPU, and heap, with DML rows flagged as the most-tripped limit](</diagrams/system-limits-governor-api-storage-planning/1-governor-limits-budget.png>)
+
 A few things worth reading carefully.
 
 **DML statements vs. DML rows are two different governors.** The statement limit (150) counts how many times you call `insert`, `update`, `delete`, `upsert`, `Database.setSavePoint`, `EventBus.publish` for after-commit events, and several others. [^1] The row limit (10,000) counts how many total records those statements process. Calling `update` once on a list of 9,000 records uses 1 statement and 9,000 rows. Calling `update` 9,000 times, one record per call, uses 9,000 statements and blows the 150 limit long before the row count matters. A single `update` on 15,000 records passes the statement limit but fails the 10,000-row limit.
@@ -75,6 +77,8 @@ The numbers that matter for planning: [^3]
 
 So a Professional org with 25 Salesforce licenses and API access gets 100,000 + (25 x 1,000) = 125,000 API calls per 24 hours. Double the licenses and you get 150,000. This is arithmetic you should be able to do in your head at a design review, because it decides whether your integration architecture is viable.
 
+![Sizing the daily API allocation: the 24-hour budget is a base of 100,000 calls plus the per-license contribution, here reaching 125,000 for 25 Salesforce licenses, with Developer, Full Sandbox, and concurrency figures and the note that community licenses contribute little](</diagrams/system-limits-governor-api-storage-planning/2-api-daily-allocation.png>)
+
 Beyond the daily total, two operational limits matter. Production orgs allow 25 concurrent API requests that last 20 seconds or longer; Developer and Trial orgs allow 5. [^3] And the timeout for a REST or SOAP API call is 10 minutes, except for query calls, which are bounded by SOQL limits. [^3] When you exceed a limit, the API returns an error such as `REQUEST_LIMIT_EXCEEDED`. [^3]
 
 The licensing insight for an architect: API capacity is bought per license type. If an org is heavy on API integrations but light on Salesforce user licenses, it may still be fine because Platform licenses and add-ons contribute. The trap is an org that relies on Customer Community or Experience Cloud users, which contribute zero or very little toward the daily allocation. [^3] You have to count the licenses you actually have, not the ones you wish you had.
@@ -84,6 +88,8 @@ The licensing insight for an architect: API capacity is bought per license type.
 Storage is the slow-burn constraint. It does not fail a transaction; it accumulates until one day an insert returns `STORAGE_LIMIT_EXCEEDED` or the org runs out of room. Storage splits into data and file, and they have separate allocations and separate consumption. [^5]
 
 Data storage is what your records consume. Since 2019, Contact Manager, Group, Essentials, Professional, Enterprise, Performance, and Unlimited editions start with 10 GB of data storage, plus incrementally added user storage. [^5] The per-user increment varies by edition: Professional and Enterprise add 20 MB per user license, while Performance and Unlimited add 120 MB. [^5] Developer Edition gets 5 MB of data storage, and Personal Edition gets 20 MB. [^5]
+
+![Storage capacity budget: data and file storage are separate allocations enforced independently, with 10 GB bases and per-user increments for the major editions, plus the Professional 10-user example reaching 10.2 GB and the Performance 100-user example reaching 22 GB of data](</diagrams/system-limits-governor-api-storage-planning/4-storage-capacity.png>)
 
 File storage is separate. Professional, Enterprise, Performance, and Unlimited editions get 10 GB of file storage per org; Essentials and Starter get 1 GB; Developer gets 20 MB. [^5] Files include attachments, Chatter files, CRM Content, the Documents tab, and the custom File field on Knowledge articles. [^5]
 
@@ -160,6 +166,8 @@ public class OrderStatusBatch implements Database.Batchable<SObject> {
 ```
 
 When this runs with the default batch size of 2000, the 20,000 records are split into 10 chunks. Each `execute` call receives a scope of 2000 records, updates them with a single DML statement, and commits. Crucially, governor limits reset for each execution of a batch in the `execute` method. [^1] So each chunk runs within its own transaction: 2000 DML rows against a 10,000-row limit, one DML statement against a 150-statement limit, one SOQL query issued by `start` against its own budget. [^1] The job that failed instantly now completes, and it processes 20,000 records without ever getting close to a limit.
+
+![Batch restructure for the DML row limit: the before side shows a single synchronous update on 20,000 rows failing the 10,000-row limit, while the after side splits the work into ten Batch Apex chunks of 2,000 rows, each running as its own transaction with a fresh set of limits](</diagrams/system-limits-governor-api-storage-planning/3-batch-restructure.png>)
 
 The lesson in the numbers: the constraint was not the total volume of the work. It was the shape of the work. A single transaction cannot process 20,000 rows, but twenty independent transactions of 2,000 rows each can. That is the entire art of limit-aware design, and it is why the architect reaches for batching when the volume outgrows the transaction.
 
