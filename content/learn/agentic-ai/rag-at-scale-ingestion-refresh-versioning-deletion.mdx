@@ -50,6 +50,8 @@ The shape is consistent no matter which tools you use:
 
 Two properties of this pipeline matter more than any single tool. The first is idempotency: if the job runs twice on the same document, the index must not hold two copies. [^2] The second is that every chunk carries enough metadata to find it again later, which is what makes refresh, versioning, and deletion possible at all. That point deserves its own section, because it is the load-bearing decision of the whole write side.
 
+![Ingestion pipeline: source systems flow through pull, parse, chunk, embed, and store, and every chunk carries a deterministic ID built from the tenant, the integration, the resource type, the source record ID, and the chunk index](</diagrams/rag-at-scale-ingestion-refresh-versioning-deletion/1-write-side-pipeline.png>)
+
 ## Deterministic chunk IDs: the foundation
 
 You cannot refresh, version, or delete what you cannot find. Before you process a single update, your vector metadata has to be designed so a change event can locate its own vectors. [^5]
@@ -72,6 +74,8 @@ The efficient incremental path re-embeds by set difference, not by full replacem
 
 **Live refresh** streams changes into the index within seconds instead of on a schedule. The shape is: a change becomes an event, the event rides a durable stream, a consumer re-chunks and re-embeds that one item, and an upsert replaces its vectors in place. [^3] Live refresh is worth its extra complexity only when staleness is a real bug, usually for support, commerce, conversations, and telemetry, where "it changed an hour ago" needs to be retrievable an hour ago, not tomorrow. [^3]
 
+![The three refresh tiers side by side, with the append-versus-upsert contrast that decides whether an edited document leaves a stale chunk retrievable](</diagrams/rag-at-scale-ingestion-refresh-versioning-deletion/2-refresh-tiers-and-the-trap.png>)
+
 The trap in every tier is the append instinct. When a new event arrives, the naive move is to embed it and add it to the index. Add. That is the bug. Every edit appends a new vector for the same underlying item, the old stale chunk stays retrievable, and the retriever returns both, so the model sees contradictions. [^3] The fix is boring and essential: upsert on a stable, deterministic ID, replace if it exists, insert if it does not. [^3] An index that can only add is an import, not a pipeline.
 
 ## Versioning: content versions and model versions
@@ -86,6 +90,8 @@ The failure that motivates all this is subtle. An embedding is a snapshot of mea
 
 The operational rule is blunt: treat any model change as a re-embed event, even when the dimensions match. [^8] And do the migration without a maintenance window. The clean pattern for a self-hosted store like pgvector is a shadow column: add a nullable column for the new model's vectors, dual-write both columns for new rows, backfill the shadow column in throttled batches, verify against an eval set, cut read traffic over with a feature flag, soak, then drop the old column and rename. [^8] That is a re-embed you can run during business hours with zero user-visible downtime.
 
+![Content versioning by hash comparison beside model versioning, with the failure each one prevents](</diagrams/rag-at-scale-ingestion-refresh-versioning-deletion/3-versioning-content-and-model.png>)
+
 ## Deletion: making content actually disappear
 
 Deletion is where RAG systems stop being demos. A vector database is separate from the source system, so deleting a record in the source does not touch the vectors derived from it. If your pipeline has no deletion handler, the chunks for a deleted deal, contact, or policy stay perfectly intact and perfectly retrievable. [^5] Those are orphan chunks, chunks whose source no longer exists, and they are a liability: an AI agent has no way to know the source record was destroyed, so it retrieves the orphan and confidently repeats deleted or restricted data. [^5]
@@ -97,6 +103,8 @@ Deletion must therefore be a first-class operation, not an afterthought. Two mec
 **Reconciliation.** Webhooks fail. Sources go down, and users delete while your integration is disconnected. Relying on events alone guarantees the index eventually drifts out of sync. So on a schedule you enumerate the source records, compare against the IDs in your store, and delete the diff: any ID present in your store but missing from the source gets removed. [^5] A full-sync reconciliation is the belt-and-suspenders safety net that catches everything the event stream missed. [^5]
 
 **The compliance floor.** When deletion is a regulatory requirement, the right to erasure under GDPR Article 17, soft deletion is not enough. Soft-deleting a vector, marking it deleted but keeping it physically in the store, is not compliant, because the data is still retrievable from the storage layer. [^5] [^9] You must physically purge the embeddings. And because vectors can carry recoverable personal data, the erasure has to cascade to every place the data landed: the primary index, replicas, backups, and evaluation snapshots. [^9] Fully managed RAG services try to make this tractable; with Amazon Bedrock Knowledge Bases, for example, deleting the source object in S3 and syncing the knowledge base removes it from the underlying vector store. [^9] The general lesson stands regardless of vendor: design the write side so a document can be found and purged on demand.
+
+![The three deletion mechanisms: event-driven tombstones, scheduled reconciliation against the source records, and the compliance purge that cascades to replicas, backups, and evaluation snapshots](</diagrams/rag-at-scale-ingestion-refresh-versioning-deletion/4-deletion-lifecycle.png>)
 
 ## Worked example: an ingestion and refresh manager in pure Python
 
