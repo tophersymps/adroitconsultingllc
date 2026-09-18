@@ -69,6 +69,26 @@ describe("mdxToNarration", () => {
     expect(narration).toContain("Sources are listed at the end of the article.");
   });
 
+  it("does NOT read the GFM footnote-definition block (real articles have no Sources heading)", () => {
+    // Real articles' "Sources" section is the renderer's auto-generated
+    // heading over a run of footnote *definition* lines `[^n]: ...`. These
+    // must not be spoken as prose (titles + URLs read aloud == the bug).
+    const mdx =
+      "LangChain found this in 2026.[^1]\n[^1]: LangChain, \"Evaluating AI Agents.\" [langchain.com](https://langchain.com/blog/evals)\n[^2]: Maxim AI, \"Top 5 Platforms for AI Agent Evaluation.\" [maxim.ai](https://maxim.ai/guides)";
+    const narration = mdxToNarration(mdx);
+    // citation titles never spoken
+    expect(narration).not.toContain("Evaluating AI Agents");
+    expect(narration).not.toContain("Top 5 Platforms");
+    // URLs never spoken (only the inline content line remains)
+    expect(narration).not.toContain("langchain.com");
+    expect(narration).not.toContain("maxim.ai");
+    // the summary sentence is emitted exactly once
+    expect(narration).toContain("Sources are listed at the end of the article.");
+    expect(narration.match(/Sources are listed at the end of the article\./g)).toHaveLength(1);
+    // original content prose survives
+    expect(narration).toContain("LangChain found this in 2026.");
+  });
+
   it("applies a custom leadIn wrapper for diagrams", () => {
     const mdx = "![An architecture diagram](</diagrams/a.png>)";
     const narration = mdxToNarration(mdx, {
