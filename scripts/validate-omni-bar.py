@@ -6,8 +6,9 @@ Checks, for each series in content/learn/:
   2. questions/<slug>.json exists for EVERY published .mdx lesson slug,
      each with quizName '<series>:lesson:<slug>', >=3 questions, valid options,
      correct_answer_index in range, explanation present.
-  3. checks/check-<n>.json for each 5-lesson block [5n-4,5n] that overlaps
-     published lessons; each with quizName '<series>:check:<n>' and >=10 questions.
+  3. checks/check-<n>.json for each lesson block (CHECK_CHUNK lessons, short final
+     tail merged into the previous check) that overlaps published lessons; each with
+     quizName '<series>:check:<n>' and >=10 questions.
   4. exam.json present with quizName '<series>:exam' and >=20 questions.
   5. All JSON parses; correct_answer_index valid.
 
@@ -16,8 +17,30 @@ Usage: python3 scripts/validate-omni-bar.py [--series salesforce-architect ...]
 """
 import json, os, re, sys
 
-REPO = os.path.expanduser("~/Documents/Fortress-of-Solitude/adroit-blog")
+REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 LEARN = os.path.join(REPO, "content", "learn")
+
+# Mirror the shared cert-quiz generator's chunking rule (scripts/generate-cert-quizzes.py
+# in Fortress-Infra): lessons are pooled CHECK_CHUNK per check, and if the final chunk
+# would hold fewer than CHECK_MIN lessons it is merged into the previous chunk.
+CHECK_CHUNK = 5
+CHECK_MIN = 3
+
+
+def lesson_chunks(n):
+    """1-based lesson ranges split by CHECK_CHUNK, short final tail merged."""
+    if n < 1:
+        return []
+    chunks = []
+    start = 1
+    while start <= n:
+        end = min(start + CHECK_CHUNK - 1, n)
+        chunks.append((start, end))
+        start = end + 1
+    if len(chunks) > 1 and chunks[-1][1] - chunks[-1][0] + 1 < CHECK_MIN:
+        merged = chunks.pop()
+        chunks[-1] = (chunks[-1][0], merged[1])
+    return chunks
 
 # Series that must meet the bar. Omni already does; these are the build-outs.
 DEFAULT_SERIES = [
@@ -103,7 +126,8 @@ def check_series(series, problems):
     # 3. checks
     cdir = os.path.join(base, "checks")
     max_lesson = max(lesson_num.values()) if lesson_num else 0
-    nchecks = (max_lesson + 4) // 5
+    chunks = lesson_chunks(max_lesson)
+    nchecks = len(chunks)
     check_files = set()
     if os.path.isdir(cdir):
         for fn in os.listdir(cdir):
@@ -114,9 +138,9 @@ def check_series(series, problems):
                 if data.get("quizName") != f"{series}:check:{int(m.group(1))}":
                     problems.append(f"{series}: {fn} quizName mismatch")
                 validate_questions(data.get("questions"), f"{series}/{fn}", problems)
-    for n in range(1, nchecks + 1):
-        if n not in check_files:
-            problems.append(f"{series}: missing check-{n}.json (lessons {5*n-4}-{5*n})")
+    for i, (lo, hi) in enumerate(chunks, 1):
+        if i not in check_files:
+            problems.append(f"{series}: missing check-{i}.json (lessons {lo}-{hi})")
 
     # 4. exam.json
     ex = os.path.join(base, "exam.json")
