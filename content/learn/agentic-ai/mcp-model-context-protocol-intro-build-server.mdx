@@ -22,6 +22,8 @@ Think about how an agent gets its abilities today. A model alone produces text. 
 
 The trouble is that nothing about that wiring is standard. Anthropic's Claude expects tools in one shape, OpenAI in another, and local models in a third. Lesson 9 walked you through exactly how those tool-calling formats differ and why you had to normalize across them. A tool that talks to your CRM has to be re-taught to every client. A client you build has to learn a bespoke integration for every tool. With A applications and B tools, you end up maintaining up to A times B custom connectors, and every new model or new data source adds a full row or column of work. [^3]
 
+![Bespoke integrations need one hand-written connector per app and tool pair, while MCP needs one connector on each side of the same protocol](</diagrams/mcp-model-context-protocol-intro-build-server/1-connector-explosion-vs-one-protocol.png>)
+
 Anthropic named this problem when it open-sourced the Model Context Protocol on November 25, 2024. The protocol's job is to replace those fragmented, one-off integrations with a single standard, the way USB replaced a drawer of proprietary cables. One connector on each side, and anything that speaks the standard works with anything else that speaks it. [^1] The official documentation puts the analogy plainly: MCP is like a USB-C port for AI applications. [^2]
 
 That analogy carries the whole design. A laptop does not care which brand of monitor you plug into the USB-C port, and a monitor does not care which laptop is on the other end. Each side implements the same connector, and the pairing just works. MCP does the same for AI applications and the systems they connect to.
@@ -40,6 +42,8 @@ A concrete mapping makes it click. Claude Desktop is a host. When it launches a 
 
 The protocol itself is JSON-RPC 2.0 underneath, the same request-response message structure you may know from other RPC systems, with notifications available when no reply is expected. MCP is stateless: each request carries the protocol version and relevant capabilities, so a server can handle each message on its own rather than depending on a conversation history it has to remember. [^3]
 
+![A host runs one client per server connection, reaching a local filesystem server over stdio and a remote Sentry server over HTTP](</diagrams/mcp-model-context-protocol-intro-build-server/2-host-client-server-architecture.png>)
+
 ## What a server can expose: tools, resources, prompts
 
 A server offers the host three kinds of things, and each has a distinct job. The official docs call them primitives. [^3]
@@ -53,6 +57,8 @@ A server offers the host three kinds of things, and each has a distinct job. The
 The client finds out what a server offers through discovery. Each primitive type has list and get methods, so a client can ask for all available tools with `tools/list`, then run one with `tools/call`. Because listings are queries, not static configuration, a server can change what it exposes over time and the client stays current. [^3]
 
 Here is the design idea that makes MCP more than a shared API format. A single server can bundle all three kinds of things around one domain. The docs use the example of a database: the server exposes tools for querying the database, a resource holding the database schema, and a prompt with few-shot examples for talking to those tools. The model gets the ability to act, the context it needs to act well, and guidance on how to act, all from one server, all described by one protocol. [^3]
+
+![The three primitives side by side: tools for actions, resources for context, and prompts as reusable templates, all discovered through list and call methods](</diagrams/mcp-model-context-protocol-intro-build-server/3-three-primitives-tools-resources-prompts.png>)
 
 The transport layer decides how those messages physically travel. MCP supports two mechanisms. **Stdio** uses standard input and output streams for a direct connection between two processes on the same machine, which is fast and needs no network. **Streamable HTTP** uses HTTP for client-to-server messages with optional server-sent events for streaming, which is how remote servers communicate and how you reach a server hosted somewhere else. The transport is abstracted from the protocol, so the same JSON-RPC messages ride over either channel. [^3]
 
