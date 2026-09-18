@@ -50,6 +50,8 @@ ticket-triager/
 
 This layout does three things. It separates the agent's identity (what it is told and what it can call) from its mechanics (how it loads config and serves requests). It keeps the entry points explicit, one CLI and one API, so nobody has to guess where the code starts. And it puts the rules up front in `AGENTS.md`, so the structure survives contact with a new person or a new model. Keep the root instruction file short, under a hundred lines, and point it at deeper docs rather than embedding everything. [^3] [^4]
 
+![Project anatomy: the root instruction file carries the rules, src holds the agent's identity and its mechanics, and documented keys stay outside version control](</diagrams/first-enterprise-agent-project-setup/1-project-anatomy.png>)
+
 ## Isolate the environment and keep secrets out of the repo
 
 Enterprise agents run in clean, reproducible environments. Start every project in its own virtual environment, never in the global Python install, because agent frameworks pin specific dependency versions that will collide with whatever else sits on the machine. [^5] A dedicated `venv` plus a `pyproject.toml` that locks the exact framework and model-client versions means the code runs the same on your laptop, in CI, and in production. [^1]
@@ -90,6 +92,8 @@ Two decisions in that definition deserve attention. The `instructions` field is 
 
 The model choice is configuration, not code, so the agent definition should not hard-code a specific model string that only works for one provider. The tools and the graph structure stay the same whether the underlying model comes from OpenAI, Anthropic, or a local server; only the model client and key change. That is the same principle this series hit in the routing lesson, and setup is where you bake it in, by reading the model and provider from configuration rather than typing them into the agent file. [^1]
 
+![The runner owns the loop: the agent definition supplies instructions, tools, and a typed output, and a checkpointer freezes the typed state after every step](</diagrams/first-enterprise-agent-project-setup/2-runner-loop.png>)
+
 ## Register tools with real schemas
 
 Tools are where the agent touches your systems, so the tool layer is the part that deserves the most care during setup. A tool in most frameworks is an ordinary Python function with a docstring that becomes the model's description of when to call it and what it returns. [^6] The docstring is the interface, the same principle as the MCP tool design in lesson 31, so write it the way you would brief a new teammate, with the trigger condition and the return shape, not a vague verb. [^1]
@@ -103,6 +107,8 @@ Start with the smallest tool set the bounded task needs. A triager needs to read
 Every agent run carries state, the messages exchanged, the accumulated results, and any custom fields like approval flags or ticket ids. Frameworks differ in how seriously they treat this state. A plain chat SDK keeps an in-process conversation list, which is fine for a script and fragile for anything that must survive a restart or run across multiple workers. A graph runtime like LangGraph models state as a typed schema that a checkpointer freezes after every step, which is what unlocks resume-after-crash and human-in-the-loop approval. [^1]
 
 For the first project, start with the framework's in-memory persistence and move to a durable store only when you have a reason. The common guidance is blunt: use `MemorySaver` for local graphs and tests, because it is single-process and disappears on restart, and move to a database-backed saver before you run multiple workers or need to resume a run after a deploy. [^1] Deciding this at setup, rather than discovering it in an outage, is the difference between a demo and a service.
+
+![Persistence decision: in-memory state for local graphs and tests, a database-backed saver once a run must survive a restart, a deploy, or more than one worker](</diagrams/first-enterprise-agent-project-setup/3-persistence-decision.png>)
 
 Whatever you choose, model the state explicitly. If the agent carries a `thread_id` or a ticket id through its run, put it in the typed state schema so every node and every checkpoint records it. Frameworks that only keep a chat list make it hard to persist the custom fields that actually matter for your domain, so define them up front. [^1]
 
