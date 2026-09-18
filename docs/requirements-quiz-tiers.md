@@ -80,7 +80,7 @@ These decisions are non-negotiable constraints for this build:
 **so that** I can track which checks I have completed and at what score.
 
 **Acceptance Criteria:**
-- Given I am logged in and viewing the series page, when I scroll to the checks section, then I see 9 knowledge check cards labeled "Knowledge Check 1 - Lessons 1-5" through "Knowledge Check 9 - Lessons 41-45".
+- Given I am logged in and viewing the series page, when I scroll to the checks section, then I see 9 knowledge check cards labeled "Knowledge Check 1 - Lessons 1-5" through "Knowledge Check 9 - Lessons 41-46".
 - Given I have completed some checks, when I view the list, then each card shows my best score and pass/fail state.
 - Given I am a guest, when I view the series page, then knowledge check cards are shown but link to pages that display the CTA placeholder.
 

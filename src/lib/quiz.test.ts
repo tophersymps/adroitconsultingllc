@@ -54,7 +54,7 @@ describe("getKnowledgeChecks", () => {
     const checks = getKnowledgeChecks("omni-studio-cert");
     expect(checks.length).toBe(9);
     expect(checks[0]).toEqual({ n: 1, lessons: [1, 5] });
-    expect(checks[8]).toEqual({ n: 9, lessons: [41, 45] });
+    expect(checks[8]).toEqual({ n: 9, lessons: [41, 46] });
     expect(checks.map((c) => c.n)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
   });
 
