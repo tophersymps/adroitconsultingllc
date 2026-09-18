@@ -26,6 +26,27 @@ export const posts: BlogPost[] = [
     "status": "published"
   },
   {
+    "slug": "kubernetes-rollout-strategies-2026",
+    "title": "Rollout Strategies: How a New Version Reaches Production",
+    "excerpt": "A rolling update swaps pods on readiness. A canary shifts traffic on evidence. Blue-green flips a service. Pick the strategy that matches your blast radius.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "September 18, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "11 min read",
+    "featured": false,
+    "tags": [
+      "DevOps",
+      "Kubernetes",
+      "CI/CD",
+      "Platform Engineering"
+    ],
+    "bannerImage": "/banners/kubernetes-rollout-strategies-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "salesforce-ldv-query-performance-2026",
     "title": "The Sandbox Has 4,000 Rows. Production Has 40 Million.",
     "excerpt": "Spring '26 added Apex cursors and Winter '27 raised heap limits. Neither helps a query the optimizer refuses to index. Here is the selectivity arithmetic to check first.",
