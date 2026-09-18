@@ -16,6 +16,8 @@ Lesson 30 got you a working server: two tools, a stdio transport, and the satisf
 
 This lesson walks the four production features, then traces the deprecated sampling path so you can maintain servers that still use it, and ties it all into one server you can build and secure end to end.
 
+![Comparison of the four MCP primitives: the model calls tools, the application attaches resources, the user selects prompts, and a deprecated sampling method lets the server borrow the client's model](</diagrams/mcp-deep-dive-tools-resources-prompts-sampling-auth/1-who-controls-what.png>)
+
 ## Tools: the model-controlled primitive
 
 A tool is a function the model decides to call. The server defines what tools exist, the model discovers them, decides when one fits, and invokes it. That is the whole contract, and it is worth stating plainly because it inverts the way you are used to wiring functions. In a normal application you call the function. In MCP the model calls it, and your job is to make the model call the right one at the right time. [^1]
@@ -78,6 +80,8 @@ The flow starts with a challenge. When a client first connects without a token, 
 
 The client then discovers the authorization server's own metadata, registers itself (either pre-registered or through Dynamic Client Registration), and runs an authorization-code flow with PKCE. The user logs in and consents to specific scopes, and the client exchanges the code for an access token and a refresh token. From then on, the client sends the access token in the `Authorization` header on every request, and the server validates its signature, expiry, audience, and scopes. [^5]
 
+![OAuth 2.1 flow for a remote MCP server: a 401 challenge with a metadata pointer, PKCE authorization code exchange, a bearer token on every request, and validation of signature, expiry, audience, and scopes](</diagrams/mcp-deep-dive-tools-resources-prompts-sampling-auth/2-oauth-auth-flow.png>)
+
 Two details separate a secure deployment from a broken one. First, the client sends a resource parameter, per RFC 8707, on both the authorization and token requests, set to the canonical URI of the MCP server. That binds the token to one server, so a token minted for one server cannot be replayed against another. [^5] Second, the server must not pass the token it receives on to downstream APIs. It acts as its own OAuth client there, with its own token. Otherwise you get the confused deputy problem, where a server uses someone else's privileges against a downstream system. [^5]
 
 The practical rules are the ones you would expect from any secure service: use short-lived access tokens, always validate tokens, enforce HTTPS in production, use least-privilege scopes rather than catch-all ones, never log credentials, and pin to a single issuer unless you are explicitly multi-tenant. [^5]
@@ -98,6 +102,8 @@ Then secure it. Deploy the server over HTTP, stand up an authorization server, a
 
 That is the protocol in one server: a tool the model calls, a resource the application attaches, a prompt the user selects, a sampling call that borrows the client's model where you maintain an inherited server, and OAuth 2.1 deciding who gets in.
 
+![The project-intel server exposes a query_issues tool, a config://project/schema resource, and a code_review prompt, then gates them behind OAuth 2.1; inherited sampling summarizes inside query_issues](</diagrams/mcp-deep-dive-tools-resources-prompts-sampling-auth/3-project-intel-server.png>)
+
 ## The pitfalls to avoid
 
 The first is writing tool descriptions and schemas as an afterthought. The model decides when to call a tool from the name, description, and schema you write. Treat those three as the product, because they are the entire interface between the model and your system. A vague description produces a model that calls the wrong tool or the right tool with the wrong arguments. [^1]
@@ -109,6 +115,8 @@ The third is confusing prompts with tools. If you want the model to trigger a wo
 The fourth is designing a server that assumes it can call models directly when sampling is available. Sampling exists so a server can reason without its own credentials. A server that hard-codes its own model calls defeats the mechanism and reintroduces the API-key management sampling was designed to remove. [^4]
 
 The fifth is shipping a remote server with no authorization, or with a broken one. A remote MCP server that can run tools is a genuinely dangerous thing to leave unauthenticated. Use OAuth 2.1, bind tokens to the server with the resource parameter, use least-privilege scopes, and never pass a client's token downstream. [^5]
+
+![Five MCP design pitfalls each paired with the rule that fixes them, from treating tool descriptions as the product to never shipping an unauthenticated remote server](</diagrams/mcp-deep-dive-tools-resources-prompts-sampling-auth/4-pitfalls.png>)
 
 ## Try it
 
