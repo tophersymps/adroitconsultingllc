@@ -33,6 +33,8 @@ The failure mode that motivates all of this is the runaway loop. An agent's whol
 
 The controls are ranked by scope, and that ranking is the mental model for the whole lesson. An approval gates the smallest unit, one action. An interrupt gates a point in the run, which can be one action or a region of work. Escalation hands off a decision. A kill switch gates the whole run. You reach for the narrowest control that is safe, and you escalate to the wider one when the situation demands it. Gating everything with the widest control, a kill switch with no approvals underneath, gives you a system that can only run or stop, with no middle ground where a person can steer it.
 
+![Four controls ranked by scope: approval gates one action, interrupt gates a point in the run, escalation hands off a decision, and kill switch gates the whole run](</diagrams/human-in-the-loop-approvals-interrupts-escalation-kill-switches/1-four-controls-by-scope.png>)
+
 ## Approvals: gating one action
 
 The most common control is the approval. When the model proposes a tool call, the runtime checks whether that call is in a class that requires a person before it executes. The check belongs in the runtime, not in a system prompt. A prompt that says "ask before you delete things" is a preference the model may follow. An approval flag on the tool is a mechanism the runtime enforces. That is the same distinction this track has drawn all the way through: model-level guidance shifts, deterministic gates hold. [^5]
@@ -50,6 +52,8 @@ The term for this in the frameworks is an interrupt, and LangGraph exposes it as
 Two properties make this useful in production. The first is that an interrupt is dynamic, not a static breakpoint. A static breakpoint pauses before or after a specific node every time. An interrupt is code, so it can be conditional: fire it only when a condition holds, like a write landing outside the expected workspace or a SQL statement that is not a read-only SELECT. [^4] That means you do not build a separate "approval version" of your graph. The same graph has the pause points built in, and they only engage when the risky condition is true.
 
 The second property is persistence. Because the state is held in a checkpointer, an interrupted thread can be resumed later on a different machine, even months later, without losing what the agent had decided up to that point. [^4] The checkpoint does not hold the run in memory. It holds it on disk, so an interrupted agent costs nothing while it waits beyond a little storage, and the operator can come back to it on their own schedule. [^3] This is the mechanism that makes a human-in-the-loop design work at company scale: the agent does not hold a server hostage while it waits for a person to approve something. It parks itself and releases the resources.
+
+![The interrupt lifecycle: a node calls interrupt, the state is saved to a checkpointer, the run halts, and a resume under the same thread ID continues from the checkpoint](</diagrams/human-in-the-loop-approvals-interrupts-escalation-kill-switches/2-interrupt-lifecycle.png>)
 
 ## Escalation: handing the decision off
 
@@ -69,6 +73,8 @@ A kill switch can be larger than a loop budget. It can be a human-invoked stop, 
 
 The reason the kill switch must be deterministic is the same reason approvals must be mechanisms rather than prompts. A review step that the model itself would have to search for has a deeper kind of hole. An agent that is already looping badly is an agent that is the least reliable judge of whether it should keep looping. So the control that stops the whole run cannot be rendered by the model. It has to be a number, a threshold, a tripwire that a process enforces. This is the discipline from lessons 22 and 23 about stopping conditions, now applied at the outer layer. A single agent needs a stopping condition. A fleet of agents, and the system that runs them, needs the same condition enforced from outside. [^8]
 
+![Choosing a control: one risky action calls for an approval, a long multi-step run for an interrupt, a decision the agent should not make for escalation, a run with no natural end for a kill switch](</diagrams/human-in-the-loop-approvals-interrupts-escalation-kill-switches/3-which-control-decision-tree.png>)
+
 ## Worked example: a support agent that touches production state
 
 Let me put all four controls in one concrete system. You are building a support agent that reads a customer's account, and it can take one risky action: it can issue a refund, cancel an order, or send an email to the customer. Those actions reach production. Everything else it does is read-only.
@@ -82,6 +88,8 @@ Let me put all four controls in one concrete system. You are building a support 
 **Kill switch.** The loop budget caps the agent at a reasonable number of tool calls per ticket. If it ever exceeds that, if it starts looping on a retry, the run stops and hands the ticket to a human with the trace attached. There is also a fleet-level stop: a command the operations team can run to halt every active agent instance at once. That is rarely used, but it exists, and its existence is what makes the rest of the autonomy acceptable. [^7] [^8]
 
 Notice what the four controls do together. The approvals make the single dangerous actions safe. The interrupt makes the long ambiguous work steerable. The escalation keeps the truly gray decisions with a person. The kill switch guarantees that, no matter how wrong the first three go, the system cannot run away. Each one is a mechanism, not a prompt, and each one fails in a designed way when a human does not show up. If no operator responds to an approval, the action stays blocked. That failing-closed behavior is the whole point.
+
+![One support agent's actions mapped to their controls: reads run free, a cancellation pauses for approval, a multi-step refund pauses on an interrupt, a disputed charge escalates, a looping run stops on the loop budget](</diagrams/human-in-the-loop-approvals-interrupts-escalation-kill-switches/4-support-agent-worked-example.png>)
 
 ## The Fortress angle: this already runs here
 
