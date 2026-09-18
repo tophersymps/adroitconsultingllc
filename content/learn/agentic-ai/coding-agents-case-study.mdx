@@ -28,6 +28,8 @@ The second rung is the cloud agent, which GitHub distinguishes explicitly from a
 
 The spectrum matters because each rung has a different cost and a different trust boundary. Autocomplete is zero-risk: it only suggests. Agent mode edits your local tree, so it needs permissions and approvals. The cloud agent edits a branch in an ephemeral environment and hands you a pull request, so the blast radius is contained to a reviewable diff before anything reaches your main branch. The same underlying loop powers all three; what changes is where it runs and how much of the world it is allowed to touch.
 
+![From autocomplete to agent: inline autocomplete is not an agent, agent mode makes autonomous edits in your local IDE, and the cloud agent works on a branch in its own ephemeral environment and opens a pull request, with the blast radius widening at each rung](</diagrams/coding-agents-case-study/1-autocomplete-to-cloud-agent.png>)
+
 ## The agentic loop, documented
 
 Claude Code's docs give the cleanest public description of the mechanism, so work from that. The loop is: gather context, take action, verify results, and repeat.[^1] The loop adapts to what you ask. A question about your codebase might only need context gathering. A bug fix cycles through all three phases repeatedly. A refactor might involve extensive verification. The model decides what each step needs based on what it learned from the previous step, chaining dozens of actions and course-correcting along the way.[^1]
@@ -45,7 +47,7 @@ The docs walk a concrete example of the loop for the task "fix the failing tests
 
 Each tool use gives the model new information that informs the next step.
 
-![The agentic loop shown as three repeating phases, gather context, take action, and verify results, with the cycle returning to context gathering until the check passes, above a band naming the two things the loop runs on, models that reason and tools that act, and the harness that supplies the tools, context management, and execution environment.](</diagrams/coding-agents-case-study/1-agentic-loop.png>)
+![The agentic loop shown as three repeating phases, gather context, take action, and verify results, with the cycle returning to context gathering until the check passes, above a band naming the two things the loop runs on, models that reason and tools that act, and the harness that supplies the tools, context management, and execution environment.](</diagrams/coding-agents-case-study/2-agentic-loop.png>)
  That is the loop in its purest form: observe the failure, find the cause, change the code, observe the result, repeat until the check passes. There is no step here a human had to supervise, because the verification step runs itself and the model can read its own result.
 
 ## The tools are the capability
@@ -56,7 +58,7 @@ The shape of that list matters. Read and write are there, so the agent can move 
 
 Hermes assembles the same idea at larger scale. Its architecture doc maps a central tool registry of more than 70 registered tools across roughly 28 toolsets, each tool file self-registering at import time, with the terminal tools supporting multiple backends (local, Docker, SSH, and remote environments).[^3] The lesson from the registry design is that tools are a first-class, extensible surface: an agent is not a fixed program, it is a loop plus whatever tools you attach to it, and the tool surface is where you extend capability without changing the loop.
 
-![The five categories of built-in coding agent tools, file operations, search, execution, web, and code intelligence, each listed with what it provides and which part of the loop it enables, from moving a codebase to locating a bug to running the check.](</diagrams/coding-agents-case-study/2-tool-categories.png>)
+![The five categories of built-in coding agent tools, file operations, search, execution, web, and code intelligence, each listed with what it provides and which part of the loop it enables, from moving a codebase to locating a bug to running the check.](</diagrams/coding-agents-case-study/3-tool-categories.png>)
 
 
 ## The verifier is the difference
@@ -101,7 +103,7 @@ Iteration four is the wider check and the handoff. The agent runs the full test 
 
 Now the teaching parts. First, the agent was able to close this loop without you because the check existed and ran itself. If the repo had no tests, the agent's only "done" signal would have been that the code looked right, which is the trust-then-verify gap, and you would have become the verification loop.[^2] Second, the trace worked because the task was narrow and the failure was reproducible. Broad, vague, or unreproducible tasks are where coding agents stall, and the fix is the scoping and verification guidance from the best-practices list: give a symptom, a likely location, and what fixed looks like.[^2]
 
-![The four iterations of one failing-test task: read the test and observe the failure, locate and understand the code, edit and rerun the test, then run the full suite and hand off with evidence, with a branch showing that a still-failing test loops back for another iteration while a passing test closes the loop.](</diagrams/coding-agents-case-study/3-failing-test-loop.png>)
+![The four iterations of one failing-test task: read the test and observe the failure, locate and understand the code, edit and rerun the test, then run the full suite and hand off with evidence, with a branch showing that a still-failing test loops back for another iteration while a passing test closes the loop.](</diagrams/coding-agents-case-study/4-failing-test-loop.png>)
 
 
 ## Safety and permissions
@@ -109,6 +111,8 @@ Now the teaching parts. First, the agent was able to close this loop without you
 A coding agent holds real tools and a real terminal in a real repo, so the boundary design is not optional. The Claude Code docs enumerate permission modes that set what the agent can do without asking: an auto mode where a classifier reviews most actions in the background and blocks risky ones, a manual mode where it asks before file edits and shell commands, an accept-edits mode where it edits files and runs common filesystem commands freely, and a plan mode where it explores and proposes without editing source.[^1] The same page notes you can allowlist trusted commands (like the test command) so it does not ask every time, and scope settings from organization policy down to personal preference.[^1]
 
 Two more controls are worth naming because they generalize. File edits are reversible: before the agent edits a file, it snapshots the current contents, so you can rewind to a previous state or ask it to undo.[^1] Checkpoints cover file changes, but actions that affect remote systems (databases, APIs, deployments) cannot be checkpointed, so those are controlled by the permission mode and permission rules.[^1] That split is the correct mental model: the local diff is cheap to roll back, the remote effect is not, so approval effort should concentrate where the rollback is impossible.
+
+![The permission boundary shown as four modes, auto, manual, accept edits, and plan, above two panels that split reversible local file edits from remote effects like databases, APIs, and deployments that cannot be checkpointed](</diagrams/coding-agents-case-study/5-permission-boundary.png>)
 
 Hermes's security model makes the same point structurally, with command approval, authorization, and container isolation as first-class concerns, and a file-write safety root that restricts which paths the agent can mutate in a given session.[^3][^5] The pattern to take into a real adoption: decide what the agent can do without asking, keep the irreversible effects behind an approval, and make the reversible local edits cheap to undo. That is Lesson 42's handoff vocabulary (confirm before irreversible, watch sensitive surfaces) applied to a repo instead of a browser.
 
