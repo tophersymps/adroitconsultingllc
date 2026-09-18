@@ -39,6 +39,17 @@ export interface SpokenDiagramInput {
 
 const defaultLeadIn = (alt: string) => `Diagram: ${alt}.`;
 
+/**
+ * Strip a single trailing sentence-ending punctuation (`.`, `!`, `?`) from a
+ * diagram's resolved text before the lead-in wraps it. Real lesson diagram
+ * alts already end in a period, so without this the default lead-in's own `.`
+ * produces a double stop (`...or products..`) that a TTS engine reads as two
+ * pauses. Only the LAST punctuation char is removed — the lead-in supplies the
+ * sentence-ending stop, so the spoken line always ends in exactly one.
+ */
+const stripTrailingSentencePunctuation = (text: string): string =>
+  text.replace(/[.!?]$/, "");
+
 /** Strip the `---` frontmatter block; returns the MDX body unchanged if absent. */
 export function stripFrontmatter(raw: string): string {
   const lines = raw.split("\n");
@@ -107,10 +118,12 @@ export function mdxToNarration(
   const leadIn = opts.leadIn ?? defaultLeadIn;
 
   const body = stripFrontmatter(mdx);
-  // resolve a diagram's spoken text: description:: override wins, else alt
+  // resolve a diagram's spoken text: description:: override wins, else alt.
+  // Normalize trailing sentence punctuation so the lead-in's own `.` never
+  // produces a double stop (real lesson alts already end in a period).
   const resolveDiagram = (src: SpokenDiagramInput) => {
     const text = src.description?.trim() ? src.description : src.alt;
-    return leadIn(text);
+    return leadIn(stripTrailingSentencePunctuation(text));
   };
 
   const lines = body.split("\n");

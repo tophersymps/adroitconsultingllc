@@ -4,6 +4,36 @@ All notable changes to the Adroit Consulting Blog project will be documented in 
 
 ## [Unreleased]
 
+### Fix: lesson audio routes enforce the members-only access seam + fail closed on cross-series slug collision (t_5d093ce2)
+
+**What** - Hardened `GET /api/audio/[slug]` and its `/timings` twin so lesson audio is gated on the SAME access seam the lesson page uses, not bare auth. Article audio stays a free auth-gated benefit (auth-only, unchanged). When the resolved entry is a lesson, the route now calls `accessSeam.decideCourseAccess(userId, series)` and returns 404 for anything other than `granted`/`admin-preview` (not-launched and paywall both 404 so the resource stays opaque). A cross-series slug collision (ADR-102: the same lesson slug can exist in multiple series) is now AMBIGUOUS from a bare slug, so the route fails closed to 404 instead of serving the first `.find()` match. Added 7 regression tests (3 MP3 + 4 timings) covering the paywall gate, the not-launched gate, and the collision path.
+
+**Why** - Security review finding (val-el, t_77cb8816): the lesson audio routes gated on bare `getUser()` while lesson content is members-only (the page enforces `accessSeam.decideCourseAccess`). A signed-in free member could stream members-only lesson narration/timings by slug once the backfill cron populates `src/data/lesson-audio.ts` (HIGH CWE-862). The bare-slug lookup also contradicted the documented cross-series collision (MEDIUM): `.find()` returned the first match, so page and audio could disagree on which course a slug belongs to.
+
+**Verified** - `npx vitest run src/app/api/audio/` (33 tests) and the full suite (834 tests) pass; `npx tsc --noEmit` exits 0; `npx eslint src/app/api/audio/` clean. Committed to `feat/lesson-audio` only; main is untouched.
+
+**Known Issues** - None. `src/data/lesson-audio.ts` is still empty scaffolding; the gate is exercised by unit tests against a seeded lesson entry.
+
+### Fix: narration diagram lead-in no longer emits a double period when the alt ends in '.' (t_2e6e20e0)
+
+**What** - Fixed the narration builder's diagram lead-in so a spoken diagram line never ends in a double period. `mdxToNarration` now strips a single trailing sentence-ending punctuation (`.`, `!`, `?`) from the resolved diagram text (alt or `description::` override) before the lead-in wraps it with its own `.`. Previously the default `(alt) => \`Diagram: ${alt}.\`` appended a second period to every real lesson diagram alt (which already ends in `.`), producing `...or products..` — a double stop a TTS engine reads as two pauses. Added 3 regression tests: an alt ending in `.` yields a single `.`, a `description::` override ending in `.` yields a single `.`, and an alt with no trailing punctuation still gets exactly one `.`.
+
+**Why** - A11y finding from lara (t_9b8826a4): all 5 Diagram lines on the real 5-diagram lesson ended in `..`. The existing unit tests never caught it because their fixture alts had no trailing period. The defect only surfaces once the backfill cron populates narrations, so it is LOW severity but worth fixing now while the scaffolding is still on the branch.
+
+**Verified** - `npx vitest run src/lib/audio-narration.test.ts` (19 tests) and the full suite (828 tests) pass; `npx tsc --noEmit` exits 0. Re-ran the builder on the real 5-diagram lesson: 106 lines, 5 Diagram cues, 0 diagram lines ending in a double period (was 5 before the fix).
+
+**Known Issues** - None. Committed to `feat/lesson-audio` only; main is untouched.
+
+### Lesson audio scaffolding on feat/lesson-audio (t_982d9989)
+
+**What** - Added the lesson-audio scaffolding on the `feat/lesson-audio` branch (NOT merged to main; the backfill cron runs later, after the diagram retrofit). A parallel `LessonAudio` module (ADR-101) with a `learn/<series>/<slug>/` storage prefix (ADR-102): new contract types in `src/lib/audio/contracts.ts`, a generated `src/data/lesson-audio.ts` (starts empty), a `--learn` mode in `scripts/build-audio.js` (with `assertSafeSeries` allowlist and a merge keyed on series/slug/voice), two-space resolution in `GET /api/audio/[slug]` and its `/timings` twin (ADR-103), and the `AudioPlayerLazy` wired into the atlas lesson page gated on `(series, slug)` (ADR-104). The narration builder `mdxToNarration` is reused unchanged (ADR-105) - verified on a real 5-diagram lesson: 106 lines, 5 Diagram cues, 16 Section cues, 0 leaked syntax.
+
+**Why** - Extend the proven article-audio feature to the Atlas (Learn) tab so each narrated lesson gets the same single-narrator (`af_heart`) auth-gated player. A parallel module keeps `ArticleAudio.slug`/`AudioStorageKey` invariants intact and keeps the lesson backfill merge independent of the article backfill cron.
+
+**Verified** - `npx vitest run src/lib/audio-narration.test.ts src/lib/audio-emit.test.ts src/app/api/audio` (52 tests) and `src/app/atlas` + audio lib tests (38 tests) all pass; `npx tsc --noEmit` exits 0. Learn-mode emitter exercised in a throwaway sandbox (metadata-only): emits all lessons, scopes to one series without dropping others, rejects a hostile series name, and does not treat the next flag as a series value. No em-dashes in any new prose.
+
+**Known Issues** - (1) `src/data/lesson-audio.ts` is empty scaffolding; the lesson-audio backfill cron (post diagram retrofit) populates it. (2) The lesson page player is gated on `lessonAudio.find((a) => a.series === series && a.slug === slug)`; until the backfill runs, no lesson renders a player. (3) Committed to `feat/lesson-audio` only; main is untouched.
+
 ### Perf: the `next-build` coordinator RSS is not cap-able by build config (measured) — off-box build is the remaining lever (t_67209e0d)
 
 **What** - No functional change. Investigated the MEDIUM finding from the perf review of `e0d35e7` (t_e8566dd9): a cold build still peaks at ~2.7-2.9 GB tree RSS against t_cb011d26's stated ~0.8 GB target, because the single `next-build` coordinator (~1.5-1.6 GB) is not governed by `experimental.cpus`. Five candidate levers were applied one at a time to a **fresh cold `.next`** and measured; **none reduced the peak**, so none was shipped (the card's own rule: do not force a change that merely moves the peak). The only durable artifact is a comment block inside the existing `experimental` block in `next.config.ts` recording the measured verdicts next to `cpus: 4` (additive; no second `experimental` block).

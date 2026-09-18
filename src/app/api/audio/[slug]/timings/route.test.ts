@@ -5,6 +5,8 @@
  * mocked R2 reader (manifest bytes). Asserts the 200/401/404 matrix and locks
  * the DoD-4 contract that the manifest is served as JSON from the PRIVATE R2
  * bucket via the entry's timingsStoragePath — never a public or signed URL.
+ * Also locks the two-space resolution (ADR-103): a lesson slug resolves
+ * through lessonAudio to a learn/ timing key.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
@@ -62,6 +64,53 @@ vi.mock("@/data/audio", () => ({
   },
 }));
 
+// A lesson slug is not in articleAudio, so it must resolve through lessonAudio
+// (ADR-103 two-space resolution). lessonAudio starts empty in the scaffolding;
+// this test seeds a fake entry to prove the route falls through to the lesson
+// key space.
+const lessonSlug = "day-01-p-1a-object-permissions-crud-system-vs-object-profiles";
+const lessonTimingsKey = "learn/salesforce-sharing-visibility-architect/day-01-p-1a-object-permissions-crud-system-vs-object-profiles/af_heart.timing.json";
+const toyLessonAudio = [
+  {
+    series: "salesforce-sharing-visibility-architect",
+    slug: lessonSlug,
+    voice: "af_heart",
+    storagePath: "learn/salesforce-sharing-visibility-architect/day-01-p-1a-object-permissions-crud-system-vs-object-profiles/af_heart.mp3",
+    timingsStoragePath: lessonTimingsKey,
+  },
+];
+
+// When true, lessonAudio carries a SECOND entry with the same slug in a
+// different series, exercising the cross-series collision (ADR-102) path.
+let lessonCollision = false;
+
+vi.mock("@/data/lesson-audio", () => ({
+  get lessonAudio() {
+    return lessonCollision
+      ? [
+          ...toyLessonAudio,
+          {
+            series: "hermes-consultant",
+            slug: lessonSlug,
+            voice: "af_heart",
+            storagePath: "learn/hermes-consultant/day-01-p-1a-object-permissions-crud-system-vs-object-profiles/af_heart.mp3",
+            timingsStoragePath: "learn/hermes-consultant/day-01-p-1a-object-permissions-crud-system-vs-object-profiles/af_heart.timing.json",
+          },
+        ]
+      : toyLessonAudio;
+  },
+}));
+
+// Access seam mock: the lesson path calls accessSeam.decideCourseAccess. The
+// default grants access so the existing lesson-resolution test passes; tests
+// override it to prove the members-only gate (CWE-862).
+let accessDecision: { kind: string } = { kind: "granted" };
+vi.mock("@/lib/access", () => ({
+  accessSeam: {
+    decideCourseAccess: async () => accessDecision,
+  },
+}));
+
 function makeGet(slug: string): NextRequest {
   return new NextRequest(`http://localhost:3000/api/audio/${slug}/timings`, {
     method: "GET",
@@ -74,7 +123,10 @@ describe("GET /api/audio/[slug]/timings", () => {
     objectAvailable = true;
     r2Failure = null;
     hasTimingsPath = true;
+    manifestBody = null;
     requestedKeys = [];
+    lessonCollision = false;
+    accessDecision = { kind: "granted" };
     vi.clearAllMocks();
   });
 
@@ -163,5 +215,48 @@ describe("GET /api/audio/[slug]/timings", () => {
     expect(body).not.toContain(TIMINGS_KEY);
     expect(TIMINGS_KEY).toMatch(/^blog\/.+\/.+\.timing\.json$/);
     expect(res.headers.get("Location")).toBeNull();
+  });
+
+  it("resolves a lesson slug through lessonAudio and serves its learn/ timing manifest (ADR-103)", async () => {
+    const res = await GET(makeGet(lessonSlug), {
+      params: Promise.resolve({ slug: lessonSlug }),
+    });
+    expect(res.status).toBe(200);
+    const body = JSON.parse(await res.text());
+    expect(Array.isArray(body.segments)).toBe(true);
+    // the manifest is read from R2 by its learn/ private key, server-side
+    expect(requestedKeys).toEqual([lessonTimingsKey]);
+    expect(lessonTimingsKey).toMatch(/^learn\/.+\/.+\/.+\.timing\.json$/);
+  });
+
+  it("returns 404 for a lesson slug when the user is not entitled (paywall) — CWE-862", async () => {
+    // A signed-in free member must NOT read members-only lesson timings.
+    accessDecision = { kind: "paywall" };
+    const res = await GET(makeGet(lessonSlug), {
+      params: Promise.resolve({ slug: lessonSlug }),
+    });
+    expect(res.status).toBe(404);
+    // The access gate runs BEFORE the object read — no R2 bytes are fetched.
+    expect(requestedKeys).toEqual([]);
+  });
+
+  it("returns 404 for a lesson slug when the course is not-launched", async () => {
+    accessDecision = { kind: "not-launched" };
+    const res = await GET(makeGet(lessonSlug), {
+      params: Promise.resolve({ slug: lessonSlug }),
+    });
+    expect(res.status).toBe(404);
+    expect(requestedKeys).toEqual([]);
+  });
+
+  it("returns 404 for a cross-series slug collision (ambiguous, ADR-102)", async () => {
+    // The same lesson slug in two series cannot be resolved from a bare slug;
+    // the route must fail closed rather than serve the first match.
+    lessonCollision = true;
+    const res = await GET(makeGet(lessonSlug), {
+      params: Promise.resolve({ slug: lessonSlug }),
+    });
+    expect(res.status).toBe(404);
+    expect(requestedKeys).toEqual([]);
   });
 });
