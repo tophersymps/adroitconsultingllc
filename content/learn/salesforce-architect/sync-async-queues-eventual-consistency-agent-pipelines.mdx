@@ -43,7 +43,11 @@ The queue is the load leveler. The queue-based load leveling pattern puts a queu
 
 Salesforce runs on the same principle, enforced by the platform. Async Apex (Queueable, Batch, and future methods) runs in the background in its own thread, so your main logic is not delayed by a long operation. [^7] And the platform caps how much work can pile into that queue: at most 50 jobs can be enqueued with `System.enqueueJob` in one synchronous transaction, and only one from an async transaction. [^8] The queue is real, and it has a capacity.
 
+![A producer, a message queue, and a consumer: bursts of demand accumulate in the queue and are drained at the consumer's own pace, so a slow or down consumer does not flood the producer](</diagrams/sync-async-queues-eventual-consistency-agent-pipelines/2-queue-load-leveler.png>)
+
 The governor limits make the tradeoff explicit. Salesforce gives async transactions more headroom than sync ones precisely because decoupled work runs longer and heavier: 200 SOQL queries instead of 100, 12 MB of heap instead of 6 MB, and 60,000 ms of CPU instead of 10,000 ms. [^5] That is the platform saying, in effect: if you are willing to give up the immediate response, you may use more resources.
+
+![A comparison table of synchronous versus asynchronous calls, showing that async trades the immediate response for more headroom: 200 SOQL queries, 12 MB of heap, and 60,000 ms of CPU versus 100, 6 MB, and 10,000 ms for sync](</diagrams/sync-async-queues-eventual-consistency-agent-pipelines/1-sync-vs-async.png>)
 
 ## The third law: distributed systems settle into eventual consistency
 
@@ -82,6 +86,8 @@ A retailer takes orders in Salesforce, authorizes payment with a processor, disp
 5. **Idempotency everywhere in the async legs.** Each dispatch event carries a unique message ID, and the warehouse dedupes before applying. If the bus redelivers a message, the warehouse does not double-dispatch. [^1]
 
 Now run the same scenario as an agent pipeline. A checkout assistant agent authorizes the card with a synchronous tool call, because it needs the authorization result to confirm. It enqueues warehouse dispatch and email notification as async worker tasks. A separate status agent reads the shared order store, and it occasionally sees a stale status for a few seconds, the inconsistency window. Nothing about the design changed. Only the processing units did. That is the entire point.
+
+![Order fulfillment across four systems: payment authorization is synchronous, warehouse dispatch and customer notification are async via queue, order status is eventually consistent, and the async legs carry idempotency](</diagrams/sync-async-queues-eventual-consistency-agent-pipelines/3-order-fulfillment.png>)
 
 ## The pitfall to avoid
 
