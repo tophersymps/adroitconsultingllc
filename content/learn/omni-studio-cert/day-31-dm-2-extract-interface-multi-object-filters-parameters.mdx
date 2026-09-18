@@ -26,7 +26,11 @@ The depth goes further than one level. Related objects can themselves carry thei
 
 The alternative framing is that an Extract is effectively building a query across objects for you. The platform documentation describes an Extract as reading Salesforce data with complex field mappings, and part of that complexity is exactly this ability to span objects through relationships. [^5] When a question says "retrieve data from multiple objects," the answer is Extract, because it is the interface built for that span. [^1][^2] Turbo Extract is the fast single-object read; Extract is the multi-object read. [^2] Keep those two fixed in your head and the interface questions get easy.
 
+![Turbo Extract is the fast single-object reader with related fields bolted on, giving up formulas and output mapping, while Extract is the flexible multi-object reader with filters, input parameters, formulas, and output mapping](</diagrams/day-31-dm-2-extract-interface-multi-object-filters-parameters/2-extract-vs-turbo.png>)
+
 There is a guardrail you should carry into every multi-object Extract, and it comes from the mapper best practices. Keep the number of sObjects in a mapper to three or fewer to avoid server performance problems. [^3] Multi-object power is real, but it is not a license to join everything in the org into one giant query. [^3] Pull the objects the operation actually needs, and keep the definition focused.
+
+![One Extract definition returns a nested tree: the primary Account, its related Contacts, and each Contact's own related records, all in a single server call, with the sObject count kept at three or fewer](</diagrams/day-31-dm-2-extract-interface-multi-object-filters-parameters/1-multi-object-relationships.png>)
 
 ### Filter options: WHERE clauses and input parameters
 
@@ -40,6 +44,8 @@ This is the heart of exam question one. An Extract must return Accounts filtered
 
 Two habits make parameterized filters comfortable in practice. First, declare the parameter once and reference it with the colon binding in every filter that needs it, so there is a single source of truth for the name. [^5] Second, use names that describe the value, like `recordId`, `industry`, or `status`, rather than positional placeholders, so the mapper reads clearly and a caller knows exactly what to pass. [^5]
 
+![A hardcoded WHERE clause bakes one value in for every caller, while an input parameter bound with a colon lets each caller supply its own value at runtime, keeping one definition reusable across many callers](</diagrams/day-31-dm-2-extract-interface-multi-object-filters-parameters/3-parameterized-filters.png>)
+
 There are more filter options than a single equality, and the exam can lean on the idea of "various filter options" in the requirement. Extract filters support comparisons beyond equals, so you can filter on ranges, on sets, and on other conditions a query needs. [^5] Combine multiple conditions to narrow the result precisely, for example matching on both a status and a territory. [^5] The requirement wording, "various filter options," is a deliberate nod to this breadth: it is not just one WHERE clause with one value, it is whatever conditions the query needs, expressed with input parameters so the values stay reusable. [^1][^5]
 
 ### Output mapping: you decide the JSON contract
@@ -49,6 +55,8 @@ Reading the right rows is one job. Shaping what comes back is the other, and it 
 What can the output mapping do? It picks fields, so you map only the fields a consumer needs and leave the rest of the object behind. [^5] It renames keys, so the JSON uses the names your OmniScript or external system expects rather than the raw API field names. [^5] It flattens or nests, so you can pull a value up to the top level or tuck it inside a structure, whichever the consumer wants. [^5] In short, the output mapping lets you present the data in the shape the downstream consumer was built against, instead of forcing the consumer to adapt to whatever the query happened to return. [^5]
 
 This is the difference between a query and a contract. A raw query returns whatever columns you asked for, in a fixed flat shape. An Extract with a deliberate output mapping returns a document: named keys, nested related data in the places you put them, values renamed and arranged for the caller. [^5] Integration Procedures lean on this constantly, because the Response Action hands the output onward and the next system only understands the shape you defined. [^3] The output mapping is how you make that shape predictable.
+
+![A raw query returns a fixed flat shape, while an Extract output mapping returns a document with renamed keys and nested related data, so the mapping is the exact JSON contract the caller receives](</diagrams/day-31-dm-2-extract-interface-multi-object-filters-parameters/4-output-mapping-contract.png>)
 
 The cost of ignoring the output mapping is silent, ugly breakage. If you leave default mappings in place or map far more than you need, the JSON grows to include data nobody reads, and the structure drifts from what the consumer expects. If you then bind against a key the mapping never produced, the binding returns nothing. [^2] That is why the mapping is worth building deliberately, field by field, against the exact shape the screen or the external API consumes. [^5]
 
