@@ -16,6 +16,8 @@ Lesson 9 taught you how to design errors so nothing is silently dropped in an in
 
 Salesforce gives an architect four layers to build that visibility: debug logs for the single transaction, Event Monitoring for the whole org, health checks for the security baseline and the platform itself, and the notifications that close the loop. They answer different questions. A debug log tells you why one call fell over. Event Monitoring tells you who exported 20,000 records at 2 AM. Health Check tells you your password policy drifted below baseline. Alerts tell you about all of it before you think to look. An architect who only reaches for one of these is flying with one instrument.
 
+![The four observability layers of a Salesforce org, ordered from the narrowest to the widest: debug logs for one transaction, Event Monitoring for the whole org, health checks for the security baseline and platform, and alerts that close the loop](</diagrams/error-handling-monitoring-debug-logs-event-monitoring-health-checks-alerts/1-observability-layers.png>)
+
 ## Define the terms
 
 - **Debug log**: a record of database operations, system processes, and errors that occur while executing a transaction or running unit tests. [^1]
@@ -42,6 +44,8 @@ The limits are the part every architect should internalize, because violating th
 
 The warning that follows the limit list is the one that bites production: if a trace flag is enabled on a frequently accessed Apex class, or for a user executing requests often, the request can fail, regardless of window and log size. [^1] Heavy logging is not free. It can take a request down. That is why production debugging is surgical: a tight flag on the specific class, run the failing path once, capture the log, turn the flag off.
 
+![The surgical production debugging workflow: set a tight trace flag on the failing class, run the failing path once, capture the log, then turn the flag off. Below it, the debug log limits: 20 MB per log, 24 hour system and seven day monitoring retention, the 1,000 MB in 15 minute and the 1,000 MB accumulated caps, and the hot class warning](</diagrams/error-handling-monitoring-debug-logs-event-monitoring-health-checks-alerts/2-debug-log-limits.png>)
+
 There is a parallel, automated alert here. You can configure specific users to receive an email when they invoke Apex that surpasses 50% of allocated governor limits. [^4] Only users with Author Apex permission can receive these warnings, per-org limits like concurrent long-running requests are not checked, and the notifications do not count against the daily single email limit. [^4] That email is your first line of defense against a slow governor-limit death spiral, because it fires before the transaction fails, not after.
 
 ## Event Monitoring: the whole org, who, what, and when
@@ -53,6 +57,8 @@ It is a paid capability. Event Monitoring is available in Enterprise, Unlimited,
 The data has a few shapes. Traditional Event Monitoring writes event log files you can download as CSV from the Event Log Browser and import into dashboards or tools like CRM Analytics, Splunk, or New Relic. [^2] Event Log Objects store the same kind of data in standard objects you can query directly with SOQL. [^2] Which you pick depends on where your analysis lives. If you run dashboards in CRM Analytics or an external SIEM, the CSV files and their tooling fit. If you want to query events inside the platform, the Event Log Objects win.
 
 The layer that turns monitoring into action is Real-Time Event Monitoring. It streams selected events as platform events and stores them in big objects, so you can react in near real time rather than after the fact. [^3] On top of that sits Transaction Security, a framework that intercepts real-time events, evaluates them against conditions you write, and applies actions. [^3] The actions are Block, Multi-Factor Authentication, and Notifications. [^3] A classic policy blocks a report export when a user tries to download more records than a threshold, or triggers MFA before a risky download proceeds. [^3] The events and their storage objects pair up, and most can drive a transaction security policy. ApiAnomalyEvent detects API anomalies, ReportAnomalyEvent flags unusual report behavior, and both can be used in a policy. [^3] The trailhead guidance adds a practical note: before building transaction security policies, query the events to determine appropriate thresholds for normal usage, so your alert is tuned to your org, not to a guess. [^2]
+
+![How a real-time event moves through Real-Time Event Monitoring and Transaction Security into a Block, MFA, or Notify action, alongside the two ways event data is stored: CSV event log files or queryable Event Log Objects](</diagrams/error-handling-monitoring-debug-logs-event-monitoring-health-checks-alerts/3-event-monitoring-flow.png>)
 
 Real-Time Event Monitoring is also where performance monitoring gets proactive. You can be notified in real time when the org exceeds the concurrent long-running Apex limit, track API calls counting toward the 24 hour limit, and watch how long bulk API jobs take in a sandbox so you have a sense of how they will behave in production. [^3] That turns "why is the queue backed up" into a question with an answer you can act on before users call.
 
@@ -73,6 +79,8 @@ The layer that ties observability to scale is API monitoring, because a busy int
 There are three complementary ways to watch it. The Sforce-Limit-Info header on API responses reports your usage, formatted like api-usage=25/5000, which lets your own integrations surface the number before you hit the wall. [^7] API Usage notifications send an email when the org exceeds a threshold you specify, as a percentage of the daily limit within a time period. [^7] And the API Total Usage event logs report SOAP, REST, and Bulk API requests to your org, browseable and downloadable from the Event Log Browser. [^7]
 
 The event logs are the real source of truth. System Overview shows totals, the seven day report shows daily counts per user, and notifications fire when totals cross a threshold, but only event-level data tells you which integration, which user, and roughly when. [^9] That is why Salesforce recommends a dedicated user per integration: each application gets its own identity, so the user ID logged with each API call gives you a clean way to trace which application caused a spike. [^7] A monitoring strategy built on totals alone can tell you the org hit 85 percent. One built on event logs can tell you it was the nightly ERP sync, running as the integration user you set up for it, an hour earlier than usual.
+
+![API usage monitoring: how the daily API request limit escalates through a soft overage into a hard system protection wall that returns HTTP 403 with REQUEST_LIMIT_EXCEEDED, and the three complementary ways to watch usage: the Sforce-Limit-Info header, API Usage notifications, and the API Total Usage event logs](</diagrams/error-handling-monitoring-debug-logs-event-monitoring-health-checks-alerts/4-api-usage.png>)
 
 ## Worked example: an architect's monitoring stack for a payments org
 
