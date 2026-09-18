@@ -30,6 +30,8 @@ Open the trace of one failing run and ask three questions in order.
 
 Ten minutes of reading one trace in that order beats an afternoon of guessing. The rest of this lesson is how to act on each verdict.
 
+![The production triage decision tree: ask three questions in order, and the first yes names the failure class. Repetition means a loop, a tool result that does not match its stated success means a bad tool, and climbing input tokens mean context bloat.](</diagrams/production-troubleshooting-loops-bad-tools-context-bloat/1-triage-decision-tree.png>)
+
 ## Loops: what actually repeats, and why
 
 A loop is the same decision made twice without new information arriving between the two. That definition matters, because it excludes a lot of things people call loops. An agent that tries three different search queries is not looping. An agent that calls `get_order_status(order_id=4471)` eight times is.
@@ -68,6 +70,8 @@ Three shapes of this, all common in production.
 
 **The opaque failure.** A traceback lands in the tool result. The model cannot act on a stack trace, and Anthropic's guidance on writing tools is explicit that error responses should be prompt-engineered to communicate specific, actionable improvements rather than opaque error codes or tracebacks.[^7]
 
+![Three ways a tool lies to an agent: the success-shaped lie returns an empty body with a 200 status, silent truncation drops results without saying so, and the opaque failure dumps a traceback the model cannot act on. Each makes the agent build a wrong answer or retry.](</diagrams/production-troubleshooting-loops-bad-tools-context-bloat/2-bad-tool-shapes.png>)
+
 We hit the first shape ourselves, in a scheduled job rather than an LLM tool. A nightly script inserted a new entry into an index file. It ran green every night and reported success every night. It had silently stopped doing anything, because the marker it inserted before had been removed in a reorganization, so the code took a branch that updated a timestamp and wrote nothing else. Nothing crashed. No alert fired. We caught it weeks later by comparing what the job claimed against what the file actually contained. The lesson generalizes directly to agent tools: a tool that cannot do its job must say so, loudly and specifically, because the caller is a model that will otherwise assume the empty result is the answer.
 
 ### What a good tool result contains
@@ -91,6 +95,8 @@ Tool results are the other half, and they are usually the bigger half in long ru
 
 Two structural options exist when clearing and compaction are not enough. Structured note-taking has the agent write state to a file outside the window and read it back later, which is how long-running agents keep progress across dozens of tool calls. Sub-agent architectures push the expensive exploration into a clean window and return only a condensed summary, often 1,000 to 2,000 tokens.[^5]
 
+![The context bloat levers from lightest to heaviest: tool result clearing, compaction, structured note-taking, and sub-agent architectures. Read the token curve first to confirm bloat before applying any of them.](</diagrams/production-troubleshooting-loops-bad-tools-context-bloat/3-context-bloat-levers.png>)
+
 Measure before you cut. Track input tokens per turn and cost per session for a normal run, then look at a failing one. If the failing run's token curve is climbing steeply while a healthy run's flattens, the problem is bloat and no amount of prompt editing will fix it. If the curves match, go back and read the tool results again.
 
 ## Worked example: the refund agent that stopped finishing
@@ -102,6 +108,8 @@ A support agent handles refund requests. It looks up the order, checks the refun
 **Step two, read the tool result at that turn.** The result is `{}`, delivered with a success status. The order exists but is soft-deleted, and the lookup tool's wrapper dropped the `deleted_at` field and returned an empty object instead of an error. From the agent's point of view, the lookup returned no data, so the reasonable next action was to try again.
 
 **Step three, confirm with the token curve.** Input tokens climb from 4,200 at turn 1 to 61,000 at turn 14. Bloat is present, and it is a consequence of the loop rather than its cause. Fix the loop first.
+
+![The refund agent loop read from the trace: lookup_order is called with byte-identical arguments at turns 4 through 8 and again at 10 through 14, the first repeat at turn 5, because the soft-deleted order returns an empty success. The fixes are to make the tool honest, add a no-progress detector, and add the case to the eval suite.](</diagrams/production-troubleshooting-loops-bad-tools-context-bloat/4-refund-agent-loop.png>)
 
 **Step four, fix the tool.** The lookup now returns an error result when the order is soft-deleted, with an actionable message naming the state. The agent stops retrying and escalates, because the prompt now says a deleted order should be routed to a human rather than re-queried.
 
