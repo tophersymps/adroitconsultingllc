@@ -1,0 +1,117 @@
+---
+title: "Rollout Strategies: How a New Version Reaches Production"
+slug: kubernetes-rollout-strategies-2026
+excerpt: "A rolling update swaps pods on readiness. A canary shifts traffic on evidence. Blue-green flips a service. Pick the strategy that matches your blast radius."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "September 18, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "11 min read"
+tags: [DevOps, Kubernetes, CI/CD, Platform Engineering]
+bannerImage: /banners/kubernetes-rollout-strategies-2026.png
+---
+
+Every deployment is a bet that the new version is better than the old one. The rollout strategy is how you place that bet without betting the whole service. Get it wrong and a bad release reaches every user at once. Get it right and a bad release touches a handful of requests, gets caught, and rolls back before anyone notices.
+
+The Kubernetes Deployment controller gives you two built-in strategies, rolling update and recreate, and neither one checks whether the new code is actually behaving. The tools that do check, Argo Rollouts and Flagger, sit on top of the Deployment and add the missing step: they hold traffic at a small percentage, measure it against a metric, and only promote when the evidence holds. This article walks the full ladder, from the built-in strategies to evidence-gated progressive delivery, and gives you the decision rule for each rung. It sits between two other pieces in this series: the [control-plane delivery model](/field-notes/control-planes-infrastructure-delivery-2026) that reconciles state instead of executing pipelines, and the [merge queue](/field-notes/merge-queue-trunk-based-2026) that closes the gap between a passing pull request and a green main. This one is about what happens after the merge, when the new version has to reach production traffic.
+
+## The two strategies Kubernetes gives you for free
+
+A Deployment does not update pods directly. It manages ReplicaSets, and a rollout is really a sequence of scaling operations: create a new ReplicaSet, scale it up, scale the old one down, according to the strategy [^1]. The two built-in strategies differ in how that replacement happens.
+
+**RollingUpdate** is the default. It replaces pods gradually, keeping the service available throughout. The controller creates new pods and waits for each to pass its readiness probe before terminating an old one. Two fields control the pace. `maxUnavailable` sets how many pods may be down during the update, and `maxSurge` sets how many extra pods may exist above the desired count. The defaults are 25% for each [^2]. For a user-facing service you usually want `maxUnavailable: 0` with a small surge, which guarantees full capacity is always available: no old pod is removed until a new one is Ready [^3].
+
+**Recreate** kills every old pod before creating any new one. It guarantees no version mixing, which matters for stateful workloads where two versions of a database schema cannot run side by side, but it introduces downtime by design [^4]. Use it only when the application cannot tolerate two versions coexisting, not out of habit.
+
+The critical limitation of both is the same: the readiness probe is the only gate. A pod that passes its probe is considered healthy and takes traffic, even if the new code is returning errors or corrupting data. The rollout has no idea whether the release is good, only whether the pods came up. That is the gap the next rungs fill.
+
+![Rolling update replaces pods gradually, waiting for each new pod to pass its readiness probe before terminating an old one, while recreate kills all old pods first](</diagrams/kubernetes-rollout-strategies-2026/1-rolling-vs-recreate.png>)
+
+## Rollback: the safety net that is always there
+
+Before you reach for a fancier strategy, know that the built-in rollback is fast and free. The Deployment keeps its rollout history, by default the last 10 ReplicaSets, so you can undo to any previous revision [^5]. `kubectl rollout undo deployment/my-app` rolls back to the previous revision, and `--to-revision=2` targets a specific one [^6]. The undo is itself a rolling update: it scales the previous ReplicaSet back up and the current one down.
+
+Two details matter. First, a paused Deployment cannot be rolled back until you resume it [^7]. Second, the controller does not automatically roll back a bad rollout. It stops scaling up the new ReplicaSet when the rollout stalls, but it takes no action beyond reporting a status condition [^8]. The `progressDeadlineSeconds` field, default 600 seconds, tells the controller to mark the rollout as stalled if no progress is made, but the actual rollback is still a human or an orchestrator decision [^9]. That is why the evidence-gated tools exist: they make the rollback decision automatic and metric-driven.
+
+## Canary: shift traffic, not just pods
+
+A canary deployment runs the new version alongside the old one and routes a small percentage of real traffic to it. The point is to validate the new version in production with a minimal blast radius before committing fully [^10].
+
+The simplest canary needs no extra tooling. Create two Deployments, one stable and one canary, behind a single Service that selects both. With 9 stable pods and 1 canary pod, roughly 10% of requests hit the new version [^11]. The traffic split is proportional to the pod ratio, which is coarse: you cannot route exactly 5% without a large number of pods, and you cannot target specific users. For fine-grained control you need a traffic router, which is where the progressive-delivery operators come in.
+
+![A basic canary runs the new version in a small canary Deployment behind the same Service as the stable version, so the pod ratio sets the traffic split](</diagrams/kubernetes-rollout-strategies-2026/2-canary-basic.png>)
+
+## Argo Rollouts: a Deployment with a promotion engine
+
+Argo Rollouts replaces the Deployment with a Rollout resource that adds the parts a Deployment never had: promotion steps, pause points, analysis runs, and traffic-shaping integrations [^12]. The current stable line is v1.10.0, released August 5, 2026 [^13].
+
+The core idea is a list of steps. A typical canary sequence sends 10% of traffic to the new version, pauses for a set duration while an AnalysisTemplate checks Prometheus for error rate and latency, then steps up to 25%, 50%, and finally 100% if every check passes [^14]. The `setWeight` step sets the traffic percentage, and the `pause` step holds the rollout, either for a duration or indefinitely until a human promotes it with `kubectl argo rollouts promote` [^15].
+
+The key distinction is between pod-based and traffic-based weight. Without a traffic router, Argo Rollouts approximates the weight by scaling ReplicaSets, which has the same granularity limit as the basic canary. With a traffic router, through Istio, NGINX, the Gateway API, or a cloud load balancer, the controller sets an actual weight on the router, decoupling traffic percentage from pod count [^16]. For anything where 5% must mean 5%, you want real traffic routing.
+
+The analysis is what makes it evidence-gated. An AnalysisRun is created during a rollout step that includes an analysis, and it queries a metric provider, Prometheus, Datadog, CloudWatch, or a webhook, and either passes, fails, or is inconclusive. If the analysis fails, the rollout aborts and traffic shifts back to the stable version, typically in seconds because the stable ReplicaSet is left at full capacity [^17].
+
+![Argo Rollouts drives a canary through weighted steps, pausing at each one to run an AnalysisRun against a metric provider, promoting on success and aborting on failure](</diagrams/kubernetes-rollout-strategies-2026/3-argo-canary-steps.png>)
+
+## Flagger: the reconciler that wraps your Deployment
+
+Flagger takes the opposite approach. Instead of replacing the Deployment, it wraps it from the outside. You keep your Deployment, and Flagger clones it into a `-primary` Deployment that serves live traffic, while the original becomes the canary that scales to zero between rollouts [^18]. The current stable line is v1.42.0, released October 16, 2025 [^19].
+
+Flagger implements a control loop that gradually shifts traffic to the canary while measuring KPIs like HTTP request success rate, request duration, and pod health. Based on the analysis, the canary is promoted or aborted [^20]. The analysis runs periodically until it reaches the maximum traffic weight or the failed-checks threshold. The promotion is fully automated and metric-gated, with webhooks for manual gates like confirm-promotion [^21].
+
+The two operators differ in their assumptions. Argo Rollouts assumes a human with a dashboard driving the rollout, with manual promote unless every pause is timed. Flagger assumes a headless reconciler driving every deploy, with no human input anywhere [^22]. If your control plane, not a person, drives every deploy, Flagger's model matches. If you want a human to eyeball each step, Argo Rollouts fits better.
+
+## Blue-green: the clean cutover
+
+Blue-green answers a different question than canary. Canary is about gradual exposure. Blue-green is about a clean cutover: stand the new version up beside the old one, satisfy yourself it works, then flip the active service across [^23].
+
+The pattern is simple. Run two full environments, blue and green. Route all traffic to one, deploy the new version to the other, run conformance and load tests against it, then switch the Service selector to point at the new version. The old version stays running, so rollback is instant: flip the selector back [^24].
+
+The cost is the tradeoff. Blue-green needs double the resources, a full duplicate environment, and the switch is all-or-nothing, so the blast radius is the whole service rather than a small percentage [^25]. It is the right choice when you need a clean cutover with instant rollback and can afford the capacity, not when you want to validate a risky change gradually.
+
+## Choosing the strategy: match the blast radius
+
+The decision rule comes down to how much risk you can absorb and how much evidence you need before committing.
+
+- **Rolling update** is the default for a reason. It is free, built in, and good enough for most internal services where a bad release is caught by monitoring and rolled back manually. Tune `maxUnavailable: 0` with a small surge for zero-downtime.
+- **Recreate** is for stateful workloads that cannot run two versions at once. Accept the downtime.
+- **Basic canary** is a cheap step up when you want a small blast radius but do not need fine-grained traffic control.
+- **Argo Rollouts or Flagger** is for anything user-facing where a bad release must not reach everyone, and where you want promotion to be conditional on real metrics rather than on a readiness probe.
+- **Blue-green** is for clean cutovers with instant rollback, when you can afford double capacity.
+
+![Decision tree for choosing a rollout strategy: Recreate for stateful workloads, rolling update for low blast radius, basic canary for a cheap step up, progressive delivery for user-facing services, blue-green for clean cutovers](</diagrams/kubernetes-rollout-strategies-2026/4-decision-tree.png>)
+
+The pattern that wins in practice is progressive delivery: start at a small percentage, measure, promote on evidence, and roll back automatically on failure. It is the same reason large platforms built automated canary analysis rather than staffing more release engineers: deployment frequency cannot scale without a linear increase in incident risk unless the rollout itself decides [^26]. The same logic applies when the thing you are rolling out is a model rather than a service: a [model-routing gateway](/field-notes/llm-gateway-model-routing-2026) can hold a fraction of inference traffic on a new model and shift it back on a latency or quality regression, which is a canary for the model layer.
+
+## The rollout is the last line of defense
+
+A rollout strategy does not replace testing, monitoring, or good code. It is the last line of defense between a bad release and your users. The built-in strategies get you most of the way, but they cannot tell a good release from a bad one. The progressive-delivery operators close that gap by making promotion conditional on evidence, and that is the difference between a deployment that is a bet and one that is a measured step.
+
+[^1]: Kubernetes, "Deployments": a Deployment manages a set of Pods and provides declarative updates; a rollout creates a new ReplicaSet and gradually scales it up while scaling down the old one. [kubernetes.io](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
+[^2]: Kubernetes, "Deployments": by default the Deployment ensures at least 75% of desired pods are up (25% max unavailable) and at most 125% are up (25% max surge). [kubernetes.io](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
+[^3]: Kubernetes, "Deployments": `maxUnavailable` sets the maximum number of pods that may be unavailable during the update; `maxSurge` sets how many extra pods may exist above the desired count. [kubernetes.io](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
+[^4]: Kubernetes, "Deployments": with `strategy.type==Recreate`, all existing pods are killed before new ones are created. [kubernetes.io](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
+[^5]: Kubernetes, "Deployments": by default all of the Deployment's rollout history is kept so you can rollback anytime; you can change that with the revision history limit. [kubernetes.io](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
+[^6]: Kubernetes, "Deployments": `kubectl rollout undo deployment/nginx-deployment` rolls back to the previous revision, and `--to-revision=2` targets a specific one. [kubernetes.io](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
+[^7]: Kubernetes, "Deployments": you cannot rollback a paused Deployment until you resume it. [kubernetes.io](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
+[^8]: Kubernetes, "Deployments": the Deployment controller stops the bad rollout automatically and stops scaling up the new ReplicaSet, depending on the rollingUpdate parameters. [kubernetes.io](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
+[^9]: Kubernetes, "Deployments": `progressDeadlineSeconds` denotes the number of seconds the controller waits before indicating the Deployment progress has stalled; Kubernetes takes no action other than to report a status condition with reason ProgressDeadlineExceeded. [kubernetes.io](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
+[^10]: Kubernetes, "Deployments": to roll out releases to a subset of users or servers, create multiple Deployments, one for each release, following the canary pattern. [kubernetes.io](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
+[^11]: Kubernetes, "Canary deployments": with 9 stable pods and 1 canary pod behind a single Service, roughly 10% of requests hit the canary. [kubernetes.recipes](https://kubernetes.recipes/recipes/deployments/canary-deployments)
+[^12]: Argo Rollouts, "Canary": a canary rollout releases a new version to a small percentage of production traffic; users define a list of steps the controller uses to manipulate the ReplicaSets. [argoproj.github.io](https://argoproj.github.io/argo-rollouts/features/canary/)
+[^13]: Argo Rollouts releases: v1.10.0 released August 5, 2026. [github.com](https://github.com/argoproj/argo-rollouts/releases)
+[^14]: Argo Rollouts, "Canary": a typical canary sequence sends 10% of traffic to the new version, pauses while an AnalysisTemplate checks metrics, then steps up to 25%, 50%, and 100%. [argoproj.github.io](https://argoproj.github.io/argo-rollouts/features/canary/)
+[^15]: Argo Rollouts, "Canary": the `setWeight` field dictates the percentage of traffic sent to the canary, and the `pause` step instructs the rollout to pause; `kubectl argo rollouts promote` unpauses. [argoproj.github.io](https://argoproj.github.io/argo-rollouts/features/canary/)
+[^16]: Argo Rollouts, "Canary": with traffic management, the controller sets an actual weight on the router, decoupling traffic percentage from pod count. [argoproj.github.io](https://argoproj.github.io/argo-rollouts/features/canary/)
+[^17]: Argo Rollouts, "Canary": if the analysis is unsuccessful the rollout is aborted; the stable ReplicaSet is left scaled to 100% so traffic can be immediately shifted back on abort. [argoproj.github.io](https://argoproj.github.io/argo-rollouts/features/canary/)
+[^18]: Flagger, "Deployment Strategies": Flagger clones your Deployment into a `-primary` Deployment that serves live traffic, while the original becomes the canary that scales to zero between rollouts. [docs.flagger.app](https://docs.flagger.app/usage/deployment-strategies)
+[^19]: Flagger releases: v1.42.0 released October 16, 2025 (latest stable; verified against the releases page). [github.com](https://github.com/fluxcd/flagger/releases)
+[^20]: Flagger, "Deployment Strategies": Flagger implements a control loop that gradually shifts traffic to the canary while measuring KPIs like HTTP request success rate, request duration, and pod health; based on the analysis the canary is promoted or aborted. [docs.flagger.app](https://docs.flagger.app/usage/deployment-strategies)
+[^21]: Flagger, "Deployment Strategies": the canary analysis runs periodically until it reaches the maximum traffic weight or the failed-checks threshold; webhooks provide manual gates like confirm-promotion. [docs.flagger.app](https://docs.flagger.app/usage/deployment-strategies)
+[^22]: Flagger vs Argo Rollouts comparison: Flagger assumes a headless reconciler driving every deploy; Argo Rollouts assumes a human with a dashboard. [eden-cms-v2.onbex.co](https://eden-cms-v2.onbex.co/blog/2026/08/02/flagger-vs-argo-rollouts-progressive-delivery-git-push-paas)
+[^23]: Argo Rollouts, "Canary": canary is about gradual exposure; blue-green is about a clean cutover, standing the new version up beside the old one then flipping the active service across. [argoproj.github.io](https://argoproj.github.io/argo-rollouts/features/canary/)
+[^24]: Flagger, "Deployment Strategies": for blue-green, run conformance and load tests on the canary pods, then switch live traffic from the old version to the new one when the canary is promoted. [docs.flagger.app](https://docs.flagger.app/usage/deployment-strategies)
+[^25]: Kubernetes canary deployments: blue-green needs 2x resources (a full duplicate environment) and the switch is all-or-nothing. [dotnetacademy.dev](https://dotnetacademy.dev/Lesson/kubernetes-canary-deployments/297)
+[^26]: Progressive delivery at scale: deployment frequency cannot scale without a linear increase in incident risk unless the rollout itself decides; the same reason Netflix, Google, and Meta built automated canary analysis rather than staffing more release engineers. [brainfuel.space](https://brainfuel.space/posts/2026-09-03-progressive-delivery-argo-rollouts-canary-analysis)
