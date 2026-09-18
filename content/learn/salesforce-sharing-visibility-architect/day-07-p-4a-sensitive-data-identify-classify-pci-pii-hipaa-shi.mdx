@@ -1,0 +1,220 @@
+---
+title: "Sharing & Visibility Architect P-4a: Sensitive Data, PCI, PII, HIPAA, Shield Platform Encryption, Field History, and Data Protection"
+slug: day-07-p-4a-sensitive-data-identify-classify-pci-pii-hipaa-shi
+series: salesforce-sharing-visibility-architect
+lesson: 7
+excerpt: "Why objective p-4a starts with the data instead of the user: identifying and classifying fields as PCI, PII, or PHI with the Data Classification metadata, what Shield Platform Encryption protects at rest and what it deliberately does not do to user visibility, how probabilistic and deterministic encryption change search and filtering, field history tracking against Shield Field Audit Trail retention, where the Data Protection and Privacy surfaces actually live in Setup, and the additive classify, restrict, encrypt, audit, mask model. Includes a worked healthcare payments scenario, a six-step configuration walkthrough, exam traps, and a try-it exercise. Day 7 of the Platform Sharing and Visibility Architect exam prep."
+date: "September 18, 2026"
+author: "Adroit Consulting"
+readTime: "20 min read"
+tags: [Salesforce, Security, Sharing, Certification]
+---
+
+Objectives p-1a through p-3b all opened the same way. Identify the user, then decide what that user may see. Objective p-4a reverses the order. It opens with the data and asks what the data is, because a credit card number, a Social Security number, and a diagnosis code do not carry the same obligations, and a control set that satisfies one of them can leave the other two exposed. Classification is not paperwork that happens after the design. It is the input that decides which controls you configure.
+
+The objective has a second half, and it is the half that trips people up. Shield Platform Encryption has to be understood exactly: what it protects, what it leaves alone, and what it costs in platform functionality. The exam tests whether you know that encrypting a field is a storage decision, not a visibility decision, and whether you can tell a layered answer from a single-control answer. A scenario that names PCI data and asks for the right controls is looking for four things stacked together, and any answer that names only one of them is incomplete.
+
+This lesson covers the classification model, the encryption model, the audit and retention model, and the way all four layers combine on a single sensitive field.
+
+## Deep Dive
+
+### Classify the data before choosing a control
+
+Three categories drive the objective, and each one implies a different control priority.
+
+PCI covers cardholder data: primary account numbers, expiration dates, cardholder names, and the service codes attached to them. Payment Card Industry rules are contractual rather than statutory, enforced by the card networks through the acquiring bank, and the technical demands center on protecting stored card data and limiting who can reach it. In a Salesforce context that means the account number field is the crown jewel, and the design goal is to store as little of it as possible for as short a time as possible.
+
+PII covers information that identifies a specific person: Social Security numbers, government identifiers, dates of birth, home addresses, personal email and phone numbers, and the account credentials a customer uses with you. The regulatory drivers are numerous and mostly regional, from the GDPR to the CCPA and a growing set of state privacy statutes. The recurring obligations are notice, individual access, correction, and erasure, which is why retention and deletion enter the design alongside visibility.
+
+PHI, the protected health information that HIPAA governs, covers health status, the provision of care, and payment for care when the information can be linked to an individual. HIPAA's Security Rule asks for access controls and audit controls, and it treats encryption as a control you either implement or formally justify leaving out. Notice what that means for the exam: the HIPAA scenario is often answered by a combination of restricted access plus durable audit history, and the audit half is what candidates forget.
+
+The platform gives you a place to record these judgments as field metadata. Every field carries four classification properties: a Data Owner (the team or person accountable for the definition), a Field Usage status, a Data Sensitivity Level, and a Compliance Categorization. The sensitivity levels ship as Public, Internal, Confidential, Restricted, and Mission Critical, and the compliance categorizations ship with values that include PII, PCI, HIPAA, GDPR, CCPA, and COPPA. Both value sets are customizable at Setup, Data Classification Settings, and the per-field assignments are exposed on the FieldDefinition object through the Tooling API, which is what lets a Flow or an Apex trigger read a classification and apply policy at runtime. [^10][^11][^15]
+
+Two properties of Data Classification are worth stating plainly, because both appear in scenario questions. First, classification is metadata about what a field is supposed to contain. It does not read the records. A field classified as PII is labeled, not verified, and content scanning is a different capability (Einstein Data Detect). Second, classification does nothing on its own. Nothing in the platform reads the label and hides the field. The label exists so that a human, a report, or a piece of automation can make a decision from it.
+
+### What Shield Platform Encryption actually protects
+
+Shield Platform Encryption encrypts data at rest for the fields, files, and other data elements you select. The encryption is AES with 256-bit keys, the data is encrypted and decrypted on the application servers, and the key material is derived inside a hardware security module. Data on disk is ciphertext, which is the property that matters when the threat you are defending against is a dump of the underlying database rather than a user with a login. [^2][^4]
+
+The key hierarchy has three layers and the exam expects you to name them. A master secret is held by Salesforce and rotated each release. A tenant secret is generated per org (by the org, or supplied by you) and lives in the org. Those two inputs are combined through a key derivation function to produce the data encryption key that actually wraps your field values, and a data encryption key is never shared across orgs. Tenant secrets come in types (data, search index, event), they can be rotated, archived, and destroyed, and destroying one without re-encrypting the data it protects is an unrecoverable loss of that data. [^3][^4]
+
+You can bring your own key material. The Encryption REST API supports BYOK, where you generate a 256-bit key in your own key management system and import it, and the Cache-Only Key Service takes that further by leaving the key material with your external service so it never enters Salesforce durable storage. The trade-off is an operational dependency: if your external key service is unavailable, decryption fails, which is why that design has to come with a published availability target. [^7]
+
+What you can encrypt is a specific list rather than "any field". Standard fields on the supported objects, most text-shaped custom fields (Text, Text Area, Long Text Area, URL, Phone, Email, and Date and DateTime types), the body of files and attachments, search index files, event bus data, CRM Analytics datasets, and archived data. Fields that are formula, auto-number, or rich text are outside the set, and field types are added over time, so confirm the current list before promising coverage in a design. [^4]
+
+The configuration lives in Setup under Platform Encryption, in the Encryption Settings page's Encryption Policy section, where you select fields and set the encryption scheme per field. There is one operational fact about this page that has caused more compliance gaps than any other. Turning encryption on affects values written from that moment forward. Existing rows keep their plaintext until the background encryption service rewrites them, which you kick off and monitor from the Encryption Statistics and Data Sync page. A go-live that enables encryption and stops there has a partially encrypted field for as long as the sync takes, and every project should treat the Data Sync run and its verification as part of the cutover rather than as cleanup. [^4][^5]
+
+### Probabilistic and deterministic encryption
+
+Encryption that cannot be filtered is safe and hard to use. Encryption that can be filtered is easier to use and weaker. Salesforce exposes both, and objective p-4a expects you to know when to spend which.
+
+Probabilistic encryption is the default and the stronger scheme. The same plaintext produces different ciphertext on every write, so the stored values carry no pattern an attacker could exploit. The cost is that the field has no consistent stored form, so it cannot be used in a WHERE filter in SOQL, cannot be sorted, and cannot be matched against a literal. [^4][^6]
+
+Deterministic encryption gives up that randomness for equality. The same plaintext produces the same ciphertext for a given field, object, and org, which is enough to support exact-match filtering in SOQL WHERE clauses, list views, report filters, and unique and external ID constraints. It comes in a case-sensitive flavor and a case-insensitive flavor, and the case sensitivity propagates into behavior: with a case-sensitive scheme, a query for Jones returns Jones and not jones. [^6]
+
+Even with deterministic encryption, pattern matching does not come back. A LIKE filter on an encrypted field is not supported under either scheme, aggregate and GROUP BY style operations on encrypted fields have limited or no support, and global search stops returning results for encrypted values. Two consequences show up in real projects. Searching for duplicate accounts to merge no longer returns results when the account or contact name field is encrypted, so a deduplication requirement and an encryption requirement have to be reconciled rather than assumed to coexist. Fields encrypted with either scheme also cannot be used in the criteria of a criteria-based sharing rule, which matters directly for a sharing and visibility architect, because the field you most want to hide may be the field you wanted to segment records by. [^6]
+
+
+Search index encryption is a separate switch from field encryption. If search index files are not encrypted, they can still expose the values of fields you believed were protected, so an encryption design that stops at the field level has a documented gap. [^4][^5]
+
+### Encryption is not access control
+
+This is the single most important sentence in objective p-4a, and the quiz for this lesson tests it directly. Encryption protects the stored form of a value. It does not restrict which users can read the field. At runtime the platform decrypts transparently for any user whose field-level security grants read access, so the value appears in the interface, in a report, in a list view, and in an API response exactly as it would in an unencrypted field. [^2][^4][^5]
+
+The comparison that makes this concrete: field-level security, org-wide defaults, and page layouts all decide who can reach the data through the application. None of them changes what is written to disk. Encryption changes what is written to disk and decides nothing about who can reach it. A scenario asking how to prevent an internal user from reading a sensitive field has an access-control answer. A scenario asking how to make the data useless if the underlying storage is exposed has an encryption answer. When a scenario asks for both, the correct response names both, in the order the classification dictates. [^2][^3]
+
+One practical limit belongs in the same paragraph, because a designer who reads both halves will hit it. Shield Platform Encryption protects data inside the platform's storage. It does not follow the data out. A native data export produces readable files, so the control for data leaving the org is a separate decision about what may be exported, by whom, and how the export itself is protected. The exam answer for "protect the value at rest" is still encryption, because encryption is the only control in the list that changes the stored form; the export path is a design concern that sits beside it.
+
+
+### Field history tracking
+
+Field history tracking answers a different question from encryption and access: who changed this value, when, and what was it before. You enable it per object with the object-level toggle, then select the fields to watch on the same page, and the platform writes a row to the object's history object (AccountHistory, ContactHistory, and the custom-object equivalent in the form ObjectName__History) for each tracked change. The rows are immutable, which is the property that makes them usable as evidence. [^9]
+
+The limits matter for compliance design. Tracking is capped per object, at 20 fields under the standard platform limits, and it is not retroactive: tracking starts when you enable it, and no later configuration recovers history from before that point. Some field types cannot be tracked at all, including formula fields, roll-up summary fields, auto-number fields, Created By and Last Modified By, long text areas, and multiselect picklists. Under the standard platform the history is retained for 18 months, with an API path that reaches up to 24 months, and history rows do not count against your data storage limits. [^8][^9]
+
+### Field Audit Trail and retention
+
+Eighteen months is shorter than most audit regimes expect, which is what Shield's Field Audit Trail exists to solve. Field Audit Trail builds on field history tracking rather than replacing it: you still enable tracking per object and per field, and the current documentation raises the per-object ceiling to 200 tracked fields. What it adds is an archive. History moves from the object's own history related list into the FieldHistoryArchive big object, and the retention policy that controls the move is defined per object in the HistoryRetentionPolicy metadata and deployed through the Metadata API. [^8]
+
+The defaults are worth memorizing. Salesforce archives after 18 months in production and after one month in a sandbox, and archived data is retained until you delete it. Salesforce's documentation describes retaining archived field history independently of the standard window, and the figure most commonly cited in compliance planning is up to 10 years. A retention policy can be scoped per object, and this is the point where the architecture question becomes real: you are deciding how long the org keeps a record of changes to a sensitive field, which is a data-minimization decision as much as an evidence decision. [^8]
+
+Two operational notes. The first archive copy is slow, because it writes every existing history row covered by the policy, while subsequent copies are incremental. And the archive is an API surface rather than a UI one: archived history is queryable through a bounded set of SOQL against FieldHistoryArchive, which means a compliance query on ten years of history is a job someone has to build, not a page someone can open. [^8][^14]
+
+There is also an interaction between the two Shield features that belongs in a design document. Field history that was archived before encryption was enabled is not retroactively encrypted. If the requirement is that a sensitive value never sits in readable form after encryption goes live, the ordering of the two changes matters. [^8]
+
+### Where the data protection surfaces actually live
+
+The exam guide's phrasing points at data protection and privacy as a topic. In the org, that topic maps to four surfaces rather than one console, and knowing which is which prevents a wrong answer.
+
+Setup, Data Protection and Privacy holds the org-level privacy toggles, including making data protection details available in records and tracking individuals on opt-in and opt-out. Turning those on exposes the Individual object and the consent objects, and adds an Individual lookup to Lead, Contact, User, and Person Account. The Individual record is the durable privacy identity, holding consent flags and contactability preferences, and it exists so that consent belongs to a person rather than to whichever Contact record happens to be current. [^12][^13][^15]
+
+Setup, Data Classification Settings holds the classification dimensions and their value sets, which is the classification work described earlier in this lesson.
+
+Privacy Center is the application layer for retention and erasure. Data management policies in Privacy Center evaluate records against conditions and then act: mask, delete, or move to a retention store. That is where a right-to-be-forgotten requirement or a "delete closed cases after seven years" requirement is implemented, and it is the surface a scenario points at when it asks how sensitive data is removed rather than hidden. [^12][^13]
+
+Security Center Extension is where risk review lives, with a Security Insights view that scores the org's configuration and a Data Classification tab that tracks classification progress across fields, plus a Who Sees What Explorer for permission analysis. If a question asks where you would review an org's sensitive-data exposure as a management exercise, this is the surface. [^10]
+
+
+### The additive control model
+
+Put the pieces in the order the classification implies and the model is short.
+
+Classify first, so the control set is a decision rather than a habit, and record the classification as field metadata so the decision is visible to reports and automation. Restrict next, because access control is the layer that governs the application: field-level security for the field, the sharing model for records, and layouts and record types kept consistent with both. Encrypt third, for the fields whose exposure at rest would be unacceptable, choosing the scheme by asking what the field has to do (nothing, or equality matching). Audit fourth, with field history on the sensitive fields and Field Audit Trail where the retention obligation runs past 18 months. Mask or retain last, through Privacy Center policies, applying the retention window the regulation asks for rather than the longest window available.
+
+The reason the model is additive rather than selective is that each layer has a blind spot the others cover. Field-level security does nothing about a storage breach. Encryption does nothing about an internal user with read access. Field history does not prevent a change, it records one. Retention policies do not limit who can see a value, only how long it exists. A single-layer answer to a sensitive-data scenario leaves whichever gap that layer does not address, and the exam builds its distractors out of exactly those single layers. [^2][^4][^8]
+
+### The costs an architect signs for
+
+Shield is a licensed add-on rather than a checkbox, and every one of its features carries a cost that should be written down before the design is approved.
+
+Encryption costs functionality. An encrypted field loses pattern matching, global search results, and support in criteria-based sharing rule criteria, and it cannot be used in a sort that the database has to perform. Those limits propagate into other features: duplicate management against an encrypted name field degrades, and any automation that filters on the encrypted value has to be checked against the scheme you chose.
+
+Encryption also costs performance and operational effort. Processing happens at the application tier, key management becomes a recurring task with rotation and archive steps, and a Cache-Only Key Service design adds a network call to every decryption and a hard external dependency. Existing data has to be migrated through the Data Sync process, which takes time on a large object.
+
+Retention costs risk as much as it costs storage. Keeping field history for ten years satisfies an auditor and violates a data-minimization principle if the same regulation expects personal data to expire sooner. The architect's job is to match the retention window to the obligation, per field, rather than applying the longest window the license allows.
+
+## Worked example: three sensitive fields in one org
+
+A healthcare payments organization runs its member support on Salesforce. Three fields in scope, and the classification decisions differ for each.
+
+`Contact.SSN__c` holds a government identifier. It is classified PII, with a compliance categorization that also reflects the HIPAA linkage, and the sensitivity level is Restricted. Nobody outside the benefits team needs to read it, nobody needs to filter on it, and the retention obligation runs for the life of the member relationship plus the audit period.
+
+`Payment_Method__c.Card_Number__c` on a custom object holds a card number. It is classified PCI, sensitivity Restricted. Billing operations need to read it during a dispute window, no reporting needs to display it, and the retention obligation is short.
+
+`Case.Diagnosis_Code__c` holds a diagnosis code. It is classified PHI, sensitivity Confidential, because clinical operations legitimately work with it all day. Here the requirement is not concealment but controlled access plus audit, and the field has to remain filterable because the clinical team reports by diagnosis group.
+
+Now the controls, field by field.
+
+For the SSN, the layers are: field-level security that grants read to one permission set and hides the field from every other profile; encryption enabled with the probabilistic scheme, since nothing needs to filter on an SSN; field history tracking on the field; and a Field Audit Trail retention policy on Contact that keeps the change record for the audit period the compliance team signed off. No criteria-based sharing rule in the org may reference this field, and a design that needed one would have to be reworked, because an encrypted field cannot appear in sharing rule criteria. [^6][^8]
+
+For the card number, the layers are: field-level security restricted to the billing permission set; encryption with the probabilistic scheme; exclusion from every page layout and list view that does not need it; field history tracking; and a Privacy Center data management policy that masks or deletes the value once the dispute window closes. The point of the retention layer here is that the strongest protection for a card number is not storing it longer than the business needs it.
+
+For the diagnosis code, the decision is different and this is the part that separates a passing answer from a failing one. The clinical team filters and reports by this field, so probabilistic encryption would break the requirement outright: a field whose ciphertext changes on every write cannot be used in a WHERE filter. The architect chooses deterministic encryption, case-insensitive, accepts the trade that equality matching was bought at the cost of cryptographic strength, and documents why. Field history stays on, Field Audit Trail covers the longer clinical retention obligation, and the access layer grants read to clinical roles through permission sets while hiding the field from service agents who work the same records. [^4][^6]
+
+In code, the difference between the schemes shows up immediately.
+
+```apex
+// Probabilistic field: this query is rejected. There is no stored value to compare against.
+List<Contact> bySsn = [
+    SELECT Id, Name FROM Contact WHERE SSN__c = '123-45-6789'
+];
+
+// Deterministic field: equality filtering works, pattern matching does not.
+List<Case> byCode = [
+    SELECT Id, CaseNumber FROM Case WHERE Diagnosis_Code__c = 'S72.001A'
+];
+
+// Not supported under either scheme, on any encrypted field.
+// WHERE Diagnosis_Code__c LIKE 'S72%'
+```
+
+Finally, the layer that holds all three together is the classification itself. When the next sensitive field arrives, the question is not "should we encrypt it" but "what is it", and the classification answers the rest: the sensitivity level decides the access restriction, the compliance categorization decides the retention window, and the filter requirement decides the encryption scheme. That ordering is the whole of objective p-4a.
+
+
+## Configuration Walkthrough
+
+1. Classify before you configure. For each field that holds card data, personal identifiers, or health information, open the field in Object Manager and set the Data Owner, Data Sensitivity Level, and Compliance Categorization. Use Setup, Data Classification Settings first to confirm the value sets match your policy, and use the download and upload utilities if the field list is longer than a page. Record the classification in the data dictionary you hand to the security review. [^10][^11]
+2. Manage the keys before you encrypt. Confirm the Shield license is provisioned, then in Setup, Platform Encryption, Key Management generate the tenant secret or secrets your design needs (data, search index, event bus), and decide whether the org uses Salesforce-generated, customer-supplied BYOK, or Cache-Only key material. If you use external key material, write down the availability expectation for the external service. [^3][^4][^7]
+3. Enable encryption on the selected fields. In Setup, Platform Encryption, Encryption Settings, use the Encryption Policy section to select the fields, choose probabilistic or deterministic per field based on whether equality filtering is required, and turn on search index encryption if search results on encrypted values matter to the org. Then run the sync from Encryption Statistics and Data Sync to encrypt existing rows, and confirm the statistics show full coverage before you announce go-live. [^4][^5]
+4. Turn on audit. Enable history tracking on each object and select the sensitive fields, remembering the per-object field cap and the field types that cannot be tracked. Where the retention obligation runs past 18 months, deploy a HistoryRetentionPolicy for the object through the Metadata API, and build the query path that reads FieldHistoryArchive, because the archive has no UI. [^8][^9]
+5. Set the retention and masking policy. In Privacy Center, define data management policies that mask, delete, or archive records once the retention window closes, and align each policy with the classification you recorded in step one. Confirm who holds the permissions to run and manage those policies, and test each policy against a small record set before scheduling it. [^12][^13]
+6. Test the layers together, as two different users. As an authorized user, confirm the field is readable, that equality filters work on the field you encrypted deterministically, and that the history related list shows changes. As an unauthorized user, confirm the field is absent from the interface, absent from reports and list views, and absent from an Apex or API response. Then confirm the piece people skip: that an encrypted value arrives decrypted for the authorized user, proving the encryption layer did not become an access control by accident. [^2][^4][^5]
+
+## Exam Traps
+
+Trap one: offering a single control for a sensitive-data field. Field-level security, org-wide defaults, and page layouts restrict who can reach a value; none of them changes what is stored. Encryption changes what is stored; it restricts nobody. A scenario asking how to protect a card field end to end is scored on whether the answer stacks classification, access restriction, encryption, and audit. [^2][^4]
+
+Trap two: treating encryption as a substitute for field-level security. Encryption protects data at rest against a storage-level exposure. An internal user whose field permissions grant read access still sees the value in plaintext in the interface, because the platform decrypts for authorized requests. If the requirement is that a user must not see a field, the answer is a field permission. [^2][^5]
+
+Trap three: assuming encrypted fields still support search and filtering. Pattern matching is gone under both schemes. Equality filtering comes back only with deterministic encryption. Sorting performed by the database, aggregate operations, global search results, and the merge tool's duplicate search all degrade or disappear, and criteria-based sharing rules cannot use an encrypted field at all. A requirement for fast partial-name search and a requirement to encrypt that name field are in conflict, and the architect is expected to surface the conflict rather than satisfy both on paper. [^4][^6]
+
+Trap four: enabling encryption and stopping there. Values written before encryption was enabled stay in the clear until the Data Sync process rewrites them. The design is not done at the moment the policy is saved, and the verification is the encryption statistics showing coverage across the whole object. [^4][^5]
+
+Trap five: confusing field history tracking with Field Audit Trail. Field history tracking is included with the platform, capped at 20 fields per object, and retained for 18 months by default. Field Audit Trail is a Shield feature that raises the tracked field limit, archives history into the FieldHistoryArchive big object, and lets you configure retention well beyond the standard window, commonly described as up to 10 years. If a scenario states a multi-year retention obligation, the answer names Field Audit Trail and not field history alone. [^8][^9]
+
+Trap six: expecting history to appear retroactively. Tracking is not turned on backwards. Changes made before the field was tracked do not exist in history, and no configuration recovers them, so a compliance requirement that names a past period cannot be satisfied by enabling tracking today. [^9]
+
+Trap seven: assuming the platform provides a single Data Protection and Privacy console that does everything. The work is spread across the Data Protection and Privacy settings, Data Classification Settings, Privacy Center for retention and erasure policies, and Security Center Extension for risk review. Naming the wrong surface is as wrong as naming the wrong control. [^10][^12][^13]
+
+Trap eight: treating classification as evidence of protection. The classification label is metadata about intent and nothing in the platform enforces it. If the design brief says a field is classified PII and stops there, no control has been applied. [^10][^11][^15]
+
+## Try It
+
+Build the trade-off rather than reading about it, because the exam answer is easier to keep once you have seen the error.
+
+In a sandbox with Shield provisioned, create a custom text field on Contact for a fictional identifier, and give yourself read access through a permission set. Populate a few records, then enable encryption with the probabilistic scheme and run the Data Sync so existing rows are covered. Try to filter on the field in a SOQL query and note the error. Then add the field to a list view filter and to a report filter and note what happens there.
+
+Switch the field to deterministic encryption, case insensitive, and run the same queries. Equality filtering now returns rows. Then try a LIKE filter and a sort, and confirm those still fail, which is the boundary the exam is testing. Add the encrypted field to the criteria of a criteria-based sharing rule and confirm the platform will not accept it. [^4][^6]
+
+Now add the audit layer. Enable history tracking on Contact, check the sensitive field, and update a value. Open the history related list and confirm the row appears, then query the history object in Developer Console. If your org has Field Audit Trail, deploy a retention policy for the object and confirm that history copies into FieldHistoryArchive and that you can query it only through the API. [^8][^14]
+
+Finish by testing the layer from lesson 6 in the other direction. Log in as a user whose profile hides the field, and confirm the value is absent from the interface, from a list view, and from an Apex response. Then log in as a user whose profile grants read access, and confirm the value appears in plaintext even though the field is encrypted. That single experiment is the difference between the two objectives, and it is the fact most likely to be tested.
+
+## What's Next
+
+You can now classify a field as PCI, PII, or PHI and explain how the classification drives the control set, state what Shield Platform Encryption protects and what it leaves to access control, choose between probabilistic and deterministic encryption from a filtering requirement, and explain when Field Audit Trail is needed instead of standard field history. Lesson 8, Access Controls to Protect Sensitive Data, Restriction Rules, Data Classification Policies, and Retention (p-4b), takes the classification you just recorded and turns it into enforcement: restriction rules for carving records out of a user's view even when sharing would grant them, data classification policies that automate the handling of sensitive fields, and retention rules that remove data on schedule rather than on request.
+
+## Related Requirements
+
+- Lesson 6 of 36 (p-3b): UI hiding versus real security, defense in depth for a field, programmatic enforcement in Apex
+- Lesson 8 of 36 (p-4b): Access controls for sensitive data, restriction rules, data classification policies, retention
+- Lesson 9 of 36 (p-5a): Programmatic enforcement of CRUD and field-level security
+- Lesson 30 of 36 (o-1b): Files, Knowledge, and custom metadata settings security
+
+## References
+
+[^1]: Salesforce Certified Platform Sharing and Visibility Architect Exam Guide. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005298977&language=en_US&type=1)
+[^2]: Protect Your Salesforce Data with Shield Platform Encryption. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.security_pe_overview.htm&language=en_US&type=5)
+[^3]: Shield Platform Encryption Terminology. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=xcloud.security_pe_definitions.htm&language=en_US&type=5)
+[^4]: Salesforce Shield Platform Encryption Implementation Guide. [resources.docs.salesforce.com](https://resources.docs.salesforce.com/216/latest/en-us/sfdc/pdf/salesforce_platform_encryption_implementation_guide.pdf)
+[^5]: Master Encryption for Fields, Event Bus, and Search Data. [trailhead.salesforce.com](https://trailhead.salesforce.com/content/learn/modules/spe_admins/spe_admins_deploy)
+[^6]: Considerations for Using Deterministic Encryption. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.security_pe_deterministic_considerations.htm&language=en_US&type=5)
+[^7]: Salesforce Shield Platform Encryption REST API (Bring Your Own Key). [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api-rest-encryption/guide/api-rest-encryption.html)
+[^8]: Field Audit Trail Implementation Guide. [resources.docs.salesforce.com](https://resources.docs.salesforce.com/latest/latest/en-us/sfdc/pdf/field_history_retention.pdf)
+[^9]: Field History Tracking. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.tracking_field_history.htm&language=en_US&type=5)
+[^10]: Getting Started with Security Center Extension (Data Classification and Security Insights). [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.sc_ext_get_started.htm&language=en_US&type=5)
+[^11]: Tooling API Developer Guide (FieldDefinition object). [resources.docs.salesforce.com](https://resources.docs.salesforce.com/latest/latest/en-us/sfdc/pdf/api_tooling.pdf)
+[^12]: Privacy Center Implementation Guide (data management policies, mask and delete actions, retention store). [resources.docs.salesforce.com](https://resources.docs.salesforce.com/rel1/doc/en-us/static/pdf/CX_Privacy_Center_Implementation_Guide_v2.2.pdf)
+[^13]: Get to Know Privacy Center. [trailhead.salesforce.com](https://trailhead.salesforce.com/content/learn/modules/privacy-center/get-to-know-privacy-center)
+[^14]: Big Objects Guide (FieldHistoryArchive standard big object). [resources.docs.salesforce.com](https://resources.docs.salesforce.com/204/latest/en-us/sfdc/pdf/big_objects_guide.pdf)
+[^15]: Salesforce Security Guide (protecting your Salesforce data, shield and auditing). [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.security.htm&language=en_US&type=5)
