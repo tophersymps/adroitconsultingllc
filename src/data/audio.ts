@@ -56,6 +56,7 @@ export const articleAudio: ArticleAudio[] = [
   { slug: "gpu-finops-ai-cost-allocation-2026", voice: "af_heart", storagePath: "blog/gpu-finops-ai-cost-allocation-2026/af_heart.mp3", timingsStoragePath: "blog/gpu-finops-ai-cost-allocation-2026/af_heart.timing.json" },
   { slug: "headless-ui-component-libraries-2026", voice: "af_heart", storagePath: "blog/headless-ui-component-libraries-2026/af_heart.mp3", timingsStoragePath: "blog/headless-ui-component-libraries-2026/af_heart.timing.json" },
   { slug: "kubernetes-llm-serving-2026", voice: "af_heart", storagePath: "blog/kubernetes-llm-serving-2026/af_heart.mp3", timingsStoragePath: "blog/kubernetes-llm-serving-2026/af_heart.timing.json" },
+  { slug: "kubernetes-rollout-strategies-2026", voice: "af_heart", storagePath: "blog/kubernetes-rollout-strategies-2026/af_heart.mp3", timingsStoragePath: "blog/kubernetes-rollout-strategies-2026/af_heart.timing.json" },
   { slug: "llm-gateway-model-routing-2026", voice: "af_heart", storagePath: "blog/llm-gateway-model-routing-2026/af_heart.mp3", timingsStoragePath: "blog/llm-gateway-model-routing-2026/af_heart.timing.json" },
   { slug: "llm-inference-autoscaling-2026", voice: "af_heart", storagePath: "blog/llm-inference-autoscaling-2026/af_heart.mp3", timingsStoragePath: "blog/llm-inference-autoscaling-2026/af_heart.timing.json" },
   { slug: "local-llm-infrastructure-2026", voice: "af_heart", storagePath: "blog/local-llm-infrastructure-2026/af_heart.mp3", timingsStoragePath: "blog/local-llm-infrastructure-2026/af_heart.timing.json" },
