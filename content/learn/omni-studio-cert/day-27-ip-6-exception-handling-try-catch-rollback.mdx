@@ -24,6 +24,8 @@ The Try half is the risky work. Steps inside the block run normally, in order, e
 
 The Catch half is the recovery. It decides what the procedure does now that a step has failed. In OmniStudio you configure the Catch behavior in two ways, and you can use either or both. [^2] Under Failure Response you specify a key-value pair to return as the response, and the value can be a formula or, in Spring '20 and later releases, a merge field. [^2] Under Custom Failure Response you specify a Remote Class and a Remote Method to execute an Apex class, and that Apex class must implement Callable. [^2] The first option shapes the JSON that goes back to the caller. The second option runs real Apex logic, which is how you do heavier recovery work such as updating a status record or calling a fallback endpoint.
 
+![A Try-Catch Block wraps risky work in its Try half and recovers in its Catch half: on a step failure, control moves to the Catch branch, which shapes the JSON response or runs Apex recovery logic](</diagrams/day-27-ip-6-exception-handling-try-catch-rollback/1-try-catch-block-mechanism.png>)
+
 Two checkboxes make the block behave. The block itself has a Fail on Block Error checkbox, which you must have checked for the Catch behavior to fire when any step inside fails. [^2] And each individual step you put inside has a Fail on Step Error checkbox, which you check on each step that must trigger the Catch behavior if it fails. [^2] If a step inside the block does not have Fail on Step Error checked, a failure in that step does not route into the Catch branch the way you expect. You are choosing, step by step, which failures are catchable. This granularity matters on the job: you do not always want the first hiccup in a block to throw everything into the Catch branch. Sometimes a step can be allowed to fail quietly and let the next step decide, and the checkbox is how you make that call.
 
 ### The option that gates it: Fail On Step Error
@@ -46,11 +48,15 @@ The Load-write-after-risky-call rule is the single most practical idea in this r
 
 Think through a concrete ordering. Bad ordering: extract the payload, create the Account, create the Opportunity, then call the external payment system. If the payment call fails, both records exist and the transaction is half done. Good ordering: extract the payload, call the external payment system, and only after it confirms do you create the Account and Opportunity. If the payment call fails, nothing was written, so the only work is returning the error. This is why the exam pairs Try/Catch with ordering: the Try/Catch handles the failure, and the ordering decides whether handling that failure requires a rollback at all or whether it is a clean stop before any persistence. [^1][^5]
 
+![Bad ordering writes the Account and Opportunity before the payment call, leaving orphaned data on failure; good ordering runs the payment call first so a failure happens before any write](</diagrams/day-27-ip-6-exception-handling-try-catch-rollback/2-bad-vs-good-ordering.png>)
+
 There are legitimate cases where you must write before a call, such as posting a status that a callout depends on. In a single synchronous transaction Salesforce also forbids doing DML before an HTTP callout, a rule you saw in the chaining lesson. Those cases get solved with Chain On Step so the write commits in its own transaction before the callout, not by abandoning rollback thinking. The general rule stands: when you control the order, put the fallible external work first and the writes after it, and use a Try-Catch Block plus Rollback On Error for the writes that genuinely must precede a call.
 
 ### The controlled error shape
 
 Robust handling is not just about not crashing. It is about giving the caller something it can act on. When a Try-Catch Block catches a failure, you shape that response with the Failure Response key-value pairs. [^2] Trailhead's ClearLight walkthrough is the canonical example. The architect sets the Failure Response keys to carry an error code and a message, plus a Detail value that pulls the actual error via a merge field into the underlying step's error path. [^5] The caller then receives JSON with an ErrorCode, a Message, and a Detail node, which is a predictable contract it can parse and display instead of choking on an unstructured failure. [^5]
+
+![The Failure Response key-value pairs ErrorCode, Message, and Detail map to a parseable JSON contract the caller receives on every failure](</diagrams/day-27-ip-6-exception-handling-try-catch-rollback/4-controlled-error-shape.png>)
 
 You can go further with the action-level Failure Response that every Integration Procedure action exposes. [^3] The common action properties include Failure Response, described as key-value pairs to be returned in the output JSON data if the action fails, with values that can include formulas and merge fields, and a companion Send Only Failure Response that returns only those pairs if the action fails. [^3] That is how a single step communicates a controlled error even without a surrounding block. And the Failure Conditional Formula ties it together: when the formula returns TRUE, the key-value pairs in the Failure Response list are added to the JSON data. [^3]
 
@@ -65,6 +71,8 @@ The other half is the response. The Catch branch must return why, not just that 
 ## Configuration Walkthrough
 
 Work through a concrete build. You are writing an IP that accepts a request to open a customer account, runs a credit check against an external system, and if the check passes, creates the Account and an Opportunity. The credit system is occasionally down, and your customer wants a clean error when it is. This is the ClearLight pattern from Trailhead. [^5]
+
+![The account-opening IP runs the credit check first; a passing check creates the Account and Opportunity, while a failing check logs to OmniComponentErrorLog and returns a controlled error](</diagrams/day-27-ip-6-exception-handling-try-catch-rollback/3-account-opening-scenario.png>)
 
 1. **Wrap the risky actions in a Try-Catch Block.** Drag a Try-Catch Block into the Structure panel. [^2] Place the actions that can fail inside it, and the most failure-prone actions are external calls: the HTTP action that hits the credit system, and any Remote Action that invokes an Apex class doing its own callout. In this IP, the credit check HTTP action goes in the block. Make sure the Try-Catch Block's Fail on Block Error checkbox is checked so a failure inside triggers the Catch behavior. [^2]
 
@@ -89,6 +97,8 @@ Work through a concrete build. You are writing an IP that accepts a request to o
 - **Misreading a business condition as a non-failure.** A Data Mapper that returns zero records does not throw, so it is not a technical failure. If your flow needs those records, a zero-result is a failure and it needs a Failure Conditional Formula that turns it into one. [^3][^4] Without it the procedure proceeds as if everything is fine, and the caller never learns the lookup failed.
 
 - **Letting a step failure abort the whole procedure by default.** Outside a Try-Catch Block, a step configured with Fail On Step Error terminates the IP. [^1] If you want a procedure to survive a failure in one step and continue or respond gracefully, that step belongs inside a Try-Catch Block. Know which property ends the procedure and which routes failure into a Catch branch, because a question will hand you a scenario and ask which behavior actually applies.
+
+![Four exam traps: no Try/Catch around an external call, swallowing the error, writes before risky calls, and misreading a business condition as a non-failure, each with its fix](</diagrams/day-27-ip-6-exception-handling-try-catch-rollback/5-exam-traps.png>)
 
 ## Exam Tip
 

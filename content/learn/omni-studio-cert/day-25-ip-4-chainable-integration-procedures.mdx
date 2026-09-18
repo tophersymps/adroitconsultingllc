@@ -38,6 +38,8 @@ Three settings implement this in OmniStudio, and you need to know all three for 
 
 Here is the piece the quiz leans on. Chainable and Queueable Chainable decide *when* a new transaction starts: when the procedure hits a configured limit. Chain On Step decides *where*: at a specific action that you know is heavy. In both cases the execution model is the same. Each link of a chainable IP runs asynchronously, in its own transaction, with its own fresh governor budget, and each link has its own success or failure. That is the sentence that answers quiz question 2.
 
+![Three settings decide how a chain splits: Chainable sets the policy for the whole procedure, Queueable Chainable raises the budget by running links as asynchronous queueable jobs, and Chain On Step forces one action into its own transaction. Each link runs in its own transaction with a fresh governor budget.](</diagrams/day-25-ip-4-chainable-integration-procedures/1-three-settings.png>)
+
 ### Why chaining beats a bigger transaction
 
 The natural reaction to a governor limit is to ask for a bigger budget. Chaining does not do that. It restructures the work so that no single transaction needs a big budget. [^2] Consider the Trailhead example of an insurance quoting procedure. A Calculation Action in the procedure ran about 70 SOQL queries. Enable Chainable on the calling action, set the Chainable Queries Limit to 70, and the procedure runs the next action in a new transaction whenever the query count reaches that threshold. A calculation action that makes 71 queries crosses the line, so the IP saves interim results and starts a second action in a fresh transaction. That second action makes 73 queries, crosses again, and chains again. The rest of the procedure stays under the limit and never chains. [^2] The work got done in three transactions instead of one, and no transaction ever asked the platform for more than its share.
@@ -55,6 +57,8 @@ The chainable design splits it. Enable Chainable on the IP action that calls the
 Then handle the callout problem. The warehouse post must happen after the inserts are committed, and Salesforce forbids DML followed by a callout in the same transaction. Check Chain On Step on the Data Mapper Post action that writes the final order status, so that step runs in its own transaction, commits, and hands control to the HTTP action in the next transaction. [^2][^3] The error disappears because the DML is committed before the callout transaction begins.
 
 Notice what the caller experiences. When you invoke a chainable IP over REST, the response comes back with partial results and a continuation value, in the response body, that you pass back in the next request to resume the procedure. [^5] Each round trip is one transaction, and the caller is effectively driving the chain forward link by link. Omniscripts and parent IPs handle that continuation automatically, which is why you mostly configure chaining and let the framework do the driving. [^3]
+
+![Worked example of a batch order import: extract and transform the payload, run an insert loop that chains every few hundred records across 50 transactions, post the order status with Chain On Step so the write commits, then make the warehouse callout in a fresh transaction.](</diagrams/day-25-ip-4-chainable-integration-procedures/3-batch-order-import.png>)
 
 ### Use cases that fit chaining
 
@@ -75,6 +79,8 @@ The common thread is length. If a procedure can finish comfortably inside one tr
 Chaining is not free, and the cost is the one you must carry into every design. In a synchronous IP, all actions share one transaction, which means they share one fate: if any step fails, the whole transaction rolls back. [^2] When you split work across transactions, you lose that guarantee. Each link commits independently. A failure in link three does not roll back link one. Work that already committed stays committed. [^2][^3]
 
 That changes how you design every chainable procedure. Since you cannot rely on a shared rollback, each link must be able to handle its own failure, and the procedure must be able to continue or fail gracefully at that point. This is why the exam's related requirements point forward to Day 27 and Try/Catch: per-link error handling is not optional polish, it is the compensation for losing the single-transaction guarantee. Design each link so that a failure is contained, logged, and either retried or reported, and design each link to be idempotent where possible, so that re-running it does not duplicate work. A chain without per-link handling is a chain that silently stops mid-way the first time one of its links fails.
+
+![Synchronous versus chainable execution: a synchronous IP shares one transaction and one rollback, so a failure anywhere rolls back all prior work, while a chainable IP runs each link in its own transaction that commits independently, so a failure in link three does not roll back links one and two.](</diagrams/day-25-ip-4-chainable-integration-procedures/2-sync-vs-chain.png>)
 
 ## Configuration Walkthrough
 
@@ -103,6 +109,8 @@ Configuring a chainable IP is a short sequence. Use the batch order import as th
 - **No error handling per link.** A mid-chain failure stops the pipeline, and without per-link handling there is no record of where or why. Every link needs its own failure handling and logging, which is why the exam pairs this requirement with Try/Catch. A chain is only as reliable as its weakest link, and the weakest link is usually the one with no failure path.
 
 - **Ignoring the caller context requirement.** A chainable IP must be invoked from a context that can act as a client, such as a REST API or an Omniscript that handles the continuation automatically. [^3][^5] If you hand a chainable IP to a caller that expects one synchronous response, the partial responses and the continuation flow will surprise it. Know who is calling before you make the procedure chainable.
+
+![Four exam traps to avoid: chaining when a synchronous IP fits, assuming chainable links share one rollback, leaving no error handling per link, and ignoring the caller context requirement.](</diagrams/day-25-ip-4-chainable-integration-procedures/4-exam-traps.png>)
 
 ## Exam Tip
 

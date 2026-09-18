@@ -24,6 +24,8 @@ The Response Action does more than pass a blob through. It can add data to the d
 
 There is a useful way to think about it that ties several earlier lessons together. Everything an IP does, a Data Mapper extract, an HTTP call, a Remote Action, a Loop, a Try-Catch Block, builds up the internal data JSON. Think of that as the warehouse: it contains every field, every intermediate value, every raw response that any step touched. The caller does not want the warehouse. The caller wants the one box of things it asked for. The Response Action is the packing slip that decides what leaves the warehouse and what stays behind. Requirement IP-7 is the skill of writing that packing slip carefully. [^1]
 
+![The Response Action is the IP's packing slip: it trims the internal data JSON to only the mapped fields, augments it with computed values, and gates the response, so only what you map is returned to the caller.](</diagrams/day-28-ip-7-response-action-the-ip-output-contract/1-response-action-is-the-output-contract.png>)
+
 ### Response shaping is explicit, and that is a feature
 
 Here is the design principle that separates a well-built IP from a lazy one: only what you explicitly map into the response gets returned. [^2] Salesforce's own documentation frames the whole job around it. The Response Actions are useful for trimming the data response, and trimming means intentionally deciding which parts of the data JSON the caller receives. [^1] It is not an accident and it is not a loss. It is the core safety and cleanliness property of the output contract.
@@ -44,11 +46,15 @@ Return Only Additional Output discards everything except the key/value pairs you
 
 Response Headers holds key/value pairs that go into the response header, and it is how you control the HTTP status code the caller sees. [^1] To override the status code, create a key named StatusCode and assign it a valid HTTP response value. [^1] This matters for the error branch. A procedure that catches a failure and wants the caller's HTTP layer to see a 400 or 500, not a 200 that happens to carry an error body, sets StatusCode in the Response Headers. That is how a FlexCard or API gateway branches on the transport-level result instead of only parsing the body. [^1]
 
+![Four Response Action properties shape the output: Additional Output adds computed key/value pairs, Return Full Data JSON returns everything, Return Only Additional Output returns only your mapped pairs, and Response Headers controls the HTTP status code.](</diagrams/day-28-ip-7-response-action-the-ip-output-contract/2-four-properties-shape-the-response.png>)
+
 ### Combining the response action with response transformations
 
 There is a second set of controls that trims the output at the level of how JSON is restructured, and you should know it because it is exactly the "map the output JSON" idea from the walkthrough. The Response JSON Path and Response JSON Node properties, which apply to the response side of the Send/Response Transformation properties, trim and reparent the output JSON. [^2] This is a distinct mechanism from the Response Action's own properties, though both shape what the caller receives. [^2]
 
 The mental model comes straight from the doc table. Setting a Response JSON Path drills down on a node so you send a subset instead of the entire JSON. Setting a Response JSON Node reparents the output under a new node name, and you can nest it by using colons, so `node1:node2` wraps the data under a two-level key. [^2] Merge-field syntax works too: a JSON Node of `%NewNode%` uses a runtime value as the node name, which is how you make the wrapper key dynamic. [^2] The practical upshot is that you have two complementary tools. The Response Action's Additional Output and Return Only Additional Output control which values exist. The Response JSON Path and Node control the container structure they sit in. A well-designed IP uses both deliberately to hit an exact shape.
+
+![A decision tree for shaping the response: use Return Full Data JSON when the caller needs everything, Additional Output with Return Only Additional Output for a specific field set, and Response JSON Path or Node to restructure the container.](</diagrams/day-28-ip-7-response-action-the-ip-output-contract/3-choosing-how-to-shape-the-response.png>)
 
 ### The error branch: same structure, every time
 
@@ -57,6 +63,8 @@ An IP that only handles success is not finished. The response contract has two h
 Why does consistency matter? Because the consumer is written against one response shape. A FlexCard binds to JSON paths declared in the card, and it renders states, like the error state you saw in the conditional rendering lesson, based on what the data source returns. If the success payload is `{data: {...}}` and the failure payload is an unstructured exception dump, the card has no reliable path to bind the error to, so it cannot decide which state to show. If instead both success and failure return a payload where the same wrapper carries either the result or an error node with a code and a message, the card handles both with the same binding logic. [^3] That is the substance of quiz question two: keep success and error shapes consistent so callers, FlexCards and OmniScripts alike, can handle both reliably. It is not about aesthetics, and errors absolutely matter, and no theming system demands it. It is about making the contract uniform so every consumer reacts to outcomes the same way. [^3]
 
 The failure shape should carry the same kind of information every time: a status or outcome flag, an error code when relevant, and a readable message. In the exception handling lesson you saw how a Try-Catch Block sets Failure Response key/value pairs that flow into the output, and how a controlled error includes an ErrorCode, a Message, and a Detail. [^3] That is the error branch feeding this lesson's contract. The Response Action then ships that structured error to the caller, optionally with a StatusCode header so the transport layer agrees that this was a failure. [^1] Success and error are two routes to the same destination: a predictable JSON contract the caller can parse with confidence.
+
+![Success and error routes return the same wrapper: success carries the mapped fields while error carries an outcome flag, an error code, and a message, so one caller handles both with the same binding logic.](</diagrams/day-28-ip-7-response-action-the-ip-output-contract/4-success-and-error-one-contract.png>)
 
 ### Test before you wire consumers
 
