@@ -1,0 +1,140 @@
+---
+title: "Data Architect DM-4A: Big Objects vs Standard/Custom Objects: Reasons, Pros and Cons, Async SOQL, Partitioning, and Indexing"
+slug: day-07-dm-4a-big-objects-vs-standard-custom-objects-reasons-pro
+series: salesforce-data-architect
+lesson: 7
+excerpt: "The data model reaches a wall. A custom object can store a lot, but there is a limit to how many rows it holds comfortably and how fast an arbitrary query against them runs. Big Objects exist for the data that outgrows that wall: billions of rows of audit history, clickstream events, and IoT telemetry that must stay on the platform without dragging down the org. This lesson compares the reasons to choose Big Objects versus standard and custom objects, walks the pros and cons, and explains the three mechanics that decide whether a Big Object is usable: the composite primary key and its index, the prefix rule that governs query performance, and Async SOQL for extracting and aggregating the results. Day 7 of the Platform Data Architect exam prep."
+date: "September 18, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [Salesforce, Data Architecture, Big Objects, Certification]
+---
+
+Lesson 6 finished the metadata management loop. This lesson starts a different conversation. What happens when the data itself is too big for the object model you already know? The answer is Big Objects, and the exam wants you to understand them not as "the thing that holds a lot of data" but as a deliberate trade. You give up most of what makes an sObject useful, and in exchange you get storage and query scale that a standard object cannot reach.
+
+Requirement dm-4a asks you to compare and contrast the reasons for implementing Big Objects versus standard or custom objects in a production instance, and to explain the unique pros and cons of Big Objects in a data model, including Async SOQL, partitioning, and indexing. [^1] The exam tests this at a decision level: given a scenario with a data volume and a set of access patterns, which store is appropriate and why. To answer those questions you need the mechanics, because the mechanics are what make the decision either work or fail.
+
+## Deep Dive
+
+### What a Big Object actually is
+
+A Big Object is a Salesforce object type built to store and manage very large volumes of data on the platform. It supports performance at the scale of a billion records or more, and it is accessible through a standard set of APIs. [^2][^11] There are two kinds. Standard Big Objects are defined by Salesforce and ship with a product, such as FieldHistoryArchive, which stores the archived field history that the Field Audit Trail produces. [^2][^3] Custom Big Objects are objects you define yourself to store data unique to your org, and they carry the `__b` suffix. [^3][^10]
+
+The mental model to hold is that a Big Object is not a bigger sObject. It is a different storage architecture with a different data contract. Where a standard or custom object is designed around interactive records that users edit, report on, and relate to each other, a Big Object is designed around append-only, high-volume, low-write-frequency data that mostly sits there until someone extracts an aggregate from it. [^7][^8]
+
+The practical consequence is that Big Objects do not count against the same storage limits that constrain standard and custom objects. [^10] A custom object that grows toward tens of millions of rows starts to strain query performance, governor limits, and storage cost. A Big Object is built for that volume and beyond, which is why orgs reach for it when the data would otherwise either blow past object storage or be pushed off the platform entirely.
+
+### Why choose a Big Object instead of a standard or custom object
+
+The decision is rarely about taste. It is about whether the data's volume and access pattern fit the object model.
+
+A standard or custom object is the right store when the data participates in normal Salesforce life. Users create records in the UI, validation rules guard the data going in, triggers and flows react to changes, sharing rules control who sees what, and reports and list views let people read it back. [^7] That is a transactional, interactive object, and it pays for that convenience with limits: a finite row budget, storage that counts against your org allocation, and query performance that degrades as the object grows. [^10]
+
+A Big Object is the right store when the data's defining properties are volume and retention. Common use cases are customer event history such as weblog or loyalty data, audit trails that must be kept for years, IoT telemetry, and clickstream records where you want to keep every event. [^3][^11] The data is append-only or rarely updated, the volume genuinely exceeds what a custom object handles comfortably, and the queries you need are mostly key-based or aggregated rather than arbitrary and interactive. [^7]
+
+The exam frames this as a boundary. If the data needs triggers, validation rules, sharing rules, standard reports, or list views, a standard or custom object is the correct home even if it means enforcing retention or archiving later. If the data is high-volume history that nobody edits and you only need occasional extracts and aggregates, that is the Big Object shape. [^7][^8]
+
+![What a standard or custom object gives you compared with what a Big Object trades away: the left side shows interactive records with triggers, validation rules, sharing, reports, and list views, and the right side shows a Big Object that drops those features in exchange for billions of records, append-only writes, and asynchronous extracts](</diagrams/day-07-dm-4a-big-objects-vs-standard-custom-objects-reasons-pro/1-object-tradeoff.png>)
+
+### The composite primary key and the index
+
+A Big Object is defined by metadata that includes its fields and its composite primary key. [^8] The primary key is the load-bearing design decision, because it is not just a uniqueness constraint. It is the access pattern. [^8]
+
+When you define a Big Object, you define an index composed of fields in a specific order. That index controls the order of records and, more importantly, what queries are efficient. [^1][^4] The index fields make up the composite key, and a query is only efficient when it filters on those index fields as a prefix. [^5][^6]
+
+The prefix rule is the single most tested mechanic in this requirement. If your index is composed of fields `A`, `B`, and `C`, in that order, then efficient synchronous queries can filter on `A`; on `A` and `B`; or on `A`, `B`, and `C`. You cannot efficiently query on `B` and `C`, or on `C` alone, or on `A` and `C` skipping `B`. [^6] You can omit fields from the composite key only from the right. [^6] That is what the phrase "filters may not have any gaps within the composite key" means, and it is why index design decides the whole performance story. [^6]
+
+A poorly chosen index makes the Big Object unusable for the query patterns you actually need, because there is no way to add an arbitrary index later. Once you deploy a Big Object, you cannot edit or delete the index. To change it, you start over with a new Big Object. [^2][^11] That permanence is why the exam and the implementation guidance both insist you design the composite primary key first, by listing the queries you need to support, before you define the object. [^7]
+
+Standard and custom objects do not force this. They support multiple indexes and arbitrary-field query optimization through techniques like skinny tables and custom indexes, which is a big reason they remain the right choice for interactive, mixed-query workloads. A Big Object gives you exactly one index, chosen up front, and everything must be designed around it. [^6][^8]
+
+![The composite primary key prefix rule: with an index on fields A, B, and C in that order, efficient synchronous queries can filter on A, on A and B, or on A, B, and C, while filtering on B alone, C alone, or A and C with a gap in B is inefficient or unsupported](</diagrams/day-07-dm-4a-big-objects-vs-standard-custom-objects-reasons-pro/2-index-prefix-rule.png>)
+
+### The things Big Objects do not do
+
+The trade has a long list of losses, and the exam tests them directly. Big Objects do not support triggers, flows, or processes. [^3][^9] They do not support validation rules. [^8][^9] They do not support standard reporting or dashboards through Report Builder. [^9][^12] They have no standard UI: no tabs, detail pages, or list views, and no page layouts. [^9][^10] They do not support standard or regular sharing rules; only object and field permissions. [^3][^9]
+
+There are also no roll-up summary fields and no lookup relationships in the usual sense. You can create a lookup field on a Big Object that references a standard or custom object, and that lookup is what enables SOQL relationship queries, but the relationship is limited and the Big Object does not participate in parent-child roll-ups the way an sObject does. [^5][^11] There is no field history, because the data in a Big Object is not meant to change. [^5][^9]
+
+Writing to a Big Object is also different. Because it is append-oriented and non-transactional, the common patterns for getting data in are the Bulk API, streaming ingestion, and Apex batch jobs with the standard insert statement. [^3][^8] Writes can be idempotent: inserting an identical record with the same representation multiple times creates only one record, which is different from an sObject where each insert request creates a record. [^3] And the platform does not support transactions that span both a Big Object and a standard or custom object. [^3]
+
+None of this is a defect. It is the price of scale. The exam wants you to recognize that these missing capabilities are expected, not accidental, and to stop expecting them from a Big Object.
+
+### Async SOQL is how you read the results
+
+Because a Big Object holds more data than synchronous SOQL can reasonably return, the read path is different. Standard synchronous SOQL on a Big Object supports only key-based filters and returns a limited number of records, which is rarely enough for analytical work. [^8] The mechanism for extracting and aggregating Big Object data is Async SOQL.
+
+Async SOQL runs a query against a Big Object as a background job and writes the result to a target. [^1][^8] The target is either another object, most commonly a standard or custom object, or a file. [^1][^8] You submit the query, the platform processes it in the background over a period that can stretch into minutes for very large datasets, and then the results land in the target you specified. [^8]
+
+Because the process is asynchronous, results are not immediate. You design the flow around polling or waiting for the job, then reading the populated target. That is the trade for being able to process a billion records that a synchronous query could never return within its timeout. [^8]
+
+Async SOQL also supports more powerful query patterns than the synchronous key-based path, including non-key filters and aggregations. [^8] That makes it the tool for the "occasional aggregate extract" requirement that compliance scenarios describe. You run an aggregate query in the background, write the summarized results to a standard or custom object, and then report on that object normally. [^1][^12]
+
+### Pros and cons, and what fits
+
+Pulling the whole picture together, the pros of a Big Object are scale, retention, cost, and platform integration. You can store billions of records on the platform, keep history on-platform for compliance, do it without the storage pressure of a standard object, and ingest the data through the same Bulk API and streaming paths the platform already provides. [^7][^8][^10]
+
+The cons are equally clear. No relationships, roll-ups, validation, or triggers. Limited query patterns dictated entirely by the index. Asynchronous and eventual access rather than immediate reads. No standard UI or reporting. [^7][^8][^9]
+
+The fit test follows from that list. Use a Big Object for event and clickstream history, audit trails requiring multi-year retention, IoT telemetry, and "keep everything" archives where you periodically aggregate results back onto a standard object for reporting. [^1][^7] Do not use a Big Object for data users edit and report on interactively, or data that needs relationships and sharing. Those belong in a standard or custom object. [^7][^8]
+
+One architectural pattern worth naming is the roll-up loop. You keep the raw history in a Big Object where it scales, and you run an Async SOQL aggregate on a schedule that writes summarized numbers onto a standard or custom object. That object is what the business reports on. The Big Object carries the volume; the standard object carries the dashboard. This is the classic architecture for the "retain everything, report on the summary" requirement. [^1][^12]
+
+![When a Big Object fits versus when it does not: fit cases include audit trails, clickstream and IoT history, and keep-everything archives with periodic aggregate roll-ups, while do-not-fit cases include data that users edit and report on interactively or data that needs relationships and sharing](</diagrams/day-07-dm-4a-big-objects-vs-standard-custom-objects-reasons-pro/3-when-big-object-fits.png>)
+
+### A note on limits and versions
+
+The exact numbers around Big Objects change between releases, and the exam respects that reality. The number of Big Objects per org, the maximum fields per index, record-count thresholds, and the availability of specific Async SOQL features all shift. [^1][^9] The guidance in this lesson is to know the architecture and the rules, and to verify any specific figure against current Salesforce documentation rather than assuming a number from memory. [^1]
+
+What does not change between releases is the conceptual contract. Big Objects trade the interactive feature set for scale and retention, the index is the single determinant of query performance, and Async SOQL is the read path for anything beyond a key-based lookup. Anchor your answers to those invariants and the exact numbers become details you confirm rather than facts you rely on.
+
+## Configuration Walkthrough
+
+Run through these five steps in a sandbox to define a Big Object, get data into it, and extract a result. They mirror what the exam expects you to be able to reason about.
+
+1. Define the Big Object in Setup. Open Setup, then Object Manager, then Create and choose Big Object. Give it a name and a set of fields. The definition lives in metadata, and you can also define it through the Metadata API by authoring the object and index XML and deploying it as a package. [^1][^3]
+2. Define the composite primary key and index. Choose which fields make up the index and the order and sort direction of each. Because you cannot edit or delete the index after deployment, this is where you commit to the access pattern. Query the fields you expect to filter on, in the order you will filter on them, and place the most selective field first. [^7][^11]
+3. Ingest the data. Use the Bulk API or the streaming or ingestion path appropriate to your source, because Big Objects do not support the standard record editing UI. For single synchronous inserts, Apex exposes an insert path, and the more common bulk pattern is an Apex batch job with the standard insert statement. [^3][^8]
+4. Query with Async SOQL. Use Setup's Async SOQL feature or the Async SOQL API to run a query or aggregation against the Big Object, and specify a target: a standard or custom object to write the results to, or a file. [^1][^8]
+5. Roll the summary back for reporting. Since a Big Object is not standard-reportable, take the summarized results that Async SOQL wrote to a standard or custom object and build the reports and dashboards on that object. The Big Object stays as the volume store; the standard object carries the business-facing numbers. [^1][^12]
+
+## Exam Traps
+
+**Trap one: expecting Big Objects to support the sObject feature set.** The most common wrong answer treats a Big Object as a bigger custom object. It does not support triggers, validation rules, roll-ups, relationships in the normal sense, or standard reports. [^3][^9] When a scenario needs those features, the correct store is a standard or custom object, and a Big Object is the distractor.
+
+**Trap two: designing queries on non-index or non-prefix fields.** A Big Object is efficient only when a query filters on index fields as a prefix. Filtering on a non-index field, or on index fields with a gap in the middle, is inefficient or unsupported. [^5][^6] The index dictates what you can query, and you chose it up front, so a query that cannot be expressed against the index means the index was designed wrong. This is the trap the exam tip points at: performance is entirely about the index, and queries must use index fields as a prefix.
+
+**Trap three: treating a Big Object as an interactive transactional store.** A Big Object is append and scale oriented, and reads are asynchronous for anything beyond a key-based lookup. [^7][^8] A scenario that describes users editing records or a UI that renders records synchronously is describing an sObject use case, not a Big Object use case.
+
+## Try It
+
+Model the retention requirement and test your index reasoning. Suppose you must keep eight years of audit events, billions of rows, on the platform for compliance, and occasionally run aggregate extracts. Decide the store and defend the choice. [^7]
+
+First, write the queries you need. An extract by date range, an aggregate of events per account, a lookup by a specific event identifier. Then lay out an index whose fields support those queries as a prefix, with the most selective field first. Confirm that every query you listed either filters on the index as a prefix or moves to Async SOQL for a non-key or aggregate read. [^6][^8]
+
+Then walk the boundaries the quiz tests. Explain why a standard custom object hits limits at this volume, why External Objects via Salesforce Connect virtualize rather than store and therefore do not satisfy an on-platform retention requirement, and why a skinny table is a query-optimization aid rather than a massive storage solution. [^7] Each of those distinctions is what separates a correct store choice from a plausible one.
+
+## What's Next
+
+You can now explain what a Big Object is, why you would choose one over a standard or custom object, the composite primary key and index rules that govern query performance, the features Big Objects intentionally do not have, and how Async SOQL extracts and aggregates the results. Lesson 8 moves from the mechanics to the decision: Big Object scenarios, specifically when to use a Big Object and when not to, applying these rules to concrete cases. [^1]
+
+## Related Requirements
+
+- Lesson 6 of 42 (dm-3b): Capturing and managing metadata: tools, change control, and governance linkage
+- Lesson 8 of 42 (dm-4b): Big Object scenarios: when to use, when not
+- Lesson 31 of 42 (lv-2a): Archiving and purging fundamentals: strategies and Big Objects
+
+## References
+
+[^1]: Salesforce Certified Platform Data Architect Exam Guide (Big Objects and Async SOQL objectives). [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005298972&language=en_US&type=1)
+[^2]: Introduction to Big Objects, Trailhead module. [trailhead.salesforce.com](https://trailhead.salesforce.com/content/learn/modules/big_objects/big_objects_get_started)
+[^3]: Big Objects Implementation Guide (types, unsupported features, idempotent writes, transactions). [resources.docs.salesforce.com](https://resources.docs.salesforce.com/latest/latest/en-us/sfdc/pdf/big_objects_guide.pdf)
+[^4]: Big Objects, Salesforce Help (define and deploy custom Big Objects, index behavior). [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.big_objects_intro.htm&type=5)
+[^5]: Salesforce Dictionary: Big Objects (composite primary key as access pattern, indexed-field query requirement, Async SOQL). [salesforcedictionary.com](https://salesforcedictionary.com/terms/big-objects)
+[^6]: Indexed Big Object SOQL limitation in Apex (composite key prefix rule, no gaps, omit from the right only). [salesforce.stackexchange.com](https://salesforce.stackexchange.com/questions/248375/indexed-big-object-soql-limitation-in-apex-class)
+[^7]: Salesforce Dictionary: When Big Objects fit and when they do not (volume threshold, append-only, key-based and aggregate queries, feature trade-offs). [salesforcedictionary.com](https://salesforcedictionary.com/terms/big-objects)
+[^8]: Salesforce Summaries: Async SOQL, Big Data Computing for the Salesforce Platform (background query, target object, processing time, non-key filters). [salesforceben.com](https://www.salesforceben.com/salesforce-summaries-async-soql-big-data-computing-for-the-salesforce-platform/)
+[^9]: Rackwave Help Center: Salesforce Big Objects (unsupported automation, wrong-tool guidance, reporting limits). [rackwave.io](https://rackwave.io/help-center/article/salesforce-big-objects)
+[^10]: Dazeworks: Big Objects and org data storage limits (not counted against storage, `__b` suffix, feature support). [dazeworks.com](https://dazeworks.com/blog/big-objects-works-against-org-data-storage-limits-2)
+[^11]: Big Objects Implementation Guide (billion-record scale, FieldHistoryArchive, index cannot be edited after deployment, lookup fields). [resources.docs.salesforce.com](https://resources.docs.salesforce.com/latest/latest/en-us/sfdc/pdf/big_objects_guide.pdf)
+[^12]: Salesforce Big Objects Guide: view Big Object data in reports and dashboards (direct standard reporting not supported; Einstein Analytics; aggregate roll-up to reportable objects). [blog.anablock.com](https://blog.anablock.com/blog/salesforce-big-objects-guide)
