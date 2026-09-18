@@ -26,6 +26,8 @@ Audit logging is about reconstruction. If an agent made a decision that harmed s
 
 Retention is about time. Data protection law does not let you keep personal data forever, but audit requirements sometimes need records to survive for years. The design problem is reconciling the two. You will spend most of your compliance energy on that single tension.
 
+![The three controls that make an agent defensible: data residency answers where the bytes landed, audit logging records what the agent did per action, and retention puts a clock on the record](</diagrams/compliance-data-residency-audit-logging-retention/1-three-compliance-controls.png>)
+
 ## Data residency: where the data actually goes
 
 Data residency is the requirement that certain data be stored and processed in specific geographic locations, decided by the laws of the country where the data subject lives. It is easy to misunderstand, because the two big examples go in opposite directions.
@@ -35,6 +37,8 @@ The GDPR does not require data about EU residents to be stored inside the EU. Wh
 China's PIPL goes the other way. It generally requires personal data gathered from individuals in China to be stored within the country's borders, and it subjects cross-border transfers to strict limitations and security assessments. [^4] Same goal, opposite mechanism. The GDPR allows the data to move if you satisfy the conditions. PIPL keeps it home by default.
 
 Here is what that means for an agent you are deploying. "The cloud lets me pick an EU region" is the start of the answer, not the end. Every system that touches the data is a jurisdiction: the model provider that processes the prompt, the vector database that stores the embeddings, the trace store that keeps the observability records. If any one of those processes or stores data in a country the law does not allow, the choice of region on the front end does not save you. The practical habit is to inventory every data touchpoint in the agent's path and ask, for each one, where the bytes land and under what legal basis. Keeping data inside fewer jurisdictions also reduces exposure to AI-specific regulation, because fewer third parties and fewer cross-border flows touch the system. [^4]
+
+![GDPR and PIPL compared: the GDPR allows data to leave the EU under a legal mechanism such as adequacy, standard contractual clauses, or binding corporate rules, while PIPL keeps it home by default, and every touchpoint in the agent path is a jurisdiction of its own](</diagrams/compliance-data-residency-audit-logging-retention/2-gdpr-vs-pipl-touchpoints.png>)
 
 ## Audit logging: from observability to accountability
 
@@ -63,6 +67,8 @@ This is not abstract at Adroit. The Fortress runs Hermes agents, and the Hermes 
 A hook is a small handler that appends one JSON record per event to a log file, with a timestamp and the event's context: which session, which user, which tools ran on which iteration. [^5] That is the audit trail in its most basic and correct form: a per-action, time-ordered, append-only record of what the agent did. Outbound webhooks push signed lifecycle events to an external endpoint, which is how you get the record off the agent's machine and into a store that an investigator cannot reach by talking to the agent. [^5]
 
 Three choices make that working log into a compliance-grade trail. Write the record to an append-only or write-once store so the agent, or an attacker who compromises it, cannot rewrite its own history. Keep the payload lean, timestamps, event type, session id, tool names, model version, decision, and keep personal data out of it, so the record is defensible under data minimization. Attach a TTL or an archive job so the record follows the retention schedule instead of growing forever. The integration point matters too. Hermes can export traces, metrics, and logs to an external backend, which is how the observability stream from lesson 20 and the audit trail here flow into the same place. [^6]
+
+![An agent event stream turned into an audit trail: gateway hooks fire when the agent starts, on each iteration of the tool-calling loop, and when it finishes, a handler writes one timestamped JSON record per event to an append-only store, the trail is pushed to an external endpoint, and metadata is retained while the personal payload gets a short lease](</diagrams/compliance-data-residency-audit-logging-retention/3-auditable-trail.png>)
 
 ## The pitfalls to avoid
 
