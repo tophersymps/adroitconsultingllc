@@ -75,6 +75,27 @@ const DEFAULT_BITRATE = process.env.AUDIO_BITRATE || "48k";
 const BUCKET = "audio";
 
 /*
+ * Length-scaled TTS timeout (ADR-108). Kokoro-82M synthesizes roughly in real
+ * time; a rigid 120s kills a ~5.7k-word lesson at exactly 120s. Scale the
+ * subprocess timeout to the narration word count with a hard 15-min ceiling so
+ * a genuinely stuck engine still dies. baseMs covers engine/model load +
+ * first-chunk latency; perWordMs is ~2-3x measured realtime (~30-50ms/word).
+ */
+const TTS_TIMEOUT = {
+  baseMs: 30_000,
+  perWordMs: 90,
+  ceilingMs: 900_000, // 15 min hard cap: a real hang still dies
+};
+function ttsTimeoutMs(narration) {
+  const words = narration.trim().split(/\s+/).filter(Boolean).length;
+  return Math.min(
+    TTS_TIMEOUT.baseMs + words * TTS_TIMEOUT.perWordMs,
+    TTS_TIMEOUT.ceilingMs
+  );
+}
+
+
+/*
  * Input validation (CWE-78 shell injection + path traversal).
  *
  * `slug` is a FILENAME from content/blog/*.mdx, `voice` and `bitrate` come from
@@ -468,7 +489,11 @@ async function runLearn({ env, dualWrite, mdxToNarration }) {
         break;
       }
       const raw = fs.readFileSync(path.join(seriesDir, `${slug}.mdx`), "utf-8");
-      const narration = mdxToNarration(raw);
+      // Lesson mode (ADR-106/107): read only LEARNING content, cutting the
+      // hands-on Try It / Related Requirements / References sections and
+      // appending the knowledge-check transition. The quiz is a separate
+      // surface and stays excluded. The article path is untouched.
+      const narration = mdxToNarration(raw, { lesson: true });
       const storagePath = `learn/${series}/${slug}/${voice}.mp3`;
       if (!narration.trim()) {
         console.error(`ERROR ${series}/${slug}: empty narration`);
@@ -490,7 +515,7 @@ async function runLearn({ env, dualWrite, mdxToNarration }) {
         execFileSync(
           venvPython,
           [engine, "--text", narration, "--voice", voice, "--bitrate", bitrate, "--out", out, "--timing", timingPath],
-          { timeout: 120000, encoding: "utf-8" }
+          { timeout: ttsTimeoutMs(narration), encoding: "utf-8" }
         );
       } catch (e) {
         console.error(`ERROR ${series}/${slug}: TTS failed (${String(e.message).slice(0, 400)})`);
@@ -663,7 +688,7 @@ async function main() {
       execFileSync(
         venvPython,
         [engine, "--text", narration, "--voice", voice, "--bitrate", bitrate, "--out", out, "--timing", timingPath],
-        { timeout: 120000, encoding: "utf-8" }
+        { timeout: ttsTimeoutMs(narration), encoding: "utf-8" }
       );
     } catch (e) {
       console.error(`ERROR ${slug}: TTS failed (${String(e.message).slice(0, 400)})`);

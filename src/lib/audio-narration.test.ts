@@ -145,6 +145,161 @@ Most teams can trace their agent.
   });
 });
 
+describe("mdxToNarration lesson mode (ADR-106/107 smart narration)", () => {
+  const FULL_LESSON = `## Deep Dive
+Read this concept carefully.
+![A diagram of object permissions and CRUD system vs object profiles.](</diagrams/perms.png>)
+## Worked example
+The worked example explains it.
+## Configuration Walkthrough
+Configure these settings.
+## Exam Traps
+Watch out for the trap here.
+## Try It
+1. Open your sandbox.
+2. Create a custom object.
+3. Assign the permission set.
+## What's Next
+Next lesson covers sharing rules.
+## Related Requirements
+Requirement REQ-1 is listed here.
+Requirement REQ-2 is listed here.
+## References
+[^1]: A reference document, [ref.com](https://ref.com)`;
+
+  it("fixture contains every section the assertions rely on cutting or keeping", () => {
+    for (const h of [
+      "## Deep Dive",
+      "## Worked example",
+      "## Configuration Walkthrough",
+      "## Exam Traps",
+      "## Try It",
+      "## What's Next",
+      "## Related Requirements",
+      "## References",
+    ]) {
+      expect(FULL_LESSON).toContain(h);
+    }
+  });
+
+  it("reads learning content (Deep Dive, Worked example, Config, Exam Traps) and diagrams", () => {
+    const narration = mdxToNarration(FULL_LESSON, { lesson: true });
+    expect(narration).toContain("Section: Deep Dive.");
+    expect(narration).toContain("Read this concept carefully.");
+    expect(narration).toContain("Section: Worked example.");
+    expect(narration).toContain("The worked example explains it.");
+    expect(narration).toContain("Section: Configuration Walkthrough.");
+    expect(narration).toContain("Configure these settings.");
+    expect(narration).toContain("Section: Exam Traps.");
+    expect(narration).toContain("Watch out for the trap here.");
+    // all diagram descriptions are read (Diagram:<alt>.)
+    expect(narration).toContain(
+      "Diagram: A diagram of object permissions and CRUD system vs object profiles.",
+    );
+    expect(narration).not.toContain("</diagrams/perms.png>");
+  });
+
+  it("replaces the Try It body with one bridge line and does not read its steps", () => {
+    const narration = mdxToNarration(FULL_LESSON, { lesson: true });
+    expect(narration).toContain(
+      "This lesson includes a hands-on exercise you can do in your sandbox.",
+    );
+    // the step-by-step body must NOT be read
+    expect(narration).not.toContain("Open your sandbox.");
+    expect(narration).not.toContain("Create a custom object.");
+    expect(narration).not.toContain("Assign the permission set.");
+    // Section heading for Try It is not emitted as a section cue
+    expect(narration).not.toContain("Section: Try It.");
+    // exactly one bridge line regardless of how many steps
+    expect(narration.match(/hands-on exercise/g)).toHaveLength(1);
+  });
+
+  it("skips Related Requirements and References bodies (nothing emitted)", () => {
+    const narration = mdxToNarration(FULL_LESSON, { lesson: true });
+    expect(narration).not.toContain("Section: Related Requirements.");
+    expect(narration).not.toContain("Requirement REQ-1");
+    expect(narration).not.toContain("Requirement REQ-2");
+    expect(narration).not.toContain("Section: References.");
+    expect(narration).not.toContain("A reference document");
+    expect(narration).not.toContain("ref.com");
+  });
+
+  it("still reads What's Next as recap (and does not cut it)", () => {
+    const narration = mdxToNarration(FULL_LESSON, { lesson: true });
+    expect(narration).toContain("Section: What's Next.");
+    expect(narration).toContain("Next lesson covers sharing rules.");
+  });
+
+  it("matches a Try It subtitle variant (Try it: <X>)", () => {
+    const mdx = "## Deep Dive\nSome learning body.\n## Try it: create a record\n1. Click New.\n## What's Next\nRecap line.";
+    const narration = mdxToNarration(mdx, { lesson: true });
+    expect(narration).toContain(
+      "This lesson includes a hands-on exercise you can do in your sandbox.",
+    );
+    expect(narration).not.toContain("Click New.");
+    expect(narration).not.toContain("Section: Try it: create a record.");
+    // learning + What's Next survive
+    expect(narration).toContain("Section: Deep Dive.");
+    expect(narration).toContain("Section: What's Next.");
+  });
+
+  it("does NOT match near-miss headings that merely contain the words", () => {
+    // Anchored matcher: these must be read as learning, not cut.
+    const mdx =
+      "## Spotting invented references\nLearn to spot fake citations.\n## The try-it: run your own extraction loop\nInside this section you do real work.\n## What's Next\nRecap.";
+    const narration = mdxToNarration(mdx, { lesson: true });
+    expect(narration).toContain("Section: Spotting invented references.");
+    expect(narration).toContain("Learn to spot fake citations.");
+    expect(narration).toContain(
+      "Section: The try-it: run your own extraction loop.",
+    );
+    expect(narration).toContain("Inside this section you do real work.");
+  });
+
+  it("appends the KC transition exactly once as the final line", () => {
+    const narration = mdxToNarration(FULL_LESSON, { lesson: true });
+    const lines = narration.split("\n");
+    const kc =
+      "That's the lesson. When you're ready, return to the lesson page to complete the knowledge check and test what you've heard.";
+    expect(narration.match(/knowledge check/g)).toHaveLength(1);
+    expect(lines[lines.length - 1]).toBe(kc);
+  });
+
+  it("appends KC transition AFTER any Sources summary, as the last line", () => {
+    // If a lesson carries a trailing footnote def, its summary line must come
+    // before the KC transition (transition is always final).
+    const mdx =
+      "## Deep Dive\nBody text.[^1]\n[^1]: A citation doc.\n## Try It\nStep one.\n";
+    const narration = mdxToNarration(mdx, { lesson: true });
+    const last = narration.split("\n").reverse().join("\n");
+    expect(last.startsWith("That's the lesson.")).toBe(true);
+    expect(last.indexOf("Sources are listed at the end of the article.")).toBeGreaterThan(0);
+  });
+
+  it("does not append the KC transition when no learning content was emitted", () => {
+    const mdx = "## Try It\n1. Do a thing.\n## Related Requirements\nA req.";
+    const narration = mdxToNarration(mdx, { lesson: true });
+    // Degenerate interactive-only lesson: the bridge is spoken, but there is
+    // no learning content, so no KC hand-off pointing at a non-existent quiz.
+    expect(narration).not.toContain("knowledge check");
+    expect(narration).not.toContain("Do a thing.");
+    expect(narration).not.toContain("A req.");
+    expect(narration).toContain("hands-on exercise");
+  });
+
+  it("article mode is byte-for-byte unchanged from pre-refinement (regression guard)", () => {
+    const mdx =
+      "## The subsystem\nWe call an API with `maxRetries = 3`.\n![A bar chart](</diagrams/x.png>)\n## Try It\nThis is article body, not a lesson cut.\n";
+    const article = mdxToNarration(mdx); // lesson falsy
+    // Try It is read normally in article mode
+    expect(article).toContain("Section: Try It.");
+    expect(article).toContain("This is article body, not a lesson cut.");
+    expect(article).toContain("Diagram: A bar chart.");
+    // no KC transition appended in article mode
+    expect(article).not.toContain("knowledge check");
+  });
+});
+
 describe("flattenLine — clean-text narration (no \\n / html / bullet artifacts)", () => {
   it("drops bare code-fence lines (``` / ~~~ / with language tag)", () => {
     expect(flattenLine("```")).toBe("");

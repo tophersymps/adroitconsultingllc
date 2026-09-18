@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lesson Audio Refinements — Smart Narration + TTS Timeout Scaling</title>
+<style>
+  :root {
+    --primary: #1a1a2e;
+    --accent: #e94560;
+    --accent2: #0f3460;
+    --bg: #f8f9fa;
+    --card: #ffffff;
+    --text: #333333;
+    --muted: #6c757d;
+    --border: #dee2e6;
+    --success: #28a745;
+    --warning: #ffc107;
+    --danger: #dc3545;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 2rem; }
+
+  /* Header */
+  header { background: var(--primary); color: white; padding: 3rem 0 2rem; }
+  header h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.5rem; }
+  header .meta { color: rgba(255,255,255,0.7); font-size: 0.9rem; }
+  header .meta span { margin-right: 1.5rem; }
+  .badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .badge-adroit { background: var(--accent); color: white; }
+  .badge-fraimers { background: #6f42c1; color: white; }
+
+  /* Sections */
+  section { background: var(--card); border-radius: 12px; padding: 2rem; margin: 1.5rem 0; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  section h2 { font-size: 1.25rem; font-weight: 600; color: var(--primary); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent); }
+  section h3 { font-size: 1.1rem; font-weight: 600; color: var(--accent2); margin: 1.25rem 0 0.5rem; }
+  section h4 { font-size: 1rem; font-weight: 600; margin: 1rem 0 0.25rem; }
+
+  /* Content */
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.25rem; }
+
+  /* Cards */
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; margin: 1rem 0; }
+  .card { border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; background: var(--bg); }
+  .card h4 { color: var(--primary); margin-bottom: 0.5rem; }
+
+  /* Status indicators */
+  .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 0.5rem; }
+  .status-pass { background: var(--success); }
+  .status-fail { background: var(--danger); }
+  .status-warn { background: var(--warning); }
+  .status-pending { background: var(--muted); }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+  th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+  th { background: var(--primary); color: white; font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; }
+  tr:nth-child(even) { background: var(--bg); }
+
+  /* Tags */
+  .tag { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 500; margin: 0.15rem; }
+  .tag-p0 { background: #f8d7da; color: #721c24; }
+  .tag-p1 { background: #fff3cd; color: #856404; }
+  .tag-p2 { background: #d1ecf1; color: #0c5460; }
+  .tag-p3 { background: #e2e3e5; color: #383d41; }
+
+  /* Footer */
+  footer { text-align: center; padding: 2rem; color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--border); margin-top: 2rem; }
+  footer img { height: 24px; vertical-align: middle; margin-right: 0.5rem; }
+
+  /* Print */
+  @media print { header { background: var(--primary) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="container">
+    <div class="badge badge-adroit">Adroit Consulting</div>
+    <h1>Lesson Audio Refinements — Smart Narration + TTS Timeout Scaling</h1>
+    <div class="meta">
+      <span>📅 September 18, 2026</span>
+      <span>📋 Adroit.io — Learn / Atlas audio</span>
+      <span>👤 Brainiac (Web Architect)</span>
+      <span>📄 v1.0</span>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+<h2>1. Problem</h2>
+<p>The merged lesson-audio scaffolding (<code>feat/lesson-audio</code>) narrates lesson MDX using the same pure builder as articles. Two gaps:</p>
+<ol>
+<li><strong>Smart narration.</strong> <code>mdxToNarration</code> reads every section, including hands-on <code>Try It</code> steps a listener cannot perform, the <code>Related Requirements</code> list, and the <code>References</code> citation block. It never hands off to the existing knowledge check.</li>
+<li><strong>TTS timeout.</strong> <code>scripts/build-audio.js</code> hard-caps the Kokoro subprocess at a rigid 120s. Lessons reach ~5.7k words (measured max 5,713) and the engine is killed at exactly 120s.</li>
+</ol>
+
+<h2>2. Catalogue truth (verified across 240 lessons / 9 series)</h2>
+<p>Two structural families:</p>
+<table>
+<thead><tr><th>Family</th><th>Series</th><th>Count</th><th>Layout</th></tr></thead>
+<tbody>
+<tr><td>A &mdash; Atlas / cert trail</td><td>omni-studio-cert, salesforce-data-architect, salesforce-sharing-visibility-architect</td><td>54</td><td>Deep Dive &rarr; Worked example &rarr; Configuration Walkthrough &rarr; Exam Traps &rarr; Try It &rarr; What's Next &rarr; Related Requirements &rarr; References</td></tr>
+<tr><td>B &mdash; consultant / architect</td><td>agentic-ai, ai-at-work, hermes-consultant (+intermediate, +advanced), salesforce-architect</td><td>186</td><td>varied concept sections &rarr; Worked example &rarr; The pitfall(s) &rarr; Try It &rarr; What's Next</td></tr>
+</tbody>
+</table>
+<p>Key asymmetry: the sections to <strong>cut</strong> are a tiny closed set (<code>Try It</code>, <code>Related Requirements</code>, <code>References</code>); the sections to <strong>keep</strong> are hundreds of varied learning headings. So we invert &mdash; an interactive-heading <em>allowlist</em>, treating everything else as learning by default.</p>
+
+<h2>3. Design: smart narration</h2>
+<p>Extend the pure <code>mdxToNarration</code> with opt-in <code>lesson</code> mode so the article path is byte-for-byte unchanged. New <code>NarrationOptions</code> fields: <code>lesson?</code>, <code>tryItBridge?</code>, <code>knowledgeCheckTransition?</code>.</p>
+<table>
+<thead><tr><th>Heading (normalized)</th><th>Action in lesson mode</th></tr></thead>
+<tbody>
+<tr><td><code>try it</code> / <code>try it: &lt;subtitle&gt;</code></td><td>Emit <code>tryItBridge</code> once, skip section body (incl. nested steps)</td></tr>
+<tr><td><code>related requirements</code></td><td>Skip section body, emit nothing</td></tr>
+<tr><td><code>references</code></td><td>Skip section body, emit nothing</td></tr>
+<tr><td><code>what's next</code></td><td>READ normally (recap + preview)</td></tr>
+<tr><td>anything else</td><td>READ normally (learning content)</td></tr>
+</tbody>
+</table>
+<p><strong>Closing transition</strong> (appended once as the final line, lesson only): &ldquo;That's the lesson. When you're ready, return to the lesson page to complete the knowledge check and test what you've heard.&rdquo; Draft for Chris; no em-dashes.</p>
+
+<h2>4. Design: TTS timeout scaling</h2>
+<p>Replace the rigid 120s with a length-scaled timeout from the narration word count:</p>
+<pre>ttsTimeoutMs(narration) = min( baseMs + words * perWordMs, ceilingMs )
+baseMs = 30_000   (engine/model load + first-chunk)
+perWordMs = 90    (~2-3x measured Kokoro realtime)
+ceilingMs = 900_000 (15 min hard cap = hang protection retained)</pre>
+<p>5,713-word max lesson &rarr; ~9 min (well inside the 15-min ceiling and far past the 120s wall). A pathological 10k-word input caps at 15 min instead of failing outright.</p>
+
+<h2>5. Data flow</h2>
+<pre><code>Lesson MDX &rarr; mdxToNarration(raw,{lesson:true})
+  &rarr; learning prose (Try It &rarr; bridge; KC transition appended)
+  &rarr; word count &rarr; ttsTimeoutMs &rarr; Kokoro execFileSync(timeout)
+  &rarr; learn/&lt;series&gt;/&lt;slug&gt;/&lt;voice&gt;.mp3 + .timing.json
+  &rarr; R2 (verify by re-read) + Supabase dual-write &rarr; src/data/lesson-audio.ts</code></pre>
+<p>Playback unchanged: authed <code>GET /api/audio/[slug]</code>, fail-closed 401/404, members-only access gate. No public/signed URL.</p>
+
+<h2>6. ADRs</h2>
+<table>
+<thead><tr><th>ID</th><th>Decision</th><th>Alternatives</th><th>Consequences</th></tr></thead>
+<tbody>
+<tr><td>ADR-106</td><td>Interactive-heading ALLOWLIST over a learning-heading blacklist</td><td>Blacklist all learning headings; paragraph heuristics</td><td>Only the finite interactive set is enumerated; survives all 240 lessons + future concept variation; one code path</td></tr>
+<tr><td>ADR-107</td><td>Read <code>What's Next</code>; append KC transition last (lesson mode)</td><td>Cut What's Next too; mid-content injection</td><td>Recap + clean terminal KC hand-off in both families</td></tr>
+<tr><td>ADR-108</td><td>Length-scaled TTS timeout (base + words*rate, 15-min ceiling) for both synthesizers</td><td>Keep 120s (kills lessons); remove timeout (no hang guard)</td><td>Long lessons never wall; real hangs still killed by ceiling</td></tr>
+</tbody>
+</table>
+<p>ADR-105 is revised: &ldquo;reuse mdxToNarration unchanged&rdquo; becomes &ldquo;reuse mdxToNarration with an opt-in lesson option&rdquo; &mdash; still one pure function, no fork.</p>
+
+<h2>7. Implementation steps for Steel</h2>
+<ol>
+<li><code>src/lib/audio-narration.ts</code>: add <code>lesson?</code>/<code>tryItBridge?</code>/<code>knowledgeCheckTransition?</code> + defaults; gate section routing on normalized heading text in lesson mode; track skip level so nested <code>###</code> steps inside Try It are skipped; append KC transition once.</li>
+<li><code>src/lib/audio/contracts.ts</code>: mirror the three new fields.</li>
+<li><code>scripts/build-audio.js</code>: add <code>ttsTimeoutMs</code>; <code>runLearn</code> calls <code>mdxToNarration(raw,{lesson:true})</code>; replace both <code>timeout: 120000</code> sites with the scaled value.</li>
+<li>Tests in <code>src/lib/audio-narration.test.ts</code>: Try It &rarr; bridge; Related Requirements/References not read; Exam Traps/What's Next read; subtitle variant matched; KC transition once; article mode regression guard; no em-dashes.</li>
+</ol>
+
+<h2>8. Acceptance criteria</h2>
+<ul>
+<li>Vitest audio/atlas suites pass (52+38); <code>tsc --noEmit</code> clean; build + lint pass.</li>
+<li>Real lesson MDX (day-01-p-1a, 5 diagrams + Try It + Exam Traps): learning read, Try It steps not read (one bridge), diagrams read, Related Requirements/References not read, ends with KC transition, zero leaked syntax.</li>
+<li>The max ~5.7k-word lesson synthesizes without the 120s wall.</li>
+<li>Committed to <code>feat/lesson-audio-refinements</code> only; not pushed to main.</li>
+</ul>
+
+<h2>9. Handoff</h2>
+<p><strong>Steel</strong> implements and verifies. <strong>Kara</strong> &mdash; no new visual design (audio-only; player unchanged). <strong>Chris</strong> reviews the two spoken-copy drafts. <strong>QA (Zod)</strong> on completion.</p>
+</main>
+
+<footer>
+  <div class="container">
+    <p><strong>Fortress of Solitude Consulting</strong> — a division of Adroit Consulting Group</p>
+    <p>Confidential — prepared for Chris (product)</p>
+  </div>
+</footer>
+</body>
+</html>

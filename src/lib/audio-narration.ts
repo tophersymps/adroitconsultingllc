@@ -20,6 +20,14 @@
  * SPDX note: an optional per-diagram override is supported. If a line
  * immediately following an image starts with `description:: `, the narration
  * reads that text instead of the bare alt — for diagrams whose alt is terse.
+ *
+ * Lesson mode (ADR-106/107, opt-in via `opts.lesson`): the article path is
+ * byte-for-byte unchanged when `lesson` is falsy. When truthy, section
+ * routing is gated on an interactive-heading ALLOWLIST — `Try It` (replaced
+ * by a single spoken bridge line), `Related Requirements` and `References`
+ * (skipped, nothing emitted) — and the knowledge-check transition is appended
+ * once as the final line. Everything else (Deep Dive, Worked example, Config
+ * walkthrough, Exam Traps, What's Next, ...) is read as learning content.
  */
 
 /** Diagram-source resolver: prefer an explicit description:: override, else alt. */
@@ -28,6 +36,20 @@ export interface NarrationOverrides {
   leadIn?: (alt: string) => string;
   /** Optional diag-resolver extension point (contract NarrationOptions). */
   diagramSource?: (src: SpokenDiagramInput) => string;
+  /**
+   * Lesson-aware section routing (ADR-106/107). When truthy, the narration
+   * reads only LEARNING content: the interactive sections a listener cannot
+   * act on (`Try It`, `Related Requirements`, `References`) are cut — `Try
+   * It` is replaced by a single spoken bridge line, the other two emit
+   * nothing — and the knowledge-check transition is appended once as the
+   * final line. `What's Next` is still read (recap + preview). Articles omit
+   * this; the article path is byte-for-byte unchanged when it is falsy.
+   */
+  lesson?: boolean;
+  /** Spoken line that replaces the `Try It` section body in lesson mode. */
+  tryItBridge?: string;
+  /** Closing knowledge-check hand-off, appended last in lesson mode. */
+  knowledgeCheckTransition?: string;
 }
 
 /** A figure's spoken-diagram source (mirrors contract SpokenDiagramSource). */
@@ -38,6 +60,29 @@ export interface SpokenDiagramInput {
 }
 
 const defaultLeadIn = (alt: string) => `Diagram: ${alt}.`;
+
+/* Lesson-mode defaults (ADR-106/107). Em-dash-free spoken copy. */
+const DEFAULT_TRY_IT_BRIDGE =
+  "This lesson includes a hands-on exercise you can do in your sandbox.";
+const DEFAULT_KC_TRANSITION =
+  "That's the lesson. When you're ready, return to the lesson page to complete the knowledge check and test what you've heard.";
+
+/**
+ * Interactive-heading classifier for lesson mode (ADR-106). The interactive
+ * set a listener cannot act on is tiny and closed: `Try It` (with an optional
+ * `: <subtitle>` suffix), `Related Requirements`, and `References`. Matching
+ * is on the NORMALIZED heading text (trim + lowercase + collapse whitespace)
+ * and anchored to the heading start, so near-miss headings that merely
+ * contain the words ("Spotting invented references", "The try-it: run your
+ * own extraction loop") do NOT match. Everything else is learning by default.
+ */
+const isTryIt = (normalized: string) => /^try it([:\s]|$)/.test(normalized);
+const isExactInteractive = (normalized: string) =>
+  normalized === "related requirements" || normalized === "references";
+
+/** Normalize a heading's text for the interactive classifier. */
+const normalizeHeading = (text: string): string =>
+  text.trim().toLowerCase().replace(/\s+/g, " ");
 
 /**
  * Strip a single trailing sentence-ending punctuation (`.`, `!`, `?`) from a
@@ -133,10 +178,69 @@ export function mdxToNarration(
   // run of footnote *definition* lines `[^n]: ...`). Speak the summary once.
   let sourcesSpoken = false;
 
+  // Lesson mode (ADR-106/107): while inside an interactive section (Try It /
+  // Related Requirements / References), skip every line until a heading at
+  // level <= the interactive heading's level arrives, then route that heading
+  // normally (so `What's Next` is read). skipLevel === 0 means "not skipping".
+  const lesson = Boolean(opts.lesson);
+  const tryItBridge = opts.tryItBridge ?? DEFAULT_TRY_IT_BRIDGE;
+  const kcTransition = opts.knowledgeCheckTransition ?? DEFAULT_KC_TRANSITION;
+  let skipLevel = 0;
+  let tryItBridged = false;
+  // True once any actual LEARNING line (heading, diagram, body prose) is
+  // emitted. The Try It bridge alone is not lesson content, so a degenerate
+  // interactive-only lesson must NOT get a KC hand-off pointing at a quiz
+  // that never followed (ADR-107: transition appended only if learning was).
+  let learningEmitted = false;
+
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i];
     const trimmed = raw.trim();
     if (!trimmed) continue;
+
+    // Heading: # ... -> "Section: ...." (also the section-boundary signal that
+    // clears lesson-mode skipping).
+    const heading = /^(#{1,6})\s+(.+)$/.exec(trimmed);
+    if (heading) {
+      const level = heading[1].length;
+      const text = flattenLine(heading[2]);
+      const normalized = normalizeHeading(heading[2]);
+
+      // A heading at level <= the interactive section's level ends the skip.
+      if (skipLevel > 0 && level <= skipLevel) skipLevel = 0;
+
+      if (lesson && skipLevel === 0) {
+        if (isTryIt(normalized)) {
+          // Interactive: replace the whole section body with one bridge line.
+          skipLevel = level;
+          if (!tryItBridged) {
+            tryItBridged = true;
+            out.push(tryItBridge);
+          }
+          continue;
+        }
+        if (isExactInteractive(normalized)) {
+          // Interactive: skip the section body, emit nothing.
+          skipLevel = level;
+          continue;
+        }
+      }
+
+      if (text && !/^sources$/i.test(text)) {
+        out.push(`Section: ${text}.`);
+        learningEmitted = lesson;
+      }
+      else if (/^sources$/i.test(text) && !sourcesSpoken) {
+        // trailing Sources citation list — don't read URLs verbatim
+        sourcesSpoken = true;
+        out.push("Sources are listed at the end of the article.");
+      }
+      continue;
+    }
+
+    // Inside a skipped interactive section: drop paragraphs, diagrams,
+    // footnote definitions, and deeper headings until the boundary above.
+    if (skipLevel > 0) continue;
 
     // Diagram image line: ![alt](<path>)
     const img = /^!\[([^\]]*)\]\(([^)]+)\)/.exec(trimmed);
@@ -150,19 +254,9 @@ export function mdxToNarration(
         i += 1; // swallow the description line
       }
       const text = resolveDiagram({ alt, description });
-      if (text) out.push(text);
-      continue;
-    }
-
-    // Heading: # ... -> "Section: ...."
-    const heading = /^#{1,6}\s+(.+)$/.exec(trimmed);
-    if (heading) {
-      const text = flattenLine(heading[1]);
-      if (text && !/^sources$/i.test(text)) out.push(`Section: ${text}.`);
-      else if (/^sources$/i.test(text) && !sourcesSpoken) {
-        // trailing Sources citation list — don't read URLs verbatim
-        sourcesSpoken = true;
-        out.push("Sources are listed at the end of the article.");
+      if (text) {
+        out.push(text);
+        if (lesson) learningEmitted = true;
       }
       continue;
     }
@@ -183,7 +277,12 @@ export function mdxToNarration(
     if (trimmed.startsWith("description::")) continue; // stray override line
 
     out.push(flattenLine(trimmed));
+    if (lesson) learningEmitted = true;
   }
+
+  // Lesson mode: append the knowledge-check transition once, as the final
+  // line, only if learning content was actually emitted (ADR-107).
+  if (lesson && learningEmitted) out.push(kcTransition);
 
   return out.filter(Boolean).join("\n");
 }
