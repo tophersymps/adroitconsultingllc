@@ -116,6 +116,65 @@ export interface SegmentTiming {
 export type ArticleAudioList = readonly ArticleAudio[];
 
 /* ------------------------------------------------------------------ */
+/*  Lesson audio (Atlas / Learn tab) - parallel module, ADR-101         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Object key of one lesson narration, relative to a store root.
+ * Scheme: learn/<series>/<slug>/<voice>.mp3
+ * (example: learn/salesforce-sharing-visibility-architect/day-01-p-1a-object-permissions-crud-system-vs-object-profiles/af_heart.mp3)
+ * The series prefix is REQUIRED because the same lesson slug can appear in
+ * multiple series (e.g. `framing-value-and-roi` exists in `hermes-consultant`
+ * and `hermes-consultant-intermediate`). The SAME key resolves in both stores
+ * (Supabase source bucket + R2), exactly like the `blog/` scheme.
+ */
+export type LessonAudioStorageKey = `learn/${string}/${string}/${string}.mp3`;
+
+/**
+ * Object key of one lesson's segment-timing manifest, relative to a store
+ * root. Scheme: learn/<series>/<slug>/<voice>.timing.json
+ * (example: learn/salesforce-sharing-visibility-architect/day-01-p-1a-object-permissions-crud-system-vs-object-profiles/af_heart.timing.json).
+ * Mirrors AudioTimingStorageKey for the lesson key space.
+ */
+export type LessonAudioTimingStorageKey = `learn/${string}/${string}/${string}.timing.json`;
+
+/**
+ * A single narrated lesson. Generated as a static array by
+ * scripts/build-audio.js --learn and emitted to src/data/lesson-audio.ts:
+ *
+ *     export const lessonAudio: LessonAudio[] = [...];
+ *
+ * The lesson page resolves the player via
+ * lessonAudio.find((a) => a.series === series && a.slug === slug).
+ * `storagePath` is the private-store key, used ONLY by the /api/audio route
+ * when reading the object server-side. No public URL and no signed URL is ever
+ * constructed from it.
+ */
+export interface LessonAudio {
+  /** Series slug - content/learn/<series>/ dir name. */
+  series: string;
+  /** Lesson slug - MDX filename under content/learn/<series>/. */
+  slug: string;
+  /** Kokoro voice id. Single narrator; DEFAULT_VOICE for the pilot. */
+  voice: string;
+  /** Object key of the narration: learn/<series>/<slug>/<voice>.mp3 (same key in the Supabase source bucket and in R2). */
+  storagePath: LessonAudioStorageKey;
+  /**
+   * Optional object key of the segment-timing manifest (Tier C exact
+   * paragraph scroll-sync): learn/<series>/<slug>/<voice>.timing.json.
+   * Absent for lessons generated before timing capture landed; the client
+   * degrades gracefully (no Follow-along) when it is missing. Like
+   * storagePath it is a private-store key ONLY - never serialized to the
+   * client; the manifest is read from R2 and served by the authed
+   * GET /api/audio/<slug>/timings route.
+   */
+  timingsStoragePath?: LessonAudioTimingStorageKey;
+}
+
+/** Compile-time guard: every lesson audio entry must resolve to a private-bucket key. */
+export type LessonAudioList = readonly LessonAudio[];
+
+/* ------------------------------------------------------------------ */
 /*  GET /api/audio/[slug] route contract                               */
 /* ------------------------------------------------------------------ */
 

@@ -20,6 +20,7 @@
  */
 import { NextRequest } from "next/server";
 import { articleAudio } from "@/data/audio";
+import { lessonAudio } from "@/data/lesson-audio";
 import { type AudioRouteContext } from "@/lib/audio/contracts";
 import { getR2Object } from "@/lib/r2/client";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
@@ -42,8 +43,11 @@ export async function GET(req: NextRequest, context: AudioRouteContext) {
     } = await supabase.auth.getUser();
     if (!user) return new Response(null, { status: 401 });
 
-    // 2. Unknown slug -> 404.
-    const entry = articleAudio.find((a) => a.slug === slug);
+    // 2. Unknown slug -> 404. Two-space resolution (ADR-103): articleAudio
+    //    first, then lessonAudio (lesson slug is unique across the catalogue).
+    const entry =
+      articleAudio.find((a) => a.slug === slug) ??
+      lessonAudio.find((a) => a.slug === slug);
     if (!entry) return new Response(null, { status: 404 });
 
     // 3. No timings manifest on this entry (pre-Tier-C generation) -> 404.

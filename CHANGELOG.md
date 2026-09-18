@@ -4,6 +4,16 @@ All notable changes to the Adroit Consulting Blog project will be documented in 
 
 ## [Unreleased]
 
+### Lesson audio scaffolding on feat/lesson-audio (t_982d9989)
+
+**What** - Added the lesson-audio scaffolding on the `feat/lesson-audio` branch (NOT merged to main; the backfill cron runs later, after the diagram retrofit). A parallel `LessonAudio` module (ADR-101) with a `learn/<series>/<slug>/` storage prefix (ADR-102): new contract types in `src/lib/audio/contracts.ts`, a generated `src/data/lesson-audio.ts` (starts empty), a `--learn` mode in `scripts/build-audio.js` (with `assertSafeSeries` allowlist and a merge keyed on series/slug/voice), two-space resolution in `GET /api/audio/[slug]` and its `/timings` twin (ADR-103), and the `AudioPlayerLazy` wired into the atlas lesson page gated on `(series, slug)` (ADR-104). The narration builder `mdxToNarration` is reused unchanged (ADR-105) - verified on a real 5-diagram lesson: 106 lines, 5 Diagram cues, 16 Section cues, 0 leaked syntax.
+
+**Why** - Extend the proven article-audio feature to the Atlas (Learn) tab so each narrated lesson gets the same single-narrator (`af_heart`) auth-gated player. A parallel module keeps `ArticleAudio.slug`/`AudioStorageKey` invariants intact and keeps the lesson backfill merge independent of the article backfill cron.
+
+**Verified** - `npx vitest run src/lib/audio-narration.test.ts src/lib/audio-emit.test.ts src/app/api/audio` (52 tests) and `src/app/atlas` + audio lib tests (38 tests) all pass; `npx tsc --noEmit` exits 0. Learn-mode emitter exercised in a throwaway sandbox (metadata-only): emits all lessons, scopes to one series without dropping others, rejects a hostile series name, and does not treat the next flag as a series value. No em-dashes in any new prose.
+
+**Known Issues** - (1) `src/data/lesson-audio.ts` is empty scaffolding; the lesson-audio backfill cron (post diagram retrofit) populates it. (2) The lesson page player is gated on `lessonAudio.find((a) => a.series === series && a.slug === slug)`; until the backfill runs, no lesson renders a player. (3) Committed to `feat/lesson-audio` only; main is untouched.
+
 ### Perf: the `next-build` coordinator RSS is not cap-able by build config (measured) — off-box build is the remaining lever (t_67209e0d)
 
 **What** - No functional change. Investigated the MEDIUM finding from the perf review of `e0d35e7` (t_e8566dd9): a cold build still peaks at ~2.7-2.9 GB tree RSS against t_cb011d26's stated ~0.8 GB target, because the single `next-build` coordinator (~1.5-1.6 GB) is not governed by `experimental.cpus`. Five candidate levers were applied one at a time to a **fresh cold `.next`** and measured; **none reduced the peak**, so none was shipped (the card's own rule: do not force a change that merely moves the peak). The only durable artifact is a comment block inside the existing `experimental` block in `next.config.ts` recording the measured verdicts next to `cpus: 4` (additive; no second `experimental` block).

@@ -5,6 +5,8 @@
  * mocked R2 reader (manifest bytes). Asserts the 200/401/404 matrix and locks
  * the DoD-4 contract that the manifest is served as JSON from the PRIVATE R2
  * bucket via the entry's timingsStoragePath — never a public or signed URL.
+ * Also locks the two-space resolution (ADR-103): a lesson slug resolves
+ * through lessonAudio to a learn/ timing key.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
@@ -62,6 +64,27 @@ vi.mock("@/data/audio", () => ({
   },
 }));
 
+// A lesson slug is not in articleAudio, so it must resolve through lessonAudio
+// (ADR-103 two-space resolution). lessonAudio starts empty in the scaffolding;
+// this test seeds a fake entry to prove the route falls through to the lesson
+// key space.
+const lessonSlug = "day-01-p-1a-object-permissions-crud-system-vs-object-profiles";
+const lessonTimingsKey = "learn/salesforce-sharing-visibility-architect/day-01-p-1a-object-permissions-crud-system-vs-object-profiles/af_heart.timing.json";
+const toyLessonAudio = [
+  {
+    series: "salesforce-sharing-visibility-architect",
+    slug: lessonSlug,
+    voice: "af_heart",
+    storagePath: "learn/salesforce-sharing-visibility-architect/day-01-p-1a-object-permissions-crud-system-vs-object-profiles/af_heart.mp3",
+    timingsStoragePath: lessonTimingsKey,
+  },
+];
+vi.mock("@/data/lesson-audio", () => ({
+  get lessonAudio() {
+    return toyLessonAudio;
+  },
+}));
+
 function makeGet(slug: string): NextRequest {
   return new NextRequest(`http://localhost:3000/api/audio/${slug}/timings`, {
     method: "GET",
@@ -74,6 +97,7 @@ describe("GET /api/audio/[slug]/timings", () => {
     objectAvailable = true;
     r2Failure = null;
     hasTimingsPath = true;
+    manifestBody = null;
     requestedKeys = [];
     vi.clearAllMocks();
   });
@@ -163,5 +187,17 @@ describe("GET /api/audio/[slug]/timings", () => {
     expect(body).not.toContain(TIMINGS_KEY);
     expect(TIMINGS_KEY).toMatch(/^blog\/.+\/.+\.timing\.json$/);
     expect(res.headers.get("Location")).toBeNull();
+  });
+
+  it("resolves a lesson slug through lessonAudio and serves its learn/ timing manifest (ADR-103)", async () => {
+    const res = await GET(makeGet(lessonSlug), {
+      params: Promise.resolve({ slug: lessonSlug }),
+    });
+    expect(res.status).toBe(200);
+    const body = JSON.parse(await res.text());
+    expect(Array.isArray(body.segments)).toBe(true);
+    // the manifest is read from R2 by its learn/ private key, server-side
+    expect(requestedKeys).toEqual([lessonTimingsKey]);
+    expect(lessonTimingsKey).toMatch(/^learn\/.+\/.+\/.+\.timing\.json$/);
   });
 });

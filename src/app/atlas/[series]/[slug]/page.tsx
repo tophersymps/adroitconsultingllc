@@ -26,6 +26,8 @@ import { getQuizForLesson } from "@/lib/quiz";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import MDXArticle from "@/components/MDX/MDXArticle";
 import Paywall from "@/components/Catalog/Paywall";
+import { AudioPlayerLazy } from "@/components/BlogPost/AudioPlayerLazy";
+import { lessonAudio } from "@/data/lesson-audio";
 import { accessSeam, getAccessUserId, getCourseRowBySlug } from "@/lib/access";
 import { buildPaywallView } from "@/lib/paywall";
 import { loadSeriesConstellation } from "@/lib/sky-server";
@@ -75,6 +77,13 @@ export default async function LessonPage({ params }: Props) {
   const mdxBody = linkifySourceCitations(stripMDXFrontmatter(mdxContent));
 
   const lessons = getLessonsForSeries(series);
+
+  // A narrated entry for this lesson, resolved from the static (build-time)
+  // generated module - gated on (series, slug) because the same lesson slug can
+  // appear in multiple series (ADR-102). No player when no audio entry.
+  const audio = lessonAudio.find(
+    (a) => a.series === series && a.slug === slug,
+  );
 
   // Access seam gate (ADR-201) — DB-backed status + entitlements. not-launched
   // → 404; paywall → render the Paywall instead of content (AC-3).
@@ -232,6 +241,18 @@ export default async function LessonPage({ params }: Props) {
             </div>
           </div>
         </div>
+
+        {/* Lesson audio - auth-gated player (locked card for logged-out).
+            Gated on `audio` so the AudioPlayer client JS chunk + its useAuth()
+            session fetch are NOT shipped/run on lessons without a narration.
+            Mirrors the article page's sticky placement (sticky top-16 z-40,
+            docked just below the site header). The lesson slug is unique
+            across the catalogue, so the player fetches /api/audio/<slug>. */}
+        {audio && (
+          <div className="sticky top-16 z-40 max-w-[920px] mx-auto px-6 my-6">
+            <AudioPlayerLazy slug={slug} hasAudio />
+          </div>
+        )}
 
         {/* Article Body — rendered from MDX content */}
         <article className="article-body max-w-[720px] mx-auto px-6 pb-16">
