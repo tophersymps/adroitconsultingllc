@@ -1,0 +1,145 @@
+---
+title: "Lesson 23: Quality Gates and Review: Who Checks the Work, and What They Check For"
+slug: quality-gates-and-review
+series: "hermes-consultant"
+lesson: 23
+excerpt: "A working agent is not a checked agent. This lesson covers the delivery craft of review: why the builder cannot be the checker, how to write acceptance criteria a reviewer can actually test, how a verdict routes work back to the implementer instead of parking it, and how to build gates that fail loudly on the work nobody is watching."
+date: "September 18, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [AI Agents, Consulting, LLMs]
+---
+
+# Lesson 23: Quality Gates and Review: Who Checks the Work, and What They Check For
+
+Lesson 22 ended with a system you can describe in three sentences: it works, you can see whether it is still working, and you know what it costs. Those three sentences are exactly the ones that get a consultant into trouble, because every one of them is a claim about the system, and none of them is a claim about a specific piece of work someone will read.
+
+Consider the shape of the problem. The intake agent answers a client's question with a confident paragraph. The weekly report renders a clean table. The digest arrives Monday at seven with no error in the log. Everything in that list passed the checks from the last four lessons: the tools fired, the cost stayed in budget, the observability tripwire never tripped. And the report still says forty-one open tickets while the data service says forty-four. Nothing failed. Nobody checked.
+
+This lesson is about the layer that catches that. It is the quality gate, and it is where the series stops being about making an agent run and starts being about running a delivery.
+
+## Define the terms: gate, criteria, reviewer, verdict
+
+A **quality gate** is a checkpoint between finished and delivered where work is compared against stated criteria and can be refused. Two properties make it a gate instead of a hope. It can fail, and it is cheap enough to run every single time. Anything that always passes is a formality, and a formality is worse than no gate because it produces the feeling of having checked.
+
+**Acceptance criteria** are the written statement of what done means, specific enough that a stranger can test it. They belong to whoever scoped the work, and they exist before the work starts. The reason to write them down is not bureaucracy. It is that a criterion living in the builder's head cannot be checked by anyone else, including the builder six days later.
+
+The **reviewer** is someone with the context to judge the work and no stake in the claim that it is right. The second half of that sentence is the hard part.
+
+A **verdict** is a routable decision, not an opinion. A pass, or a list of concrete changes. If the reviewer's output cannot be handed to a worker and acted on, the review produced a comment, not a verdict.
+
+There is one more term worth naming because it explains why gates exist at all. **Builder blindness** is the gap between what you meant to build and what you built. The author of an artifact reads the artifact as intended, filling in the missing step from memory. Every review process in every industry exists because that gap is universal, and because the person least able to see it is the person closest to the work.
+
+## Who checks: never the builder
+
+Independence is not a formality of org charts. It is a context property. A reviewer who shares the builder's session, memory, and assumptions will read the artifact the same way the builder did and miss the same thing.
+
+Hermes makes this concrete in a way that transfers to any platform. A profile is a separate home directory with its own config, credentials, personality, memory, sessions, skills, and cron jobs. The docs are blunt about why two agent processes must never share one home: both write memory automatically, and each loads the other's writes into its system prompt at session start, so two writers compound each other's state until it stops being anything you configured. [^1] That warning is the whole argument for an independent reviewer, stated as a filesystem rule. Shared context produces shared blind spots.
+
+So the reviewer is a separate profile. It does not need a different model or a bigger brain. It needs a different job description and a different context at the moment it reads the work. A reviewer profile that has never seen the builder's reasoning is in a better position to judge the artifact than one that carries the reasoning in its memory.
+
+The reviewer also needs the right checklist, and the checklist does not have to live in the reviewer's profile. A task can carry skills of its own, attached at creation, so a review card can spawn with an audit checklist the reviewer profile does not otherwise hold. The documented example is a card whose assignee needs a security audit and a code review, created with those two skills attached rather than editing the profile. [^2] That is the consulting move: the standard lives with the work, so a reviewer can be assembled for one job and does not accumulate every discipline the client might one day need.
+
+For a solo consultant with one agent, independence gets harder and matters more. The reviewer is still a separate run: a fresh session whose context contains the acceptance criteria, the artifact, and the evidence, and does not contain the story of how the work was made. That is a weaker form of independence than a different agent, and it is far stronger than asking the builder whether it did a good job.
+
+## What they check for: artifacts against criteria, decisions against intent
+
+Two kinds of review happen in a delivery, and confusing them produces both rubber stamps and endless arguments.
+
+**Artifact review** asks whether the output matches the acceptance criteria. The count in the table matches the count in the source. The file opens. The report arrived on time. Every client question got an answer. This kind of review is mechanical, and mechanical review should be automated, because a human doing arithmetic on a Friday is a more expensive and less reliable check than a three-line script.
+
+**Decision review** asks whether the approach was right. Was the escalation threshold set where the client's actual risk sits? Is the schema going to survive the second use case? Should this job have been an agent at all, or a script? Judgment does not reduce to a test, and this is where a human reviewer earns their place.
+
+The trap is a delivery where every gate checks artifacts. That system reliably produces agents that do the wrong thing correctly, on time, within budget. The artifact passes because the artifact was never the problem.
+
+For either kind of review to work, the criteria have to be testable. Hermes gives a sharp illustration of the cost of vague criteria in goal mode, where a worker loops until an auxiliary judge agrees the work is done. The judge compares the worker's output against the card's title and body, and the docs treat those fields as the acceptance criteria. [^3] Write a body of "make the docs good" and you have built a judge with no standard, so it approves whatever it reads. Write a body that names the pages, the language, and the link check, and the same judge becomes a real gate. The same rule governs a client deliverable. "The digest arrives Monday at seven, contains the counts table, and reports no errors" is testable. "A high quality digest" is a mood.
+
+## How review works as a first-class state
+
+A quality gate that lives in a chat thread disappears the moment the conversation ends. A gate needs a place to sit, and in Hermes it is a board status: a task moves through triage, todo, ready, running, blocked, review, done, and archived, and review is one of them. [^4] The card physically sits in a column until a verdict moves it. That visibility is most of the value. You can open the board and see what is waiting on a check.
+
+The full loop, from the same documentation, is worth walking because the routing is the part consultants get wrong:
+
+1. The builder finishes and calls `kanban_request_review` with a summary and optional metadata, naming an optional reviewer profile. The same card enters review and the implementation run closes with the outcome `review_requested`. Requesting review is not a failure state and it is not a block. [^4]
+2. The reviewer reads the task, inspects the evidence and the candidate, and then returns a verdict in one of two directions. `kanban_request_changes` with a reason closes the review run as `changes_requested` and routes the card back to the original implementer in ready, without touching block-loop accounting. `kanban_complete` closes it as passed. [^4]
+3. The run history then reads `review_requested`, `changes_requested`, `review_requested`, `completed`, each attempt with its own actor, summary, metadata, and outcome. The second attempt can see exactly what the reviewer rejected, and the final approval stays auditable. [^5]
+4. A block is reserved for a real external escalation: missing access, a product decision, unavailable infrastructure. The documentation says this explicitly, and it matters because using block for ordinary rejection burns the signal. Once the blocked column contains rejected drafts, nobody reads it as a call for help, and the card also enters the block-recurrence path that eventually dumps looping work into triage.
+
+Notice what the routing achieves commercially. A rejection has a destination: back to the implementer with a reason attached. A reviewer who cannot route work, only comment on it, turns every rejection into a negotiation.
+
+Two configuration details decide what kind of gate you are running. Review dispatch is on by default, and when a review is dispatched the assigned profile spawns with a bundled review skill; turning it off gives you a human-only review board. [^4] And board transitions fire hooks, `kanban_task_completed` and `kanban_task_blocked` among them, each carrying the task id and profile name, fired after the state change commits so a handler always sees durable state. [^6] That is how a gate reaches a person. A gate nobody gets told about is a gate that fails into a board nobody opened.
+
+## The evidence that makes review cheap
+
+A reviewer's scarcest resource is attention. Every handoff that arrives without evidence spends it on reconstruction.
+
+The convention that fixes this is a small structured handoff, and the documented shape covers engineering and review work: changed files, the verification commands that were run, dependencies, a blocked reason, retry notes, and residual risk. [^2] The framing in the docs is the useful part. Every worker should leave enough evidence for the next reader to answer four questions quickly. What changed? How was it verified? What can unblock or retry this if it fails? What risk is deliberately still open? [^2]
+
+Two of those fields do the real work of a quality gate. **Verification holds the commands that actually ran**, not a sentence claiming the work is correct. That is lesson 14 applied to the handoff: the claim is not the evidence, and the reviewer should never have to ask what was tested. **Residual risk holds what was not tested or still needs human eyes.** That field is what stops a known unknown from arriving at the client as a surprise, because it converts "we didn't get to the edge case" from an omission into a recorded decision.
+
+There is a corollary worth stating as a rule. No evidence, no review. A handoff that arrives as a confident paragraph with no verification list goes back unread, because a reviewer who starts by reconstructing the work is doing the builder's job instead of checking it. Keeping credentials, tokens, and raw logs out of the handoff is part of the same discipline: store a pointer, not the secret.
+
+## Worked example: gating the claims-intake engagement
+
+Take the engagement you have carried through this series. An intake agent answers client questions from a data service, a daily digest lands in a channel, and a weekly report pulls the intake queue and summarizes it. Lessons 21 and 22 made it observable and priced. Now gate it.
+
+The first gate is automated and runs on every weekly report. The verification step lives inside the skill that runs the job, because a skill format carries a dedicated Verification section whose purpose is exactly this: writing down how to confirm the work succeeded, so the agent follows the procedure instead of improvising a check. [^7] The check here is a read-back: pull the raw counts from the data service, compare them to the numbers in the summary, and fail the run if they differ. Three lines of comparison, run every week, forever.
+
+The second gate is human and sits on the risky action. The intake agent does not just answer questions; in your build it can also trigger a follow-up and touch client records. Destructive and irreversible operations are where a person belongs in the loop, which is what the approval layer is for: an approval mode that can be smart, manual, or off, applied per environment. [^8] Set it so the client's production environment requires a person for anything irreversible, and set it so the client knows that. A gate the client cannot see is a gate they will not trust.
+
+The third gate is a scheduled review, and it is the one most consultants skip. A reviewer profile runs weekly against a sample: three intake conversations drawn from the week, plus the two most recent digest runs. It checks two things. Did the answer match the source it cites? And when the conversation should have escalated to a human, did the escalation fire? The output is a verdict: either a pass, or a list of changes routed back to the agent's owner. This is the same pattern as a scheduled health check, applied to quality instead of availability, and it exists because the weekly volume is too large for anyone to read by hand and too important to leave unread.
+
+Now the failure that motivates all of it. In the version of this engagement that had gates on the layout and none on the arithmetic, the weekly report rendered beautifully and reported forty-one open tickets against the data service's forty-four. The reviewer had opened the file, seen the table, and approved the presentation. The missing gate was a comparison, which is the cheapest gate in the entire engagement and the one that would have caught the error before a client did.
+
+## Gate design rules
+
+Three rules come out of that example and they apply to any platform.
+
+**The cheapest gate that catches the failure wins.** For the same failure, prefer a script over an agent and an agent over a person. Paying a model to re-read a file and count rows is spending tokens to do a slower version of a job a shell command does exactly. The gate ladder only fails when you skip a rung, not when you use the cheap one.
+
+**A gate must be tested by feeding it something bad.** Before you trust a check, hand it an artifact that should fail and confirm it refuses. A gate that has never rejected anything has never been shown to work, and in a client delivery the failure mode is silent: everyone downstream assumes the check would have caught it.
+
+**Gate the unattended work first.** The work you watch with your own eyes does not need a gate, because you are the gate. The recurring job at 3am, the digest nobody reads until Thursday, the intake line running while you sleep: those are where the whole discipline pays. If you find yourself asking which deliverable to gate first, pick the one with no human in the loop.
+
+## The pitfalls to avoid
+
+**Reviewing your own work.** Same context, same assumptions, same blind spot. A separate run with a different context is the minimum viable independence.
+
+**Criteria that live in someone's head.** A reviewer cannot test a standard that was never written down. Put the acceptance criteria on the task, and write them as things a stranger could check.
+
+**Reviewing the presentation instead of the content.** A file that opens is not a file that is right. Check the number, then the layout.
+
+**Rejecting by blocking.** A rejected draft is not an escalation. Route it back to the implementer with a reason, and keep the blocked column for things only a human can resolve.
+
+**A gate with no owner.** If a verdict is nobody's decision, everyone assumes someone else made it. Name the reviewer on the card.
+
+**Leaving residual risk unwritten.** "We did not test the holiday schedule" is a manageable fact. The same fact discovered in production is an incident.
+
+**Running the review as a heroic act.** A review that happens when someone remembers is a review that stops happening. Anything recurring gets a schedule, a scope, and a place to put the verdict.
+
+## Try it
+
+Take one deliverable from your engagement and build its gate on paper before you build anything else:
+
+1. Name the gate. Which deliverable, and where does the check sit: a run step, a review status, an approval prompt, or a scheduled job?
+2. Name the owner. Who returns the verdict? If the answer is the person who built it, go back to step one.
+3. Write three to five acceptance criteria as testable statements.
+4. Map each criterion to its check. If a criterion has no check, either write one or mark it as a judgment call for a human, and say so out loud.
+5. Write the fail path. Where does rejected work go, who is told, and what happens to the deliverable in the meantime?
+6. Break the gate. Hand it something you know is wrong and watch it refuse. If it passes, the gate is decoration.
+7. Schedule it. For anything recurring, put the review on a schedule so the check is a job instead of a promise.
+
+If you can answer all seven, you have moved from shipping work to shipping work you can defend, which is the difference between a system that ran and a delivery you can put your name on.
+
+## What's next
+
+You now have a delivery with gates: work that is checked against written criteria by someone who did not build it, with a verdict that routes back to the implementer and evidence attached to every handoff. That covers the failures your gates anticipated. The next lesson is about the ones nothing caught, when the client is already on the phone and the agent is misbehaving in production. It is about troubleshooting under pressure: how to diagnose a broken agent without making it worse, why the first move is to stop the bleeding rather than to start reading logs, and how to keep the evidence you will need later while everyone wants an answer now.
+
+[^1]: Hermes Agent Docs, Profiles: Running Multiple Agents, a profile is a separate Hermes home directory with its own config, credentials, personality, memories, sessions, skills, and cron jobs, and the docs warn that two agent processes must never share one profile because both write memory automatically and each loads the other's writes into its system prompt at session start, compounding state. [hermes-agent.nousresearch.com/docs/user-guide/profiles](https://hermes-agent.nousresearch.com/docs/user-guide/profiles)
+[^2]: Hermes Agent Docs, Kanban: specialist skills can be attached to an individual task (`kanban_create(..., skills=[...])` or repeated `--skill` flags) instead of editing the assignee's profile; and `kanban_complete(summary=..., metadata={...})` carries the human-readable closeout plus a machine-readable handoff whose documented shape for engineering and review work is changed files, verification commands, dependencies, blocked reason, retry notes, and residual risk, so the next reader can answer what changed, how it was verified, what can retry it, and what risk is still open. [hermes-agent.nousresearch.com/docs/user-guide/features/kanban](https://hermes-agent.nousresearch.com/docs/user-guide/features/kanban)
+[^3]: Hermes Agent Docs, Kanban: goal mode runs a worker in a loop where an auxiliary judge checks the worker's output against the card's title and body, treated as the acceptance criteria, and the docs instruct that the body be written as explicit acceptance criteria because the judge is only as good as that text. [hermes-agent.nousresearch.com/docs/user-guide/features/kanban](https://hermes-agent.nousresearch.com/docs/user-guide/features/kanban)
+[^4]: Hermes Agent Docs, Kanban: task status set (`triage | todo | ready | running | blocked | review | done | archived`); `kanban_request_review` starts a same-card review with a durable summary, optional metadata, and an optional reviewer profile, moving the task to `review` and closing the implementation run as `review_requested` (this is not a block); `kanban_request_changes` is the reviewer verdict that closes the review run as `changes_requested` and routes the card back to its original implementer without block-loop accounting; `kanban_block` is reserved for real external escalation; and `kanban.review_dispatch` (default true) spawns the assigned profile with the bundled review skill, set false for human-only review boards. [hermes-agent.nousresearch.com/docs/user-guide/features/kanban](https://hermes-agent.nousresearch.com/docs/user-guide/features/kanban)
+[^5]: Hermes Agent Docs, Kanban tutorial: the implement, review, changes, re-review choreography, whose run history records `review_requested → changes_requested → review_requested → completed` with each attempt carrying its own actor, summary, metadata, and outcome, so the second implementer sees exactly what the reviewer rejected and the final approval stays auditable. [hermes-agent.nousresearch.com/docs/user-guide/features/kanban-tutorial](https://hermes-agent.nousresearch.com/docs/user-guide/features/kanban-tutorial)
+[^6]: Hermes Agent Docs, Kanban: board transitions fire plugin hooks including `kanban_task_claimed`, `kanban_task_completed`, and `kanban_task_blocked`, each carrying `task_id` and `profile_name`, and they fire after the board DB change commits so callbacks always see durable state. [hermes-agent.nousresearch.com/docs/user-guide/features/kanban](https://hermes-agent.nousresearch.com/docs/user-guide/features/kanban)
+[^7]: Hermes Agent Docs, Skills System: the SKILL.md section order includes a dedicated Verification section ("how to confirm it worked"), so the check for a procedure is written down next to the procedure and the agent follows it during the task. [hermes-agent.nousresearch.com/docs/user-guide/features/skills](https://hermes-agent.nousresearch.com/docs/user-guide/features/skills)
+[^8]: Hermes Agent Docs, Security: dangerous command approval is a human-in-the-loop boundary for destructive operations, configured via `approvals.mode` as `smart`, `manual` (always prompt), or `off` (no prompts, equivalent to running with `--yolo`), with a hard blocklist that trips before the approval layer. [hermes-agent.nousresearch.com/docs/user-guide/security](https://hermes-agent.nousresearch.com/docs/user-guide/security)
