@@ -36,6 +36,8 @@ The reproducibility test the field uses is blunt and useful: take a build artifa
 
 Testing gains an agent layer on top of the code tests from lesson 36. Unit tests still check deterministic routing and parsing on every commit. Model validation checks that a new model version meets minimum thresholds before anything routes to it. Behavioral tests run the agent on real scenarios and score output quality with an evaluator, and they must run before every release and on a schedule in production, because output quality is the layer where the interesting failures live. [^1]
 
+![Pipeline stages and what an agent system adds at each one, from versioned prompt templates in the repository through canary deploys to quality drift in production](</diagrams/ci-cd-for-agents-prompt-versioning-model-registry-canary-releases/1-what-the-pipeline-tracks.png>)
+
 Deploy is where the biggest change lands. A one-word change to a system prompt can shift agent behavior out of proportion to its size, so an all-at-once rollout is too risky, and canary or blue-green becomes the norm rather than the exception. Operate and monitor pick up prompt rotation, model management in production, cost per request, and quality drift, not just uptime and latency. [^1] [^2]
 
 ## Prompt versioning: the first and cheapest win
@@ -72,6 +74,8 @@ Bring back the support agent from lesson 36 and give it a candidate prompt revis
 
 A Flagger-style canary definition for that agent routes an initial 10% of traffic to the new version and adds another 10% every minute until it reaches half of traffic, pausing at each step to score the candidates it sampled. The first two metrics it watches, request success rate and request duration, are ordinary service health. The next three are the agent's reason to exist: a response quality score that must stay above a floor, a hallucination rate that must stay under a ceiling, and a policy violation rate that must stay near zero. Those quality scores come from a separate evaluation service that samples canary responses and scores them, because without agent-specific metrics a pipeline can show green while the agent is quietly producing wrong answers. [^1]
 
+![The canary ladder from one percent to full traffic with an automated gate at each step, beside the support agent worked example and the quality metrics each gate watches](</diagrams/ci-cd-for-agents-prompt-versioning-model-registry-canary-releases/2-canary-ladder-and-gates.png>)
+
 If the analysis step trips any threshold five consecutive times, the tool rolls back the canary automatically, and the whole rollout has a deadline, so a candidate that never converges is pulled rather than left to churn. The config encodes a policy you decided before the rollout started: which dimension gates the release, and what the acceptable bound is. You decide that in advance, because you cannot make a sound call about quality tradeoffs in the middle of a production incident. [^1] [^3]
 
 This is the same discipline that gates this very lesson before it can publish. The file you are reading passes through an automated verification script that hard-fails on the em-dashes and AI-slop phrases the writing standards forbid, and a lesson with a hard issue is never committed. It is a small, honest example of the principle: a change does not reach production until an automated gate says it may. The gate is what turns "this feels fine" into "this is proven acceptable."
@@ -85,6 +89,8 @@ The second is a green pipeline over wrong answers. If your canary only watches l
 The third is skipping the observation window. Teams run offline evals, see good scores, and flip the whole fleet at once. The offline set under-represents the real distribution, and the regression you never saw surfaces across every user instead of across 5% of them. The point of canary is to pay the small cost of a measured slice to avoid the large cost of a full misstep. [^3] [^4]
 
 The last is treating shadow and canary as the same thing. Shadow answers "does the candidate behave reasonably on the real distribution," with no user exposed. Canary answers "is it at least as good with users in the loop," with a real blast radius and auto-rollback. Teams that skip shadow ship quality regressions the first time real traffic hits the candidate; teams that skip canary wait forever for offline numbers that never converge instead of putting the candidate in front of users with a rollback path. You want both, in order. [^4]
+
+![Shadow traffic and canary release side by side, showing the question each pattern answers and the blast radius each one carries](</diagrams/ci-cd-for-agents-prompt-versioning-model-registry-canary-releases/3-shadow-vs-canary.png>)
 
 ## Try it
 
