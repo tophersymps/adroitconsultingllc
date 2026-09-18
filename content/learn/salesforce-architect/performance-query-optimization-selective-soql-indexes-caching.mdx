@@ -37,6 +37,8 @@ Compound logic follows the same idea. With AND, the optimizer uses the indexes u
 
 Two more facts matter. The platform maintains indexes by default on common standard fields for most objects: RecordTypeId, Division, CreatedDate, SystemModstamp (Last Modified Date), Name, Email for contacts and leads, foreign key relationships, and the record ID primary key. [^2] And index tables do not include null values by default, so a filter looking for empty values does not benefit from a standard custom index. [^2] If you need empty-value rows indexed, you work with Customer Support to enable and rebuild the index to include them. [^2]
 
+![The optimizer uses an index only when a filter is selective: standard fields need under 30 percent on the first million records and under 15 percent after, custom fields under 10 and 5, with AND forgiving and OR the expensive operator.](</diagrams/performance-query-optimization-selective-soql-indexes-caching/1-selectivity-thresholds.png>)
+
 ## Writing SOQL the optimizer will use
 
 Now the craft. You cannot control the optimizer, but you can control the shape of the query you hand it. The first rule is to filter on an indexed field. A query is only selective when one of its filters is on an indexed field and that filter pulls the result set below the threshold. [^7] If you filter on a field with no index at all, you have already lost the cheap path, no matter how tight the filter is.
@@ -46,6 +48,8 @@ The second rule is to avoid the operators that push the optimizer off the index 
 The third rule is to keep in mind that selectivity is about reducing rows below a threshold, and that two selective filters are better than one. When two or more filters in the WHERE clause each reduce the rows, query performance improves. [^7] So write the filter that narrows the most, and add a second one on an indexed field where it helps.
 
 There is a hard floor under all of this. Salesforce may terminate non-selective SOQL queries that run against objects containing more than 200,000 records, to avoid long execution times. [^7] Inside triggers, where you have no control over the row counts your code runs against, selectivity is not a nicety. It is a requirement for the code to run at all. Lesson 17's indexing lesson and this one converge here: a trigger that fires on an object past a few hundred thousand records and issues a non-selective query is a production incident waiting to happen.
+
+![Three rules shape a selective query: filter on an indexed field, avoid the negative operators that drop the index, and write two selective filters so the optimizer narrows the read.](</diagrams/performance-query-optimization-selective-soql-indexes-caching/2-writing-selective-soql.png>)
 
 ## Measure, then index
 
@@ -67,6 +71,8 @@ The API gives you two scopes. The session cache holds data tied to one user sess
 
 The limits are tight and they shape the design. Enterprise editions get 10 MB of Platform Cache, Unlimited and Performance get 30 MB, and other editions get none. [^4] A single cached item caps at 100 KB, session cache TTL runs from 5 minutes up to 8 hours, and org cache TTL runs from 5 minutes up to 48 hours with a 24 hour default. [^4] Those numbers are the reason the best practice is to cache a few large items rather than many small items separately, and to stay mindful of limits to avoid unexpected evictions. [^5]
 
+![Platform Cache has two scopes and tight limits: session cache holds one user's data with a TTL up to 8 hours, org cache is shared across the org up to 48 hours, Enterprise gets 10 MB and Unlimited and Performance get 30 MB with each item capped at 100 KB.](</diagrams/performance-query-optimization-selective-soql-indexes-caching/3-platform-cache-scopes-limits.png>)
+
 A cache is only as correct as its miss handling. The documented best practice is to test for cache requests that return null, because a miss returns null and you must load and store the value yourself. [^3] The `Cache.CacheBuilder` interface does this for you: it safely retrieves a value and, on a miss, builds and stores it, so your calling code does not have to remember to check for null on every read. [^6] Use it. Hand-rolled miss handling is exactly where caching bugs hide.
 
 Choose what you cache by asking whether recomputation is expensive and the data is stable. A lookup table that changes weekly, a set of account entitlements that updates rarely, or a computed configuration value that every request touches are all good candidates. A per-user, per-moment value is a bad candidate; you would burn the cache and still miss. And remember the memory limit. With 10 MB in an Enterprise org, you are not caching large result sets. You are caching the small, hot, stable values that would otherwise be recomputed on every request.
@@ -83,6 +89,8 @@ A field service org runs a dashboard that shows open Cases grouped by territory,
 6. **Cache what is stable.** The territory list and the territory-to-owner mapping change rarely and are read on every dashboard load. They move those into Platform Cache with an org partition and a TTL long enough to survive a working day, using the CacheBuilder interface so a miss loads and stores the value cleanly. [^3] [^6]
 
 The result: the dashboard query is now selective and uses an index, so the scan is gone, and the stable lookup values no longer hit the database at all. The same query that timed out now returns fast because the architect gave the optimizer a filter it could use and stopped re-querying the values that did not change.
+
+![The six fix steps follow the measure-then-index method: identify the slow query, check it against the query plan, measure selectivity with a grouped count, index only the selective territory field, use a two-column index for the sort, and cache the stable lookup lists.](</diagrams/performance-query-optimization-selective-soql-indexes-caching/4-worked-example-case-dashboard.png>)
 
 ## The pitfall to avoid
 
