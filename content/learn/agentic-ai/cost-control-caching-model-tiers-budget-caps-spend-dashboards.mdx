@@ -28,6 +28,8 @@ Semantic caching is the second, higher-level lever, and it lives in your applica
 
 The two caches are not competitors; they stack. Prompt caching handles the stable prefix at the provider, and semantic caching handles the repeated question at the application. Both have a failure mode worth naming. Prompt caching only engages when you actually mark the prefix and keep it stable, and a small prompt edit invalidates the cached prefix for everyone. Semantic caching can silently serve a wrong answer if your similarity threshold is loose, so the threshold is a correctness decision, not just a cost one. Caching is the cheapest lever and the first one you should turn, because it changes nothing about your model quality and cuts spend directly.
 
+![The two caches compared: prompt caching lives at the provider and pays a write premium once then a far cheaper read on the same tokens, while semantic caching lives in the application and compares a new question's embedding to stored questions against a similarity threshold](</diagrams/cost-control-caching-model-tiers-budget-caps-spend-dashboards/1-cache-economics.png>)
+
 ## Model tiers: pay frontier prices only when you must
 
 The second lever is deciding which model handles which request. The prices per token across model tiers differ by an order of magnitude or more, and most agent traffic does not need the top tier. A support agent resolving a billing question and a research agent synthesizing across forty sources are not the same workload, and paying the same per-token rate for both is how budgets leak.
@@ -38,6 +40,8 @@ The payoff is documented. Research using RouteLLM, an open framework for trainin
 
 The failure mode here is the one that quietly erases the savings. A cheaper model lowers cost per token but can raise cost per finished task, when the cheap model makes mistakes that cost retries, escalation, or human review. [^7] The metric that matters is cost per completed task, not cost per token, and that is measured with the evals from Lesson 19 and the observability from Lesson 20. Tiering is only a saving if the cheap tier keeps quality high enough that you are not paying for its mistakes somewhere downstream. The other thing to resist is over-routing to save cents: routing 60 percent of traffic to a cheaper model can silently split one product into two behaviors, and the aggregate accuracy number hides which specific queries got worse. [^7] Route with the quality boundary in mind, and watch the tasks that matter most, not the aggregate.
 
+![Model tiers and routing: cheap, mid, and frontier tiers set the price of each task, rule-based intent routing and cascade routing decide which task pays it, and the RouteLLM research shows the payoff in quality kept and cost cut](</diagrams/cost-control-caching-model-tiers-budget-caps-spend-dashboards/2-tiering-routing.png>)
+
 ## Budget caps: the hard stop
 
 Caching and tiering shrink the bill. Budget caps make sure it cannot escape. A cap is a dollar- or token-denominated ceiling that turns off spending when it is reached, and it belongs in the gateway layer from Lesson 26, in front of every provider, where a single key can carry its own limit.
@@ -45,6 +49,8 @@ Caching and tiering shrink the bill. Budget caps make sure it cannot escape. A c
 The gateway is the natural home because it already holds the virtual keys. In a gateway like LiteLLM you can set a budget per virtual key, per user, per team, or per model, and the gateway enforces it before a request ever reaches a provider. [^8] A virtual key can carry a monthly budget, a daily budget, a per-model budget such as a small daily allowance on the expensive model, and an expiration period. When the budget is exhausted the gateway returns a budget-exceeded error and refuses the request rather than letting it through. [^8] The structural point is that a runaway agent, the one that burns forty turns re-asking itself the same question, is bounded by a budget even when it is politely within every rate limit, because a rate limit controls speed and a budget controls total spend.
 
 The operational pattern is soft thresholds with a hard stop, and the response ladder is the same shape a good incident runbook uses. Watch usage at 50 percent and review whether the growth is expected. At 80 percent, review routing, token usage, retries, and caching before the trend becomes a problem. At 95 percent, escalate to the service owner or on-call. At 100 percent, block the request or route it to an explicitly approved fallback model. [^9] The point of the soft thresholds is that they give a human time to act on the trend, so the hard stop at the top is a backstop, not the only guardrail. The most effective budgets nest: an organization cap, team caps inside it, and individual key caps inside those, so that one engineer's experimental loop cannot spend the whole org's month. [^9]
+
+![The budget response ladder from 50 to 100 percent, where watching at 50 buys a human time to review routing at 80 and escalate at 95 before the hard stop at 100, with organization, team, and individual key caps nested inside each other](</diagrams/cost-control-caching-model-tiers-budget-caps-spend-dashboards/3-budget-cap-ladder.png>)
 
 ## Spend dashboards: the early warning system
 
@@ -65,6 +71,8 @@ The manual is 8,000 tokens and it is loaded into every request as context. At an
 Now route the questions by tier. About 70 percent of the traffic is simple lookups, where does the policy say X, that a cheap model answers correctly. The other 30 percent, ambiguous questions and synthesis across multiple sections, needs the frontier tier. Routing the 70 percent cheap while keeping the frontier for the rest preserves the quality on the hard cases and cuts the per-token cost on the easy ones, which is the RouteLLM shape of keeping most quality while paying frontier prices for a minority of the traffic. [^6]
 
 Then cap it. Give the bot a team budget of $250 a month in the gateway, with alerts firing at 50, 80, and 95 percent and a hard stop at 100 percent. [^9] [^8] Now a documentation update that doubles the manual, or a new feature that triples traffic, cannot silently multiply the bill; it trips the 80 percent alert and a human reviews the routing before the cap blocks anything. And because the gateway tags every request by team and job, the dashboard shows the month's spend attributed to the initiative that owns it. The three levers answer three questions in order: how do we stop paying for the same thing twice, how do we avoid paying frontier prices for easy work, and how do we find out, early, if either of those has drifted.
+
+![The three levers applied in order to one document support bot: caching the 8,000-token manual that costs about 600 dollars a month uncached, routing the 70 percent of traffic that is simple lookups to a cheap tier, and capping the team budget at 250 dollars a month with alerts at 50, 80, and 95 percent before the hard stop](</diagrams/cost-control-caching-model-tiers-budget-caps-spend-dashboards/4-three-levers-worked-example.png>)
 
 ## The Fortress angle: a hybrid stack running all three levers
 
