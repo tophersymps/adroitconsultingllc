@@ -24,6 +24,8 @@ That flow matters for the exam because it explains why Load exists as a separate
 
 Load also carries a couple of capabilities that matter beyond the raw write. It supports formulas, so you can compute a value at write time and map it onto a target field rather than trusting the inbound payload. [^2][^3] It can work with custom input formats as well as the default JSON and XML. [^1] And it is not limited to standard objects. Data Mappers can access external objects and custom metadata alongside sObjects, with no special syntax or additional configuration. [^1] For a cert-prep mental model, the load-bearing idea is simpler: Load is the interface that takes input and changes records in the org.
 
+![Load is the write step in the data flow: an OmniScript calls an Extract to read data from Salesforce, the user interacts to capture changed and new data, then the OmniScript calls a Load to write that data back to Salesforce](</diagrams/day-33-dm-4-load-interface-multi-object-writes/1-load-in-data-flow.png>)
+
 ### The input JSON is the driver
 
 The single most important shift when you move from Extract to Load is who is in charge. In an Extract, Salesforce data is the source and you decide what to read. In a Load, the inbound JSON is the driver. [^2] You map fields from that payload onto target object fields, and the payload's structure determines what gets written, to which objects, and with what relationships. [^2]
@@ -32,6 +34,8 @@ Read that carefully, because it changes how you reason about errors. If the payl
 
 The payload also drives the operation itself. The same Load can insert new records, update existing ones, or delete them, and which one happens is determined by how you configure the mapper and, for upserts, by the keys in the incoming data. [^2][^4] That is the "multi-object" and "multi-operation" reach of the requirement. One mapper can write an Account, its related Contacts, and its related Opportunities in a single run, each with the operation the data calls for.
 
+![Extract vs Load: Extract moves data out of Salesforce with Salesforce as the source and you deciding what to read, while Load writes data into Salesforce with the inbound JSON as the driver and the payload structure deciding what gets written](</diagrams/day-33-dm-4-load-interface-multi-object-writes/2-extract-vs-load.png>)
+
 ### Insert, update, and delete across multiple objects
 
 The requirement name is "Multi-Object Writes," and the word multi does real work. Load is not limited to one sObject per mapper. You can define target objects for several types in a single Load and write a parent and its children together. [^1][^2] The canonical example the documentation leans on is an Account plus its Contacts, but the pattern generalizes: any parent object with child records that arrive together in one payload can be written by one Load. [^1]
@@ -39,6 +43,8 @@ The requirement name is "Multi-Object Writes," and the word multi does real work
 This is where the operation choice comes in. Load can insert new records, update existing ones, or delete them, and you configure which per target object. [^2][^4] For an insert, the mapper creates new records. For an update, it needs to know which existing records to touch, which is where Ids and external IDs come in. [^4] For a delete, it removes records, again keyed by the identifiers you map. [^4] The multi-object part means these can all happen in the same mapper and the same run, so a single payload can, say, insert a new Account, update two of its existing Contacts, and delete a stale one, all in one call.
 
 The reason this matters for the exam is that a wrong answer will try to narrow Load's reach. Quiz Q1 asks which interface creates or updates records from input JSON, and the correct answer is Load. [^2] Extract and Turbo Extract read, they do not write, and Transform reshapes without touching the org at all. [^1][^2] Only Load performs insert, update, and delete against objects. [^2] If a question describes writing records, the interface is Load.
+
+![One Load writes multiple objects and operations: a single input JSON payload flows through the Load Mapper to write an Account insert, a Contact update, and a Contact delete in one call, with each Contact's lookup field pointing at its Account by Id or external ID](</diagrams/day-33-dm-4-load-interface-multi-object-writes/3-multi-object-write.png>)
 
 ### How relationships work: lookups by Id or external ID
 
@@ -67,6 +73,8 @@ Multi-object writes introduce a risk that single-record writes do not: partial s
 The way to hold rollback in your head is to connect it to what you learned about exception handling in lesson 27. There, the Integration Procedure's Try/Catch pattern treats rollback as the safety net for orchestrated writes: when a step fails, the transaction rolls back so nothing partial is committed. [^5] Load's rollback-on-error is the same instinct applied inside the write itself. If any record in the Load fails, the whole write is rolled back rather than committing the records that succeeded. [^1][^5]
 
 The exam trap here is the failure path without rollback. If you configure a Load inside a failure path or omit rollback-on-error, a mid-run failure leaves partial data, and the next run has to reconcile whatever half-finished state the previous run left. [^5] Rollback is not decoration, it is the control that keeps a multi-object write atomic in practice. When the requirement says Load supports rollback-on-error, treat that as a feature the exam will test as both a correct configuration and a missing configuration.
+
+![Two controls keep a multi-object write safe: external-ID upsert makes Load idempotent so a re-run updates instead of stacking duplicates, and rollback-on-error keeps a failed write atomic so a mid-run failure rolls back the whole write instead of leaving partial data](</diagrams/day-33-dm-4-load-interface-multi-object-writes/4-upsert-and-rollback.png>)
 
 ## Configuration Walkthrough
 
