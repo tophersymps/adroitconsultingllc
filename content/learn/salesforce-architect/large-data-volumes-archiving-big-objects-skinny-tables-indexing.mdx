@@ -35,6 +35,8 @@ The catch is selectivity. The optimizer does not use an index just because one e
 
 Compound logic follows the same idea. With AND, the optimizer uses indexes unless one of them returns more than 20% of the records. With OR, it uses them unless all of them return more than 10%. [^4] And for list views that select on one field and sort on another, a **two-column custom index** beats two single-column indexes, for example an Account list view that filters by State and sorts by City. [^4]
 
+![Selectivity thresholds control whether the optimizer uses an index: a standard indexed field is used when the filter matches under 30% of the first million records then 15% after, a custom index under 10% then 5%, with AND tolerating up to 20% per filter and OR only up to 10% before an index is bypassed](</diagrams/large-data-volumes-archiving-big-objects-skinny-tables-indexing/1-selectivity-thresholds.png>)
+
 So the indexing strategy is: identify the queries that matter, confirm the filter field can be indexed, check that the filter is selective against the thresholds, and only then invest in a custom index. Indexing a low-selectivity field is wasted effort, because the optimizer will ignore it.
 
 ## Skinny tables: cut the read cost on hot tables
@@ -69,6 +71,8 @@ Archive and delete are different tools. Deletion frees storage but destroys the 
 
 So the archiving strategy is tiering with a retrieval plan. Hot data stays in sObjects, indexed and fast. Cold data moves to a big object or external archive. The decision every record makes is: is this still queried or reported on day to day, or does it only need to exist? If the answer is the latter, it is a candidate to leave the active tables.
 
+![Tiering every record into hot or cold storage: data still queried or reported on day to day stays in indexed sObjects, while data that only needs to exist moves to a big object or external archive, with big objects providing consistent performance up to a billion records and queryable history](</diagrams/large-data-volumes-archiving-big-objects-skinny-tables-indexing/2-storage-tiering.png>)
+
 ## Worked example: a 40 million record event history
 
 A telecom operator runs a custom object, `UsageEvent__c`, that ingests one record per device event and has grown to 40 million rows. Cases number 3 million, with 2.4 million closed. Reports over the event object time out, storage is at 90%, and the Cases list view is slow. The architect's plan:
@@ -80,6 +84,8 @@ A telecom operator runs a custom object, `UsageEvent__c`, that ingests one recor
 5. **Tier the event data.** `UsageEvent__c` is append-only and huge, so the full 40 million rows have no reason to live in an sObject. The team redirects new events into a big object from the start, keeping only a rolling 90 days of active events in the transactional object for reporting. [^1]
 
 The result is a system where the hot objects stay small and selective, the bulk history is off the transactional database, and every remaining query has an index that the optimizer will actually use.
+
+![A telecom operator tames a 40 million record event history in five steps: index the hot queries first, add a two-column index for the list view, put a skinny table on the read-heavy Cases object, archive closed history to a big object that shrinks the hot table by over a million rows, and tier the append-only event data into a big object keeping just 90 days active](</diagrams/large-data-volumes-archiving-big-objects-skinny-tables-indexing/3-worked-example.png>)
 
 ## The pitfall to avoid
 
