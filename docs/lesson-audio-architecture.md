@@ -73,10 +73,10 @@ The lesson page resolves `const audio = lessonAudio.find(a => a.series === serie
 `GET /api/audio/[slug]` is extended to resolve BOTH key spaces. The route currently does `articleAudio.find(a => a.slug === slug)`. It becomes:
 
 1. Look up `articleAudio.find(a => a.slug === slug)` → if found, `storagePath` is the `blog/` key.
-2. Else look up `lessonAudio.find(a => a.slug === slug)` → if found, `storagePath` is the `learn/<series>/<slug>/` key.
+2. Else look up `lessonAudio.filter(a => a.slug === slug)` → if found, `storagePath` is the `learn/<series>/<slug>/` key.
 3. Else 404.
 
-Because the lesson slug is unique across the catalogue, a bare `slug` lookup in `lessonAudio` is unambiguous — no series param is needed on the route. The route's auth gate, Range/206 handling, and fail-closed 401 are unchanged. The `/timings` twin route gets the same two-space resolution.
+A bare `slug` lookup in `lessonAudio` is unambiguous ONLY when the slug is unique across the catalogue. Because the same lesson slug CAN appear in multiple series (ADR-102, e.g. `framing-value-and-roi` in `hermes-consultant` and `hermes-consultant-intermediate`), a collision is AMBIGUOUS from a bare slug — the route cannot know which course the caller means. The route therefore fails closed to 404 when a slug maps to more than one series, rather than serving the first `.find()` match. Lesson entries are also MEMBERS-ONLY: the route enforces `accessSeam.decideCourseAccess(userId, series)` and returns 404 for non-entitled users (mirroring the lesson page's paywall/not-launched gate), so a signed-in free member cannot stream members-only narration by slug (CWE-862). The route's auth gate, Range/206 handling, and fail-closed 401 are unchanged. The `/timings` twin route gets the same two-space resolution + access gate.
 
 ### Generator: `scripts/build-audio.js` learn mode
 
@@ -90,7 +90,7 @@ The generator gains a `--learn` mode that targets `content/learn/<series>/<slug>
 
 ### Auth seam alignment
 
-The lesson page's auth seam matches the audio route's auth. The lesson page already resolves `getSupabaseServerClient().auth.getUser()` (`page.tsx:87-89`) and gates content on the access seam (`accessSeam.decideCourseAccess`, ADR-201). The audio route uses the SAME `getSupabaseServerClient().auth.getUser()` mechanism (`route.ts:68-72`). Both are HttpOnly-cookie session checks. Lessons are members-only (paywall-gated), so a signed-in user who can see the lesson content is exactly the user the audio route will authenticate. No seam change required.
+The lesson page's auth seam matches the audio route's auth. The lesson page already resolves `getSupabaseServerClient().auth.getUser()` (`page.tsx:87-89`) and gates content on the access seam (`accessSeam.decideCourseAccess`, ADR-201). The audio route uses the SAME `getSupabaseServerClient().auth.getUser()` mechanism (`route.ts:68-72`). Both are HttpOnly-cookie session checks. Lessons are members-only (paywall-gated), so the audio route additionally enforces `accessSeam.decideCourseAccess(userId, series)` for lesson entries (t_5d093ce2) — a signed-in user who can see the lesson content is exactly the user the audio route will authenticate, and a signed-in free member who cannot see the content is denied (404).
 
 ### Narration builder — verified, no change
 
@@ -132,7 +132,7 @@ flowchart LR
 |----|-------|----------|--------------|--------------|
 | ADR-101 | Parallel `LessonAudio` module over extending `ArticleAudio` | New `LessonAudio` interface + generated `src/data/lesson-audio.ts` | Extend `ArticleAudio` / `src/data/audio.ts` | Keeps `ArticleAudio.slug`/`AudioStorageKey` invariants intact; lesson page resolves by `(series, slug)`; independent backfill merge |
 | ADR-102 | `learn/<series>/<slug>/` storage prefix | Lesson keys are `learn/<series>/<slug>/<voice>.mp3` | Reuse `blog/<slug>/` | Disambiguates same slug across series; mirrors the `blog/` dual-store scheme |
-| ADR-103 | Extend `GET /api/audio/[slug]` with two-space resolution | Route checks `articleAudio` then `lessonAudio` | Parallel `/api/audio/learn/[series]/[slug]` route | One route, one auth gate, one Range/206 path; lesson slug unique so bare-slug lookup is unambiguous |
+| ADR-103 | Extend `GET /api/audio/[slug]` with two-space resolution | Route checks `articleAudio` then `lessonAudio`; a lesson slug that maps to more than one series is ambiguous and 404s; lesson entries additionally pass `accessSeam.decideCourseAccess` (members-only) | Parallel `/api/audio/learn/[series]/[slug]` route | One route, one auth gate, one Range/206 path; bare-slug lookup is unambiguous only when the slug is unique, so a collision fails closed to 404 rather than serving the first match |
 | ADR-104 | Reuse `AudioPlayer`/`AudioPlayerLazy` unchanged | Same client components, same `{ slug, hasAudio }` props | New lesson-specific player | No new client chunk; `hasAudio` boolean keeps private keys off the wire |
 | ADR-105 | Reuse `mdxToNarration` unchanged | Lesson MDX feeds the same pure function | Fork a lesson narration builder | Verified on a 5-diagram lesson: 0 leaked syntax; one code path to maintain |
 

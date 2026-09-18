@@ -33,9 +33,33 @@ const toyLessonAudio = [
   },
 ];
 
+// When true, lessonAudio carries a SECOND entry with the same slug in a
+// different series, exercising the cross-series collision (ADR-102) path.
+let lessonCollision = false;
+
 vi.mock("@/data/lesson-audio", () => ({
   get lessonAudio() {
-    return toyLessonAudio;
+    return lessonCollision
+      ? [
+          ...toyLessonAudio,
+          {
+            series: "hermes-consultant",
+            slug: lessonSlug,
+            voice: "af_heart",
+            storagePath: "learn/hermes-consultant/day-01-p-1a-object-permissions-crud-system-vs-object-profiles/af_heart.mp3",
+          },
+        ]
+      : toyLessonAudio;
+  },
+}));
+
+// Access seam mock: the lesson path calls accessSeam.decideCourseAccess. The
+// default grants access so the existing lesson-resolution test passes; tests
+// override it to prove the members-only gate (CWE-862).
+let accessDecision: { kind: string } = { kind: "granted" };
+vi.mock("@/lib/access", () => ({
+  accessSeam: {
+    decideCourseAccess: async () => accessDecision,
   },
 }));
 
@@ -116,6 +140,8 @@ describe("GET /api/audio/[slug]", () => {
     r2Failure = null;
     requestedKeys = [];
     requestedRanges = [];
+    lessonCollision = false;
+    accessDecision = { kind: "granted" };
     vi.clearAllMocks();
   });
 
@@ -304,11 +330,42 @@ describe("GET /api/audio/[slug]", () => {
   });
 
   it("returns 404 for a lesson slug with no audio entry (lessonAudio empty)", async () => {
-    // lessonAudio is mocked to a fixed toy array; a slug not in it 404s.
-    const res = await GET(makeGet("some-lesson-without-audio"), {
-      params: Promise.resolve({ slug: "some-lesson-without-audio" }),
+      // lessonAudio is mocked to a fixed toy array; a slug not in it 404s.
+      const res = await GET(makeGet("some-lesson-without-audio"), {
+        params: Promise.resolve({ slug: "some-lesson-without-audio" }),
+      });
+      expect(res.status).toBe(404);
+      expect(requestedKeys).toEqual([]);
     });
-    expect(res.status).toBe(404);
-    expect(requestedKeys).toEqual([]);
+
+    it("returns 404 for a lesson slug when the user is not entitled (paywall) — CWE-862", async () => {
+      // A signed-in free member must NOT stream members-only lesson narration.
+      accessDecision = { kind: "paywall" };
+      const res = await GET(makeGet(lessonSlug), {
+        params: Promise.resolve({ slug: lessonSlug }),
+      });
+      expect(res.status).toBe(404);
+      // The access gate runs BEFORE the object read — no R2 bytes are fetched.
+      expect(requestedKeys).toEqual([]);
+    });
+
+    it("returns 404 for a lesson slug when the course is not-launched", async () => {
+      accessDecision = { kind: "not-launched" };
+      const res = await GET(makeGet(lessonSlug), {
+        params: Promise.resolve({ slug: lessonSlug }),
+      });
+      expect(res.status).toBe(404);
+      expect(requestedKeys).toEqual([]);
+    });
+
+    it("returns 404 for a cross-series slug collision (ambiguous, ADR-102)", async () => {
+      // The same lesson slug in two series cannot be resolved from a bare slug;
+      // the route must fail closed rather than serve the first match.
+      lessonCollision = true;
+      const res = await GET(makeGet(lessonSlug), {
+        params: Promise.resolve({ slug: lessonSlug }),
+      });
+      expect(res.status).toBe(404);
+      expect(requestedKeys).toEqual([]);
+    });
   });
-});

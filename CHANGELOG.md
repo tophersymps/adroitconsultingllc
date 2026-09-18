@@ -4,6 +4,16 @@ All notable changes to the Adroit Consulting Blog project will be documented in 
 
 ## [Unreleased]
 
+### Fix: lesson audio routes enforce the members-only access seam + fail closed on cross-series slug collision (t_5d093ce2)
+
+**What** - Hardened `GET /api/audio/[slug]` and its `/timings` twin so lesson audio is gated on the SAME access seam the lesson page uses, not bare auth. Article audio stays a free auth-gated benefit (auth-only, unchanged). When the resolved entry is a lesson, the route now calls `accessSeam.decideCourseAccess(userId, series)` and returns 404 for anything other than `granted`/`admin-preview` (not-launched and paywall both 404 so the resource stays opaque). A cross-series slug collision (ADR-102: the same lesson slug can exist in multiple series) is now AMBIGUOUS from a bare slug, so the route fails closed to 404 instead of serving the first `.find()` match. Added 7 regression tests (3 MP3 + 4 timings) covering the paywall gate, the not-launched gate, and the collision path.
+
+**Why** - Security review finding (val-el, t_77cb8816): the lesson audio routes gated on bare `getUser()` while lesson content is members-only (the page enforces `accessSeam.decideCourseAccess`). A signed-in free member could stream members-only lesson narration/timings by slug once the backfill cron populates `src/data/lesson-audio.ts` (HIGH CWE-862). The bare-slug lookup also contradicted the documented cross-series collision (MEDIUM): `.find()` returned the first match, so page and audio could disagree on which course a slug belongs to.
+
+**Verified** - `npx vitest run src/app/api/audio/` (33 tests) and the full suite (834 tests) pass; `npx tsc --noEmit` exits 0; `npx eslint src/app/api/audio/` clean. Committed to `feat/lesson-audio` only; main is untouched.
+
+**Known Issues** - None. `src/data/lesson-audio.ts` is still empty scaffolding; the gate is exercised by unit tests against a seeded lesson entry.
+
 ### Fix: narration diagram lead-in no longer emits a double period when the alt ends in '.' (t_2e6e20e0)
 
 **What** - Fixed the narration builder's diagram lead-in so a spoken diagram line never ends in a double period. `mdxToNarration` now strips a single trailing sentence-ending punctuation (`.`, `!`, `?`) from the resolved diagram text (alt or `description::` override) before the lead-in wraps it with its own `.`. Previously the default `(alt) => \`Diagram: ${alt}.\`` appended a second period to every real lesson diagram alt (which already ends in `.`), producing `...or products..` — a double stop a TTS engine reads as two pauses. Added 3 regression tests: an alt ending in `.` yields a single `.`, a `description::` override ending in `.` yields a single `.`, and an alt with no trailing punctuation still gets exactly one `.`.
