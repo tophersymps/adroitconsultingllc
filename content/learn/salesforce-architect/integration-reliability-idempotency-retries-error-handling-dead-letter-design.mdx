@@ -32,6 +32,8 @@ Classify every error before you decide how to react. MuleSoft's error-handling r
 
 The trap is that transient errors only stay transient for so long. "Transient errors are only transient errors for so long, and can become poisoned messages that need manual intervention." [^3] A service that is unavailable for an hour looks identical to a service that is permanently misconfigured after your first four retries. That is why every retry policy needs a bounded retry budget, and why everything past the budget lands in a dead-letter channel with an owner.
 
+![A two-column comparison of the failure taxonomy: transient errors (network timeout, request timeout, momentary 503) are retried with backoff, while poisoned messages (authentication error, resource not found, malformed payload) go to the dead-letter channel, with the status-code mapping for each](</diagrams/integration-reliability-idempotency-retries-error-handling-dead-letter-design/1-error-taxonomy.png>)
+
 ## Idempotency: the foundation of safe retries
 
 An idempotent operation can be replayed without side effects. In Salesforce's words: "Idempotent capabilities guarantee that repeated invocations are safe. If idempotency isn't implemented, repeated invocations of the same message can have different results, potentially resulting in data integrity issues. Potential issues include the creation of duplicate records or duplicate processing of transactions." [^1]
@@ -59,6 +61,8 @@ Three rules shape every retry policy:
 2. **Honor backoff signals.** When a rate-limited response includes a `Retry-After` header, wait that long, and use exponential backoff rather than hammering the endpoint. [^7]
 3. **Set a budget and escalate.** After N attempts, the transient error becomes a poisoned message: stop retrying, log it, and route it to the dead-letter channel. [^3]
 
+![A retry timeline showing exponential backoff: attempts at 5, 25, and 125 second waits, then the budget is spent and the message escalates to the dead-letter channel, with a 400 validation error skipping the retry loop entirely](</diagrams/integration-reliability-idempotency-retries-error-handling-dead-letter-design/2-bounded-retry-backoff.png>)
+
 Know the status codes you are reacting to. The REST API error reference: 401 means the session ID or OAuth token expired or is invalid; 403 with error code `REQUEST_LIMIT_EXCEEDED` means you've exceeded org API request limits; 404 is a missing resource; 500 is a Lightning Platform error; 502 is Salesforce Edge failing to reach the instance; 503 means the server is down for maintenance or overloaded. [^8] That mapping tells you which codes belong in the retry loop (502, 503, 500 with care) and which belong in the DLQ (400, 404, 401 after one re-auth attempt).
 
 One more error-handling trap, this one inside the response body: the Composite API returns HTTP 200 even when a subrequest failed and the transaction rolled back. "Proper error handling should examine the response body, not just HTTP status codes." [^1] If you only check the status, a fully rolled-back composite call looks successful.
@@ -75,6 +79,8 @@ On the Salesforce side, the DLQ is usually a custom object. The integration patt
 - `Error_Message__c`, `Error_Type__c`, `Error_Code__c`: the failure details.
 - `Retry_Count__c` and `Status__c`: how many attempts happened and whether the message is `New`, `Retrying`, `Resolved`, or `Escalated`.
 - `Subscriber__c` or `Integration__c`: which consumer failed.
+
+![A flow showing every message is either processed exactly once or parked in a dead-letter channel, with the Integration_Error__c object fields that record the payload, error details, retry count, and status lifecycle](</diagrams/integration-reliability-idempotency-retries-error-handling-dead-letter-design/3-dead-letter-design.png>)
 
 For ETL integrations the parallel structure is the control/error table: the job reads the control table to find the last run time, processes, then updates the control values on success or writes restart values on failure, so a rerun continues where the previous run stopped instead of redoing or skipping work. Salesforce's guide recommends creating those tables in an environment the ETL tool can reach even when Salesforce is unavailable, because "Salesforce should be treated as a spoke in this process and the ETL infrastructure is the hub." [^1]
 
