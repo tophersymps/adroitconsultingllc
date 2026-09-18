@@ -1,0 +1,156 @@
+---
+title: "OmniStudio T-3: Resolve Data Mapper Output & Mapping Issues"
+slug: day-40-t-3-resolve-data-mapper-output-mapping-issues
+series: omni-studio-cert
+lesson: 40
+excerpt: "Learn the evidence-first way to fix a Data Mapper that returns nothing or returns the wrong shape. Treat a Data Mapper as a four-stage pipeline (extract, formula, map, output) and read the Debug Console log, which records the request and the response for each mapper call so both sides of the equation are visible. Work the diagnosis order the exam grades: input JSON, then filters and parameters, then mappings and formulas, then output JSON. Trace an empty Extract to a null ContextId that silently filters every row out, and trace a missing output node to an un-mapped source path or a case mismatch between the Extract Object Path and the Mapping tab. Spot blank formulas caused by null inputs, type mismatches, and date-format differences, keep formulas in dependency order, and sidestep the exam traps: editing mappings before reading the payloads, trusting a null parameter, and testing only happy-path data."
+date: "September 18, 2026"
+author: "Adroit Consulting"
+readTime: "20 min read"
+tags: [OmniStudio, Troubleshooting]
+---
+
+A Data Mapper comes back empty, or it comes back with a hole in it, and the reflex is to open the Mapping tab and start moving paths around. That is almost always the wrong first move. A Data Mapper is a pipeline with distinct stages, and a defect in any one of them shows up as bad output at the end. The Debug Console log records the request a mapper was sent and the response it produced, so the input and the output sit side by side in one place. The disagreement between those two payloads is what names the broken stage. [^1][^8]
+
+Requirement T-3 asks you to resolve Data Mapper output and Data Mapping issues. That splits into two questions that look similar and are not. Why did the mapper return nothing, and why did the mapper return the wrong thing. Nothing is an input problem: the data never arrived, so there was nothing to map. Wrong is a mapping problem or a formula problem: the data arrived and the mapper turned it into the wrong shape, the wrong values, or a structure with pieces missing. [^1][^3]
+
+This lesson walks the pipeline stage by stage, shows how to read both sides of the log, and works two failures end to end: an Extract that returns an empty response for a record you know exists, and an Extract that returns records but drops an output node the caller needs. The diagnosis order is the takeaway. Input JSON first, filters and parameters second, mappings and formulas third, output JSON last. [^2][^8]
+
+## Deep Dive
+
+### A Data Mapper is a pipeline, and its output JSON is the contract
+
+Start with the shape of the tool, because every failure in this requirement is a failure at one specific stage. A Data Mapper reads, transforms, and writes Salesforce data, and it comes in four types: Turbo Extract, Extract, Transform, and Load. A Turbo Extract handles simple single-object reads and supports neither formulas nor output mappings, so it has no Output tab at all. An Extract reads Salesforce data and can structure the result through formulas and mappings. A Transform reshapes input data without reading from or writing to Salesforce. A Load accepts JSON or XML and writes it to Salesforce objects. [^1] When you debug a mapper, the first question to settle is which of these you are looking at, because a Turbo Extract cannot have the mapping problem you may be hunting. [^1]
+
+For an Extract, the work happens on tabs, and the tabs map directly onto the stages. The Extract tab defines the Salesforce objects to read, labels the extracted JSON for later use, and filters which records to return. The Formula tab turns extracted values into new key-value pairs, where the Formula Result Path is the key and the formula is the value. The Mapping tab connects the data you extracted and prepared to the structure you want in the output, assigning each input path to a target path. [^2]
+
+Two labeling conventions from that tab layout do most of the work in this lesson. The Extract Object Path is the label you give extracted data so you can reference it later, which is why a field comes back as `Customer:Name` rather than a bare field name. The Formula Result Path is the name a computed value lives under, so a concatenated billing address might sit at `CommunicationAddress`. [^2][^6] Both of those labels are what the Mapping tab reads from. Change a label and every mapping that pointed at it breaks.
+
+The output of all this is a JSON structure, and that structure is a contract. The mappings together name the JSON root node and define the key-value pairs inside it, which is why the same mapping that produces `PersonAccount:Name` also decides that `PersonAccount` is the shape the caller will read. [^2] An OmniScript, a FlexCard, or an Integration Procedure downstream reads those paths with merge syntax. When a path is absent from the output, the consumer does not throw a helpful error. It renders blank. That is the reason T-3 exists as an exam requirement: the symptom appears far away from the cause. [^3][^7]
+
+### Empty output is an input problem, not an output problem
+
+Here is the mental model that fixes most "the mapper is broken" reports. A Data Mapper can only map what it retrieved. If the extract stage returned zero rows, the formula stage has nothing to compute on, the mapping stage has nothing to assign, and the output JSON is empty or missing the nodes entirely. The output is behaving correctly. The pipeline was fed nothing. [^3][^5]
+
+So for an empty response, the search starts at the front of the pipeline, not the back. Read the input JSON the mapper was sent. Then read the output it produced. Then ask the narrow question: did the extract have rows to work with? The log answers that, because the Debug Console records the request and the response for each action, which means the mapper's input payload and its output payload are both preserved. [^8] In the Data Mapper Designer, Preview mode exposes the same two things at design time: you enter input parameters, click Execute, and read the Response pane alongside the Debug Log and Error panes. [^2]
+
+That is the whole technique behind the first quiz question in this lesson. An Extract returns empty output for valid input, and the first place to look is the input mapping and filters together with the log's input and output JSON. [^8] Not the FlexCard theme, not the org license, not the browser cache. Those are the distractors because they describe failure modes from other domains of the exam, and none of them can empty a payload that the mapper was never given. [^1][^8]
+
+### Filters and parameters: the null parameter is what does the damage
+
+The most common single cause of an empty Extract is a filter that matched nothing, and the most common reason a filter matched nothing is a parameter that arrived null or absent. [^3]
+
+Walk the mechanism. An extract filter controls which records come back from the object defined in the extraction step, and it typically compares a field on the object to a variable passed into the mapper. In the designer tour example, the filter returns records where the account Id equals the `ContextId` variable, and that variable is passed to the Data Mapper by another component such as an OmniScript. [^2] Now suppose the caller sends the parameter under a different name, or sends it as null because an upstream action never wrote it. The query runs perfectly. The filter evaluates against nothing. Zero rows come back, the output is empty, and nothing in the mapper looks wrong because nothing in the mapper is wrong. [^2][^10]
+
+The naming half of this is worth memorizing, because it is the part people miss. The parameter name has to be the same across every element it passes through for data to flow properly, which is why the Trailhead build recommends labeling a ContextId with a description of the ID it holds. [^10] The same principle applies inside the pipeline: the Extract uses that value in the query, and the calling action uses the same name to hand it over. A rename on one side and not the other produces exactly the silent empty result described above.
+
+Then there are the filters that are simply too narrow, or narrow in the wrong way. A multi-criteria filter with one extra condition excludes records you expected. A filter on a field that is blank for the record in question matches nothing. A filter written against the wrong field type, or relying on a comparison that does not behave the way you assumed, narrows the result set to zero. [^3] None of these produce an error. All of them produce an empty response.
+
+The verification step is the same in every case: check the actual parameter values in the call against what the filter expects. In Preview mode you can enter the key-value pair by hand in the Input Parameters pane and click Edit as Params to control it precisely, which turns a guessing game into a controlled test. [^2] In the Debug Console you read the request payload and see what value actually arrived. [^8]
+
+One scoping note that saves time at the exam and in the org: if the mapper needs formulas or output mappings, it cannot be a Turbo Extract, because Turbo Extracts support neither. If you are debugging an empty response from a Turbo Extract, the entire formula and mapping branch of your diagnosis is off the table and the filter or the parameter is the whole story. [^1]
+
+### Wrong output is a mapping problem: read the output JSON path by path
+
+Now take the other half. The mapper returned records, the caller still renders a blank field, and the question becomes why the data disappeared between the extract and the consumer. Three defects account for almost all of it, and the output JSON shows which one you have. [^2][^5]
+
+Wrong source path. The Mapping tab assigns an input path to a target path, and the input path is the Extract Object Path label or a Formula Result Path. Point a mapping at a path that does not exist, or at a path that exists under a different parent, and the target key either never populates or populates with nothing. [^2][^6]
+
+Case mismatch. JSON keys are case sensitive, and the designer labels are what the mapping reads. `Customer:Name` and `Customer:name` are two different paths. A single wrong character in the case produces a mapping that looks right on screen, resolves to nothing at runtime, and leaves the target node empty in the output JSON. [^2]
+
+Un-mapped fields. This one is easy to miss because nothing is broken, the field simply was never assigned to a target path. The mapper returns a well-formed payload with a node absent from it. Because the pipeline produces its output from the mappings, anything not mapped is not in the output, and the downstream merge renders blank rather than erroring. [^2][^5][^7]
+
+That last point is how you diagnose all three at once. Read the output JSON the mapper actually produced, then walk the mapping table target by target. Every key present in the output came from a mapping that resolved. Every key the caller expects but the output lacks is either un-mapped or mapped from a source path that did not resolve. The output JSON is the inventory; the mapping table is the explanation. [^2][^5]
+
+Structure problems show up the same way. The mappings define the root node and the shape inside it, so a changed root node name breaks every consumer that reads the old one, and a mapping that should produce an array but produces a single object breaks any repeater expecting to iterate. Output data types matter here too, because the target path is typed and the consumer reads it as that type. [^2][^5][^12]
+
+### Formulas that return blank: nulls, types, dates, and run order
+
+A formula result that lands empty in the output can look like a mapping failure, and often it is not. The formula ran, and it produced nothing usable. Four causes dominate. [^6]
+
+Null inputs. Concatenating a field that is null, doing arithmetic on a null, or passing a null into a date function tends to yield a blank or an error rather than a value. If one extracted field in a chain is empty, the whole computed result can empty out. [^6]
+
+Type mismatches. A value that is text where a function expects a number, or a string where a function expects a date, produces a blank or a failure instead of a result. This is the second cause behind the second quiz question in this lesson: a formula field returns blank, and the likely cause is a null input or a type mismatch in the formula. Not the theme, not the license, not the channel. Those distractors are from other domains and do not touch the compute stage. [^6]
+
+Date and format differences. Date and time functions are sensitive to the shape of the value you hand them, so a date arriving in an unexpected format can produce a blank or an error rather than a converted value. [^6][^3]
+
+Run order. Formulas execute in the order they appear in the designer, which matters when one formula depends on the result of another. If the dependent formula sits above the formula it references, it computes before its input exists. The designer lets you drag formulas into sequence for exactly this reason. [^2]
+
+The verification method for all four is the same, and it is the reason the walkthrough below includes it as a numbered step: test the formula with edge values, not with the sample record that happens to work. Feed it a null, an empty string, a zero, a value of the wrong type, and a date in a different format. A formula that is correct for happy-path data and wrong for everything else will pass casual testing and fail in production. [^6]
+
+### The diagnosis order, and why it is not arbitrary
+
+Put the pieces in sequence and the requirement becomes mechanical. Input JSON. Then filters and parameters. Then mappings and formulas. Then output JSON. [^2][^8]
+
+Each step narrows the next. You read the input JSON first because it tells you whether the mapper was handed usable data at all. You check filters and parameters second because a filter or a null parameter decides whether rows come back, and there is no point inspecting a mapping for data that was never retrieved. You check mappings and formulas third because that is where retrieved data becomes the output shape, and the output JSON you already know how to read tells you which targets failed. You read the output JSON last because by then it is a confirmation, not a discovery. [^2][^3][^8]
+
+That order is also the fastest route to the fix, because it stops you from editing a mapping to repair an input problem. If the parameter was null, changing the mapping accomplishes nothing except making the original defect harder to find. [^3]
+
+### Both sides of the equation live in the log
+
+The tool that makes this work is the one the exam names for it. The Debug Console records action requests and response data, so for a mapper call you can see the request that was sent and the response that came back, which means the mapper's input and its output are both in evidence. [^8] That is the direct answer to the third quiz question: the tool that compares a mapper's input and its output is the Debug Console. Reports, Data Loader, and Workbench do not log the mapper call. [^8]
+
+There is a design-time sibling worth knowing because it is faster while you build. Preview mode in the Data Mapper Designer lets you enter input parameters, execute, then read the Response pane next to the Debug Log and Error panes, so you can reproduce an empty result without leaving the designer. [^2] Use Preview while you are authoring and the Debug Console when the failure is happening in someone else's session, where the log carries the real parameter values the real caller sent. [^2][^8] Lesson 46 covers the Debug Console in full as requirement T-9.
+
+One practical reading habit: when you open the log for a mapper call, look at the request before the response. Almost every empty-output investigation is decided by whether the request carried a value for the parameter the filter depends on. [^8][^10]
+
+## Configuration Walkthrough
+
+Work one concrete failure with two symptoms, because they are the two shapes this requirement takes. A `Get Account Summary` Extract is called from an OmniScript. It passes a `ContextId` for the account record. For one rep, the mapper returns an empty response even though the account exists. For everyone else, records come back but the mailing address node is missing from the output. Both symptoms trace to evidence you can read in the log. [^2][^8]
+
+1. **Open the Debug Console for the failing mapper call.** Filter to the session or the component so you isolate the mapper call you care about rather than reading every action in the transaction. [^8] If you are still in the designer, use Preview instead: enter the input parameter in the Input Parameters pane, click Execute, and read the Response pane with the Debug Log and Error panes open beside it. [^2] You are not changing anything yet. You are pulling the evidence.
+
+2. **Compare input JSON against the output mapping against the actual output.** Read the request payload the mapper received and the response payload it returned. [^8] Now read the Mapping tab in the designer. Does the request carry the parameter the filter needs? Does the response contain the nodes the mapping table promises? Three payloads, one question each, and the disagreement between them localizes the broken stage. [^2][^5]
+
+3. **Check filters and parameters against expected values.** Take the parameter value out of the request payload and compare it to what the extract filter compares against. Confirm the names match across the caller and the mapper, because the value only flows when the name is the same on both sides. [^2][^10] Confirm the filter criteria are what you intended, that the field being filtered is populated on the record in question, and that no extra criterion is excluding it. [^3] In the case above, the empty response for one rep resolves here: the parameter arrived null, the filter compared a field to nothing, and the query correctly returned zero rows. [^2][^3]
+
+4. **Validate formulas with edge values.** For the missing address node, check whether the address is produced by a mapping straight from the extract or by a formula. If it comes from a formula, test that formula with a null address, an empty string, and a value of the expected type, because a null input or a type mismatch produces a blank rather than an error. [^6] Then confirm the formula's run order puts it before anything that depends on its result path. [^2] If the address is a direct mapping, compare the source path against the extract label character by character and confirm the target path is actually mapped. [^2][^5]
+
+5. **Fix the cause, re-run, and verify in a fresh log entry.** Change the parameter name or its upstream source for the empty response. Correct the source path, the case, or the missing mapping for the dropped node. [^2][^3] Then re-run the call and open a new log entry to confirm the request now carries the value and the response now contains the node. The mapper is fixed when the evidence says it is fixed, not when the designer looks cleaner. [^8]
+
+## Exam Traps
+
+- **Editing mappings without reading input versus output.** The expensive wrong move, and the trap this requirement is built around. A mapping edit made before you know whether the data arrived can spend an hour rearranging a table that was never the problem. Read the request and the response first, decide which stage failed, and only then touch the mapping. [^2][^3][^8]
+
+- **A null input parameter that silently filters everything out.** Nothing errors. The query runs, the filter compares against nothing, and the mapper returns an empty response that looks like a broken mapper. The cause is upstream, in the value the caller sent, and the fix is the name or the source of that parameter rather than the mapper itself. [^3][^10]
+
+- **Testing only happy-path data.** A mapper that works on the record you happened to preview is not a tested mapper. Null inputs, empty strings, values of the wrong type, and dates in an unexpected format are where the blank fields come from, and a formula that was only ever run against good data will ship the defect. [^6]
+
+## Exam Tip
+
+Compress T-3 into one line: Data Mapper debugging is input JSON against output JSON. One side is always right, and the other one explains the bug. [^8] If the output is empty, the input was empty, so look at the filter and the parameter value in the log before you look at the Mapping tab, and remember that names have to match across the elements a value passes through. [^2][^3][^10] If the output is wrong, the input was fine, so walk the output JSON against the mapping table and look for the source path that did not resolve, the case that does not match, and the field that was never mapped. [^2][^5] If a computed value came back blank, test the formula with nulls and wrong types before rewriting it, and check that it runs after anything it depends on. [^2][^6] The order to work in is the order the requirement grades: input JSON, filters and parameters, mappings and formulas, output JSON. [^2][^8]
+
+## Try It
+
+Build the failures on purpose in a sandbox, because reading about a null parameter is not the same as watching a filter swallow a query. [^2][^6][^8]
+
+Start with a working Extract that filters an account by a ContextId, and preview it with a real record Id so you can see a populated Response pane. [^2] Then pass a null for that parameter, execute again, and watch the response come back empty while the debug log shows a perfectly valid query that returned nothing. Rename the parameter on the caller side only, run it a third time, and watch the same silent empty result appear. [^2][^10] You have now seen the two most common causes of an empty Extract, and neither one produced an error message.
+
+Next, drop a mapped field. Remove a single mapping from the Mapping tab, or change the case of one character in a source path, then execute and read the output JSON. Find the node that vanished, then restore the mapping and watch it return. [^2][^5]
+
+Then break a formula. Build a concatenation over extracted fields and run it against a record where one of those fields is blank, then against a value of the wrong type, and read the blank result each time. [^6] Fix it, and note that the fix was input handling, not the mapping.
+
+Finish by reading a real Debug Console entry for a mapper call, request first and response second, and naming out loud which side of the equation holds the cause. [^8] If you can do that for an empty response and for a wrong response, T-3 is a data problem you already know how to solve.
+
+## What's Next
+
+You now read a Data Mapper as a pipeline, trace an empty response to a filter or a null parameter, trace a wrong response to a source path, a case mismatch, or an un-mapped field, test formulas with edge values instead of happy-path data, and use the Debug Console to compare the request a mapper received against the response it produced. [^2][^3][^5][^6][^8] Lesson 41, Resolve Integration Procedure Execution Errors (T-4), takes the same evidence-first method one layer up, to the process that calls your mappers: reading per-action logs to find which step failed, diagnosing HTTP and Remote Action failures from their response bodies, tracing null data to an upstream action, and handling governor limits by chaining. [^1][^10] The mapper you just learned to debug is one of the actions you will be reading in those logs. [^1]
+
+## Related Requirements
+
+- Extract Interface: Multi-Object, Filters, Parameters, lesson 31 of 46 (DM-2)
+- Formulas in Data Mappers, lesson 35 of 46 (DM-6)
+- Mapping Source and Target Structures, lesson 36 of 46 (DM-7)
+- Using the Debug Console, lesson 46 of 46 (T-9)
+
+## References
+
+[^1]: [Omnistudio Data Mappers (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptors.htm&language=en_US&type=5)
+[^2]: [Explore the Data Mapper Designer Tool Features, Trailhead (Omnistudio Data Mapper Fundamentals module)](https://trailhead.salesforce.com/content/learn/modules/omnistudio-data-mapper-fundamentals/tour-the-data-mapper-designer)
+[^3]: [Omnistudio Data Mapper Extract Overview (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_extract_overview.htm&language=en_US&type=5)
+[^5]: [Omnistudio Data Mapper Transform Data Mappings (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_dataraptor_transform_data_mappings.htm&type=5)
+[^6]: [Use Formulas in Omnistudio Data Mappers (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_use_formulas_in_dataraptors.htm&type=5)
+[^7]: [Inputs and Outputs for Omnistudio Data Mappers, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_inputs_outputs_for_data_mappers.htm&type=5)
+[^8]: [View and Debug Action Requests and Response Data, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_view_and_debug_action_requests_and_response_data.htm&type=5)
+[^10]: [Build Simple Integration Procedures, Trailhead (Omnistudio Integration Procedures module)](https://trailhead.salesforce.com/content/learn/modules/omnistudio-integration-procedures/build-simple-integration-procedures)
+[^12]: [Omnistudio Data Mapper Output Data Types (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_output_data_types_47661.htm&type=5)
