@@ -42,6 +42,8 @@ A security reviewer spends years learning one core instinct: separate untrusted 
 
 NIST's adversarial machine learning taxonomy treats prompt injection as a distinct attack class on generative AI, separate from the evasion and poisoning attacks that apply to predictive models, and it separates direct from indirect injection as different techniques. [^4] The point of that taxonomy is that you cannot defend an AI system by pretending it is a normal web application. The input-validation and WAF controls that catch SQL injection do not catch a hidden instruction inside a support email, because the email is not parsed as a command. It is read as context, and the model decides on its own that part of it reads like an instruction.
 
+![Comparison of a classic application and an AI agent: the classic query parser keeps untrusted data out of its grammar, while an agent funnels the system prompt, retrieved content, and user input into one interpreter with no boundary in the token stream](</diagrams/security-architecture-for-ai-prompt-injection-tool-permissions-least-privilege/1-two-interpreters.png>)
+
 Two consequences follow, and both should shape every design decision.
 
 First, **you cannot reliably detect injection in the prompt.** Filters and prompt-hardening reduce the attack surface, and OWASP and NIST both recommend them, but neither authority claims complete prevention. NIST's own framing is that the mitigations reduce risk rather than eliminate it. [^4] [^5] So the security of the system cannot depend on the model refusing a bad instruction. It has to come from the surrounding architecture.
@@ -70,6 +72,8 @@ Three decisions make up the permission boundary, and each one is worth an explic
 
 The permission boundary is where the Salesforce agent-user model becomes a worked example rather than an abstraction. A customer-facing agent executes as a dedicated agent user, a real Salesforce user record with a profile and permission sets, and everything that user can reach is in scope for every anonymous conversation the agent has. [^6] Salesforce's own guidance for that agent user is the principle of least privilege: grant only the objects and fields the agent genuinely needs, and no more. [^6] If that agent user has read access to Opportunity, then every visitor who injects a prompt gets a shot at the opportunity pipeline, because the agent will query what its user can see. The identity and the tool set are the same boundary.
 
+![The permission boundary as three decisions between the model and live systems: which tools exist at all, what each tool may do, and who authorizes a call, with the agent user identity bounding the whole path](</diagrams/security-architecture-for-ai-prompt-injection-tool-permissions-least-privilege/2-permission-boundary.png>)
+
 ## Least privilege, and its agentic cousin, least agency
 
 Least privilege is not a setting. It is a method for sizing an identity, and for an agent it has to be applied at three levels at once, because an agent is three things: an identity that runs, a set of tools it can call, and a degree of autonomy over when it calls them.
@@ -79,6 +83,8 @@ Least privilege is not a setting. It is a method for sizing an identity, and for
 - **Least agency on the autonomy.** This is the layer classic least privilege does not name. OWASP introduces least agency to capture the advice that you should avoid granting autonomous behavior where a simpler design works, because unnecessary autonomy expands the attack surface without adding value. [^3] A one-shot tool call that requires approval does not need the authority to chain actions on its own.
 
 These three sit on top of the excessive-agency risk OWASP has carried since its first LLM edition. Excessive agency is the grant of more capability than the task requires, and it is the reason a single successful injection becomes a harmful action instead of a harmless wrong answer. [^2] When you trim the identity, the tools, and the autonomy, you are not making the agent less useful. You are making the failure mode less expensive, and for a component you cannot fully trust, that is the entire game.
+
+![Least privilege applied at three levels, each with the minimum it asks for and the reach it caps: the identity the agent runs as, the tool set and per-tool scope, and the autonomy the agent holds](</diagrams/security-architecture-for-ai-prompt-injection-tool-permissions-least-privilege/3-least-privilege-three-levels.png>)
 
 A useful way to think about it, and one that connects to the search-screen lesson, is that the model is the untrusted input and everything else is the trust boundary. You cannot make the model trustworthy, so you make the boundary small. The agent user is the permission model, the tools are the query allowlist, and the human approval gate is the server-side authorization check. Same discipline, new interpreter.
 
@@ -95,6 +101,8 @@ Walk the failure through the three boundaries, and the fixes name themselves.
 **Tools.** The email tool should not accept an arbitrary recipient. It should send only to the address already on the case, drawn from the record the agent is working, with the recipient validated against that record, not taken from free text the model produced. That is least privilege on the tool: the tool's parameter space is bounded so a tricked model cannot aim it anywhere new. [^3]
 
 **Autonomy and approval.** Sending an email with account data, or any action that touches sensitive or customer-visible state, should sit behind a human approval gate. The agent proposes, a person confirms, the tool executes. That single change converts a silent data exfiltration into a visible prompt to a human, and it removes the agent from the critical path of the harmful action. [^3]
+
+![The worked support agent example traced end to end: the injected support message, the model treating it as context, the query that succeeds and the email that leaves, then the three cuts that close the path at identity, tools, and autonomy](</diagrams/security-architecture-for-ai-prompt-injection-tool-permissions-least-privilege/4-worked-example-three-cuts.png>)
 
 The architectural lesson generalizes beyond the CRM example. Any agent that reads and acts has three degrees of freedom you can restrict, what it can see, what it can do, and what it can decide on its own. Restrict all three and a fully successful injection has nowhere to go. The model gets tricked, the prompt is hostile, and the system answers with a refusal, an empty result, or a request for a human, because the reach simply is not there.
 
