@@ -14,6 +14,8 @@ Every rule in the earlier Integration Procedures lessons exists because someone 
 
 Requirement IP-8 reads as a description, but it is a judgment test in disguise. The exam does not hand you a definition to recite. It hands you a scenario, or a set of claims, and asks which one reflects how production IPs are actually built. [^1] The in-lesson quiz asks three such questions, and each maps to a claim you must be ready to defend. First, best practices favor focused, well-named IPs with consistent contracts and robust error handling, never a single massive IP that does everything. Second, reusable data logic belongs in Data Mappers that IPs reuse, not duplicated inline in every procedure, because reuse keeps that logic single-sourced. Third, an IP should be chainable when the process is long-running and exceeds synchronous limits, and not only because chaining is available, which means short orchestrations stay synchronous. Every section below teaches toward those three claims, because they are the exam's way of checking that you absorbed the domain's practices and not just its mechanics. [^1]
 
+![The five habits of a production-ready Integration Procedure: focused, contracted, cached, chained, and tested, plus reusing Data Mappers and keeping errors consistent and never silent](</diagrams/day-29-ip-8-integration-procedure-best-practices/1-five-habits.png>)
+
 ## Deep Dive
 
 ### Focused IPs: one logical operation, one procedure
@@ -26,6 +28,8 @@ Why does focus matter beyond the SOQL cap? Three reasons, and each is a maintain
 
 The monolithic alternative is the trap, and it is the first one the requirement calls out. One massive IP that extracts data, calls three external systems, writes five objects, formats a document, and sends an email is hard to test, because its inputs and outputs are entangled across every step. It is hard to maintain, because a change to any one responsibility risks the others. And it is hard to reuse, because no caller wants all of it, so each caller either over-requests or you build workarounds. The best practice is the opposite: split responsibilities into focused procedures, each owning one logical operation, and let them call one another when an operation genuinely needs several phases. [^1]
 
+![Monolithic IP versus focused IPs: one massive procedure that extracts, calls external systems, writes objects, formats documents, and sends email is the anti-pattern, while focused procedures are testable, reusable, and maintainable](</diagrams/day-29-ip-8-integration-procedure-best-practices/2-monolithic-vs-focused.png>)
+
 ### Consistent contracts: the IP as a dependable building block
 
 A focused IP is only useful if the things around it can rely on its shape. That is the second habit, and it comes straight from the design principle you met in the Response Action lesson: the shape of what an IP accepts and returns is a contract, and a contract only works if it is stable. [^2] Best-practice IPs keep consistent input and output JSON contracts, and they design the error branch into that contract so a failure comes back in a shape callers already know how to parse. [^1][^2]
@@ -35,6 +39,8 @@ Unpack input first. Every caller that invokes the IP, whether an OmniScript, a F
 Output is where the contract really earns its keep, and the reason is the error branch. A best-practice IP does not return a tidy object on success and a raw exception dump on failure. It returns a consistent structure on both routes, with the same wrapper carrying either the result or an error node that holds a code and a readable message. [^3] That consistency is what makes the IP a dependable building block: a FlexCard or OmniScript binds to one response shape, and it handles both outcomes with the same logic instead of special-casing an unstructured failure. You saw the mechanics in the Response Action and exception handling lessons. What IP-8 adds is the judgment that this consistency is a best practice you apply to every IP you build, not an option you reach for on the hard ones. [^2][^3]
 
 The Response Action is the enforcement point for the output contract, because it is the action that decides exactly what leaves the procedure. [^2] Trimming the response to only what the caller needs is itself listed as a best practice, and it pairs with the consistency rule: map the success fields deliberately, map the error branch in the same shape, and let the Response Action ship a clean, predictable payload. [^1][^2] An IP with a stable contract behaves like a library function. Callers trust it, reuse it, and stop re-implementing its work themselves.
+
+![The consistent output contract: a best-practice IP returns the same wrapper on both the success and failure routes, carrying an outcome flag, the result, and an error node with a code and a readable message](</diagrams/day-29-ip-8-integration-procedure-best-practices/3-consistent-contract.png>)
 
 ### Error handling everywhere: no silent failures
 
@@ -60,6 +66,8 @@ The judgment here is the part the exam tests, and it is the substance of quiz qu
 
 There is a design consequence that should shape how you plan long procedures. When you split work across transactions, each link commits independently, so there is no shared rollback across links. [^5] A failure in link three does not undo link one. That is exactly why the chaining lesson paired with per-link error handling: each link needs its own failure path, and each link should be idempotent where possible so re-running it does not duplicate work. [^5] The best practice for long procedures is not just to enable chaining. It is to design the procedure so that its links are independently safe, because the transaction boundary that saves you from governor limits also removes the safety net of a single rollback. [^3][^5]
 
+![Chain or cache decision: chain when a process is long-running and exceeds synchronous limits, keep short orchestrations synchronous, and cache only frequently accessed, infrequently updated data](</diagrams/day-29-ip-8-integration-procedure-best-practices/4-chain-vs-cache.png>)
+
 ### Reuse Data Mappers: single-source your data logic
 
 The sixth habit is where reusable data logic lives, and it answers quiz question two outright. Best-practice IPs reuse Data Mappers instead of duplicating data logic inline, because an IP usually calls one or more Data Mappers, and those Data Mappers are the single source of truth for reading and writing SObject data. [^1][^6]
@@ -81,6 +89,8 @@ The discipline is to test each action, not just the final result. When you run a
 ## Configuration Walkthrough
 
 None of these practices live in a single property. They are a design discipline you apply while you build, and a review checklist you run before you activate. Walk through the sequence on a concrete example: an IP that looks up an order and its line items, resolves each line's product through a shared lookup, and returns a tidy summary to a FlexCard.
+
+![Building GetOrderSummary: the seven best-practice steps from scoping and naming the procedure, defining contracts, reusing a Data Mapper, adding error handling, caching stable reference data, deciding synchronous versus chainable, to testing each action before activating](</diagrams/day-29-ip-8-integration-procedure-best-practices/5-getordersummary-walkthrough.png>)
 
 1. **Scope the procedure to one logical operation and name it.** Decide what the IP owns before you add anything. This IP owns "lookup an order and summarize its line items," so name it `GetOrderSummary`, not `ProcessOrderStuff`. [^1] Resist the urge to fold in the email that gets sent after the order is confirmed or the write that updates the order status; those belong in separate focused procedures that a caller can invoke when it actually needs them. [^1]
 
