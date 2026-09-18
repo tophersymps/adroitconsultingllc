@@ -32,6 +32,8 @@ The platform gives you a place to record these judgments as field metadata. Ever
 
 Two properties of Data Classification are worth stating plainly, because both appear in scenario questions. First, classification is metadata about what a field is supposed to contain. It does not read the records. A field classified as PII is labeled, not verified, and content scanning is a different capability (Einstein Data Detect). Second, classification does nothing on its own. Nothing in the platform reads the label and hides the field. The label exists so that a human, a report, or a piece of automation can make a decision from it.
 
+![Comparison of PCI, PII, and PHI: what each category covers, who enforces it, the control priority it implies, and the obligation that gets missed](</diagrams/day-07-p-4a-sensitive-data-identify-classify-pci-pii-hipaa-shi/1-classify-first-control-priority.png>)
+
 ### What Shield Platform Encryption actually protects
 
 Shield Platform Encryption encrypts data at rest for the fields, files, and other data elements you select. The encryption is AES with 256-bit keys, the data is encrypted and decrypted on the application servers, and the key material is derived inside a hardware security module. Data on disk is ciphertext, which is the property that matters when the threat you are defending against is a dump of the underlying database rather than a user with a login. [^2][^4]
@@ -57,6 +59,8 @@ Even with deterministic encryption, pattern matching does not come back. A LIKE 
 
 Search index encryption is a separate switch from field encryption. If search index files are not encrypted, they can still expose the values of fields you believed were protected, so an encryption design that stops at the field level has a documented gap. [^4][^5]
 
+![Probabilistic and deterministic encryption compared on filtering capability, plus the limits that hold under both schemes](</diagrams/day-07-p-4a-sensitive-data-identify-classify-pci-pii-hipaa-shi/3-probabilistic-vs-deterministic.png>)
+
 ### Encryption is not access control
 
 This is the single most important sentence in objective p-4a, and the quiz for this lesson tests it directly. Encryption protects the stored form of a value. It does not restrict which users can read the field. At runtime the platform decrypts transparently for any user whose field-level security grants read access, so the value appears in the interface, in a report, in a list view, and in an API response exactly as it would in an unencrypted field. [^2][^4][^5]
@@ -65,6 +69,8 @@ The comparison that makes this concrete: field-level security, org-wide defaults
 
 One practical limit belongs in the same paragraph, because a designer who reads both halves will hit it. Shield Platform Encryption protects data inside the platform's storage. It does not follow the data out. A native data export produces readable files, so the control for data leaving the org is a separate decision about what may be exported, by whom, and how the export itself is protected. The exam answer for "protect the value at rest" is still encryption, because encryption is the only control in the list that changes the stored form; the export path is a design concern that sits beside it.
 
+
+![Two layers side by side: access control changes who can read a value while encryption changes what is stored, plus what the same encrypted field looks like to an authorized user, an unauthorized user, and an exposed database](</diagrams/day-07-p-4a-sensitive-data-identify-classify-pci-pii-hipaa-shi/2-encryption-vs-access-control.png>)
 
 ### Field history tracking
 
@@ -81,6 +87,8 @@ The defaults are worth memorizing. Salesforce archives after 18 months in produc
 Two operational notes. The first archive copy is slow, because it writes every existing history row covered by the policy, while subsequent copies are incremental. And the archive is an API surface rather than a UI one: archived history is queryable through a bounded set of SOQL against FieldHistoryArchive, which means a compliance query on ten years of history is a job someone has to build, not a page someone can open. [^8][^14]
 
 There is also an interaction between the two Shield features that belongs in a design document. Field history that was archived before encryption was enabled is not retroactively encrypted. If the requirement is that a sensitive value never sits in readable form after encryption goes live, the ordering of the two changes matters. [^8]
+
+![Timeline comparing field history tracking with Field Audit Trail: the 18 month standard window, the 24 month API path, the 20 and 200 field caps, and the archive into the FieldHistoryArchive big object with retention until deletion](</diagrams/day-07-p-4a-sensitive-data-identify-classify-pci-pii-hipaa-shi/4-field-history-vs-audit-trail.png>)
 
 ### Where the data protection surfaces actually live
 
@@ -130,6 +138,8 @@ For the SSN, the layers are: field-level security that grants read to one permis
 For the card number, the layers are: field-level security restricted to the billing permission set; encryption with the probabilistic scheme; exclusion from every page layout and list view that does not need it; field history tracking; and a Privacy Center data management policy that masks or deletes the value once the dispute window closes. The point of the retention layer here is that the strongest protection for a card number is not storing it longer than the business needs it.
 
 For the diagnosis code, the decision is different and this is the part that separates a passing answer from a failing one. The clinical team filters and reports by this field, so probabilistic encryption would break the requirement outright: a field whose ciphertext changes on every write cannot be used in a WHERE filter. The architect chooses deterministic encryption, case-insensitive, accepts the trade that equality matching was bought at the cost of cryptographic strength, and documents why. Field history stays on, Field Audit Trail covers the longer clinical retention obligation, and the access layer grants read to clinical roles through permission sets while hiding the field from service agents who work the same records. [^4][^6]
+
+![The worked example as a table: three sensitive fields and the restrict, encrypt, audit, and retention layers each classification buys, with the ordering that answers the objective](</diagrams/day-07-p-4a-sensitive-data-identify-classify-pci-pii-hipaa-shi/5-worked-example-control-stacks.png>)
 
 In code, the difference between the schemes shows up immediately.
 
