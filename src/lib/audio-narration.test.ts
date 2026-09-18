@@ -77,6 +77,35 @@ describe("mdxToNarration", () => {
     expect(narration).toBe("Figure spoken: An architecture diagram.");
   });
 
+  it("does not emit a double period when the alt already ends in a period", () => {
+    // Real lesson diagram alts end in a sentence-ending period; the default
+    // lead-in appends its own `.`, which previously produced a double stop
+    // (`...or products..`) that a TTS engine reads as two pauses.
+    const mdx =
+      "![A diagram of object permissions and CRUD system vs object profiles.](</diagrams/perms.png>)";
+    const narration = mdxToNarration(mdx);
+    expect(narration).toBe(
+      "Diagram: A diagram of object permissions and CRUD system vs object profiles.",
+    );
+    expect(narration).not.toMatch(/\.\.$/);
+  });
+
+  it("normalizes trailing sentence punctuation for description:: overrides too", () => {
+    const mdx =
+      "![Small caption](</diagrams/y.png>)\ndescription:: A detailed spoken walkthrough of how the pipeline stages data.";
+    const narration = mdxToNarration(mdx);
+    expect(narration).toBe(
+      "Diagram: A detailed spoken walkthrough of how the pipeline stages data.",
+    );
+    expect(narration).not.toMatch(/\.\.$/);
+  });
+
+  it("keeps a single trailing period when the alt has no sentence punctuation", () => {
+    const mdx = "![A bar chart of MAU growth](</diagrams/x.png>)";
+    const narration = mdxToNarration(mdx);
+    expect(narration).toBe("Diagram: A bar chart of MAU growth.");
+  });
+
   it("normalizes a real pilot article into speakable prose without raw diagram paths", () => {
     const mdx = `---
 title: "Most Teams Can See Their Agents"
@@ -84,7 +113,7 @@ slug: agent-eval-infrastructure-2026
 ---
 ## The eval layer
 Most teams can trace their agent.
-![A bar chart showing 52% run offline evals and 37% online ones](</diagrams/eval.png)`;
+![A bar chart showing 52% run offline evals and 37% online ones](</diagrams/eval.png>)`;
     const narration = mdxToNarration(mdx);
     // frontmatter stripped, no YAML residue
     expect(narration).not.toContain("title:");

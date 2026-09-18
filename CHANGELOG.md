@@ -4,6 +4,16 @@ All notable changes to the Adroit Consulting Blog project will be documented in 
 
 ## [Unreleased]
 
+### Fix: narration diagram lead-in no longer emits a double period when the alt ends in '.' (t_2e6e20e0)
+
+**What** - Fixed the narration builder's diagram lead-in so a spoken diagram line never ends in a double period. `mdxToNarration` now strips a single trailing sentence-ending punctuation (`.`, `!`, `?`) from the resolved diagram text (alt or `description::` override) before the lead-in wraps it with its own `.`. Previously the default `(alt) => \`Diagram: ${alt}.\`` appended a second period to every real lesson diagram alt (which already ends in `.`), producing `...or products..` — a double stop a TTS engine reads as two pauses. Added 3 regression tests: an alt ending in `.` yields a single `.`, a `description::` override ending in `.` yields a single `.`, and an alt with no trailing punctuation still gets exactly one `.`.
+
+**Why** - A11y finding from lara (t_9b8826a4): all 5 Diagram lines on the real 5-diagram lesson ended in `..`. The existing unit tests never caught it because their fixture alts had no trailing period. The defect only surfaces once the backfill cron populates narrations, so it is LOW severity but worth fixing now while the scaffolding is still on the branch.
+
+**Verified** - `npx vitest run src/lib/audio-narration.test.ts` (19 tests) and the full suite (828 tests) pass; `npx tsc --noEmit` exits 0. Re-ran the builder on the real 5-diagram lesson: 106 lines, 5 Diagram cues, 0 diagram lines ending in a double period (was 5 before the fix).
+
+**Known Issues** - None. Committed to `feat/lesson-audio` only; main is untouched.
+
 ### Lesson audio scaffolding on feat/lesson-audio (t_982d9989)
 
 **What** - Added the lesson-audio scaffolding on the `feat/lesson-audio` branch (NOT merged to main; the backfill cron runs later, after the diagram retrofit). A parallel `LessonAudio` module (ADR-101) with a `learn/<series>/<slug>/` storage prefix (ADR-102): new contract types in `src/lib/audio/contracts.ts`, a generated `src/data/lesson-audio.ts` (starts empty), a `--learn` mode in `scripts/build-audio.js` (with `assertSafeSeries` allowlist and a merge keyed on series/slug/voice), two-space resolution in `GET /api/audio/[slug]` and its `/timings` twin (ADR-103), and the `AudioPlayerLazy` wired into the atlas lesson page gated on `(series, slug)` (ADR-104). The narration builder `mdxToNarration` is reused unchanged (ADR-105) - verified on a real 5-diagram lesson: 106 lines, 5 Diagram cues, 16 Section cues, 0 leaked syntax.
