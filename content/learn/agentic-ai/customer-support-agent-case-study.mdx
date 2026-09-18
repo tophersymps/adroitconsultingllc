@@ -26,9 +26,13 @@ The framing comes from Anthropic's engineering guidance, and it is the single mo
 
 Apply that to support. Most of your traffic is a small set of intents: "my bill is wrong", "I need to cancel", "where is my order", "reset my password". These are well-defined tasks with a known end state, and that is precisely what workflows are for. Predictability and consistency for well-defined tasks is the benefit Anthropic lists for workflows, while agents win where flexibility and model-driven decision-making are needed at scale.[^1] So you do not hand a free-running agent the whole conversation. You build a routing step that classifies the intent, then hands each intent a constrained, mostly predetermined path with a few decision points inside.
 
+![A two-panel comparison: a workflow orchestrates LLMs and tools through predefined code paths and wins on predictability for well-defined tasks, while an agent lets the LLM direct its own processes and tool usage for the long tail the workflow gets stuck on. The band below states the default: find the simplest solution and add complexity only when needed.](</diagrams/customer-support-agent-case-study/1-workflow-vs-agent.png>)
+
 The routing example in Anthropic's post describes this exact split. Routing is for directing different types of customer service queries, like general questions, refund requests, and technical support, into different downstream processes, prompts, and tools, and for sending easy, common questions to smaller, cheaper models while hard or unusual ones go to more capable models.[^1] That cost split matters at support volume, because your easy questions are the majority and your expensive model is not needed for most of them.
 
 Here is the consequence. The thing you build is not an agent in the free-running sense for the common cases. It is a workflow with three of the building blocks stacked: routing at the front, a retrieval step in the middle, and an action boundary at the edge. You reach for an open-ended agent for the long tail of weird, unstructured requests, where the workflow gets stuck and a model that can improvise is genuinely better. Most of your design effort goes into the routing and the boundary, not into making the model smarter.
+
+![A customer message flows down through three stacked building blocks: routing at the front, retrieval in the middle, and the action boundary at the edge. The stack ends in two outcomes, resolved end to end or handed to a human with the full context attached.](</diagrams/customer-support-agent-case-study/2-three-blocks-stacked.png>)
 
 ## The routing layer: classify before you act
 
@@ -60,6 +64,8 @@ What makes this hard in practice is not the search. It is the refinement. Custom
 
 Two failure modes to design against here, both from the RAG lessons earlier in this path. Retrieval can return the wrong chunk, in which case the model builds a fluent answer on the wrong fact, and retrieval can return nothing relevant, in which case the model hallucinates an answer rather than admitting it does not know. Intercom's third phase, validate accuracy, exists to catch both. It compares the generated response to the original query, determines whether the response answers it well enough, and checks whether the response is grounded in the knowledge resources as the source of truth. If the checks fail, Fin tells the customer it cannot answer and escalates to a human.[^4] Copy that structure. The validation step is not decoration. It is the gate that separates a grounded answer from a confident fabrication.
 
+![Four stages run left to right through the Fin engine: refine the query, retrieve from approved content only, generate a grounded answer, then validate accuracy. A passing check returns the answer, and a failing check tells the customer it cannot answer and escalates to a human.](</diagrams/customer-support-agent-case-study/3-retrieval-pipeline-gates.png>)
+
 ## The tool boundary: read freely, write under guard
 
 Retrieval gives the agent answers. Tools give it the ability to act. This is where a support agent turns from a chatbot into something with risk, and where most of the security budget belongs.
@@ -73,6 +79,8 @@ Two containment lessons apply even at small scale. The first is that the model l
 The second is about credentials. In Anthropic's managed agent architecture, the structural fix for credential theft is to ensure tokens are never reachable from the sandbox where the model's generated code runs. Git credentials are wired into the local remote so push and pull work without the agent ever handling the token, and custom tool tokens live in a vault behind a proxy.[^6] For a support agent, the same shape means your CRM and billing credentials never enter the conversation context. The agent calls a tool, and the tool owns its own credential. A prompt injection can then steal a fact, but it cannot steal a password it was never shown.
 
 The tool boundary is also where retrieval and action meet. A good support agent can look up an order, but changing it is a separate, guarded capability. Keep the lookup and the mutation as different tools, because the difference between them is exactly your blast radius. Lesson 39's warning about tools that report success while returning nothing applies harder here, since the caller is a model that will otherwise assume the empty result is the answer.[^7]
+
+![Two columns compare the tool boundary: read-only tools are the default and can be deployed broadly, while write tools are added one at a time behind their own policy check for amount threshold, rate limit, and fresh confirmation. Below, the containment band names the model, the environment, and the external content the agent can reach.](</diagrams/customer-support-agent-case-study/4-tool-boundary-read-write.png>)
 
 ## Escalation: the handoff is part of the design, not a failure
 
@@ -111,6 +119,8 @@ A customer writes: "I got charged twice for my subscription and I want one of th
 **Step six, log the outcome.** The resolved intent, the sources retrieved, the two charges, and the result all append to the session log and attach to the ticket. The observability layer records resolution, latency, and token cost, so the pipeline from Lesson 38 has something to chart and Lesson 39 has a clean trace to read if anything goes sideways later.
 
 The whole thing ran as a bounded workflow, never as a free-running agent, touched one narrow write tool under two separate policy gates, and left a complete record. That is the architecture working.
+
+![The refund request walked through six numbered steps: route, retrieve, validate against policy, act under guard, validate the answer, and log the outcome, ending with one narrow write tool, two policy gates, and a complete record.](</diagrams/customer-support-agent-case-study/5-refund-request-six-steps.png>)
 
 One comparison sharpens why the design choices matter. Klarna reported its AI assistant handled two-thirds of customer service chats in its first month, resolved errands in under two minutes, and drove a 25 percent drop in repeat inquiries.[^9] Those are the numbers a vendor wishes were the whole story, and they are worth reading with the skepticism the rest of this lesson teaches. Resolution to one customer can be an argument for cancellation to another, and a metric that counts chats "handled" inflates fast when the escalation path is hidden. Treat vendor-reported metrics as evidence to interrogate, not as a benchmark you copy, and judge your own agent by resolution rate and re-contact rate separately, not by the volume of messages it answers.
 
