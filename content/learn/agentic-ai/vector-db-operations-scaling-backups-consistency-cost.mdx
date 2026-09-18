@@ -1,0 +1,138 @@
+---
+title: "Lesson 45: Vector DB Operations: Scaling, Backups, Consistency, and Cost"
+slug: vector-db-operations-scaling-backups-consistency-cost
+series: "agentic-ai"
+lesson: 45
+excerpt: "Lesson 12 taught you how to choose a vector database. This lesson is about what it takes to run one. A vector database is not a static pile of vectors; it is a live system with a memory budget, a backup story, a consistency model, and a bill. This lesson covers how a vector database scales and why memory is the variable that decides it, why backing one up is different from backing up a normal database, how consistency and freshness are maintained as documents change, and what all of that actually costs. A worked example sizes a pgvector deployment by hand and walks the backup and consistency decisions for a real RAG workload."
+date: "September 18, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [LLMs, AI Agents, RAG, Vector Databases, Data Engineering]
+---
+
+# Lesson 45: Vector DB Operations: Scaling, Backups, Consistency, and Cost
+
+Lesson 12 taught you how to choose a vector database. This lesson is about what it takes to run one. Choosing is a one-time decision. Running is a daily one, and it is where most RAG systems quietly fall apart. A vector database is not a static pile of vectors you load once and forget. It is a live system with a memory budget, a backup story, a consistency model, and a bill, and each of those four things behaves differently from what you are used to with a normal database.
+
+The framing that makes the whole lesson click: a vector database is a derived index sitting next to a source of truth, and its operational behavior is dominated by one resource, memory. Almost every scaling, backup, consistency, and cost decision in this lesson traces back to those two facts. The index is derived, so it can be rebuilt, but rebuilding is expensive. The index must live in memory to be fast, so memory is the variable that decides scale, and memory is the variable that decides the bill.
+
+## Define the terms
+
+**Scaling** is the process of making a vector database handle more vectors or more queries. The two directions are vertical, more memory and CPU on one node, and horizontal, more nodes with the data sharded across them. [^1]
+
+**Sharding** is splitting the vector collection across multiple nodes so each node owns a subset. The shard assignment is usually deterministic, a hash of a primary key, so a given vector always lands on the same node. [^2]
+
+**Replication** is keeping copies of each shard on more than one node so a node failure does not take its shard down. A replication factor of three is common for latency-critical workloads. [^2]
+
+**Backup** is a copy of the data you can restore from. For a vector database this means the vectors, the metadata attached to each point, and the index configuration needed to recreate search behavior. [^3]
+
+**Consistency** is the guarantee about when a read reflects a completed write. Strong consistency means a read sees the latest write immediately. Eventual consistency means a read may see stale data for a window, the inconsistency window, before the change propagates. [^4]
+
+**Cost** is the total bill for running the store: the managed service fee or the self-hosted infrastructure, plus the memory that holds the index, plus the compute that serves queries.
+
+## Scaling: memory is the variable
+
+The single most important fact about scaling a vector database is that the index has to live in memory to be fast. An HNSW search is a chain of random accesses through a graph, and random access to disk is the one pattern where the difference between RAM and NVMe shows up in every single query. [^5] When the index fits in memory, each hop takes nanoseconds. When it spills to disk, each hop becomes a disk read, and query latency jumps by an order of magnitude or more. [^6]
+
+That makes memory the real scaling variable, not row count. Row count is a proxy; memory is the thing that actually decides whether the system is fast. [^7] The practical consequence is that you size the index before you provision the instance, using a per-vector figure.
+
+The arithmetic is worth doing by hand. A 1536-dimension float32 vector is 1536 times 4 bytes, which is 6144 bytes, roughly 6 kilobytes of raw payload. [^7] Once you add the HNSW graph metadata, the neighbor pointers and per-tuple overhead, the real footprint lands around 20 to 25 kilobytes per vector. [^7] Multiply that by your row count and you have your memory target.
+
+At 10 million vectors, that is 200 to 250 gigabytes of index that wants to live in memory. [^7] When it does not, latency degrades non-linearly. At 110 percent of RAM capacity, latency can rise 2 to 3 times as index pages get evicted and reloaded. At 150 percent, 5 to 10 times. At 200 percent, latency becomes unpredictable, tens to hundreds of milliseconds depending on cache hit rates. [^6] This cliff is why sizing RAM to hold the index is the first scaling decision, before you touch sharding or replication.
+
+The two scaling directions follow from that. Vertical scaling, adding memory to one node, is the simplest and works until the index outgrows the largest machine you can buy. Horizontal scaling, sharding across nodes, is what you do when one node cannot hold the working set. The shard assignment is usually deterministic, a hash of the primary key, so a given vector always lands on the same node and updates and deletes stay simple. [^2] For a multi-tenant system, sharding by tenant ID is the cleanest path: each query routes to a single shard, and recall is identical to a single-node system. [^1]
+
+Replication is the availability half of scaling. Each shard keeps copies on multiple nodes, so a node failure does not take its shard down. A replication factor of three with read-from-nearest routing is the common production shape for latency-critical workloads. [^2] The tradeoff is that replication multiplies your memory bill, because every replica holds a full copy of its shard's index. That is the first place scaling and cost collide.
+
+## Backups: why a vector database is different
+
+Backing up a vector database is not the same as backing up a normal database, and the difference is the index. A relational backup is mostly about durability: you dump rows, you restore rows, done. [^3] A vector database backup has to preserve more, because the index behind it can take hours to rebuild from raw embeddings. [^3]
+
+The first question to answer is whether the vector database is the source of truth or a derived index. A vector database is almost always a derived index sitting next to a primary store, Postgres, S3, a document store. [^3] If it can be rebuilt from source documents plus an embedding pipeline, then the backup strategy is different from a system where the vectors are the only copy. That answer changes how urgent backups are. [^3]
+
+The second question is what a restore actually has to reproduce. A production pgvector schema has at least four recovery surfaces: the source records, the chunk rows, the embedding vectors, and the index. [^8] The base table is the business truth. The chunks and embeddings are derived from it. The index is derived from the embeddings. Each layer has its own recovery cost.
+
+The backup mechanism matters because of what it preserves. A physical backup, `pg_basebackup` or a filesystem or WAL-based snapshot, copies the data directory as-is, so index relation files, including HNSW and IVFFlat indexes, restore intact with no rebuild. [^8] A logical backup, `pg_dump`, stores only the `CREATE INDEX` statements, not the index data, so every index is rebuilt from scratch on restore. [^8] An HNSW rebuild on a large embedding table is a materially different time cost than rebuilding a B-tree. [^8] For a 100-million-vector database, a logical restore can lock the system for hours during index creation. [^9]
+
+The operational lesson is to separate recovery ownership. The source-of-truth owner defines which records must be recoverable and what point in time matters. The embedding pipeline owner owns chunking code, model version, dimensions, and rebuild throughput. The database owner owns backup schedules, WAL retention, and restore procedures. The product owner defines acceptable retrieval degradation during recovery. [^8] Most teams skip this and then discover, mid-incident, that nobody owns the rebuild.
+
+The failure that motivates all of it is subtle. A backup can meet the database RPO and still fail the retrieval RPO. [^8] You restore the database cleanly, the application comes back, and then support search returns old policy chunks, misses the latest runbooks, and mixes two embedding model versions in the same result set. [^8] The backup met the database recovery point. It failed the retrieval recovery point, because the retrieval system was not restored to a known semantic state. [^8]
+
+The discipline that prevents it: test the restore, and document the embedding model version. Restoring an old database without re-embedding leaves stale vectors, and restoring stale vectors with a new model is silently wrong. [^10] A restore that is never tested is a backup that does not exist. [^10]
+
+## Consistency: the window you never declared
+
+Consistency is where RAG systems stop being demos, and the failure is usually invisible. A document store feeding a vector index through an ingestion pipeline is a distributed system with two separate data structures that must be kept in sync. Every write to one diverges it from the other. The ingestion pipeline is the synchronization mechanism. The lag between source truth and retrievable truth is the inconsistency window. [^11]
+
+The problem is that most teams never define how wide that window is allowed to be. They know they re-index nightly, so the window is up to 24 hours, but they have not written that down as a consistency guarantee or an SLA. They have not decided whether 24 hours is acceptable for their domain. They have not built monitoring to detect when the actual window exceeds the intended one. [^11] The absence of a declaration is not the absence of a model. It is an implicit model: your system is eventually consistent, in a way nobody designed, with a staleness bound nobody measured. [^11]
+
+The failure looks like everything is working. A policy document is updated at 2 PM. The editor saves the change, gets a confirmation, moves on. The vector index is on a nightly re-index schedule. For the next ten hours, every query about that policy retrieves the old version, with full confidence, normal latency, healthy similarity scores, and a green dashboard. [^11] The model has no way to know the chunk is stale, because the stale chunk looks just like a current one.
+
+The consistency models you can choose from form a spectrum. Strong consistency means once a write is acknowledged, later reads see that write. [^4] It is the strictest guarantee and the most expensive, because every query waits until the latest writes are acknowledged by all replicas. [^12] Eventual consistency accepts a short delay before all replicas or index segments show the latest state, which keeps ingestion and query throughput high but creates a period where search results may be stale. [^4]
+
+Between the poles sit the models most production systems actually want. Session consistency, or read-my-writes, ties a client session to a replica and guarantees you see your own writes, which is the sweet spot for user flows that upload and immediately search. [^13] Bounded staleness accepts results up to a fixed age, useful for high-QPS public search where a few hundred milliseconds of age is fine. [^13] The rule of thumb: default to session consistency for interactive apps, and escalate to strong only on mutation-then-query paths that must reflect new content. [^13]
+
+The practical lever is that some systems let you pick the consistency level per query. Milvus, for example, supports eventual, session, bounded, and strong, and you can run a high-speed ingestion pipeline with eventual consistency while serving the business-critical search API with strong or bounded consistency from the same cluster. [^12] That is the flexibility you want: the ingestion path tolerates staleness, the user-facing path does not, and you do not have to pick one model for the whole system.
+
+The hardest case is deletion. A vector database is separate from the source system, so deleting a record in the source does not touch the vectors derived from it. [^14] If your pipeline has no deletion handler, the chunks for a deleted record stay perfectly intact and perfectly retrievable. [^14] Deletion must be a first-class operation, and the consistency model has to cover it, because a tombstone that propagates eventually is a window where deleted data is still retrievable. [^11]
+
+## Cost: the bill follows the memory
+
+The cost of a vector database is dominated by the same variable as its scaling: memory. The deployment model you choose determines your cost trajectory more than any benchmark score. [^15] Managed services charge for the memory and compute they reserve or meter. Self-hosted systems charge for the infrastructure you provision. The two diverge sharply as the index grows.
+
+The divergence has a name: the cost inversion. At 10 million vectors, a managed serverless option like Pinecone costs roughly $70 a month while pgvector on RDS runs about $45. At 100 million vectors, the managed option reaches $700 or more a month while self-hosted Milvus or pgvector stays under $100. [^15] That is a 7x cost inversion between 10 million and 100 million vectors, and it is the single most important data point in the vector database market. [^15] The managed service is cheaper at small scale and dramatically more expensive at large scale, because you pay for the convenience of not running infrastructure, and that convenience premium compounds with the memory the index needs.
+
+The hidden costs are where the bill surprises you. Vendor pricing pages are designed to make the cost look lower than what you will actually pay, and the gap between the pricing page estimate and the actual monthly bill averages 2.5x to 4x. [^16] The hidden costs include compute for in-memory indexes, egress charges, and replication for high availability, none of which show up in the pricing calculator you used to get budget approval. [^15] Replication is the biggest one: every replica holds a full copy of the shard's index, so a replication factor of three triples the memory you pay for.
+
+The decision framework is the same one from lesson 12, now with the cost curve explicit. If you already run Postgres and have under a few million vectors, pgvector is the default, because you pay only for the Postgres instance you already run. [^17] If you have high query volume and are cost-sensitive, a per-node self-hosted system gets cheaper per query as it scales, because there is no per-query charge. [^17] If you want zero operations and have bursty or idle traffic, a managed serverless option is the path of least resistance, and you accept the premium and the lock-in. [^17]
+
+The trap to avoid is sizing for today's index and ignoring tomorrow's. Because memory is the variable, and because the cost follows the memory, a system that fits comfortably in 4 GB today can hit a cliff at 10 million vectors that forces a migration you did not budget for. [^6] The cost decision is really a scale decision made early, and the cheapest system at 100K vectors is often the most expensive one at 100 million.
+
+## Worked example: sizing a pgvector deployment by hand
+
+To make the memory math concrete, size a pgvector deployment for a real workload. Suppose you have a support knowledge base with 2 million chunks, embedded with a 1536-dimension model, and you want the HNSW index to live in memory.
+
+First, the raw vector payload. A 1536-dimension float32 vector is 1536 times 4 bytes, which is 6144 bytes, roughly 6 kilobytes. [^7] Two million of those is about 12 gigabytes of raw vectors.
+
+Second, the index overhead. Once you add the HNSW graph metadata, the real footprint is roughly 20 to 25 kilobytes per vector. [^7] At 2 million vectors, that is 40 to 50 gigabytes of index that wants to live in memory. [^7]
+
+Third, the headroom. The index is not the only thing in memory. Postgres needs shared buffers, the OS needs page cache, and other tables need their working set. A common rule is to provision roughly 1.5x the raw vector storage in RAM per index, plus headroom for the rest of the instance. [^18] For this workload, that points at a machine with 64 to 96 gigabytes of RAM, depending on how much else the instance serves.
+
+Now the cost. On a managed Postgres, that size of instance is the dominant line item. On a self-hosted box, it is the hardware you buy or rent. Either way, the number that decided the bill was the memory, and the memory was decided by the index footprint, and the index footprint was decided by the vector count and dimension. You can now estimate the cost of any workload before you provision it, which is exactly what lets you choose the deployment model with your eyes open.
+
+The backup and consistency decisions for this workload follow the same logic. Because the knowledge base is derived from source documents, the backup strategy is: physical backups for fast restore, plus a documented rebuild path from source through the embedding pipeline, because the index can always be rebuilt if the physical backup is lost. [^8] The consistency model is session consistency for the user-facing search, because a support agent that uploads a document and immediately searches it must see its own write, while the bulk ingestion pipeline can run eventual. [^13] And the deletion path is a first-class operation, because a support knowledge base has records that get removed for policy reasons, and those chunks must stop being retrievable. [^14]
+
+## The pitfall to avoid
+
+The single mistake that undoes most vector database operations is treating the store as a static pile of vectors instead of a live system with a memory budget, a backup story, a consistency model, and a bill. Teams choose a database in lesson 12 and then never think about it again, and the system rots in four independent ways: the index outgrows memory and latency collapses, the backup restores rows but not retrieval state, the consistency window grows unmeasured and unmonitored, and the bill climbs past the budget nobody sized for.
+
+The habits that prevent it are all unglamorous. Size the index before you provision the instance, using the per-vector memory figure, so the working set fits in RAM. [^7] Decide whether the vector store is the source of truth or a derived index, and build the backup and rebuild path accordingly. [^3] Declare a consistency model and monitor the actual inconsistency window against it, because an undeclared model is an implicit one with a staleness bound nobody measured. [^11] And treat cost as a scale decision made early, because the cheapest system at small scale is often the most expensive at large scale. [^15]
+
+## Try it
+
+1. **Size a deployment by hand.** Take a RAG workload you are building or have built. Count the chunks, note the embedding dimension, and compute the raw vector payload and the HNSW index footprint using the 20 to 25 kilobytes per vector figure. [^7] Then estimate the RAM you would need to keep the index in memory, and compare that to what you are actually running.
+2. **Audit your backup story.** For a vector store you control, answer two questions. Is it the source of truth or a derived index? And does a restore reproduce the retrieval state, not just the rows? If the answer to the second is no, write the rebuild path from source through the embedding pipeline, and note the model version it depends on. [^8]
+3. **Declare your consistency model.** For a RAG system you run, write down the inconsistency window you are willing to accept, and the mechanism that detects when the actual window exceeds it. If you cannot name the window, you have an implicit model, and that is the finding. [^11]
+
+## What's next
+
+You can now run a vector database: size it, back it up, keep it consistent, and pay for it with your eyes open. Lesson 46 turns to the data that flows into that store, the pipelines that feed it: data pipelines for RAG, covering ETL, connectors, change data capture, and incremental refresh. Where this lesson made the store dependable, lesson 46 makes the flow of data into it dependable, and the two together are what keep a RAG system honest at scale.
+
+[^1]: martinuke0.github.io. [Architecting Distributed Vector Databases: Scaling Semantic Search from Prototype to Production](https://martinuke0.github.io/posts/2026-09-02-architecting-distributed-vector-databases-scaling-semantic-search-from-prototype-to-production)
+[^2]: martinuke0.github.io. [Architecting Distributed Vector Databases: Scalability Patterns and Infrastructure for High-Volume Semantic Search](https://martinuke0.github.io/posts/2026-05-30-architecting-distributed-vector-databases-scalability-patterns-and-infrastructure-for-high-volume-semantic-search)
+[^3]: teachyou.ai. [Backing Up and Restoring Vector Databases](https://teachyou.ai/blog/vector-db-backup-restore)
+[^4]: theaidatabaseblog.com. [Consistency Models in Vector Databases](https://theaidatabaseblog.com/learn/consistency-models-in-vector-databases)
+[^5]: dev.to. [Choosing and Tuning a pgvector Index](https://dev.to/multigrid/choosing-and-tuning-a-pgvector-index-1hki)
+[^6]: adaptiverecall.com. [How Many Vectors Can pgvector Handle](https://adaptiverecall.com/vector-search/pgvector-capacity.php)
+[^7]: particula.tech. [pgvector HNSW Tuning for 10M+ Rows Without Ripping It Out](https://particula.tech/blog/pgvector-hnsw-tuning-millions-rows-production)
+[^8]: rajivonai.com. [pgvector Backup and Restore: Why Embeddings Change Your RPO/RTO Thinking](https://rajivonai.com/blog/2026-06-04-pgvector-backup-restore-rpo-rto)
+[^9]: inferensys.com. [Milvus Backup vs pgvector pg_dump: In-Depth Comparison](https://inferensys.com/differences/enterprise-vector-database-architectures/vector-database-backup-and-disaster-recovery/milvus-backup-vs-pgvector-pgdump)
+[^10]: callsphere.ai. [Database Backup and Recovery for AI Agent State: Postgres + pgvector](https://callsphere.ai/blog/vw3c-postgres-pgvector-backup-recovery-ai-agents)
+[^11]: postsyntax.substack.com. [Your RAG System Is Serving Stale Data Without Knowing It](https://postsyntax.substack.com/p/most-rag-pipelines-have-no-consistency)
+[^12]: medium.com. [What I Learned About Consistency Models While Experimenting with Vector Databases](https://medium.com/@alexchen3292/what-i-learned-about-consistency-models-while-experimenting-with-vector-databases-7b552c503b79)
+[^13]: medium.com. [Tune Consistency, Keep Recall: 8 Vector Store Knobs](https://medium.com/@Nexumo_/tune-consistency-keep-recall-8-vector-store-knobs-b710fc42bdcb)
+[^14]: truto.one. [How to Handle Deleted SaaS Records in RAG Pipelines to Prevent Data Leaks](https://truto.one/blog/how-to-handle-deleted-saas-records-in-rag-pipelines-to-prevent-data-leaks)
+[^15]: saaswithalex.pages.dev. [Vector Databases Compared: Scale Cliffs and the Pricing Lie](https://saaswithalex.pages.dev/posts/vector-database-pricing-scale-cliffs)
+[^16]: leanopstech.com. [Vector DB Bills Exposed: 2.5-4x Over Budget](https://leanopstech.com/blog/vector-database-cost-comparison-2026)
+[^17]: spendark.com. [Vector Database Pricing 2026: Pinecone vs pgvector vs Weaviate vs Qdrant](https://spendark.com/blog/vector-database-pricing/)
+[^18]: stackharbor.com. [pgvector similarity search on PostgreSQL](https://stackharbor.com/en/knowledge-base/pgvector-similarity-search)
