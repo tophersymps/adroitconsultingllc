@@ -128,6 +128,10 @@ export function mdxToNarration(
 
   const lines = body.split("\n");
   const out: string[] = [];
+  // The trailing GFM citation block (its auto-generated "Sources" heading is
+  // produced by the renderer, so it is NOT present in the MDX — the block is a
+  // run of footnote *definition* lines `[^n]: ...`). Speak the summary once.
+  let sourcesSpoken = false;
 
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i];
@@ -155,12 +159,27 @@ export function mdxToNarration(
     if (heading) {
       const text = flattenLine(heading[1]);
       if (text && !/^sources$/i.test(text)) out.push(`Section: ${text}.`);
-      else if (/^sources$/i.test(text)) {
+      else if (/^sources$/i.test(text) && !sourcesSpoken) {
         // trailing Sources citation list — don't read URLs verbatim
+        sourcesSpoken = true;
         out.push("Sources are listed at the end of the article.");
       }
       continue;
     }
+
+    // Footnote *definition* line `[^n]: <citation>` — the GFM Sources block.
+    // Real articles never carry a `## Sources` heading in source (the renderer
+    // auto-generates it), so the block is just these lines at the end. They
+    // are citations, not prose: never read the title/URL aloud. Emit the
+    // summary sentence once at the top of the block, then skip the rest.
+    if (/^\[\^\d+\]\s*:/.test(trimmed)) {
+      if (!sourcesSpoken) {
+        sourcesSpoken = true;
+        out.push("Sources are listed at the end of the article.");
+      }
+      continue;
+    }
+
     if (trimmed.startsWith("description::")) continue; // stray override line
 
     out.push(flattenLine(trimmed));
