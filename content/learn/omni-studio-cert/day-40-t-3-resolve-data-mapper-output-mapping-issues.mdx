@@ -28,6 +28,8 @@ Two labeling conventions from that tab layout do most of the work in this lesson
 
 The output of all this is a JSON structure, and that structure is a contract. The mappings together name the JSON root node and define the key-value pairs inside it, which is why the same mapping that produces `PersonAccount:Name` also decides that `PersonAccount` is the shape the caller will read. [^2] An OmniScript, a FlexCard, or an Integration Procedure downstream reads those paths with merge syntax. When a path is absent from the output, the consumer does not throw a helpful error. It renders blank. That is the reason T-3 exists as an exam requirement: the symptom appears far away from the cause. [^3][^7]
 
+![The four-stage Data Mapper pipeline: Extract, Formula, Map, and Output JSON, with the tab each stage runs on and the symptom each stage produces when it fails](</diagrams/day-40-t-3-resolve-data-mapper-output-mapping-issues/1-mapper-pipeline-stages.png>)
+
 ### Empty output is an input problem, not an output problem
 
 Here is the mental model that fixes most "the mapper is broken" reports. A Data Mapper can only map what it retrieved. If the extract stage returned zero rows, the formula stage has nothing to compute on, the mapping stage has nothing to assign, and the output JSON is empty or missing the nodes entirely. The output is behaving correctly. The pipeline was fed nothing. [^3][^5]
@@ -50,6 +52,8 @@ The verification step is the same in every case: check the actual parameter valu
 
 One scoping note that saves time at the exam and in the org: if the mapper needs formulas or output mappings, it cannot be a Turbo Extract, because Turbo Extracts support neither. If you are debugging an empty response from a Turbo Extract, the entire formula and mapping branch of your diagnosis is off the table and the filter or the parameter is the whole story. [^1]
 
+![How a null or renamed parameter empties an Extract: the caller sends the value, the filter compares a field to it, the value arrives empty, the query matches nothing, and the output comes back empty with no error raised](</diagrams/day-40-t-3-resolve-data-mapper-output-mapping-issues/2-null-parameter-silent-filter.png>)
+
 ### Wrong output is a mapping problem: read the output JSON path by path
 
 Now take the other half. The mapper returned records, the caller still renders a blank field, and the question becomes why the data disappeared between the extract and the consumer. Three defects account for almost all of it, and the output JSON shows which one you have. [^2][^5]
@@ -63,6 +67,8 @@ Un-mapped fields. This one is easy to miss because nothing is broken, the field 
 That last point is how you diagnose all three at once. Read the output JSON the mapper actually produced, then walk the mapping table target by target. Every key present in the output came from a mapping that resolved. Every key the caller expects but the output lacks is either un-mapped or mapped from a source path that did not resolve. The output JSON is the inventory; the mapping table is the explanation. [^2][^5]
 
 Structure problems show up the same way. The mappings define the root node and the shape inside it, so a changed root node name breaks every consumer that reads the old one, and a mapping that should produce an array but produces a single object breaks any repeater expecting to iterate. Output data types matter here too, because the target path is typed and the consumer reads it as that type. [^2][^5][^12]
+
+![Three defects that drop a node from the output JSON: a wrong source path, a case mismatch, and an un-mapped field, with how to spot each one in the output](</diagrams/day-40-t-3-resolve-data-mapper-output-mapping-issues/3-mapping-defects.png>)
 
 ### Formulas that return blank: nulls, types, dates, and run order
 
@@ -78,6 +84,8 @@ Run order. Formulas execute in the order they appear in the designer, which matt
 
 The verification method for all four is the same, and it is the reason the walkthrough below includes it as a numbered step: test the formula with edge values, not with the sample record that happens to work. Feed it a null, an empty string, a zero, a value of the wrong type, and a date in a different format. A formula that is correct for happy-path data and wrong for everything else will pass casual testing and fail in production. [^6]
 
+![Four causes of a blank formula result: null inputs, type mismatches, date and format differences, and run order, plus the edge values to test each one with](</diagrams/day-40-t-3-resolve-data-mapper-output-mapping-issues/4-blank-formula-causes.png>)
+
 ### The diagnosis order, and why it is not arbitrary
 
 Put the pieces in sequence and the requirement becomes mechanical. Input JSON. Then filters and parameters. Then mappings and formulas. Then output JSON. [^2][^8]
@@ -85,6 +93,8 @@ Put the pieces in sequence and the requirement becomes mechanical. Input JSON. T
 Each step narrows the next. You read the input JSON first because it tells you whether the mapper was handed usable data at all. You check filters and parameters second because a filter or a null parameter decides whether rows come back, and there is no point inspecting a mapping for data that was never retrieved. You check mappings and formulas third because that is where retrieved data becomes the output shape, and the output JSON you already know how to read tells you which targets failed. You read the output JSON last because by then it is a confirmation, not a discovery. [^2][^3][^8]
 
 That order is also the fastest route to the fix, because it stops you from editing a mapping to repair an input problem. If the parameter was null, changing the mapping accomplishes nothing except making the original defect harder to find. [^3]
+
+![Diagnosis order for Data Mapper failures: empty output traces to the filter or parameter, wrong output traces to a mapping or formula, and the four steps run input JSON, filters and parameters, mappings and formulas, then output JSON](</diagrams/day-40-t-3-resolve-data-mapper-output-mapping-issues/5-diagnosis-order.png>)
 
 ### Both sides of the equation live in the log
 
