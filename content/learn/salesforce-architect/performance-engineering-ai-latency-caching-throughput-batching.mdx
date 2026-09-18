@@ -58,11 +58,15 @@ Batching is how a serving system turns many slow operations into one efficient o
 
 The Anyscale analysis describes two approaches. Naive static batching groups requests once and processes them as a fixed batch, and its performance collapses as the variance in generation length grows, because short requests wait on long ones. Continuous batching fixes this by scheduling at the iteration level: each step, new requests are added to the batch when there is room, and finished requests leave immediately. The result is striking. Continuous batching delivered up to 23x the throughput of static batching in their benchmarks, and it improved median latency too, because a new request can join the batch immediately instead of waiting for the current batch to drain. [^4]
 
+![Static batching groups requests so short ones wait on the long one, while continuous batching lets finished requests leave and new ones join at each iteration, delivering up to 23x the throughput](</diagrams/performance-engineering-ai-latency-caching-throughput-batching/3-continuous-vs-static-batching.png>)
+
 The practical lesson for an architect is that batching is a throughput tool and it has a latency cost. Batching works when many requests are independent and can tolerate a little waiting to fill the batch. It fails when a single user is waiting on one result and you hold that result to make the batch bigger. So batch the work that is not latency-critical, the bulk scoring, the nightly enrichment, the backfill. Keep the interactive turns on a low-latency path and let them join the batch as they arrive, which is exactly what continuous batching does.
 
 ## Caching: skip the work that repeats
 
 The most effective optimization is not making work faster. It is not doing the work at all. The cache-aside pattern is the standard shape. On a read, the application checks the cache first. On a hit it returns the cached value. On a miss it loads from the data store, stores the value, and returns it. On a write it invalidates the cached entry so the next read repopulates it. [^5]
+
+![Cache-aside pattern: a read first checks the cache and returns on a hit, on a miss it loads from the data store and stores the value, and a write invalidates the cached entry](</diagrams/performance-engineering-ai-latency-caching-throughput-batching/2-cache-aside.png>)
 
 Two properties decide what belongs in a cache. The Azure guidance is direct: caching works best for relatively static data or data that applications read frequently. [^5] If a value changes every few minutes or is read once, a cache adds stale data and eviction churn for no benefit. The other property is the expiration policy. A TTL that is too short forces the application to keep reloading from the store. A TTL that is too long serves stale data. [^5] Caches also have finite size and evict by least recently used policy, so you size the cache to the working set and let the TTL retire what should no longer be trusted. [^5]
 
@@ -73,6 +77,8 @@ The second is prompt caching, which targets the largest repeated cost in an AI s
 ## Worked example: a support agent with an 8 second budget
 
 A field service org deploys an AI support assistant that reads a customer's open cases, drafts a reply, and shows it to a rep. The architect sets an 8 second budget for the whole turn and walks each step.
+
+![The support agent's 8 second turn split into four budget slices: 4.5 for the draft model call, 1.5 for the SOQL query, 1 for the knowledge base check model call, and 1 of headroom](</diagrams/performance-engineering-ai-latency-caching-throughput-batching/1-latency-budget.png>)
 
 1. **Set the budget.** The whole turn gets 8 seconds. The architect splits it: 4.5 for the model call that reads the case context and drafts, 1.5 for the SOQL query that pulls the customer's cases, 1 for a second model call that checks the draft against the knowledge base, and 1 of headroom. [^1]
 
