@@ -57,6 +57,8 @@ Three reasons show up constantly, and none of them survive contact with the cost
 
 The through-line is the unit of analysis in Lesson 36. A single org gives you sharing, rollups, and transactions across the whole footprint for free. The moment you split, every cross-entity read becomes a cross-org read, every rollup becomes a feed, and every transaction that spans the boundary stops being atomic. You are trading a permanent integration tax for a problem that governance and platform discipline can usually solve in place. Only split when the wall itself is the requirement.
 
+![The split test: four legitimate drivers for a second org (regulatory walls, data residency, an unshareable security boundary, acquisition) versus three reasons that do not survive the cost ledger (wanting local space, org too big, chasing a 360 view)](</diagrams/multi-org-architecture-when-to-split-org-to-org-integration-patterns/1-split-test.png>)
+
 ## The cost structure of going multi-org
 
 Decision before expense, but know what you are signing up for. The costs are not one-time; they recur every release and every integration change.[^1]
@@ -76,6 +78,8 @@ The pattern that keeps a multi-org estate from turning into spaghetti is a centr
 
 What lives in the hub is the data the company must agree on once: product catalogs, global accounts, price lists, reference codes. What lives in the spokes is transactional and local: orders, cases, projects, the workflows of a single business unit. The rule is that any record the whole company must read the same way belongs in the hub, and any record that only one unit touches belongs in its spoke. Get that split wrong and you are back to duplicated reference data you reconcile forever.
 
+![Hub-and-spoke with master data: a central hub owns the canonical product catalogs, global accounts, price lists, and reference codes, while spokes run their own transactional data (orders, cases, projects, workflows) and consume the master data published outward](</diagrams/multi-org-architecture-when-to-split-org-to-org-integration-patterns/2-hub-and-spoke.png>)
+
 ### Salesforce Connect and the cross-org adapter
 
 For real-time access to another org's data without middleware, the modern declarative option is Salesforce Connect with the cross-org adapter. Salesforce Connect maps external data tables to external objects, so an org can query, create, update, delete, search, and run reports against data that lives outside it, without storing a copy. The cross-org adapter connects directly to data stored in another Salesforce org using the standard REST API, and unlike OData it does not require an intermediary web service between the two.[^2] That is the key architectural property: a spoke can read the hub's master data over the platform's own REST API, respecting the hub org's native authentication and permissions, with no integration layer of its own.
@@ -94,6 +98,8 @@ For movement that does not need to be live, the integration-pattern families fro
 
 The principle that ties these together is the same one Lesson 29 drilled: an org-to-org integration is still an integration, and it needs the same idempotency, retry, dead-letter, and testing discipline you would apply to any external system. The two orgs do not share a transaction, so neither side can assume the other completed its part. Your upstream retry must be safe to run twice, by design.
 
+![The four org-to-org integration patterns compared: hub-and-spoke with master data, Salesforce Connect's cross-org adapter for real-time reads, event-driven bridging with platform events and Pub/Sub, and batch or near-real-time synchronization, each with what it does and when to reach for it](</diagrams/multi-org-architecture-when-to-split-org-to-org-integration-patterns/3-integration-patterns.png>)
+
 ## Worked example: a global manufacturer that gets the split right
 
 A manufacturer runs one Salesforce org that serves every region. Growth brings in a European financial-services arm with strict PII and audit requirements, and the company acquires a logistics business in a separate legal entity with its own Salesforce instance and data model. Leadership wants the three groups to cooperate, but it does not want the finance arm's compliance burden imposed on everyone, and it does not want to re-engineer the logistics acquisition's data model into the parent's.
@@ -109,6 +115,8 @@ For the operational signal, orders in the spokes must trigger inventory and fulf
 The architect refuses two requests. The logistics team wants its own copy of the hub's product catalog "so we can change it locally," and the architect declines, because the catalog is the canonical record and a local, diverging copy recreates the reconciliation problem that hub-and-spoke exists to avoid. The finance arm asks to share its cases with the parent via S2S, and the architect declines there too, both because the walled garden exists precisely to isolate that data and because S2S is being retired, so building on it would be a deprecated-architecture trap.[^6] The finance cases stay inside the finance org, visible to the parent only through an approved, logged reporting export, which is what the compliance requirement actually requires.
 
 What holds the design together is that every org boundary was chosen for a structural reason, and every data flow across a boundary was chosen deliberately rather than left to whoever set up the next integration.
+
+![Worked example topology: the original org becomes the hub owning canonical account and product records, the finance and logistics orgs run as spokes, each spoke reads hub master data over the cross-org adapter, a MuleSoft bridge relays platform events for order changes, and two requests (a writable catalog copy and S2S sharing) are refused](</diagrams/multi-org-architecture-when-to-split-org-to-org-integration-patterns/4-worked-example.png>)
 
 ## Three consequences you should respect, not work around
 
