@@ -46,6 +46,8 @@ An off-platform store, such as a data lake, S3 or R2 object storage, or Snowflak
 
 The choice rule that ties them together: interactive and transactional data stays in a standard or custom object; high-volume, append-only history that must stay on the platform goes into a Big Object; data that must not be copied is virtualized through an External Object; and data Salesforce never needs to serve lives off-platform. [^1][^7]
 
+![A comparison table of the four stores: a standard or custom object for interactive data, a Big Object for high-volume append-only history that must stay on the platform, an External Object to virtualize data without storing a copy, and an off-platform store for data Salesforce never needs to serve](</diagrams/day-08-dm-4b-big-object-scenarios-when-to-use-when-not/1-four-alternatives.png>)
+
 ### The archival pattern
 
 The archival pattern is the most common reason an architect introduces a Big Object into an existing org. A standard object has grown too large to stay fast, but the old records still need to be retained. The move is to shift the old records out of the standard object into a Big Object, then delete them from the source so the source wins back performance and storage. [^7]
@@ -56,6 +58,8 @@ The detail that makes or breaks this pattern is the index on the Big Object. You
 
 The companion rule the exam tests directly: you must actually delete the archived source records. Archiving into a Big Object without deleting from the standard object gains nothing. [^7] The rows still sit on the big object, list views still scan them, and storage and performance stay at the wall. The benefit arrives only when the source is emptied of what moved.
 
+![The archival pattern: archive closed cases older than the retention threshold from a 200 million row Case object into a Big Object, then delete the archived rows from Case so the object shrinks back to a size where it performs](</diagrams/day-08-dm-4b-big-object-scenarios-when-to-use-when-not/2-archival-pattern.png>)
+
 ### The aggregate-and-report pattern
 
 The second pattern is about ingestion and reporting. You ingest high-volume events into a Big Object, run periodic Async SOQL aggregations in the background, and write the summarized results to a standard object that the business reports on. [^1][^8] Reporting happens on small, reportable data, while the raw volume stays in the Big Object where it scales.
@@ -63,6 +67,8 @@ The second pattern is about ingestion and reporting. You ingest high-volume even
 The loop matters because a Big Object is not standard-reportable and synchronous reads are limited. [^8][^9] Async SOQL runs a query or aggregate as a background job and writes the result to a target, typically a standard object or a file. [^1][^8] You schedule that job, it processes the accumulated events, and the summaries land in a reportable object. Dashboards and reports read the summary object, never the Big Object itself.
 
 This is the architecture behind a telemetry or event pipeline. Raw events stream into a Big Object continuously. A nightly Async SOQL job aggregates them by account and time window. The aggregated rows go into a standard object. Report Builder and dashboards run against that object, and performance stays fast because the reportable data is compact. [^12]
+
+![The aggregate-and-report loop: raw events stream into a Big Object, a scheduled Async SOQL job aggregates them into a summary object, and reports and dashboards read the summary object, never the Big Object itself](</diagrams/day-08-dm-4b-big-object-scenarios-when-to-use-when-not/3-aggregate-report-loop.png>)
 
 Cost and license deserve a note. Big Objects consume data storage, and at some tiers there are additional license or capacity implications that you should confirm against current pricing and limits. [^1] They do not consume the same API and transaction envelope as interactive records, which is part of why high-volume ingestion is so much cheaper per event than storing the same rows as interactive sObjects. [^3] But "cheaper per event" is not "free," and a scenario that ignores the storage cost of several years of accumulated events is an incomplete appraisal. Confirm the current numbers rather than assuming a figure from memory. [^1]
 
