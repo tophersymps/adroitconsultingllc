@@ -1,0 +1,162 @@
+---
+title: "OmniStudio T-4: Resolve Integration Procedure Execution Errors"
+slug: day-41-t-4-resolve-integration-procedure-execution-errors
+series: omni-studio-cert
+lesson: 41
+excerpt: "Learn the evidence-first way to fix an Integration Procedure that fails mid-run. Read the Debug Console the way the exam grades: line by line through the per-action log to find which action failed, then read that action's request and response. HTTP failures name themselves in the status code and response body, so check the Named Credential and the endpoint before you touch anything else. A Remote Action surfaces an Apex exception message, and a later action reading a JSON path that is absent points back at an upstream action that never produced the data. Callout and DML governor limits end the synchronous transaction, and the fix is chaining, which splits the work across transactions. In chainable procedures every link is its own transaction, so a mid-chain failure stops the pipeline and you check each link's logs. Miss the Try/Catch and one external failure kills the whole procedure, so this lesson covers exception handling too."
+date: "September 19, 2026"
+author: "Adroit Consulting"
+readTime: "21 min read"
+tags: [OmniStudio, Troubleshooting]
+---
+
+An Integration Procedure failed, and somebody told you the endpoint is broken. That is a hypothesis, not a diagnosis. An Integration Procedure runs many actions in one server call, and any one of them can be the failure. The action that threw the error is rarely the action whose config you should change, and the action whose config you should change is rarely the last one you looked at. The way to stop guessing is to read the per-action log, which records what each step was asked to do and what it came back with. [^1][^7]
+
+Requirement T-4 asks you to resolve Integration Procedure execution errors. That means debugging a process, not a single component, so the skill is tracing. You identify which action failed, you read that action's request and response, and you follow the data forward or backward until the cause is visible. [^1] The failure modes are a short list: HTTP status and response problems, Remote Action Apex exceptions, null and missing data that traces to an upstream action, callout and DML governor limits, and chain links that each run as their own transaction. [^2] This lesson walks all of them and shows the one method that covers every case.
+
+The method is two halves. Find the failing action first, from the per-action logs, then read its request and response. Data flow problems show upstream. [^1][^2] Everything in this requirement is some version of those two sentences, so the lesson builds toward them and the walkthrough applies them to a real failure.
+
+## Deep Dive
+
+### An Integration Procedure: a single transaction full of steps
+
+Keep the essential shape in mind, because it decides how you debug. An Integration Procedure is a declarative, server-side process that executes multiple actions in a single server call. [^1] It can read and write data from Salesforce, make REST calls to external systems, and call Apex code, and it is invoked from an OmniScript, an API, an Apex method, or a Card or FlexCard data source. [^1] Inside, you arrange actions in sequence: Set Values, Data Mapper Extracts and Posts, Calculations, HTTP Actions to REST endpoints, Remote Actions into Apex classes, Email actions, and a Response Action that ends the procedure and returns data to the caller. [^11]
+
+The word that matters for debugging is "single." By default, all the actions in an Integration Procedure run in the same Apex transaction, as a unit. [^3] That one fact explains the limits failure mode below, because a transaction has governor caps, and "single" is why the whole procedure fails together when one step exceeds them. [^3][^9]
+
+The other useful fact is that the procedure is a flow of data. Each action reads from the data JSON, the shared JSON structure the caller sent in and every action contributes to, and writes its results back into it. [^1][^11] Actions chain because output feeds input. That is why "which action failed" is only the first question, and "where did the data it expected come from" is the question that finds the cause. [^2]
+
+### The per-action log is the map
+
+The Debug Console shows each action's execution and its request and response data, so you can see every step of an invocation in one place. [^7] This is the tool T-4 is built around, and it is the direct answer to the first quiz question: when an IP fails at the HTTP Action step, the logs show which action failed and the failing call's request and response, including the auth and the status. Not nothing, not the user's password, not the org edition. [^7] The log records per-action execution for every action, and it preserves the failing call's request and response so both halves are in evidence.
+
+In the Integration Procedure designer you open it from Preview, by clicking the Action Debugger, which opens the debug console. [^7] You can search for an action by name, copy a specific node such as the Remote Options in a Data Mapper Extract action, clear the log, and reload to repopulate it with fresh request and response data. [^7] If you have error logging enabled, failed steps also write detail to `OmniComponentErrorLog` sObject records so you can review failures outside the live console. [^5]
+
+When you open the log for a failed procedure, scan for the action that errored first. Each action has an entry with its request and its response. [^7] The failing action is the one whose response is an error shape, and the response body tells you what kind. You are not debugging config yet. You are locating the step and collecting its evidence.
+
+There is a design-time habit that pairs with this. In the designer you can add Debug Logging to an HTTP action, configuring Pre Action Logging and Post Action Logging to write values from the data JSON into the Preview tab's Debug Output pane before or after the action runs. [^8] That lets you watch what a specific step received and produced while you build, before the failure ever reaches a live console.
+
+![The per-action log in the Debug Console: each action entry shows its request and its response, and the failed action is the one whose response is an error shape, with search, copy-node, and clear controls along the top](</diagrams/day-41-t-4-resolve-integration-procedure-execution-errors/1-per-action-log.png>)
+
+### HTTP failures: the response body names the problem
+
+The HTTP Action executes a REST call and returns the results to the procedure. [^8][^11] When that call fails, the failure is one of three things, and the response tells you which.
+
+Auth. The HTTP Action requires a Named Credential for the endpoint, and the credential is a configured property of the action. [^8] If the call returns an authorization error, a 401 or a 403, check the Named Credential on the action before anything else. Someone may have rotated a password or revoked a token on the provider side, and the credential still points at the old secret. The response body from the provider usually says exactly that, something like invalid token or access denied. Read it. It is the diagnosis. [^8]
+
+Timeout. The action has a Timeout property, how long in milliseconds to wait for a response, and a Retry Count for how many times to retry when it fails. [^8] A timeout error means the endpoint did not answer within the configured window, so the question is the endpoint, not the procedure. Is the service down, is the URL reachable, and is the timeout long enough for a slow but legitimate response? [^8]
+
+Non-2xx status. The procedure itself records the result of an HTTP call into the data JSON. An HTTP action adds details about the results of the call to a `ElementNameInfo` node, including the response headers, the status, and the status code such as 200. [^2] A 4xx or 5xx status in that node is the cause, and the response body alongside it names the specific problem. A 404 says the endpoint path is wrong. A 500 says the provider's server failed. A 429 says you were rate limited. Do not ignore it and do not guess past it.
+
+The exam traps for HTTP failures are the interesting part. Reviewers flag candidates who change the endpoint path on a hunch, or reorder actions, or rewrite the response mapping, when the response body already said the credential expired. [^2][^8] The response body and the status code are the cause; everything else is noise until you have read them.
+
+### Remote Action exceptions: the Apex error surfaces with a message
+
+A Remote Action calls a specified Apex class and method, or a specified invocable action, and can pass in invocation options and data. [^11][^12] The Apex class must implement the `VlocityOpenInterface2` or `Callable` interface, and it runs when the procedure reaches that step. [^11]
+
+When the Apex throws, the exception message surfaces in the log. [^11] That message is where the cause lives. A `NullPointerException` says the Apex received an input it did not expect, so the fix is upstream, in what the procedure handed it. An `IllegalArgumentException` names the value that is out of range, so you check the inputs. A custom exception thrown from the class body tells you the logic hit the branch that rejected the data. The exception message is a pointer, and following it is the whole job. [^11]
+
+Two things to check before you blame the logic. First, the inputs the procedure passed, because an Apex method is only as correct as the data the Remote Action handed it, and a wrong merge field in the action config produces a wrong argument. [^11] Second, whether the exception is a genuine logic bug or a data problem the code was never designed to handle, because the distinction decides where the fix goes. If the Apex correctly rejects a value that should never have been sent, the fix is upstream filtering, not the class. [^11]
+
+### Null and missing data: the later action reads a path that is absent
+
+This is the second quiz question, and it teaches the tracing habit that separates people who debug from people who throw their hands up. A later IP action reads a JSON path that is missing, and the likely root cause is that an upstream action did not produce the expected data. Not the theme, not the license, not the channel. Those are distractors from other domains. [^2]
+
+Walk the mechanism. The procedure shares one data JSON, and each action writes into it. A later action reads a path out of what earlier actions wrote. [^1][^11] If the path is absent at runtime, the most common reason is that the action that should have created it ran before the data existed, or failed silently, or populated a differently named node. [^2] The empty read is a symptom; the upstream gap is the cause.
+
+The debug move is to trace the data flow. Open the log, find the action that reads the missing path, and look at its request to see what it expected. Then step backward to the action that should have produced that node and read its response to see what it actually wrote. [^7] The two responses disagree, and the disagreement names the broken step. This is exactly the "data flow problems show upstream" tip: when a JSON path is missing, you look at the earlier actions first. [^2]
+
+Two silent ways this happens are worth memorizing. An upstream action can run without error and write a node under a different name, so the path the later action reads is simply not there. And an upstream action can fail in a way that does not stop the procedure, leaving the node absent rather than failing loudly. [^2][^11] Read the produced JSON, not your memory of the config.
+
+### Limits: the synchronous transaction has a ceiling
+
+Callout and DML governor limits exist in a synchronous Apex transaction, and an Integration Procedure runs all its steps in that single transaction by default. [^3][^9] When a step exceeds a limit, Salesforce ends the transaction and the Integration Procedure fails. [^3] This is the third quiz question: an IP hits callout limits in its synchronous transaction, and the fix is to refactor to chainable IPs, which run across multiple transactions. Adding more actions does not help, because the limit is on the transaction, not the action count. A FlexCard and disabling logging are unrelated. [^3][^9]
+
+The concrete limits are governor caps. Sales, Service, and other orgs hit them in different forms, but the ones this requirement cares about are callout limits, the number of HTTP callouts and the callout time allowed per transaction, and DML limits, which also apply to Data Mapper Post actions that write to Salesforce inside the same transaction. [^9][^3] The pattern is that heavy procedures, ones doing many SOQL queries, many callouts, many writes, hit the ceiling partway through, and the transaction dies. [^3]
+
+Governor limits exist to keep the platform stable: they are usage caps that help ensure efficient processing and resource use. [^3] Hitting one is not a bug in your logic. It is a design signal that the work is too big for one transaction, and the design answer is chaining. [^3]
+
+### Chaining: split the work across transactions
+
+Chaining is the fix for the limits failure mode, and it is the subject of an earlier lesson (Day 25, IP-4), so this lesson treats it as the remedy and points back. [^3] Chaining lets a long-running Integration Procedure continue past a governor limit by saving the interim results and running the next step in a fresh transaction. [^3] If the procedure is configured as Chainable for synchronous Apex limits, or Queueable Chainable for asynchronous Apex limits, and a step exceeds the configured limit, the step's interim results are saved and the work continues in a new transaction. [^3] If no limit is exceeded, all the steps still run in a single transaction, so chaining is on-demand, not automatic. [^3]
+
+The configuration has two parts. On the action that should chain, you set the Chainable or Queueable Chainable property. [^3] On the procedure, under Procedure Configuration, you expand the Chainable Configuration or Queueable Chainable Limits section and set the limits, such as the Chainable Queries Limit, that trigger a new transaction when exceeded. [^3] There is also a Chain On Step setting on an action, which makes the next step always run in a new transaction regardless of limits, useful when an action that writes data must run before an HTTP callout, because Salesforce prohibits DML operations before HTTP external callouts. [^3]
+
+Here is the chain-specific error pattern, the last sentence in the deep-dive list, and an easy thing to get wrong when you debug. In a chainable procedure, each link is its own transaction. [^3] A failure in a mid-chain link stops the pipeline at that link; the links after it never run, and the interim results you expected never arrive. [^3] So when a chained procedure fails, you do not debug the whole flow as one unit. You check each link's logs, find the link whose transaction errored, and treat its scope as a transaction boundary. [^3] The failure looks like it came from downstream data being missing, and it is actually the upstream link that died.
+
+![Chaining splits a long procedure across transactions: each link runs as its own transaction, a mid-chain failure stops the pipeline at that link, and the chainable limits decide when a new transaction starts](</diagrams/day-41-t-4-resolve-integration-procedure-execution-errors/2-chaining-transactions.png>)
+
+### A single external failure should not end the whole procedure
+
+The last trap in this requirement is missing exception handling. Without it, one external failure kills the entire Integration Procedure. [^2][^4] A REST endpoint that hiccups, an Apex call that throws, a record that rejects a write, any single action failing in a synchronous single-transaction procedure takes everything down with it. [^2]
+
+The remedy is Try/Catch, covered properly on Day 27 (IP-6), and named here because it is part of resolving execution errors. A Try-Catch Block lets you try running the steps inside it and catch the error if a step fails. [^4] You wrap the risky work, usually the external calls, in the try branch, and in the catch branch you handle the failure: log it, return a controlled error, or end the procedure gracefully rather than letting it abort. [^2][^4]
+
+The mechanism that carries the controlled outcome is the Response Action, which ends the procedure and returns data to the caller, and can add debugging data to the data JSON or end conditionally. [^6] Used with a Try/Catch, it is how a failed procedure returns a useful error shape to the OmniScript or FlexCard that called it, instead of a bare exception. [^2][^6] There is also a configuration-level safeguard on any action: a Failure Conditional Formula that evaluates to true when the step failed, and a Fail On Step Error option that stops or continues the procedure based on that formula. [^2] These give you per-step control over whether a failure is fatal.
+
+## Configuration Walkthrough
+
+Work through a real failure, because the mechanics only stick when you follow them on a concrete flow. Here is a procedure that reads a Salesforce account with a Data Mapper Extract, calls a weather API with an HTTP Action, transforms the result, and loads a note back to Salesforce. You are told it fails. [^1][^7]
+
+1. **Open the Debug Console for the failed invocation.** In the Integration Procedure designer, click Action Debugger in Preview to open the debug console. [^7] If you are debugging a live failure, open the recorded entry for that invocation instead, or read `OmniComponentErrorLog` records if error logging is enabled. [^5][^7] Do not change anything yet. You are pulling the evidence.
+
+2. **Identify the failing action from the per-action logs.** Scan the sequence of action entries. Each shows its request and its response. [^7] The action whose response is an error shape is the failing step. In this flow, suppose the HTTP Action is the one that shows a non-success status. You have now located the failure. [^2][^7]
+
+3. **Check the failing action's request and response: auth, status, payload.** For an HTTP Action, read the status code in its `ElementNameInfo` node and the body in its response. [^2][^8] A 401 or 403 says check the Named Credential on the action's properties, because the credential is the configured property for the endpoint and auth failures live there. [^8] A timeout says check the Timeout property and whether the endpoint is reachable. [^8] A 404 says the HTTP Path is wrong. [^8] In this flow, suppose the body says the token is invalid. The cause is the credential, and the fix is the credential, not the procedure's logic.
+
+4. **Verify upstream actions produced the expected JSON.** If the failing action was not the external call but a later action reading a JSON path that is absent, trace backward. [^2] Open the response of the action that should have created that node and confirm what it actually wrote. [^7] A node under a different name, or a silently failed action, leaves the path missing, and the fix is upstream. [^2]
+
+5. **For a Remote Action exception, read the Apex message and check its inputs.** If the failing step is a Remote Action, the exception message in the log tells you whether the Apex logic errored or the procedure handed it bad data. [^11] Confirm the merge fields in the action's invocation options produced the expected inputs before you edit the class. [^11]
+
+6. **For a governor limit, refactor to chainable or simplify.** If the failure message names a callout or DML limit in the synchronous transaction, the fix is chaining: set Chainable or Queueable Chainable on the action, configure the chainable limits under Procedure Configuration, and redraw the boundary so the heavy work spans multiple transactions. [^3] Where a mid-chain link failed, remember each link is its own transaction, so check that link's logs, not the whole flow as one. [^3]
+
+7. **Wrap the external work in Try/Catch so one failure does not end the procedure, and re-run.** Put the risky calls inside a Try-Catch Block, use the catch branch and a Response Action to return a controlled error, and consider a Failure Conditional Formula with Fail On Step Error for per-step control. [^2][^4][^6] Re-run the invocation and read a fresh log entry to confirm the failing action now succeeds and the actions after it run.
+
+## Exam Traps
+
+- **Blaming the last action when an upstream one produced bad data.** The error surfaces in the action that read the bad data, and that action is innocent. Trace the data flow backward to the action that created it, and fix the producer, not the consumer. [^2][^7]
+
+- **Ignoring the HTTP status and response body.** The status code and body name the cause: auth, timeout, or a wrong path. Change the endpoint on a hunch instead of reading the 401 body and you repair nothing. [^2][^8]
+
+- **Missing Try/Catch.** A single external failure kills the whole synchronous procedure. Wrap the external calls so one transient failure does not take the pipeline down, and return a controlled error through a Response Action. [^2][^4][^6]
+
+## Exam Tip
+
+Compress T-4 into a sequence you can run on any failed procedure. Find the failing action first, from the per-action log, and read its request and response. [^7] That is the whole first half of the technique. [^2] For an HTTP failure, the status code and response body name the cause, so check the Named Credential and the endpoint before anything else. [^2][^8] For a Remote Action, read the Apex exception message and verify the inputs the procedure passed. [^11] Then handle the data-flow class of problem: if a later action reads a JSON path that is missing, trace upstream to the action that should have produced it, because that is where the data flow breaks. [^2] When the failure names a callout or DML limit in the synchronous transaction, the fix is chaining, which splits the work across transactions, and in a chained procedure each link is its own transaction, so a mid-chain failure means checking each link's logs. [^3] Wrap the risky work in Try/Catch so one failure does not end the whole procedure. [^2][^4]
+
+## Try It
+
+Reproduce each failure mode in a sandbox, because reading about a bad credential is not the same as seeing a 401 body and knowing what it means. [^2][^7][^8]
+
+Start with an HTTP failure. Build an HTTP Action against a test endpoint, preview it, and watch the per-action log show the request and response. [^7][^8] Break the Named Credential, rerun, and read the auth error in the body. Point the HTTP Path at a route that returns 404, rerun, and watch the status node. Change the Timeout to something tiny against a slow endpoint, rerun, and see the timeout error. [^8] You have now seen the three HTTP failure signatures.
+
+Next, build the data-flow failure. Make three actions where the third reads a JSON node the second one should create, then break the second action so it writes nothing, and watch the third read an absent path. [^2][^7] Trace the logs backward and identify the upstream producer. [^7]
+
+Then add a Try/Catch around the external work and make one call throw, watching the catch branch handle it instead of the whole procedure aborting. [^2][^4]
+
+Finally, if your sandbox has a heavy procedure, exercise the governor limit and apply chaining: set the Chainable option, configure the chainable limits, and watch the work continue in a fresh transaction past the limit. [^3] Note where a mid-chain link would stop the pipeline, and confirm you would check that link's logs. [^3] After all four, you can name the failing action, read its request and response, and follow the data to the cause, which is the whole of T-4.
+
+## What's Next
+
+You can now locate the failing action in a per-action log, read an HTTP failure from its status and response body, follow a Remote Action exception to its message and inputs, trace a missing JSON path to the upstream action that failed to produce it, treat governor limits as a signal to chain, and wrap risky work in Try/Catch so one failure does not kill the procedure. [^2][^3][^7][^11] Lesson 42, Resolve Caching Problems (T-5), stays in the same troubleshooting domain but shifts from errors to stale results. [^2] It covers the signature symptom of old data appearing after the source changed, and the three controls that cause it: a TTL that is too long for how fast the data changes, a cache scope that leaks one user's data to another, and a cache key that ignores what varies and returns the wrong record. [^2] You will diagnose by asking three questions instead of one, stale data points at TTL and invalidation, and wrong data points at keys and scope. [^2]
+
+## Related Requirements
+
+- IP Design, Server-Side Orchestration, lesson 22 of 46 (IP-1)
+- Chainable Integration Procedures, lesson 25 of 46 (IP-4)
+- Exception Handling: Try/Catch and Rollback, lesson 27 of 46 (IP-6)
+- Resolve Caching Problems, lesson 42 of 46 (T-5)
+
+## References
+
+[^1]: [Integration Procedures (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_integration_procedures.htm&language=en_US&type=5)
+[^2]: [Handle Errors in Integration Procedures, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_error_handling_in_integration_procedures_55179.htm&language=en_US&type=5)
+[^3]: [Manage Long-Running Integration Procedures, Trailhead](https://trailhead.salesforce.com/content/learn/modules/advanced-features-of-omnistudio-integration-procedures/manage-long-running-integration-procedures)
+[^4]: [Handle Errors by Using a Try-Catch Block, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_handle_errors_using_try_catch_blocks_49845.htm&language=en_US&type=5)
+[^5]: [Enable Error Logging for Integration Procedures, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_ip_enable_error_logging_for_integration_procedures.htm&language=en_US&type=5)
+[^6]: [Response Action for Integration Procedures, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_response_action_for_integration_procedures_54655.htm&language=en_US&type=5)
+[^7]: [View and Debug Action Requests and Response Data, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_view_and_debug_action_requests_and_response_data.htm&language=en_US&type=5)
+[^8]: [HTTP Action Properties for Integration Procedures, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_http_action_properties_for_integration_procedures.htm&language=en&type=5)
+[^9]: [Execution Governors and Limits, Salesforce Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_gov_limits.htm)
+[^11]: [Integration Procedure Actions, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_integration_procedure_actions.htm&language=en_US&type=5)
+[^12]: [Remote Action for Integration Procedures, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_remote_action_for_integration_procedures.htm&language=en_US&type=5)
