@@ -43,6 +43,8 @@ Numbers drift between versions and channels, so treat these as the shape of the 
 
 The most important limit for a trigger author is the **Apex trigger batch size of 200**.[^4] Triggers do not run once per record. They run once per 200 records in the triggering set. A load of 2000 records fires the trigger ten times, and each firing is a fresh transaction against its own governor budget. This is why a trigger that holds one SOQL query inside a per-record loop is a time bomb: a 300-record update can fire 300 queries in a single transaction, and the governor throws `System.LimitException` at query 101.
 
+![A 2000-record load fires the trigger 10 times, each firing a fresh transaction with its own governor budget of 100 SOQL, 150 DML, 6 MB heap, and 10 seconds of CPU](</diagrams/bulkification-trigger-frameworks-limits-aware-design/1-trigger-batch-governor-budget.png>)
+
 ## Bulkify: always assume the trigger sees a collection
 
 The first rule of bulkification is to stop writing triggers for a single record. Salesforce's guidance is direct: always assume the trigger operates on a collection of records so that it works in all circumstances.[^4] It does not matter that the user interface usually saves one record. When the origin is a bulk DML operation or the API, the trigger operates on a record set.[^4]
@@ -100,6 +102,8 @@ trigger SoqlTriggerBulk on Account (after update) {
 ```
 
 One query returns the opportunities for every account in the trigger, regardless of batch size. This is the pattern Apex designers mean by bulk SOQL: let the query do the heavy lifting of collecting related records, then iterate the results, never issuing a query inside the iteration.[^1] The same rule applies to helper methods. Any method that runs a query must receive a collection and query for all of it in one call, because governor limits are shared across the whole transaction, not per method.[^1]
+
+![Bulk SOQL queries once and binds the whole collection in the WHERE clause, so 150 accounts cost one query instead of 150, and the same rule applies to DML: one call on the collected list](</diagrams/bulkification-trigger-frameworks-limits-aware-design/2-bulk-soql-dml.png>)
 
 ## Bulk DML: one call on the collection
 
@@ -164,6 +168,8 @@ The trigger clarifies a point Lesson 32 made: committing to one entry point per 
 
 The benefit is direct: the trigger stays a thin, readable router; the logic lives in classes you can test in isolation; and the class methods can be invoked from other code paths, not just from a record save. The clearest sign a trigger needs this treatment is when it stops being readable in one screen.[^6]
 
+![The trigger framework keeps one thin trigger per object that only routes events, delegating to a handler class for orchestration and a helper or service class for reusable business logic, with a recursion guard flag in the handler](</diagrams/bulkification-trigger-frameworks-limits-aware-design/3-trigger-framework-layers.png>)
+
 ## Recursion: the guard the framework carries
 
 A trigger that performs DML on the same object it fires on will re-enter itself. Account on before update runs an update, which fires before update again, forever, until a governor limit stops the runaway. The standard guard is a static flag in the handler: set it when the framework starts executing, check it before doing work, clear it when done, so the recursive call returns immediately.[^6]
@@ -173,6 +179,8 @@ Static variables live for the duration of the transaction and are shared across 
 ## Worked example: an order-to-fulfillment trigger, bulkified
 
 A distributor needs, after an order is inserted, to update the related inventory quantities and create a fulfillment task per order line. Orders arrive through a Bulk API load of thousands at a time. The architect wires it through a framework and bulkifies each layer.
+
+![The bulkified order-to-fulfillment flow: one trigger delegates to a handler, the service collects order IDs and queries once, aggregates units in memory, issues one update and one insert, and the recursion guard keeps the task inserts from re-entering the trigger](</diagrams/bulkification-trigger-frameworks-limits-aware-design/4-order-to-fulfillment-bulkified.png>)
 
 1. **One trigger.** `OrderTrigger` fires on `after insert` and delegates to `OrderTriggerHandler.OnAfterInsert(Trigger.new, Trigger.newMap)`. The trigger file is a router and nothing else.[^5]
 
