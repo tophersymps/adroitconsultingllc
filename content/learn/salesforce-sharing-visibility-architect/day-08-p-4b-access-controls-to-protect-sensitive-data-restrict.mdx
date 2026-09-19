@@ -1,0 +1,156 @@
+---
+title: "Sharing & Visibility Architect P-4b: Access Controls to Protect Sensitive Data, Restriction Rules, Data Classification Policies, and Retention"
+slug: day-08-p-4b-access-controls-to-protect-sensitive-data-restrict
+series: salesforce-sharing-visibility-architect
+lesson: 8
+excerpt: "Why objective p-4b turns the classification from lesson 7 into enforcement: restriction rules that carve a sensitive subset of records back out of a user's view even when sharing grants the object, the rule structure of user criteria and record criteria, the limits an architect signs for (object types, edition caps, the EQUALS-only operator, one active rule per user per object), data classification policies that drive masking and alerts, retention policies that delete aged PII and shrink breach scope, and the access review and time-boxed grant controls that keep the sensitive attack surface small. Includes a worked HR payroll scenario, a five-step configuration walkthrough, exam traps, and a try-it exercise. Day 8 of the Platform Sharing and Visibility Architect exam prep."
+date: "September 19, 2026"
+author: "Adroit Consulting"
+readTime: "20 min read"
+tags: [Salesforce, Security, Sharing, Certification]
+---
+
+Lesson 7 taught you to classify a field as PCI, PII, or PHI and to choose the controls that classification implies. Objective p-4b asks what happens next: how do you take that classification and turn it into working enforcement? The answer has three parts, and each is a governance control rather than a visibility control.
+
+The first part is restriction rules, which operate on records rather than fields. Classification told you a record is sensitive; a restriction rule stops most of the org from seeing it. The second part is data classification policy, which makes the label from lesson 7 do work: automated masking, access review triggers, and alerts keyed off the classification. The third part is retention, which decides how long the sensitive data exists at all. A record you cannot see is still a liability if it sits on disk for a decade; a record that no longer exists cannot be breached. [^2][^5]
+
+The exam tests whether you can tell grant tools from restrict tools. A sensitive-data scenario is almost always asking you to restrict, and a candidate who reaches for a sharing rule to "give" someone access to sensitive records has missed the point of the objective. This lesson builds the restrict toolbox: what each control does, where it lives in Setup, and the cases where the wrong one fails the scenario.
+
+## Deep Dive
+
+### Restriction rules narrow, they never grant
+
+A restriction rule is a criteria-based security rule that filters the records a user can see down to a subset that matches the criteria you specify. The Salesforce documentation is direct about the intent: restriction rules let certain users access only specified records, and they prevent users from accessing records that can contain sensitive data or information that is not essential to their work. [^2]
+
+Think of it as a permanent filter applied on top of everything else. Before the rule, a user sees whatever the org-wide defaults, role hierarchy, and sharing rules grant them. After the rule, that already-granted set is narrowed to only the records that match the rule's record criteria. The documentation describes the effect as similar to filtering a list view or report, except that it is permanent and it applies everywhere. [^2]
+
+Two properties follow directly, and both are tested.
+
+First, a restriction rule never grants access. It only removes it. This is the fact behind quiz question two in the sidecar for this lesson. A restriction rule cannot be used to give someone access, because it has no grant action at all. It carves a subset. If a scenario asks how to open records up to a new group, a restriction rule is the wrong tool, and a sharing rule or a revision to the org-wide default is the right one. [^2][^3]
+
+Second, the restriction applies to records that the user was already entitled to see through other sharing. If a user would see a record through the role hierarchy or a sharing rule, a restriction rule still blocks them from the filtered subset unless the rule explicitly includes them in its user criteria. Restriction takes precedence by narrowing. This is the mechanic behind quiz question one: an object with org-wide Public Read Only exposes every record, and the only way to pull the sensitive subset out while leaving the rest public is a rule that filters the flagged records to a designated group. [^2]
+
+A restriction rule carries two sets of criteria. The user criteria defines who the filter applies to: a specific role, a public group, a license type, or a subset of users. The record criteria defines which records those users keep seeing. Both must hold for a user to be affected. In the HR example from the sidecar, the user criteria names the HR managers group and the record criteria is the custom field Sensitive__c equals true, which is precisely how "only HR managers see flagged records" becomes a declarative configuration. [^2][^4]
+
+The mechanism is fully declarative. It requires no Apex, no Apex Managed Sharing, and no trigger, which is why quiz question two's distractor about managed sharing is wrong. It is config that an administrator builds in the user interface and that ships between orgs as metadata.
+
+### Where restriction rules work, and the limits
+
+The platform restricts where restriction rules can be created, and the exam expects you to know the boundary. Rules are available for custom objects, external objects, quotes, contracts, events, tasks, time sheets, and time sheet entries. They are not available as a general mechanism on every standard object. When a scenario says "make only the HR group see these flagged Account records," the mechanical answer is a restriction rule on the custom or relevant object, and the deeper design question is whether the sensitive data lives on an object that supports the control. [^2][^3]
+
+Each object supports a small number of active rules. The cap is two active restriction rules per object in Enterprise and Developer editions, and five in Performance and Unlimited editions. That cap forces design thought: you cannot solve a complex policy by piling on restriction rules, so the ones you use have to carry real weight. You also create at most one active restriction or scoping rule per object per user, and Salesforce deliberately does not validate that only one applies. If two active rules both match a user, only one is observed, and which one is not something you can rely on. The safe design is exactly one rule per object per user. [^2][^3]
+
+The operators are deliberately limited. Record criteria and user criteria support the EQUALS operator only. AND and OR are not supported, formulas are not supported, and referencing a parent object's field from a rule is not allowed. You can reference another object's field in the record criteria, and you can provide comma-separated values or IDs for a single field, which is how the "see records owned by either of these two managers" case works. When you write an ID into criteria, use the 15-character form rather than the 18-character one. [^3][^4]
+
+These restrictions matter for the sensitive-data case because you cannot express every population with the EQUALS operator. If the sensitive subset is defined by a range, a comparison, or a computed condition, a restriction rule cannot express it, and the design must move the discriminating value onto a field that equals the population the rule names. The usual pattern is a boolean or picklist flag set on the record, which is exactly why the HR scenario uses Sensitive__c = true rather than a free-form condition.
+
+There are documented behaviors that affect how you verify a rule. Users holding the View All Records or View All Data permissions see every record regardless of restriction rules, so an admin testing a rule while holding View All will not see the block and will wrongly conclude the rule is broken. Restriction rules are not applied to code executed in System Mode, so an Apex routine that reads records for the current user via the system context bypasses them. And the UserRecordAccess object, which answers "does this user have access to this record?", does not consider restriction rules, so a query result that says the user has access can disagree with what the user can actually open. [^3]
+
+Security does not cascade to child objects. Creating a restriction rule for Contract does not change access to the notes or attachments attached to those contracts. Child records need their own sharing mechanism, which is a recurring gap in designs that assume a parent rule protects everything beneath it. [^3]
+
+### Restriction rules complement, not replace, the sharing model
+
+The place a restriction rule earns its keep is the sensitive sub-population inside an otherwise-shared object. Org-wide defaults handle the broad grant. Sharing rules handle the controlled grant to a group. Role hierarchy handles the manager's upward visibility. None of those can say "all of this, except these specific records." Restriction rules are the only core control whose entire job is the except.
+
+That is the architectural one-liner for this objective: classification identifies the sensitive subset, restriction rules enforce the subset, and retention removes the subset on a schedule. The three are a chain, and a design that stops after the restriction rule is incomplete. [^2][^5]
+
+Lesson 7 noted one interaction that belongs in the same mental model: an encrypted field cannot appear in a criteria-based sharing rule. Restriction rules have their own field constraints, the EQUALS-only operator and the inability to reference parent fields. When the sensitive subset is defined by a field you also want to encrypt, the two requirements must be reconciled early, because the automation that would segment the records and the protection for the segmenting value can collide.
+
+### Data classification policies drive the automation
+
+The classification you recorded in lesson 7 becomes policy through data classification. Salesforce's data classification documentation is explicit that classification levels, a set that includes public, internal, confidential, and restricted among the shipped values, exist so that storage and security decisions follow the label. A field classified as confidential or restricted is a signal to apply stronger controls; a field classified as public asks for none. [^8]
+
+With the Shield / Data Protection licensing in place, the classification feeds automated behavior. The Data Management Policies feature in Privacy Center is the concrete mechanism: a policy runs against records that match criteria, then applies a mask or delete transformation, and optionally retains the processed records by copying them to an external data store. The policy criteria can check a field on the object, a related record up to five levels up the hierarchy through parent conditions, or child records through cross-object queries. [^5]
+
+This is how the label becomes action without a human watching. A policy that matches "records classified PII and inactive for 730 days" and masks the SSN field is the classification driving masking. A policy that matches "Sensitive__c = true" and deletes the record after the retention horizon is the classification driving deletion. The mechanical point is that the policy is the enforcement arm and the classification is the decision input. Neither works alone. [^5][^8]
+
+### Retention policies shrink the blast radius
+
+Data retention answers the question the other controls ignore: how long does the sensitive data exist? A restriction rule hides records from most users, but hidden data is still stored data, and stored PII is a breach or compliance exposure even when nobody in the app can see it. The control that addresses this is a retention policy. [^5][^7]
+
+In Salesforce the retention work lives in Privacy Center under Data Management Policies. A policy can delete records outright, mask the sensitive fields, or retain the processed records by moving them to an external data store, and GDPR-style minimization is the stated purpose. Privacy law requires minimizing the personal data you store and anonymizing or pseudonymizing what you keep, and the Data Management Policies feature automates the deletion, masking, and retention that achieves it. [^5]
+
+Quiz question three in the sidecar tests the essential judgment. Given aged PII that is no longer needed, the control that most directly reduces the blast radius is a retention policy that deletes the records once the retention horizon passes. Deleting the records removes the exposure entirely. The competing answers, changing the profile license, granting View All, and enabling more app tabs, change none of the stored data and therefore shrink none of the blast radius. [^5]
+
+The retention horizon itself is a governance decision the architect owns. Aligning retention with classification means a PII field expires on the cadence the regulation demands, not on the longest window the license allows. A credit card number you do not need after a dispute window is safest deleted the day the window closes. A diagnosis code under a clinical retention obligation stays longer because the obligation says so. The rule is to match the window to the obligation, per data type, rather than applying one global horizon. [^5][^7]
+
+Retention is distinct from sharing, and that distinction is a tested point. Sharing decides who can see a record now. Retention decides how long the record exists at all. A compliance scenario that asks how to limit exposure of aged personal data is answered with retention, and an answer that only tightens sharing leaves the aged data sitting on disk. [^5]
+
+### Access reviews and time-boxed grants keep the surface small
+
+Two governance controls pair with classification to keep the sensitive-data attack surface from growing back.
+
+The first is the access review: a recurring, deliberate re-certification of who holds access to the sensitive subset. The platform's control guidance points at a rigorous quarterly access review process as the low-risk behavior beside permission management, and the discipline is what makes the review valuable, not the frequency. Periodically confirming that only the HR managers group still holds the sensitive access, that the person who left last quarter was removed, and that the temporary grant was revoked is how a classification stays true over time. [^11]
+
+The second is the time-boxed grant. Salesforce exposes mechanisms for access that expires. A user and permission set group assignment can carry an expiration date, which is the explicit way to grant temporary access without leaving a permanent door open. The User Access Policy feature goes further: it grants or revokes an access mechanism, a permission set, a permission set group, or a permission set license, automatically when a triggered event fires, so elevated access can be granted for an incident and revoked when the incident ends without a human remembering to undo it. [^9][^10]
+
+Both controls exist because static configuration decays. The restriction rule you build today is only as good as the review that confirms it still matches reality, and a grant you leave open-ended is a rest-horizon failure in waiting. A sensitive-data design that has classification, restriction, and retention but no mechanism for access to expire is missing a governance layer.
+
+### Where the data protection and privacy controls consolidate
+
+The sensitive-data work does not live in one menu, and knowing the map is part of the architect's job. Data Protection and Privacy settings hold the org-level privacy toggles and expose the Individual object for consent. Data Classification Settings holds the classification dimensions and value sets from lesson 7. Privacy Center is the application layer where Data Management Policies mask, delete, and retain, which is where the retention and masking from this lesson are built. The through-line is that classification feeds Policy, and Policy is where the masking, retention, and access controls are expressed and monitored. [^5][^8]
+
+The design habit that the objective rewards is routing sensitive-data decisions to this surface rather than scattering one-off field-level choices. When a new sensitive field arrives, the question is not only "who hides this field" but also "what policy masks it, when does it expire, and who reviews that access." Answering all four in the data protection and privacy surface is what makes the classification operational.
+
+## Worked example: a payroll applicant subset
+
+A financial services firm runs recruiting on Salesforce. Two requirements are in scope.
+
+First, a subset of applicant records is flagged with the custom boolean Sensitive__c on the custom object Applicant__c. The org-wide default on Applicant__c is Public Read Only, because recruiters must see every applicant. But the flagged records hold background-check data that only HR managers may ever see. This is the quiz one scenario exactly. The design is a restriction rule: on Applicant__c, define the rule with user criteria naming the HR managers group and record criteria of Sensitive__c equals true. That rule filters the HR managers' already public view down to the flagged subset and blocks every other user from those records, while the unflagged majority stays public. The org keeps Public Read Only for the rest, which is why the correct answer to quiz one is the restriction rule and not a change to the org-wide default, which would tighten visibility for everyone, or a sharing rule, which can only grant and cannot pull the subset back out. [^2]
+
+Second, the same org stores PII on every applicant: a date of birth, a national identifier, and a home address in retirement records that are no longer used for anything. These aged records are the quiz three scenario. The design is a Data Management Policy in Privacy Center that matches records classified PII, checks they have been inactive past the retention horizon the compliance team set, and deletes them. The masking alternative applies where records must remain for audit but the sensitive field no longer needs to be readable. In both cases the exposure is reduced by acting on the stored data, not by relabeling who can view it. [^5]
+
+The two requirements use different halves of the same toolbox. Restriction narrowed who could see the active sensitive records. Retention removed the aged PII that nobody needed to see at all.
+
+## Configuration Walkthrough
+
+1. Identify the sensitive subset and the criteria that define it. Decide whether the subset is a custom boolean flag (Sensitive__c equals true), a picklist value, or a value already on the record, and confirm the discriminating field is not encrypted, because restriction rules cannot segment on a value they cannot filter. [^3]
+2. Create the restriction rule on the object. Navigate to a supported object in Object Manager and open Restriction Rules, then define the user criteria to name the specific roles or groups that may keep the subset (for example, the HR managers group) and the record criteria to match the sensitive subset. Remember the EQUALS-only operator and the per-object rule cap. [^2][^4]
+3. Establish the data classification policy. In the Data Protection and Privacy surface, tag the object and its sensitive fields as PII or PHI and set the sensitivity level, then confirm the classification value sets match the policy you are about to write. [^8]
+4. Set the retention policy and the access review cadence. In Privacy Center, define a Data Management Policy that masks or deletes the sensitive records after the compliance horizon, configure the external data store if you need to retain rather than delete, and set the recurring access review for the sensitive subset so the restriction rule and the granted groups are re-certified on schedule. [^5][^7]
+5. Test as two users. Log in as a non-exempt user and confirm the flagged records are blocked even though the object is Public Read Only and the user's role or a sharing rule might otherwise grant access. Then log in as a user in the HR managers group and confirm the flagged subset is visible. Test the retention policy against a small set and confirm the delete or mask runs when the horizon passes. [^2][^3]
+
+## Exam Traps
+
+Trap one: using a restriction rule to grant access. A restriction rule only removes access; it has no grant action. A scenario that asks how to give a group access to sensitive records is answered with a sharing rule or an org-wide default change, never a restriction rule. Conversely, a scenario that asks how to block everyone but a group, with the object otherwise shared, is answered with a restriction rule. [^2]
+
+Trap two: assuming the exempted or otherwise-entitled user still loses access unless exempted. A user who would see a record through the role hierarchy, a sharing rule, or the org-wide default is still blocked by a restriction rule's filter unless the rule's user criteria names them. Restriction narrows what the other sharing granted, it does not offer a veto you can opt out of silently. [^2]
+
+Trap three: forgetting the retention half of a compliance scenario. Classification, restriction, and retention are separate governance controls. A design that classifies and restricts but never schedules deletion leaves the aged sensitive data on disk, and an answer to a compliance scenario that omits retention is incomplete. [^5]
+
+Trap four: treating restriction rules as a general tool for every object. They exist for custom objects, external objects, quotes, contracts, events, tasks, time sheets, and time sheet entries, not every standard object. A scenario whose sensitive records live on an object outside the supported set needs a different design. [^2][^3]
+
+Trap five: assuming a rule blocks everything. View All Records and View All Data see past restriction rules, code in System Mode bypasses them, child records are not automatically protected, and UserRecordAccess does not reflect the block. Treating the rule as a wall rather than a filter leads to a verification that misses the real behavior. [^3]
+
+## Try It
+
+Build the quiz-one scenario in a sandbox so the block is something you have seen, not something you have read about. Create a custom object with a boolean flag, set the org-wide default to Public Read Only, and create a couple of records, some flagged and some not. Create a second user outside the HR managers group, and give that user object read access.
+
+Create a restriction rule on the object with record criteria naming the flag equal to true and user criteria naming only your HR manager user. Log in as the non-exempt user and confirm the flagged records disappear while the unflagged ones remain visible, then log in as the HR manager and confirm the flagged subset appears. Add a rule whose user criteria is broad and confirm the operator limits: try to write an AND condition or a formula and see the platform refuse it.
+
+Then build the quiz-three half. In Privacy Center, create a Data Management Policy that matches the PII records and deletes them after a short retention horizon, run it against a small set, and confirm the records are gone. Test the mask action on a second field, and confirm the value is scrubbed while the record remains. Finish by confirming that a user with View All Data sees past your restriction rule, which is the verification trap the exam is testing.
+
+## What's Next
+
+You can now explain restriction rules as a record-level restrict tool that never grants, describe the user and record criteria that define the filtered subset, map the object, edition, and operator limits an architect signs for, and connect classification, retention, and access review into a complete sensitive-data governance design. Lesson 9, Programmatic Enforcement: CRUD and Field-Level Security in Apex, stripInaccessible, and Without Sharing (p-5a), moves the same enforcement into code: how Apex respects or bypasses the sharing model, when to run with or without sharing, and how stripInaccessible keeps user-level security from being an afterthought in custom automation. The restriction and retention controls from this lesson are the declarative baseline; lesson 9 shows what happens when automation has to honor them.
+
+## Related Requirements
+
+- Lesson 7 of 36 (p-4a): Sensitive data identification and classification, Shield Platform Encryption, field history, data protection
+- Lesson 9 of 36 (p-5a): Programmatic enforcement of CRUD and field-level security, stripInaccessible, WITHOUT sharing
+- Lesson 15 of 36 (r-3a): Criteria-based and ownership-based sharing rules
+- Lesson 29 of 36 (o-1a): Reports and dashboards, folder sharing, run in context
+
+## References
+
+[^1]: Salesforce Certified Platform Sharing and Visibility Architect Exam Guide. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005298977&language=en_US&type=1)
+[^2]: Restriction Rules. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.security_restriction_rule.htm&type=5)
+[^3]: Restriction Rule Considerations. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.security_restriction_rule_considerations.htm&type=5)
+[^4]: Restriction Rule Example Scenarios. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.security_restriction_rule_examples.htm&type=5)
+[^5]: Mask, Delete, or Retain Data with Data Management Policies. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.data_management_policies.htm&type=5)
+[^6]: Privacy Center: Satisfy Customer Requests and Data Privacy Laws. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.about_privacy_center.htm&type=5)
+[^7]: Considerations for Privacy Center Data Retention. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.privacy_center_retention_considerations.htm&type=5)
+[^8]: What is Data Classification? [salesforce.com](https://www.salesforce.com/platform/data-security/data-classification/)
+[^9]: Automatically Grant or Revoke Access with a User Access Policy. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.perm_active_user_access_policy.htm&type=5)
+[^10]: Manage Salesforce Object Access. [trailhead.salesforce.com](https://trailhead.salesforce.com/content/learn/modules/data_security/data_security_objects)
+[^11]: Permission Set Groups Control. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=xcloud.shr_permission_set_groups.htm&language=en_US&type=5)
