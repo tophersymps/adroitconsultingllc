@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "design-debt-paydown-2026",
+    "title": "Design Debt: Track It, Price It, Pay It Down",
+    "excerpt": "Design debt compounds like technical debt, but teams rarely book it. The three types, how to measure each, and a pay-down routine that needs no redesign.",
+    "category": "UI/UX",
+    "categoryColor": "ux",
+    "categoryGradient": "from-violet to-violet-dark",
+    "date": "September 19, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "Design Debt",
+      "Design Systems",
+      "UX",
+      "Design Engineering",
+      "Design Ops",
+      "UI/UX"
+    ],
+    "bannerImage": "/banners/design-debt-paydown-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "computer-use-agents-production-harness-2026",
     "title": "Computer Use in Production: The Harness Beats the Model",
     "excerpt": "Benchmarks put computer-use agents near 20 percent on real work. The vendors' own tool docs show why the harness, not the model, decides what ships.",
