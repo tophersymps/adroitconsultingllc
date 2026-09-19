@@ -32,6 +32,8 @@ The shared language is the **ubiquitous language**: the vocabulary that domain e
 
 The names matter less than the discipline behind them. The question that runs through all four is: **what belongs together, what stays apart, and who owns the boundary?**
 
+![The four tools of domain modeling: entity keeps identity, value object is defined by its values, aggregate is a consistency boundary with one root, and bounded context is the boundary around a model](</diagrams/domain-modeling-entities-aggregates-bounded-contexts-agent-design/1-four-ddd-tools.png>)
+
 ## Why agents need this more than objects do
 
 Here is what changes when the "things" in your domain are agents instead of rows. An object holds data and a few methods, and its shape is pinned down by a schema. An agent holds a system prompt, a set of tools, and a model that is statistical. The model makes the boundary problems worse, because an agent can be convinced to reach past its scope in a way a database row cannot. A record type cannot accidentally behave like another record type. An agent can absolutely start doing work that belongs to a different agent.
@@ -58,6 +60,8 @@ Let me make this concrete with a scenario an insurance architect would recognize
 
 Each context gets its own agent, and the boundaries are drawn where the language changes. The triage agent says "this looks like a liability claim". The coverage agent says "this policy has a mold exclusion". The adjudication agent says "denied, exclusion applies, reason code 12". The words do not collide because each agent only ever reasons in its own terms. [^6]
 
+![Claims intake drawn as three bounded contexts, one agent each: Triage owns claim, claimant, incident, submission; Coverage owns policy, exclusion, rider, coverage limit, effective date; Adjudication owns approval, denial, escal, amount, reason](</diagrams/domain-modeling-entities-aggregates-bounded-contexts-agent-design/2-claims-intake-contexts.png>)
+
 **The aggregate inside the coverage context.** The coverage agent needs to check whether an incident is covered. The rule "an incident on a lapsed policy is not covered" requires policy status, coverage dates, and the incident date to be read together and decided as one. That is an aggregate: the policy, with its coverage terms, is the root, and the check happens through the root so that no sub-part can be decided in isolation. If you let the agent read the incident date from one tool and the policy status from another and combine them in free text, the rule lives nowhere it can be tested. Put the invariant in one place and let the agent call it. [^4]
 
 **The ubiquitous language catches the drift.** The claims team says "escal" for a claim that needs a human. If the adjudication prompt says "flag for review", and the tool is named `submitForHumanReview`, and the escalation list is labeled "needs attention", you now have three terms for one concept, and the model will mix them up. The DDD move is to use one term everywhere: the prompt says "escal", the tool is `escalate`, the status is "escalated". [^4]
@@ -70,6 +74,8 @@ Here is the pattern that makes domain modeling practical for agent systems, from
 2. **Normalize.** Resolve dates, identifiers, and units using trusted context, not the model's guesses. The model says "yesterday"; the application resolves it against a real clock and timezone.
 3. **Authorize.** Decide whether this actor may request this operation. This is policy, and it is deterministic.
 4. **Execute.** Invoke the aggregate method that enforces the invariant. The domain accepts or rejects the change.
+
+![The proposal pattern in four steps: constrain and parse a typed output contract, normalize against trusted context, authorize the actor deterministically, then execute through the aggregate that enforces the invariant](</diagrams/domain-modeling-entities-aggregates-bounded-contexts-agent-design/3-proposal-pattern.png>)
 
 The reason this matters is that a schema can reject a missing field, but it cannot decide that the user owns the claim, that the incident date resolves correctly, or that the claim is not already closed. Those are invariants, and invariants belong in the aggregate, not in the prompt. [^4] The model proposes; the domain disposes.
 
