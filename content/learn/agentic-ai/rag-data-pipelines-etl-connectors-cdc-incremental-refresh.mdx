@@ -16,6 +16,8 @@ Lesson 35 taught you to treat embeddings as a materialized view and to keep that
 
 The framing that makes this lesson click: a RAG pipeline is a data engineering problem wearing an AI costume. [^2] It has the same failure modes as any ETL system, bad parsing, silent data loss, schema drift, no observability between the raw file and the row in the database, and it rewards the same fixes: real connectors, real normalization, real idempotency, and real tests. Once you see it that way, the model and the embedding space stop being the interesting decisions. The pipeline is where production RAG actually lives or dies.
 
+![A RAG pipeline is ETL wearing an AI costume: extract from source systems through connectors, transform raw records into clean retrievable text, and load the result into the index, where the load step embeds and upserts chunks into the vector store](</diagrams/rag-data-pipelines-etl-connectors-cdc-incremental-refresh/1-etl-pipeline.png>)
+
 ## Define the terms
 
 **A connector** is the component that reaches into a source system, a database, a wiki, an S3 bucket, a CRM, a ticketing system, and pulls or receives the records that change. Connectors come in two styles. Pull connectors run on a schedule and crawl the source for anything new or modified. Push connectors receive events, webhooks or change data capture, the moment a change happens. [^1]
@@ -42,6 +44,8 @@ The first decision in any RAG pipeline is how you get changes out of the source.
 
 The rule of thumb: use pull for sources that only give you a schedule, and push for anything that emits events. Then design the pipeline so either can be the intake, because the downstream stages, normalize, chunk, embed, upsert, should not care whether the change arrived on a timer or on an event. The connector is the only stage that knows the source. Everything after it should be source-agnostic.
 
+![Connectors split into two styles: pull connectors run on a schedule and crawl the source, with freshness bounded by how often you poll, while push connectors receive events the moment a change happens and give near-real-time updates plus tombstone handling for deletes](</diagrams/rag-data-pipelines-etl-connectors-cdc-incremental-refresh/2-pull-vs-push.png>)
+
 ## Transform: normalize before you embed
 
 The single most common mistake teams make is dumping raw source payloads straight into the chunker and embedding model. [^3] Raw SaaS JSON is hostile to vector retrieval. It is heavily nested, stuffed with internal system IDs, inconsistent enums, and metadata that carries zero semantic value. Embed it as-is and you get three compounding failures: token waste, because the context window of the embedding model fills with structural syntax, braces, brackets, and keys instead of meaning; attention dilution, because the model assigns weight to recurring system strings like `created_at` and `Status__c` instead of the human-readable text; and low-quality vectors that retrieve poorly and leak provider-specific noise into downstream prompts. [^3]
@@ -61,6 +65,8 @@ The cleanest form is log-based CDC. Production databases keep a transaction log 
 What makes CDC the right mechanism for RAG is that it hands your pipeline the exact inputs the incremental problem needs. Your consumer interprets the event, decide whether it is a create, an update, or a delete; triggers retrieval of the affected document if only an ID came through, or uses the payload directly; invokes chunking and preprocessing for new or updated content; orchestrates re-embedding of just those chunks; and issues the right command to the vector store, insert, upsert, or delete. [^4] That is the entire incremental pipeline in one paragraph, and every step traces back to the event that told you what changed.
 
 For sources that are not a single database, the same shape generalizes. A streaming data pipeline can capture changes from source databases via CDC and then transform and enrich those raw change records into context-ready documents using streaming SQL, joining rows and aggregating them the way you would in a warehouse, but maintained incrementally as events arrive. [^12] The pattern is the same whether the transform runs in a stream processor or a materialized view: raw change in, clean context-ready document out, only for the records that moved.
+
+![Log-based change data capture turns a poller into a live system: a CDC connector tails the database transaction log and emits a structured change event carrying the operation type and the before and after state, which the consumer turns into an insert, upsert, or delete on the vector store](</diagrams/rag-data-pipelines-etl-connectors-cdc-incremental-refresh/3-cdc-live-system.png>)
 
 ## Incremental refresh: embed only what changed
 
@@ -147,6 +153,8 @@ p.apply({"op": "delete", "id": "KB-1", "payload": {"version": "v5"}})
 print("index size:", len(p.index))
 print("watermark :", sorted(p.processed))
 ```
+
+![Incremental refresh in miniature: the lifecycle of one document, where a create upserts and records a watermark, a duplicate delivery is a no-op, an identical-content update skips the re-embed, a real edit re-embeds only that document, and a delete tombstone purges its chunks](</diagrams/rag-data-pipelines-etl-connectors-cdc-incremental-refresh/4-incremental-lifecycle.png>)
 
 Run it and watch the lifecycle. The first create extracts the record, normalizes the raw payload into a single clean line, chunks it, and upserts it, and the watermark records `(KB-1, v2)`. The second identical event returns `no-op` because the same version is already in the watermark, which is the at-least-once deduplication that keeps a redundant delivery from burning embedding budget. The update to `v3` carries byte-identical content, so the transform hash matches the stored value and the pipeline returns `unchanged`, skipping the re-embed entirely, the incremental refresh in miniature. The `v4` update actually changes the body, so only KB-1 gets re-chunked and re-embedded while every other document in the index is left alone. The delete event acts as a tombstone and removes the document's chunks from the index. The final index is empty and the watermark holds every version it has seen, which is exactly how a real pipeline keeps a memory of what it processed so a rerun is safe.
 
