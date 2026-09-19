@@ -22,6 +22,8 @@ Level 1 taught you to scope an engagement and keep it alive week to week. The im
 
 Three of those differences matter most. In the lab you can afford one capable model for everything; in production that is the most expensive and often the slowest way to run. In the lab you can verify by eye; in production the output volume is too high to look at everything and you need a systematic check. In the lab you are in the room to approve destructive commands; in production the agent runs at night and on a schedule, and the approval step either happens automatically or the run fails closed. Routing, evals, and guardrails are the three levers you pull to make the lab agent into a production one. Everything else stays the same.
 
+![Three operating rules change between the lab and production: one model for everything becomes routing by tier, verifying by eye becomes a scheduled gold-set check, and approving in the room becomes failing closed](</diagrams/production-routing-evals-guardrails/1-lab-vs-production.png>)
+
 ## Model routing: the operating decision hiding in a config field
 
 Start with the counterintuitive claim. The most expensive mistake in agent production is not choosing a bad model. It is giving every task the same model. A single default treats a two-line data lookup and a multi-step architectural judgment as equal work, and that is wrong on both sides: the easy task overpays and the hard task under-performs.
@@ -35,6 +37,8 @@ Model routing is the discipline of deciding which capability runs which task, an
 **Route by reliability, not just capability.** The model that scores highest on a benchmark is not automatically the model you trust with the client's Monday report. Benchmarks measure what a model can do in isolation. Production measures what it does consistently, all month, under the same prompt and the same data. The discipline is to route a workload to the model you have actually observed holding up, not the one with the best marketing. This is the point where routing and evals meet, and it is the reason you do not pick a model and forget about it. You pick it, then you prove it, then you revisit it when the output drifts.
 
 There is a sharp edge to routing that bites the unwary: the unattended job that inherits a model you did not choose. If a scheduled job is not pinned, it can silently follow the global default, and a switch to a more expensive model or provider spends money on every run with nobody noticing. Hermes Agent guards against this by failing closed: an unpinned job that loses its model/provider snaps into a skipped state and stops calling the API until an operator restores the configuration. [^1] That behavior is the correct production posture, and you should copy it even in systems without the guard. An unattended job should never silently inherit a cost change. Either it is pinned deliberately, or it stops.
+
+![A scheduled job receives its model through three explicit layers: a per-job model pin for the runs that matter, a fleet-wide cron.model default for unpinned scheduled jobs, and a delegation block that routes spawned subagents. An unpinned job that loses its model fails closed](</diagrams/production-routing-evals-guardrails/2-model-routing-layers.png>)
 
 ## Evals: proving the output is still correct
 
@@ -52,6 +56,8 @@ An eval suite for a consulting delivery has three parts.
 
 The discipline has a rhythm. Every change to the system, the rules, the data sources, or the model triggers a full eval run before the change is trusted. A change that passes the eval is deployable. A change that fails it is not, no matter how good the change looked in isolation. Over weeks, the gold set grows as new edge cases surface in real use, and each one is added as a case, so the suite gets stricter the longer the system runs. That is the trajectory you want: an agent that is harder to silently break this month than it was last month.
 
+![Every change to a rule, data source, or model triggers a full eval run against the gold set before it is trusted. Pass means deployable; fail blocks the change and points back at the broken requirement, and each new edge case gets added to the gold set so the suite grows stricter](</diagrams/production-routing-evals-guardrails/3-eval-rhythm.png>)
+
 ## Guardrails: the boundary actually enforced
 
 Lesson 2 made you write the boundary, the line the system does not cross. Here is the production problem. A boundary written in a requirements document is a hope. A boundary enforced by configuration is a guardrail. The gap between them is where client trust is won or lost, and it is a gap you close by construction, not by intent.
@@ -65,6 +71,8 @@ The guardrail model has a specific shape. There is a floor that never comes down
 **The headless policy.** Production agents run unattended, on a schedule and at night, which means the human approval step from the lab is gone. You have to decide, in advance, what happens when an unattended run hits a dangerous command. The safe default is to deny: the command is blocked, the run finds another path or stops, and nothing destructive happens while nobody watches. [^4] [^5] The alternative, auto-approve everything in a headless run, is a decision you make only for a fully trusted, isolated environment, and you make it knowing exactly what you gave up. This is the guardrail that carries the client-facing promise, because it is the one that holds when you are not there.
 
 There is a fourth guardrail that is not about commands at all, and it is easy to overlook. Production agents touch credentials, and credentials should be isolated from the code and from each other. In Hermes Agent, secrets live in `.env` or a secret store, never in the config that gets committed, and subprocess and MCP environments get filtered so a tool does not inherit keys it does not need. [^6] [^7] The discipline transfers to any delivery: least privilege for the agent, least privilege for each of its tools, and no secret ever sitting in a file that can be pushed to a repo.
+
+![A command is held by three guard gates before it runs: the floor hardline blocklist blocks catastrophic actions with no override (wiping a filesystem root, a fork bomb, formatting a live disk), the operator deny list blocks matching commands unconditionally (no forced git push, no writes to the production data source), and the approval or headless policy fails closed so nothing destructive runs while nobody watches](</diagrams/production-routing-evals-guardrails/4-guardrail-flow.png>)
 
 ## Worked example: the Monday report, hardened for production
 
