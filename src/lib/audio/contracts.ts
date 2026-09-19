@@ -266,6 +266,14 @@ export interface NarrationOptions {
   lesson?: boolean;
   /** Spoken line that replaces the `Try It` section body in lesson mode. */
   tryItBridge?: string;
+  /**
+   * Spoken framing line prepended before a Configuration Walkthrough section
+   * in lesson mode (ADR-106/107 keep + bridge). The walkthrough body is NOT
+   * cut (unlike Try It) — the bridge reframes the mouse-click steps for a
+   * listener, then the section content (sequence + why + traps) is read as
+   * normal. Defaults to a single em-dash-free line.
+   */
+  walkthroughBridge?: string;
   /** Closing knowledge-check hand-off, appended last in lesson mode. */
   knowledgeCheckTransition?: string;
 }
