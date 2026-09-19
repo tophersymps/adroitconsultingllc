@@ -16,6 +16,8 @@ Lesson 28 showed how to design a high-volume event stream that stays inside its 
 
 The short version: mock the callout to test your code in isolation, use a sandbox to test against realistic data and real platform behavior, then assemble integration test suites that prove the seams between systems hold. Those three are not alternatives. They are the bottom, middle, and top of the same strategy, and an architect who skips one ends up with a deployment that fails in a way unit tests never saw coming.
 
+![The three layers of an integration test strategy: integration test suites at the top, sandbox in the middle, and mocking the callout at the bottom, each catching what the layer below it cannot](</diagrams/testing-integrations-mocking-sandbox-test-strategy-integration-suites/1-three-layer-strategy.png>)
+
 ## Define the terms
 
 - **Mock**: a stand-in object that returns scripted responses instead of calling the real dependency. In Apex, you provide a class that implements `HttpCalloutMock` and return whatever fake `HttpResponse` the test needs. [^1]
@@ -59,6 +61,8 @@ Mocking handles the unit layer, where you test code against faked external syste
 
 Salesforce provides four sandbox types, and they differ by what data they copy. [^3] A Developer sandbox is an isolated environment that copies your production configuration and metadata, with no data unless you add it. It refreshes quickly and is the workhorse for day to day development. A Developer Pro sandbox raises the data allowance so you can load a subset of records for testing customizations that depend on data. A Partial Copy sandbox copies a template-defined subset of records and metadata, which is how you get realistic test data without a full copy. A Full sandbox is a complete replica, records, attachments, and metadata, and it is the only type that supports performance testing, load testing, and staging. [^3]
 
+![A comparison of the four Salesforce sandbox types: Developer, Developer Pro, Partial Copy, and Full, and what data each copies and what testing each supports](</diagrams/testing-integrations-mocking-sandbox-test-strategy-integration-suites/2-sandbox-types.png>)
+
 The strategy question is: where does each kind of integration testing belong? Unit tests with mocks run in any sandbox and in the developer console, because they need no real data and no real network. Integration tests that exercise your code against the platform's data model and governor limits belong in a Partial Copy sandbox, which carries enough real shape to be meaningful. Load and performance testing of an integration path belongs only in a Full sandbox, both because it is a full replica and because Salesforce says Full sandboxes are where such testing is supported. [^3]
 
 The mistake to avoid is treating every sandbox as interchangeable. Refreshing a Full sandbox is slow and expensive enough that Salesforce notes the refresh interval makes it difficult to use for development. [^3] So you reserve Full for the testing that needs the whole org, and do your iteration in Developer and Partial Copy sandboxes. And whatever the type, apply a sandbox template to the Partial Copy and Full sandboxes so you bring across only the records you need for testing, rather than the entire production data set. [^3]
@@ -70,6 +74,8 @@ One more habit, and it connects sandboxes to mocks. Unit tests in Apex should no
 Mocks prove each unit behaves against a faithful fake. Sandboxes prove the platform behaves with real data. The third layer, integration test suites, proves that the seams between the pieces hold. Recall the definition: an integration test takes a small group of units, often two, and tests their behavior as a whole. [^5] The unit of work here is not a single method. It is a handshake: your Apex calling out to a service, a trigger reacting to a DML operation that fires a platform event, a flow that reads a record a batch job just wrote.
 
 The test pyramid gives you the shape of a healthy suite. Martin Fowler's framing is that you have many fast, isolated unit tests at the base, fewer integration tests in the middle, and a small number of slow end-to-end tests at the top. [^4] Google's testing blog is blunter about the top of the pyramid: end-to-end tests are valuable but expensive and brittle, so you keep them few and focused on the user journeys that carry real value, and you push coverage down into integration and unit tests. [^5]
+
+![The test pyramid: many fast unit tests at the base, fewer integration tests in the middle, and a small number of slow end-to-end tests at the top](</diagrams/testing-integrations-mocking-sandbox-test-strategy-integration-suites/3-test-pyramid.png>)
 
 Two properties decide whether an integration suite is healthy: placement and honesty. Placement means a real integration test actually exercises the seam. If the code under test calls a mock, that is a unit test, not an integration test. An integration test for a callout would use a sandbox and a live or simulated version of the external endpoint to verify the two sides agree on the contract. Honesty means the test fails when the seam breaks. A suite where the mock and the real service have drifted, where the probe never runs against the real contract, is churn, not coverage.
 
@@ -84,6 +90,8 @@ A lending org exposes a `CreditCheckService` that calls an external bureau and r
 2. **Integration test in a Partial Copy sandbox.** A separate suite runs against a bureau sandbox endpoint that emulates the real service. It confirms the real request body your code sends matches what the bureau expects, and that the response parser handles the live schema. Because it runs in a Partial Copy sandbox with template-selected records, the test sees realistic customer data under real platform limits. [^3] This suite catches the drift between your mock and the real service, exactly what the unit layer cannot.
 
 3. **Load verification in a Full sandbox.** Before release, the org runs a scripted load against the credit check path in a Full sandbox to confirm response time and callout limits hold under expected volume. Salesforce reserves this kind of performance and load testing for Full sandboxes. [^3] A handful of scenarios, not a big suite, because these runs are slow and expensive.
+
+![The three layers of tests for a credit check callout: a unit test with a mock, an integration test in a Partial Copy sandbox, and load verification in a Full sandbox](</diagrams/testing-integrations-mocking-sandbox-test-strategy-integration-suites/4-credit-check-layers.png>)
 
 The pattern is the point. The mock makes the logic testable and fast. The sandbox makes the seam with the real service testable and honest. The load run in Full makes the production behavior testable at scale. Each layer catches what the layer below it cannot.
 
