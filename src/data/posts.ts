@@ -2007,7 +2007,7 @@ export const posts: BlogPost[] = [
       "Web Development",
       "TypeScript"
     ],
-    "bannerImage": "/banners/category-react.png",
+    "bannerImage": "/banners/supabase-realtime-binary-payloads.png",
     "status": "published"
   },
   {
@@ -2029,7 +2029,7 @@ export const posts: BlogPost[] = [
       "Delivery",
       "AI at Work"
     ],
-    "bannerImage": "/banners/category-ai.png",
+    "bannerImage": "/banners/ai-generated-code-cicd-guardrails.png",
     "status": "published"
   },
   {
@@ -2049,7 +2049,7 @@ export const posts: BlogPost[] = [
       "DevOps",
       "Performance"
     ],
-    "bannerImage": "/banners/category-ai.png",
+    "bannerImage": "/banners/local-llm-infrastructure-2026.png",
     "status": "published"
   },
   {
@@ -2068,7 +2068,7 @@ export const posts: BlogPost[] = [
       "AI Agents",
       "Reliability"
     ],
-    "bannerImage": "/banners/category-ai.png",
+    "bannerImage": "/banners/multi-agent-orchestration-production-lessons.png",
     "status": "published"
   },
   {
@@ -2088,7 +2088,7 @@ export const posts: BlogPost[] = [
       "Web Development",
       "Performance"
     ],
-    "bannerImage": "/banners/category-react.png",
+    "bannerImage": "/banners/typescript-7-go-native-compiler.png",
     "status": "published"
   },
   {
@@ -2108,7 +2108,7 @@ export const posts: BlogPost[] = [
       "Flow",
       "AI Agents"
     ],
-    "bannerImage": "/banners/category-sf.png",
+    "bannerImage": "/banners/salesforce-summer-26-three-things.png",
     "status": "published"
   }
 ];
