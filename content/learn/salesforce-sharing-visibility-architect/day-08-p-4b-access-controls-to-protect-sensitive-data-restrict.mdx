@@ -32,6 +32,8 @@ Second, the restriction applies to records that the user was already entitled to
 
 A restriction rule carries two sets of criteria. The user criteria defines who the filter applies to: a specific role, a public group, a license type, or a subset of users. The record criteria defines which records those users keep seeing. Both must hold for a user to be affected. In the HR example from the sidecar, the user criteria names the HR managers group and the record criteria is the custom field Sensitive__c equals true, which is precisely how "only HR managers see flagged records" becomes a declarative configuration. [^2][^4]
 
+![A restriction rule filters the already-granted set: user criteria and record criteria both must hold, and only the matching subset remains visible](</diagrams/day-08-p-4b-access-controls-to-protect-sensitive-data-restrict/1-restriction-rule-filter.png>)
+
 The mechanism is fully declarative. It requires no Apex, no Apex Managed Sharing, and no trigger, which is why quiz question two's distractor about managed sharing is wrong. It is config that an administrator builds in the user interface and that ships between orgs as metadata.
 
 ### Where restriction rules work, and the limits
@@ -44,6 +46,8 @@ The operators are deliberately limited. Record criteria and user criteria suppor
 
 These restrictions matter for the sensitive-data case because you cannot express every population with the EQUALS operator. If the sensitive subset is defined by a range, a comparison, or a computed condition, a restriction rule cannot express it, and the design must move the discriminating value onto a field that equals the population the rule names. The usual pattern is a boolean or picklist flag set on the record, which is exactly why the HR scenario uses Sensitive__c = true rather than a free-form condition.
 
+![The limits an architect signs for: supported objects, edition caps, the EQUALS-only operator, and who sees past the rule](</diagrams/day-08-p-4b-access-controls-to-protect-sensitive-data-restrict/2-restriction-rule-limits.png>)
+
 There are documented behaviors that affect how you verify a rule. Users holding the View All Records or View All Data permissions see every record regardless of restriction rules, so an admin testing a rule while holding View All will not see the block and will wrongly conclude the rule is broken. Restriction rules are not applied to code executed in System Mode, so an Apex routine that reads records for the current user via the system context bypasses them. And the UserRecordAccess object, which answers "does this user have access to this record?", does not consider restriction rules, so a query result that says the user has access can disagree with what the user can actually open. [^3]
 
 Security does not cascade to child objects. Creating a restriction rule for Contract does not change access to the notes or attachments attached to those contracts. Child records need their own sharing mechanism, which is a recurring gap in designs that assume a parent rule protects everything beneath it. [^3]
@@ -53,6 +57,8 @@ Security does not cascade to child objects. Creating a restriction rule for Cont
 The place a restriction rule earns its keep is the sensitive sub-population inside an otherwise-shared object. Org-wide defaults handle the broad grant. Sharing rules handle the controlled grant to a group. Role hierarchy handles the manager's upward visibility. None of those can say "all of this, except these specific records." Restriction rules are the only core control whose entire job is the except.
 
 That is the architectural one-liner for this objective: classification identifies the sensitive subset, restriction rules enforce the subset, and retention removes the subset on a schedule. The three are a chain, and a design that stops after the restriction rule is incomplete. [^2][^5]
+
+![The sensitive-data governance chain: classification identifies the subset, restriction enforces it, retention removes it, and access review keeps the surface small](</diagrams/day-08-p-4b-access-controls-to-protect-sensitive-data-restrict/3-governance-chain.png>)
 
 Lesson 7 noted one interaction that belongs in the same mental model: an encrypted field cannot appear in a criteria-based sharing rule. Restriction rules have their own field constraints, the EQUALS-only operator and the inability to reference parent fields. When the sensitive subset is defined by a field you also want to encrypt, the two requirements must be reconciled early, because the automation that would segment the records and the protection for the segmenting value can collide.
 
@@ -101,6 +107,8 @@ First, a subset of applicant records is flagged with the custom boolean Sensitiv
 Second, the same org stores PII on every applicant: a date of birth, a national identifier, and a home address in retirement records that are no longer used for anything. These aged records are the quiz three scenario. The design is a Data Management Policy in Privacy Center that matches records classified PII, checks they have been inactive past the retention horizon the compliance team set, and deletes them. The masking alternative applies where records must remain for audit but the sensitive field no longer needs to be readable. In both cases the exposure is reduced by acting on the stored data, not by relabeling who can view it. [^5]
 
 The two requirements use different halves of the same toolbox. Restriction narrowed who could see the active sensitive records. Retention removed the aged PII that nobody needed to see at all.
+
+![Worked example: a restriction rule keeps flagged applicants HR-only, and a Data Management Policy deletes aged PII](</diagrams/day-08-p-4b-access-controls-to-protect-sensitive-data-restrict/4-payroll-worked-example.png>)
 
 ## Configuration Walkthrough
 
