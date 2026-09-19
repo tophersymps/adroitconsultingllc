@@ -1,0 +1,145 @@
+---
+title: "Lesson 46: Multi-Org Architecture: When to Split, and Org-to-Org Integration Patterns"
+slug: multi-org-architecture-when-to-split-org-to-org-integration-patterns
+series: "salesforce-architect"
+lesson: 46
+excerpt: "The org is the biggest structural decision a Salesforce architect makes, and it is the hardest to undo. This lesson gives you a test for when a second org is legitimate and when it is an expensive way to dodge a governance problem, then shows the patterns that connect orgs that must stay separate: hub-and-spoke with master data, Salesforce Connect's cross-org adapter, event-driven bridging, and batch synchronization."
+date: "September 19, 2026"
+author: "Adroit Consulting"
+readTime: "15 min read"
+tags: [Salesforce, Architecture, Multi-Org, Integration]
+---
+
+# Lesson 46: Multi-Org Architecture: When to Split, and Org-to-Org Integration Patterns
+
+Every lesson so far has drawn its boundary somewhere. Triggers fire in the order that Lesson 39 laid out. Integration limits constrain one org's budget, which Lesson 4 taught you to size. Sharing rules mediate one org's records, which Lesson 36 did the deep dive on. This lesson is about the boundary itself: the org. When is one instance of Salesforce not enough, when is splitting a mistake you will pay for for years, and when you do split, what patterns connect the pieces into something a customer can still navigate as one company?
+
+Your org strategy, the choice of how many instances of Salesforce your company runs, is one of the most foundational and architecturally significant decisions you will ever make. It shapes every future Salesforce initiative, and unlike an API choice or a trigger pattern it is brutally expensive to reverse. The consolidation lesson, Lesson 47, exists because companies keep getting this wrong and then pay to back it out. Start here, with the decision, and you avoid creating the problem the next lesson solves.
+
+## Define the terms
+
+- **Org (organization)**: one Salesforce instance, with its own schema, security model, users, automations, data, and API namespace. It is the unit everything else in this course has been scoped to.[^1]
+- **Org strategy**: how many orgs a company runs and how they share data and process. It is an enterprise-architecture level decision, made above the level of any single line of business or delivery team.[^1]
+- **Single-org architecture**: one instance for the whole business. Everything shares one data model, one security model, one automation layer.
+- **Multi-org architecture**: several instances, usually split along regulatory, geographic, or business-unit lines, connected by integration so a customer or partner can still interact with the company as a whole.
+- **Org-to-org integration**: the patterns used to move data and process between two Salesforce orgs, which are distinct platforms even though they come from the same vendor.
+- **Hub-and-spoke**: a topology where one org owns the authoritative copy of shared reference or master data and publishes it outward, while spoke orgs operate their own transactional data and consume the master data.[^1]
+- **Salesforce Connect**: the feature that maps data from an external source to **external objects**, giving that data real-time access inside the org without copying it in. It is how one Salesforce org reads another org's data as if it were local.[^2]
+- **Cross-org adapter**: the Salesforce Connect adapter that connects directly to data in another Salesforce org over the standard REST API, without an intermediary web service.[^2]
+- **Salesforce-to-Salesforce (S2S)**: a legacy association feature that linked records across two orgs. Salesforce is retiring it by spring 2027, which makes it a migration driver rather than a tool for new designs.[^2][^6]
+- **Platform events and Pub/Sub**: the event-driven integration layer. Platform events publish state changes; the Pub/Sub API carries them with a gRPC-based binary transport. This is the modern way to decouple two orgs so a change in one fans out to consumers in the other.[^4][^5]
+
+One naming note before the mechanics. The org boundary is a wall, and the wall is the product. When you design a multi-org architecture you are deciding where the walls go, what each wall lets through, and what must be stitched across the gap. Integration does not remove the wall. Integration specifies how the two sides share a password and a handshake across it.
+
+## When splitting is legitimate
+
+The honest test for splitting an org is not whether your stakeholders are unhappy. It is whether the split exists because a single org physically cannot satisfy a requirement, or because you would rather not enforce a separation that a single org demands. Salesforce's own architecture guidance treats the default as "as few orgs as possible," and it is worth taking that default seriously, because every org you add is permanent integration and licensing overhead that you will carry from then on.[^1]
+
+Four drivers legitimately justify a split.
+
+**Regulatory and compliance walls.** Healthcare and financial services, in particular, sometimes need a walled garden. PII and confidential business data carry encryption, access-restriction, and audit requirements that, if applied to every line of business in the org, would burden the development and support teams across the board. A walled-garden org isolates the burden to the business unit that actually carries it.[^1] This is a structural reason: the compliance requirement cannot be met with a sharing model alone, because it is not a record-visibility question. It is an isolation and reviewability question across an entire ecosystem of apps, tools, and integrations.
+
+**Data residency and legal jurisdiction.** Where the law requires customer data to remain in a country or region, the physical location of the instance matters. A single global org serving users from every jurisdiction cannot always satisfy a residency requirement short of heavy application-level work. A regional org exists in the region, and the residency requirement is satisfied by the platform's physical placement rather than by your code.
+
+**A security or governance boundary you genuinely cannot share.** When two business units should not be able to see each other's records, profiles, automations, or release pipelines, an org boundary enforces that separation mechanically. Sharing rules can restrict record visibility; they cannot prevent one shared administrator from overstepping, and they do not isolate a rogue automation from the rest of the org. The org boundary is a hard boundary, and for a real trust boundary that is exactly what you want.
+
+**Acquisition, divestiture, or a genuinely diversified business.** When a company acquires another company that runs its own Salesforce, or operates lines of business with entirely separate data models, processes, and teams, consolidation is usually the wrong first move. The engineering effort to fuse two different data models and governance regimes into one org is large, and the newly acquired teams rarely want to work in the parent's space.[^1] Multiple orgs are the honest answer for diversified businesses whose operating models do not share process or data.
+
+## When splitting is a mistake
+
+Three reasons show up constantly, and none of them survive contact with the cost ledger.
+
+**"The lines of business want their own space."** A request backlog, slow changes, or anxious stakeholders are not a reason to split an org. They are a reason for a center of excellence, delegated administration, and tiered data architecture. Salesforce's guidance is explicit that this is not a good reason to split, and that the satisfactions people are chasing, local control and faster change, can be delivered inside a single org with the right governance.[^1] Splitting to escape a governance problem does not fix the problem. It just moves the governance problem to an integration problem, which is more expensive.
+
+**"The org got too big."** Volume and performance are real constraints, and there are defensible reasons to carve up an org's largest objects. But carving up an org into multiple instances is the blunt instrument. The archiving, skinny-table, indexing, and governor techniques from Lessons 18 and 22 exist precisely so you can size a single org instead of paying for forever-integration. Splitting for raw size should be a last resort reached after the platform's own limits and patterns are exhausted, not the first response to a slow report.
+
+**"We need a 360-degree customer view."** This one is backwards, and it is worth stating plainly. Customer 360, the unified view of a customer across the company, is the strongest argument for a single org or for a deliberate data hub, not for many disconnected ones. A multi-org strategy can still support a 360 view, but only with added complexity and cost, because now the view has to be assembled across integration rather than read from one schema.[^1] If a unified customer record is a core business requirement, treat that as a force pushing you toward fewer orgs or toward a hub that aggregates, not toward more walls.
+
+The through-line is the unit of analysis in Lesson 36. A single org gives you sharing, rollups, and transactions across the whole footprint for free. The moment you split, every cross-entity read becomes a cross-org read, every rollup becomes a feed, and every transaction that spans the boundary stops being atomic. You are trading a permanent integration tax for a problem that governance and platform discipline can usually solve in place. Only split when the wall itself is the requirement.
+
+## The cost structure of going multi-org
+
+Decision before expense, but know what you are signing up for. The costs are not one-time; they recur every release and every integration change.[^1]
+
+- **Licensing multiplies.** Users who need access to more than one org consume a license in each. A single user living in two orgs is two licenses.
+- **Integration becomes a first-class system.** Data and process now cross org boundaries, and that crossing must be built, monitored, and maintained forever.
+- **Environment management compounds.** Every org carries its own sandboxes and release cycles, so a multi-org estate multiplies your environment construction and oversight work.
+- **Identity becomes a user-experience problem.** Multiple usernames and passwords produce a terrible experience and a steady stream of password-reset support tickets. Salesforce's guidance is to plan SSO early, because it is the one cost that touches every user every day.[^1]
+
+## The org-to-org integration patterns
+
+Now the constructive half. When the walls are justified, you still have to run a company across them. These are the patterns, ordered from the most deliberate (hub-and-spoke) to the most general (events and batch). You will usually combine several.
+
+### Hub-and-spoke with master data
+
+The pattern that keeps a multi-org estate from turning into spaghetti is a central org that owns the canonical copy of shared data, with spokes that consume it. This is the topology Greg Cook's architecture guidance recommends: put the master data in one org, share it out to the others, and use a managed package to deploy the same application functionality from the hub into each spoke so that every business unit runs the same standard processes while keeping local control.[^1]
+
+What lives in the hub is the data the company must agree on once: product catalogs, global accounts, price lists, reference codes. What lives in the spokes is transactional and local: orders, cases, projects, the workflows of a single business unit. The rule is that any record the whole company must read the same way belongs in the hub, and any record that only one unit touches belongs in its spoke. Get that split wrong and you are back to duplicated reference data you reconcile forever.
+
+### Salesforce Connect and the cross-org adapter
+
+For real-time access to another org's data without middleware, the modern declarative option is Salesforce Connect with the cross-org adapter. Salesforce Connect maps external data tables to external objects, so an org can query, create, update, delete, search, and run reports against data that lives outside it, without storing a copy. The cross-org adapter connects directly to data stored in another Salesforce org using the standard REST API, and unlike OData it does not require an intermediary web service between the two.[^2] That is the key architectural property: a spoke can read the hub's master data over the platform's own REST API, respecting the hub org's native authentication and permissions, with no integration layer of its own.
+
+The cross-org adapter is not free of design considerations, and Salesforce publishes a dedicated guide for it. The external objects you surface still have to behave well: reports on external data carry the same limitations as any report, and you need to think through whether real-time reads are what the consuming flow needs or whether you are better off with a periodic copy.[^3] Real-time external objects are excellent for reference data that changes rarely and must never go stale. They are a poor fit for high-volume transactional reads, where the round trip to the other org on every screen load will hurt.
+
+### Event-driven bridging with platform events and Pub/Sub
+
+When a change in one org should trigger work in another, you want events, not polled reads. Platform events publish a state change, and the Pub/Sub API carries it over a gRPC-based binary transport that outperforms the old CometD long-polling transport.[^4][^5] Salesforce is explicit about the direction of travel: it is moving toward faster, event-driven architecture, which is why legacy tools and transports are being retired.[^2]
+
+The architectural caveat, and it is an important one for a multi-org design, is that platform events live inside an org. When two separate orgs must react to the same event, the event stream does not magically cross the boundary on its own. The standard shape is a relay: the producing org publishes the event, a bridge (typically MuleSoft or another middleware platform) subscribes on one side and publishes into the consuming org on the other. The pattern still wins on decoupling, because the producing org does not need to know anything about the consuming org. It just publishes a fact about the world, and whatever cares about that fact, in this org or across a bridge, subscribes. That is the "Pub/Sub-first" approach Salesforce recommends for external data streams.[^2]
+
+### Batch and near-real-time synchronization
+
+For movement that does not need to be live, the integration-pattern families from Lesson 4 apply unchanged between two orgs. Remote process invocation with request-reply and fire-and-forget covers synchronous and asynchronous calls. Batch data synchronization covers scheduled reconciliation of record sets, which is the workhorse for moving transactional data from spokes into a reporting or analytics hub.[^2] Change data capture gives you near-real-time record changes when you need to mirror specific objects but not the whole org.
+
+The principle that ties these together is the same one Lesson 29 drilled: an org-to-org integration is still an integration, and it needs the same idempotency, retry, dead-letter, and testing discipline you would apply to any external system. The two orgs do not share a transaction, so neither side can assume the other completed its part. Your upstream retry must be safe to run twice, by design.
+
+## Worked example: a global manufacturer that gets the split right
+
+A manufacturer runs one Salesforce org that serves every region. Growth brings in a European financial-services arm with strict PII and audit requirements, and the company acquires a logistics business in a separate legal entity with its own Salesforce instance and data model. Leadership wants the three groups to cooperate, but it does not want the finance arm's compliance burden imposed on everyone, and it does not want to re-engineer the logistics acquisition's data model into the parent's.
+
+The architect applies the legitimacy test.
+
+The finance arm is a walled-garden case. Its regulatory and audit requirements are genuine structural reasons for a separate org, not a preference, so that split survives the test. The logistics acquisition is a diversification case: a separate data model, separate teams, and a heavy integration cost to fuse it. It stays separate, at least for now. But the three share real data, global account and product master data, that the whole company must read consistently.
+
+So the topology is a hub-and-spoke. The original org becomes the hub and owns the canonical account and product records. The finance and logistics orgs run as spokes. The architect uses Salesforce Connect with the cross-org adapter so each spoke reads the hub's master accounts and products as external objects, in real time, over the hub's REST API, with the hub's permissions enforced. No middleware is needed between the orgs for that read path.
+
+For the operational signal, orders in the spokes must trigger inventory and fulfillment work in the hub. The architect publishes a platform event on each order change and uses a MuleSoft bridge to relay the event into the hub, which is the Pub/Sub-first pattern. The spokes never call the hub's REST API to ask whether an order changed. They publish the fact, and a relay carries it. The hub does not need to know the spokes' internals, and the spokes do not need to know the hub's. They are decoupled by the event stream, exactly as Lesson 10 taught you to build asynchronous boundaries.
+
+The architect refuses two requests. The logistics team wants its own copy of the hub's product catalog "so we can change it locally," and the architect declines, because the catalog is the canonical record and a local, diverging copy recreates the reconciliation problem that hub-and-spoke exists to avoid. The finance arm asks to share its cases with the parent via S2S, and the architect declines there too, both because the walled garden exists precisely to isolate that data and because S2S is being retired, so building on it would be a deprecated-architecture trap.[^6] The finance cases stay inside the finance org, visible to the parent only through an approved, logged reporting export, which is what the compliance requirement actually requires.
+
+What holds the design together is that every org boundary was chosen for a structural reason, and every data flow across a boundary was chosen deliberately rather than left to whoever set up the next integration.
+
+## Three consequences you should respect, not work around
+
+**An org boundary has no distributed transaction.** Both orgs are transactional on their own, and neither can participate in a transaction the other starts. When a change must be reflected in two orgs, you cannot get atomicity for free. You get eventual consistency, exactly the lesson from Lesson 10, and your design must tolerate a window where the two sides disagree and must define which side is authoritative during that window.[^7]
+
+**An org boundary is a permanent wall.** Integration crosses it, but it does not remove it. Every new shared read is a cross-org call, every shared rollup is a feed, and every identity that touches both orgs is a licensing and SSO decision. You are not paying these costs once. You are paying them on every future design, which is why the decision to split has to be structural and not tactical.
+
+**Duplicated data is a standing reconciliation obligation.** If you decide, deliberately, to copy reference data into a spoke so the spoke can change it locally, you have created two sources of truth and a job that never ends. The discipline is to keep canonical data in exactly one org and treat every other appearance as a cache or a feed, not a second source of truth.
+
+## Try it
+
+1. A line of business asks for its own org because the shared org's backlog is slow and they want faster changes. Legitimate split or not, and what do you offer instead? *(Not a legitimate split. The satisfaction they want, local control and speed, comes from a center of excellence, delegated administration, and tiered data architecture inside the single org.)*[^1]
+
+2. A healthcare business must keep patient data to strict PII and audit standards that most of the company does not need. What kind of split, if any, is justified here, and why is sharing alone not enough? *(A walled-garden org is justified: the compliance requirement is a structural isolation and reviewability requirement, and a sharing model controls record visibility but does not isolate automations, admins, or a release pipeline the way an org boundary does.)*[^1]
+
+3. Two orgs need to share real-time master product data, and you want no middleware in the path. Which Salesforce mechanism fits, and what is its one hard requirement? *(Salesforce Connect with the cross-org adapter, which connects to another org over the standard REST API without an intermediary web service. The requirement is that the other org's data is exposed as external objects and read with its permissions enforced.)*[^2][^3]
+
+4. An order change in one org must trigger fulfillment work in another, and you want the two decoupled. Why is a relayed platform event better than the consuming org polling the producing org's REST API? *(The event fans out the fact without the producing org knowing the consumer, it is the Pub/Sub-first approach Salesforce recommends, and it removes the polling load and tight coupling a polled read creates.)*[^2][^4]
+
+5. A colleague proposes giving a spoke its own writable copy of the hub's canonical product catalog "so we can adapt it locally." What do you object to? *(The catalog is canonical and belongs in one place; a writable local copy creates two sources of truth and a permanent reconciliation job, the standing penalty for duplicating reference data.)*[^1]
+
+6. A team plans a new org-to-org sync using Salesforce-to-Salesforce. What should you tell them? *(S2S is a legacy association feature Salesforce is retiring by spring 2027, so it is a deprecated target for new designs. Migrate to Salesforce Connect or the Pub/Sub API instead.)*[^2][^6]
+
+## What's next
+
+This lesson took a company from one org to several and showed the patterns that stitch the pieces together while the walls stay standing. Lesson 47 runs the decision in the other direction. It is about org consolidation and migration: Salesforce-to-Salesforce mapping, migrating records and configuration between orgs, and the cutover planning that gets you from two instances to one without losing data or trust. If this lesson taught you when the wall is right, the next one teaches you how to take a wall down cleanly when the cost of keeping it has outlived the reason for it.
+
+[^1]: developer.salesforce.com. [Enterprise Architecture: Single-org versus Multi-org Strategy | Salesforce Developers Blog](https://developer.salesforce.com/blogs/developer-relations/2014/10/enterprise-architecture-multi-org-strategy)
+[^2]: architect.salesforce.com. [Integration Patterns | Data 360 and Integration | Salesforce Architects](https://architect.salesforce.com/docs/architect/fundamentals/guide/integration-patterns.html)
+[^3]: help.salesforce.com. [Considerations for Salesforce Connect Cross-Org Adapter | Salesforce Help](https://help.salesforce.com/s/articleView?id=platform.xorg_considerations.htm&type=5)
+[^4]: developer.salesforce.com. [Platform Events | Salesforce Developers](https://developer.salesforce.com/docs/atlas.en-us.platform_events.meta/platform_events/platform_events_intro.htm)
+[^5]: developer.salesforce.com. [Pub/Sub API | Salesforce Developers](https://developer.salesforce.com/docs/platform/pub-sub-api/guide/intro.html)
+[^6]: help.salesforce.com. [Salesforce-to-Salesforce retirement | Salesforce Help](https://help.salesforce.com/s/articleView?id=005103355&type=1)
+[^7]: architect.salesforce.com. [Integration Patterns: Transactionality | Salesforce Architects](https://architect.salesforce.com/docs/architect/fundamentals/guide/integration-patterns.html)
