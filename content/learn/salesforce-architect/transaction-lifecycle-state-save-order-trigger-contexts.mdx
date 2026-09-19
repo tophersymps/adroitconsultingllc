@@ -52,6 +52,8 @@ When a record save starts, Salesforce executes a defined sequence. The canonical
 18. Commit the transaction.
 19. Run post-commit logic: email alerts, platform events, future and queueable methods, asynchronous paths.
 
+![The 19-step order of execution for a record save, with step 8 as the hinge where the record enters the database uncommitted and steps 9 through 17 running against that uncommitted row until step 18 commits the transaction](</diagrams/transaction-lifecycle-state-save-order-trigger-contexts/1-save-order-timeline.png>)
+
 Two properties of that list do the real teaching, and both are load-bearing for architecture.
 
 Step 8 is the hinge. Everything from step 9 through step 17 runs against a record that is in the database but not committed. That gap is why after context exists and why it so often does the wrong thing when a developer treats it as "done and final." The record is not final until step 18.
@@ -61,6 +63,8 @@ The order around steps 5 and 6 produces a lift that surprises people who just wr
 ## State in memory versus state in the database
 
 The whole transaction is a story about two places a record can live. Before step 8 the authoritative values are in `Trigger.new`, in memory. After step 8 the authoritative values are in the database.
+
+![A two-column comparison of where a record lives, showing Trigger.new in memory before step 8 versus the database after step 8, and what each context can do](</diagrams/transaction-lifecycle-state-save-order-trigger-contexts/3-state-memory-vs-database.png>)
 
 Before triggers read and write `Trigger.new` directly. That write is effectively free: it does not consume a DML statement, because the values are part of the in-memory record that step 8 persists. Salesforce's guardrail for choosing a before trigger is exactly this: use before context to set or normalize fields on the record being saved, because you get the change with no extra DML and the transaction stays small.[^3]
 
@@ -73,6 +77,8 @@ After triggers run against a record that exists in the database. An after insert
 A single transaction can exercise all four save contexts. This is the idea the lesson title points at, and it is where architects who only ever think "insert" or "update" get into trouble.
 
 The four contexts are before insert, before update, after insert, and after update. A save that touches a record in only one of those operations runs two of them: an insert runs before insert then after insert, and an update runs before update then after update. But a transaction is not limited to one DML statement, and it is not limited to one operation. A batch process that upserts 10,000 records, some new and some existing, runs before insert, before update, after insert, and after update in that single transaction. A process that inserts a lead and then immediately updates a field on it runs all four as well, across the two statements.[^1]
+
+![A two-by-two grid of the four trigger contexts, crossing insert and update with before and after, showing that before contexts set fields for free while after contexts cost DML budget](</diagrams/transaction-lifecycle-state-save-order-trigger-contexts/2-four-trigger-contexts.png>)
 
 Write triggers that assume which context they will face, and the mixed batch is where the assumption breaks. The fix is to dispatch on the context instead of guessing it. The modern way uses `System.TriggerOperation`, an enum with members such as `BEFORE_INSERT`, `BEFORE_UPDATE`, `AFTER_INSERT`, and `AFTER_UPDATE`, in place of a chain of boolean checks.[^5]
 
