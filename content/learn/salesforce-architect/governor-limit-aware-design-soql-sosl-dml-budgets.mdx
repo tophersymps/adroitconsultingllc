@@ -40,6 +40,8 @@ A single `update` of 10,000 records costs one DML statement and 10,000 DML rows.
 
 Queries work the same way, with a twist that catches people. The 50,000 row meter is charged by rows returned, not rows scanned. A non-selective query that scans a million rows but returns 40 costs 40 rows and one query statement, so it looks cheap on both meters while still being an operations problem: the SOQL statement character limit and query complexity rules exist because the platform pays for scanning even when your budget does not. Lesson 24 covers selectivity and indexing; this lesson treats query quality as a separate axis from query quantity.
 
+![Two meters, not one: a single update of 10,000 records passes both the statement and row meters, while a loop updating one record at a time exhausts the 150-statement budget with the row meter barely moved](</diagrams/governor-limit-aware-design-soql-sosl-dml-budgets/1-two-meters-not-one.png>)
+
 ## What counts as a query
 
 Every inline SOQL statement counts as one query. The methods that also count, which you should assume will trip reviewers who have not read the fine print:[^1]
@@ -73,6 +75,8 @@ Counting toward the 150:
 
 Partial-success DML is still one statement. `Database.insert(records, false)` gives you `SaveResult` objects per record so you can log failures and continue, and it costs a single DML statement plus one row per record processed. There is no budget discount for `allOrNone = false`, and no budget penalty either. The choice is about error handling, not resource cost.
 
+![What counts against each meter: the calls that spend the 100-query budget and the calls that spend the 150-statement budget, including the parent-child subquery and the savepoint and rollback entries](</diagrams/governor-limit-aware-design-soql-sosl-dml-budgets/2-what-counts-against-each-meter.png>)
+
 ## The budget belongs to the transaction, not to you
 
 This is where most production limit exceptions originate. Your trigger is not allocated 100 queries. The transaction is, and everything that fires on that save shares it.[^1]
@@ -80,6 +84,8 @@ This is where most production limit exceptions originate. Your trigger is not al
 The limits reference states that CPU time is calculated for the executing Apex code and for any processes called from it, such as package code and workflows.[^1] The same shared-pool reading applies to the query and DML meters. In one user save you can have before and after triggers on the object, a record-triggered Flow, rollup summary recalculation, and an installed package that is not certified and therefore has no pool of its own. Each one looks reasonable in isolation. Together they can exhaust a budget none of them individually approached.
 
 Two implications for design reviews. First, ask who else touches this object in the same transaction, not just who owns the code you are changing. Second, leave headroom. A handler that spends 90 queries on its own is not "under the limit," it is a handler that has spent the org's margin, and the next feature that needs two more queries will be the one that breaks in production.
+
+![The budget belongs to the transaction: before and after triggers, a record-triggered Flow, rollup summary recalculation, and an uncertified package all spend from one shared transaction budget](</diagrams/governor-limit-aware-design-soql-sosl-dml-budgets/3-budget-belongs-to-transaction.png>)
 
 Certified managed packages are the exception that helps: a security-reviewed AppExchange package gets its own per-namespace pool of 100 synchronous SOQL queries and 150 DML statements, in addition to your org's. The cumulative cross-namespace ceiling is 11 times the per-namespace limit, so a transaction can reach 1,100 SOQL queries across certified namespaces.[^1] Note the word certified. A package without that review shares your pool, and a code review that assumes otherwise is how orgs lose a Friday evening.
 
@@ -139,6 +145,8 @@ The budget sheet, written before the code, for a batch of 50 cases:[^1]
 | **Transaction total** | **5** | **4** | **~300** | **~180** |
 
 Against a synchronous budget of 100 queries, 150 DML statements, 50,000 rows, and 10,000 DML rows, this transaction is comfortable. The value of the sheet is not the total; it is the columns. A reviewer can see that the trigger's selector issues two queries for the whole batch rather than two per case, and that the added package brings the query count to five instead of the two the trigger author tested with.
+
+![Case-closure transaction budget sheet for 50 cases: the record-triggered Flow, trigger selector queries, trigger DML, and rollup package total five SOQL queries, four DML statements, about 300 query rows, and about 180 DML rows](</diagrams/governor-limit-aware-design-soql-sosl-dml-budgets/4-case-closure-budget-sheet.png>)
 
 Now the code that keeps the selector side honest, using a single query per object and a `Map` for lookup:
 
