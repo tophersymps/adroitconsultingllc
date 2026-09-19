@@ -38,6 +38,8 @@ The consulting discipline is to sort your recurring wins into the right bucket. 
 
 There is a middle pattern worth knowing. Hermes lets a job attach a cheap pre-run script that decides whether to wake the agent at all. The script emits a signal, and if nothing has changed, the scheduler skips the model run entirely for that tick. A poll that runs every few minutes can check a file's modification time or count new rows in a database, and only spend an inference call when there is something new to process. This is the cost discipline made concrete: you never pay for a thinking turn on a run that has nothing to say.[^2]
 
+![Two buckets of recurring work: an agent job needs judgment and costs an inference call each run, a script-only job is deterministic and costs almost nothing, and a pre-run gate wakes the agent only when something has changed](</diagrams/automation-and-cron-jobs/1-two-buckets-of-recurring-work.png>)
+
 ## The self-contained prompt: the discipline that makes a schedule survivable
 
 Here is the failure mode that takes down more scheduled work than any other, and it is not a technical one. A one-off task works because you are there. When you run a task by hand, you carry the context in your head. You know which server, which file, which account, which "the issue" refers to. The moment you schedule that task, that context has to live somewhere else, because the fresh run has none of it.
@@ -46,6 +48,8 @@ Hermes runs each cron job in a completely fresh agent session. Nothing from your
 
 The rule is brutal and simple: the prompt must be self-contained. It has to specify the target, the action, the exact commands or tools, and the shape of the output. Instead of "check on that server issue," you write "connect to server 192.168.1.100 as user deploy, check whether nginx is running with systemctl status nginx, and verify that https://example.com returns HTTP 200." Every fact the run needs, the run has, because you put it there.[^3]
 
+![The self-contained prompt: a vague prompt that assumes your memory makes a fresh agent guess, while a self-contained prompt names the target, action, exact commands, and output shape so a stranger can execute it](</diagrams/automation-and-cron-jobs/2-self-contained-prompt.png>)
+
 The same rule extends to judgment work. A scheduled weekly report cannot say "summarize the findings." It has to say which data to pull, from where, over what window, and what the report should include. The consultant's craft here is writing the prompt as if a new colleague who has never met the client will run it tomorrow, because that is exactly what happens on every scheduled tick. A prompt that reads well to you because you remember the project is not a good prompt. A prompt a stranger could execute to a consistent result is the one you can schedule and hand over.
 
 ## The observability reflex: make unattended work loud when it fails
@@ -53,6 +57,8 @@ The same rule extends to judgment work. A scheduled weekly report cannot say "su
 This is the discipline that most separates professionals from hobbyists, and it transfers to any automation you will build. Unattended work fails silently unless you design it to be loud. A task that runs while nobody is watching can fail, and if its failure is quiet, it is discovered when the client notices the report did not arrive, or worse, when they notice it is wrong.
 
 The first habit is to separate the two things that can go wrong, because they fail differently. The run can fail, meaning the agent did not complete the work. The delivery can fail, meaning the work completed but the output never reached the person who needed it. Hermes tracks them separately and reports them separately, so a job whose run succeeded but whose message did not land is flagged as a delivery failure, not passed off as a success. If you treat "it ran" as "it delivered," you will confidently tell the client the process is healthy while their team has not received a report in a week.[^4]
+
+![Two things can go wrong and they fail differently: the run can fail so the agent never completes the work, or the delivery can fail so the output never reaches the person, and a fleet check surfaces every job that broke](</diagrams/automation-and-cron-jobs/3-run-vs-delivery-failure.png>)
 
 The second habit is to check the fleet, not just the one job. An engagement that ships automation ships several recurring jobs, and each one can break on its own. The professional checks the whole set the way they would check any service they are responsible for: what ran, what failed, what is about to fire, what has not fired when it should. A health check that surfaces every job with a failed last run, a failed delivery, or a schedule that has silently stopped firing is the difference between maintaining recurring value and letting it quietly decay.[^5]
 
@@ -77,6 +83,8 @@ This lesson asks the next question: which of those wins should run without you? 
 The weekly summary is the natural first automation. Every Friday, someone has to answer "what came in this week, and what did we flag?" That is exactly the recurring, judgment-light win worth scheduling. You write a self-contained prompt. Pull the week's intake from the ticketing platform, note anything the agent flagged as unverifiable, and produce a summary with counts and open items. You name the window, you name the tool it should call, you name the shape of the output, because the fresh Friday session will have none of that context. You schedule it, and you choose where it delivers: the client's team channel, so the report lands before the Friday standup.
 
 Then you do not stop at creating it. You let it fire on its own. You check the delivered output against what you know should be there, and you confirm it landed in the channel. You add a fleet check to your own recurring habit, so a job's failure reaches you before it reaches the client's inbox. When you hand it over, you tell the client exactly what you verified. The report fires Friday at five. It covers the week's intake and flags what it could not verify. It lands in their channel. If it ever fails, it will tell someone. Every word of that is something you watched happen, not something you hoped would.
+
+![Turning the intake win into a weekly report: pick the recurring win, write a self-contained prompt, schedule it to fire Friday at five into the team channel, and watch it run unattended before handover](</diagrams/automation-and-cron-jobs/4-intake-win-to-weekly-report.png>)
 
 ## The pitfalls to avoid
 
