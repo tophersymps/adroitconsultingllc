@@ -48,6 +48,8 @@ Timeout. The action has a Timeout property, how long in milliseconds to wait for
 
 Non-2xx status. The procedure itself records the result of an HTTP call into the data JSON. An HTTP action adds details about the results of the call to a `ElementNameInfo` node, including the response headers, the status, and the status code such as 200. [^2] A 4xx or 5xx status in that node is the cause, and the response body alongside it names the specific problem. A 404 says the endpoint path is wrong. A 500 says the provider's server failed. A 429 says you were rate limited. Do not ignore it and do not guess past it.
 
+![The three HTTP failure signatures: a 401 or 403 points at the Named Credential, a timeout points at the endpoint and the Timeout property, and a 404, 500, or 429 status names the cause in the response body](</diagrams/day-41-t-4-resolve-integration-procedure-execution-errors/3-http-failure-decision-tree.png>)
+
 The exam traps for HTTP failures are the interesting part. Reviewers flag candidates who change the endpoint path on a hunch, or reorder actions, or rewrite the response mapping, when the response body already said the credential expired. [^2][^8] The response body and the status code are the cause; everything else is noise until you have read them.
 
 ### Remote Action exceptions: the Apex error surfaces with a message
@@ -67,6 +69,8 @@ Walk the mechanism. The procedure shares one data JSON, and each action writes i
 The debug move is to trace the data flow. Open the log, find the action that reads the missing path, and look at its request to see what it expected. Then step backward to the action that should have produced that node and read its response to see what it actually wrote. [^7] The two responses disagree, and the disagreement names the broken step. This is exactly the "data flow problems show upstream" tip: when a JSON path is missing, you look at the earlier actions first. [^2]
 
 Two silent ways this happens are worth memorizing. An upstream action can run without error and write a node under a different name, so the path the later action reads is simply not there. And an upstream action can fail in a way that does not stop the procedure, leaving the node absent rather than failing loudly. [^2][^11] Read the produced JSON, not your memory of the config.
+
+![Tracing a missing JSON path: a later action reads a node that is absent, and the debug move is to step backward to the action that should have produced it and read its response, because the empty read is a symptom and the upstream gap is the cause](</diagrams/day-41-t-4-resolve-integration-procedure-execution-errors/4-trace-missing-json-path.png>)
 
 ### Limits: the synchronous transaction has a ceiling
 
@@ -93,6 +97,8 @@ The last trap in this requirement is missing exception handling. Without it, one
 The remedy is Try/Catch, covered properly on Day 27 (IP-6), and named here because it is part of resolving execution errors. A Try-Catch Block lets you try running the steps inside it and catch the error if a step fails. [^4] You wrap the risky work, usually the external calls, in the try branch, and in the catch branch you handle the failure: log it, return a controlled error, or end the procedure gracefully rather than letting it abort. [^2][^4]
 
 The mechanism that carries the controlled outcome is the Response Action, which ends the procedure and returns data to the caller, and can add debugging data to the data JSON or end conditionally. [^6] Used with a Try/Catch, it is how a failed procedure returns a useful error shape to the OmniScript or FlexCard that called it, instead of a bare exception. [^2][^6] There is also a configuration-level safeguard on any action: a Failure Conditional Formula that evaluates to true when the step failed, and a Fail On Step Error option that stops or continues the procedure based on that formula. [^2] These give you per-step control over whether a failure is fatal.
+
+![Try/Catch containment: without it one external failure kills the whole synchronous procedure, and with it the catch branch handles the failure and a Response Action returns a controlled error to the caller instead of a bare exception](</diagrams/day-41-t-4-resolve-integration-procedure-execution-errors/5-try-catch-containment.png>)
 
 ## Configuration Walkthrough
 
