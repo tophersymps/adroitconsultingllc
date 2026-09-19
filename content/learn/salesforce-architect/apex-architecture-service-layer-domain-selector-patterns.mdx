@@ -26,11 +26,15 @@ Apex is not like writing a standalone application where you choose your own stru
 - **Unit of work**: a pattern that groups the DML operations of a process and commits them together, so the service layer can perform related inserts, updates, and deletes as one consistent transaction.[^2]
 - **Mapper pattern**: Martin Fowler's pattern for moving data between objects and a database while keeping them independent. The Salesforce selector pattern is a version of it, renamed because its primary job is selecting SObjects, not mapping them to a separate data model.[^3]
 
+![The three-layer Apex stack: every entry point routes to the service layer, which delegates behavior to the domain and queries to the selector, all behind a thin trigger that stays to a routing call.](</diagrams/apex-architecture-service-layer-domain-selector-patterns/1-three-layer-stack.png>)
+
 ## Why a trigger is the wrong home for logic
 
 Start with the constraint that forces the whole architecture. A trigger is Apex code that runs before or after record changes, and it is the most natural-looking place to put "when an account is updated, do X." But a trigger is not a class. It cannot inherit, it cannot factor logic through other methods the way a class can, and the platform invokes it in bulk, for a whole set of records at once, not one record at a time.[^5]
 
 The consequence is practical. Logic that lives directly in a trigger becomes code you cannot reuse, because a Visualforce controller, a batch class, and a REST API have no way to call into the trigger. Each of those entry points ends up with its own copy of the same rule, and the copies drift. The moment a business rule changes, you are hunting the same change in four places. That is the failure the service and domain layers exist to prevent.
+
+![Where the business rule lives decides how many places you touch: logic copied into each entry point drifts, while logic in one layer is reused by every entry point.](</diagrams/apex-architecture-service-layer-domain-selector-patterns/2-trigger-vs-layers.png>)
 
 Salesforce has a rule of thumb for when you even need this structure. If your app is heavily data-centric and you can deliver most of it declaratively, with flows, validation rules, and formula fields, you may not need Apex at all.[^4] The moment you are process-centric, with complex calculations, validations, or a richer UI, and you have more than one way into your functionality, a batch job, a UI, and an API, the structure pays for itself. That is exactly the situation the exam and real architect work keep pointing at: multiple entry points, shared logic, and requirements that evolve.
 
@@ -89,6 +93,8 @@ The third layer answers a simpler-sounding problem: where do the SOQL queries go
 A selector class has a clear contract. Its method names say what they return, so `selectByIdWithProducts` returns opportunities with their line items, predictably. It uses compile-time field references so the platform blocks deletion of fields the code depends on. It lets the caller opt in or out of sharing and permission checks, so the selector can run in a system context when needed but enforce the running user's security by default. And it prefers set-based criteria, which encourages the caller to stay bulkified. The result is that a query is a piece of logic, defined once and reused, exactly the way any other piece of logic should be.[^3]
 
 Put all three layers together and a real flow looks like this. A user edits an opportunity in the UI. A controller calls `OpportunitiesService.applyDiscounts`. The service validates and, behind the boundary, uses `OpportunitiesSelector.selectByIdWithProducts` to fetch the records, constructs the `Opportunities` domain class, and calls its behavior. The discount math runs in the domain class, and the unit of work commits. When the same change arrives through a trigger, the thin trigger handler routes to the same domain class, so the two paths cannot disagree. Every SOQL statement lives in the selector, every business rule in the domain, and every process in the service. That separation is what keeps the application maintainable as it grows.[^3]
+
+![The applyDiscounts flow across all three layers: a controller calls the service, the selector fetches records, the domain runs the discount math, and the unit of work commits, so a user edit and a trigger path reach the same behavior.](</diagrams/apex-architecture-service-layer-domain-selector-patterns/3-applydiscounts-flow.png>)
 
 ## The pitfalls to avoid
 
