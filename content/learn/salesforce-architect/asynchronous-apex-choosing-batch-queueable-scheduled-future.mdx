@@ -173,9 +173,15 @@ The 100-job cap is worth designing around. A scheduled class registered per user
 | Batch | Volume: thousands to millions of records, chunk-level fault isolation | 5 concurrent jobs, 200 default scope, up to 50M via QueryLocator[^3][^5] |
 | Scheduled | Time-based kickoff of one of the above | 100 scheduled jobs, no synchronous callouts[^4] |
 
+![Four async primitives compared: Future is fire-and-forget, Queueable is the modern default, Batch is for volume, and Scheduled is a timer that delegates. Each draws from the same 24-hour async ceiling.](</diagrams/asynchronous-apex-choosing-batch-queueable-scheduled-future/1-four-primitives-comparison.png>)
+
 The decision collapses into a short set of questions. Is the trigger time-based rather than event-based? Schedule something, and have it delegate. Does the work span more records than one transaction can hold, or does it need to survive as independent chunks? Batch. Does it need to accept real objects, make a callout, chain, or be monitored? Queueable. Is it a small primitive-parameter job in code you are already not touching? Future, and only then.
 
+![Choosing a primitive in practice: four questions collapse the decision. Time-based means Scheduled, more records than one transaction can hold means Batch, real objects or callouts or chaining means Queueable, and a small primitive-parameter job in untouched code means Future.](</diagrams/asynchronous-apex-choosing-batch-queueable-scheduled-future/3-decision-tree.png>)
+
 The composite pattern is the one worth memorizing, because it is how the four primitives are actually meant to stack. Scheduled Apex starts a batch job, the batch splits the volume into transactions, and each chunk enqueues a queueable that owns the callout and the retry decision. The scheduler holds the clock, batch holds the volume, and queueable holds the unit of work that can fail and be tracked on its own.
+
+![The composite pattern: Scheduled Apex starts a batch job, the batch splits the record set into transactions, and each chunk enqueues a queueable that owns the callout and the retry decision.](</diagrams/asynchronous-apex-choosing-batch-queueable-scheduled-future/2-composite-pattern.png>)
 
 That raises the retry question the pattern only half answers. A queueable that fails has no automatic retry, and a batch chunk that fails is simply recorded as an error on the `AsyncApexJob`. Designing the flag that tells the next run what still needs doing, the `Needs_Sync__c` in the example above, is usually more valuable than any retry configuration. Idempotent, self-describing work is what makes async reliable, and Lesson 21 covered the dead-letter and retry design that surrounds it.
 
