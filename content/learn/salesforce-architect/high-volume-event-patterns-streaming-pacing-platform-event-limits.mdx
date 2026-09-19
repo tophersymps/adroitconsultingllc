@@ -30,6 +30,8 @@ The Pub/Sub API is the modern choice for high-volume work. It is a gRPC and HTTP
 
 The streaming model also changes how you think about delivery. A subscriber that is connected receives messages as they are published. A subscriber that is disconnected does not lose them, because high-volume event messages are stored in the event bus for 72 hours. [^1] When the subscriber reconnects, it can resume from its last Replay ID and catch up on everything it missed within that window. [^2] That durability is what makes streaming safe to build on: the bus holds the messages while your consumer is down, and replay closes the gap.
 
+![The streaming model in one view: polling asks for changes on a schedule while streaming pushes each event over an open connection, the event bus holds messages for 72 hours while a subscriber is down, and a stored Replay ID lets the subscriber resume and catch up after a disconnect](</diagrams/high-volume-event-patterns-streaming-pacing-platform-event-limits/1-streaming-model.png>)
+
 ## Pacing: matching the rate to the road
 
 Pacing is the discipline that keeps a high-volume design alive. The event bus has two rolling limits, an hourly publishing limit and a 24-hour delivery limit, and both are enforced. [^2] Pacing means you design the publish rate so you never trip them, and you design the consumer so it can absorb what the bus sends.
@@ -49,6 +51,8 @@ The limits are the load-bearing wall of any high-volume design, so an architect 
 **Delivery allocation.** This is the maximum number of event messages delivered in a rolling 24-hour period to Pub/Sub API and CometD subscribers, `empApi` components, and event relays. [^2] It is 50,000 on Performance and Unlimited, 25,000 on Enterprise, and 10,000 on Developer. [^2] Two details matter. First, the delivery allocation is shared between high-volume platform events and Change Data Capture events, so a CDC-heavy org and a platform-event-heavy org draw from the same pool. [^2] Second, the delivery allocation does not apply to Apex triggers, flows, or Process Builder processes, so an event consumed on-platform does not count against it. [^2]
 
 The delivery allocation is where architects get surprised, because it is counted per subscriber. The number of delivered events is counted for each subscribed client, and if you have multiple subscribers, your usage is added across all of them. [^2] An Unlimited org with a 50,000 allocation that delivers 20,000 events to each of two clients has consumed 40,000, not 20,000. [^2] Every subscriber multiplies your delivery usage, so an unnecessary subscriber is not free, it is a second charge against the same pool.
+
+![The two rolling allocations side by side: the hourly publishing cap (250,000 on Performance and Unlimited, 250,000 with the API add-on on Enterprise and Professional, 50,000 on Developer, 275,000 with the platform event add-on) and the per-subscriber 24-hour delivery cap shared with Change Data Capture, with each allocation's failure mode](</diagrams/high-volume-event-patterns-streaming-pacing-platform-event-limits/2-allocations.png>)
 
 **What happens when you exceed them.** The two limits fail differently. If you exceed the hourly publishing allocation, the publish call fails with a `LIMIT_EXCEEDED` error, the events are not published or queued, and you must wait for the rolling usage to decrease and then republish. [^2] If you exceed the delivery allocation, the subscription is disconnected. A CometD client gets `403::Organization total events daily limit exceeded` on the Bayeux `/meta/connect` channel, and a Pub/Sub API client gets `sfdc.platform.eventbus.grpc.subscription.limit.exceeded` with the message "You have exceeded the event delivery limit for your org." [^2]
 
@@ -77,6 +81,8 @@ A connected-device company streams telemetry from Salesforce to a data warehouse
 5. **Batch the publishes.** A device that changes several fields in one save publishes all its events in a single `EventBus.publish` call, preserving their order and reducing publish operations. [^1]
 6. **Plan the recovery.** When the warehouse disconnects for maintenance, it stores its last Replay ID. The events it missed stay in the bus for 72 hours, and on reconnect it resumes from that ID and catches up. [^1] [^2]
 7. **Monitor the usage.** A scheduled check of `PlatformEventUsageMetric` watches both publishing and delivery usage, so the team sees the delivery pool approaching 50,000 before the subscription disconnects. [^2]
+
+![The telemetry-flood design walkthrough: choose the Pub/Sub transport, hold 200,000 events an hour under the 250,000 publishing cap, watch the 50,000 delivery pool shared with CDC, filter the stream with a custom channel, batch publishes in one call, plan recovery via stored Replay ID, and monitor PlatformEventUsageMetric before the pool is exhausted](</diagrams/high-volume-event-patterns-streaming-pacing-platform-event-limits/3-telemetry-scenario.png>)
 
 ## The pitfall to avoid
 
