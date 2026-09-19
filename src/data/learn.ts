@@ -1379,6 +1379,152 @@ export const learnSeries: LearningSeries[] = [
     "curriculumLessons": 90
   },
   {
+    "slug": "salesforce-data-architect",
+    "name": "Platform Data Architect Certification",
+    "description": "A one-stop prep course for the Salesforce Certified Platform Data Architect exam. All 21 official objectives split into 42 focused lessons, with data-modeling design patterns, LDV and MDM trade-offs, exam traps, and practice questions.",
+    "gradient": "from-teal to-cyan-600",
+    "lessons": [
+      {
+        "slug": "day-01-dm-1a-data-modeling-fundamentals-objects-fields-relation",
+        "title": "Data Architect DM-1a: Data Modeling Fundamentals: Objects, Fields, Relationships",
+        "series": "salesforce-data-architect",
+        "lesson": 1,
+        "excerpt": "The building blocks of every Salesforce data model: standard vs custom objects, what a field type actually commits you to, the lookup vs master-detail decision and everything it controls (ownership, sharing, delete, roll-ups), and the object features that shape the UI and the rules. Includes a configuration walkthrough, the exam traps, and a hands-on try-it.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Modeling",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-02-dm-1b-modeling-design-considerations-normalized-vs-denor",
+        "title": "Data Architect DM-1B: Modeling Design Considerations: Normalized vs Denormalized, Standard vs Custom, Common Data Model",
+        "series": "salesforce-data-architect",
+        "lesson": 2,
+        "excerpt": "How to make the modeling trade-offs that day one only named: normalization versus denormalization and when each wins on a shallow-query platform, extending standard objects versus building custom ones, and the Salesforce common data model built around accounts, contacts, and person accounts that underpins Customer 360. Includes a configuration walkthrough, the exam traps, and a worked example. Day 2 of the Platform Data Architect exam prep.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Modeling",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-03-dm-2a-designing-a-scalable-data-model-that-obeys-the-sec",
+        "title": "Data Architect DM-2A: Designing a Scalable Data Model That Obeys the Security and Sharing Model",
+        "series": "salesforce-data-architect",
+        "lesson": 3,
+        "excerpt": "How the Salesforce sharing stack really works: organization-wide defaults set the baseline, then the role hierarchy, sharing rules, teams, and manual sharing open access upward and outward. This lesson ties that stack to data modeling by showing how ownership and the lookup versus master-detail choice determine who can see each record, and how to design private-by-default, few-rules models that scale. Includes a configuration walkthrough, the exam traps, and a worked example. Day 3 of the Platform Data Architect exam prep.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Security",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-04-dm-2b-data-model-scenarios-given-security-sharing-constr",
+        "title": "Data Architect DM-2B: Data-Model Scenarios Given Security and Sharing Constraints",
+        "series": "salesforce-data-architect",
+        "lesson": 4,
+        "excerpt": "Security and sharing are not ornaments bolted onto a data model; they are constraints that decide which relationships and access mechanisms survive a design review. This lesson shows how to work backward from who must see what, to an Organization-Wide Defaults baseline, a role hierarchy, a small set of sharing rules, and the right relationship choices, then covers territories, account and opportunity teams, and Experience Cloud sharing sets for the access edge cases. Day 4 of the Platform Data Architect exam prep.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Modeling",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-05-dm-3a-business-and-technical-metadata-business-dictionar",
+        "title": "Data Architect DM-3A: Business and Technical Metadata: Business Dictionary, Data Lineage, Taxonomy, Data Classification",
+        "series": "salesforce-data-architect",
+        "lesson": 5,
+        "excerpt": "The difference between metadata that helps and metadata that lies is discipline. This lesson separates business metadata from technical metadata, distinguishes the business glossary from the technical data dictionary, and shows how data lineage, taxonomy, and data classification each answer a different question: where a value came from, how categories are controlled, and how sensitive a field is. It closes with why even good metadata needs owners, change control, and a review cadence to stay trustworthy. Day 5 of the Platform Data Architect exam prep.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Governance",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-06-dm-3b-capturing-and-managing-metadata-tools-governance-l",
+        "title": "Data Architect DM-3B: Capturing and Managing Metadata: Tools, Change Control, and Governance Linkage",
+        "series": "salesforce-data-architect",
+        "lesson": 6,
+        "excerpt": "Metadata that nobody can retrieve, diff, or report on is documentation, not governance. This lesson covers the tool families that capture metadata on the platform (Object Manager, Field Usage, the Setup Audit Trail, the Metadata API, the Tooling API), where enterprise catalogs and platform scanners fit, and why source-controlled deployment is metadata governance in practice. It closes on the linkage that turns a written standard into a running control: checked automatically, reconciled on a cadence, owned by a named steward. Day 6 of the Platform Data Architect exam prep.",
+        "date": "September 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Governance",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-07-dm-4a-big-objects-vs-standard-custom-objects-reasons-pro",
+        "title": "Data Architect DM-4A: Big Objects vs Standard/Custom Objects: Reasons, Pros and Cons, Async SOQL, Partitioning, and Indexing",
+        "series": "salesforce-data-architect",
+        "lesson": 7,
+        "excerpt": "The data model reaches a wall. A custom object can store a lot, but there is a limit to how many rows it holds comfortably and how fast an arbitrary query against them runs. Big Objects exist for the data that outgrows that wall: billions of rows of audit history, clickstream events, and IoT telemetry that must stay on the platform without dragging down the org. This lesson compares the reasons to choose Big Objects versus standard and custom objects, walks the pros and cons, and explains the three mechanics that decide whether a Big Object is usable: the composite primary key and its index, the prefix rule that governs query performance, and Async SOQL for extracting and aggregating the results. Day 7 of the Platform Data Architect exam prep.",
+        "date": "September 18, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Big Objects",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-08-dm-4b-big-object-scenarios-when-to-use-when-not",
+        "title": "Data Architect DM-4B: Big Object scenarios: when to use, when not",
+        "series": "salesforce-data-architect",
+        "lesson": 8,
+        "excerpt": "Lesson 7 built the mechanics of Big Objects. This lesson applies them to decisions. A customer hands you a scenario: a volume, an access pattern, a retention window, and often a cost constraint. You decide whether a Big Object is right, or whether the answer is a standard or custom object, an External Object that virtualizes instead of stores, or an off-platform store that the platform never serves. This lesson walks the fit criteria, compares the four alternatives, and works the two patterns the exam loves: archiving old records out of a standard object into a Big Object, and the aggregate-and-report loop where high-volume events land in a Big Object and summaries roll to a reportable object. Day 8 of the Platform Data Architect exam prep.",
+        "date": "September 19, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Big Objects",
+          "Certification"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 8,
+    "curriculumLessons": 42
+  },
+  {
     "slug": "salesforce-sharing-visibility-architect",
     "name": "Platform Sharing and Visibility Architect Certification",
     "description": "A one-stop prep course for the Salesforce Certified Platform Sharing and Visibility Architect exam. All 18 official objectives split into 36 focused lessons, with config walkthroughs, sharing-model trade-offs, exam traps, and practice questions.",
@@ -3027,135 +3173,6 @@ export const learnSeries: LearningSeries[] = [
     "curriculumLessons": 25
   },
   {
-    "slug": "salesforce-data-architect",
-    "name": "Platform Data Architect Certification",
-    "description": "A one-stop prep course for the Salesforce Certified Platform Data Architect exam. All 21 official objectives split into 42 focused lessons, with data-modeling design patterns, LDV and MDM trade-offs, exam traps, and practice questions.",
-    "gradient": "from-teal to-cyan-600",
-    "lessons": [
-      {
-        "slug": "day-01-dm-1a-data-modeling-fundamentals-objects-fields-relation",
-        "title": "Data Architect DM-1a: Data Modeling Fundamentals: Objects, Fields, Relationships",
-        "series": "salesforce-data-architect",
-        "lesson": 1,
-        "excerpt": "The building blocks of every Salesforce data model: standard vs custom objects, what a field type actually commits you to, the lookup vs master-detail decision and everything it controls (ownership, sharing, delete, roll-ups), and the object features that shape the UI and the rules. Includes a configuration walkthrough, the exam traps, and a hands-on try-it.",
-        "date": "September 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Data Modeling",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-02-dm-1b-modeling-design-considerations-normalized-vs-denor",
-        "title": "Data Architect DM-1B: Modeling Design Considerations: Normalized vs Denormalized, Standard vs Custom, Common Data Model",
-        "series": "salesforce-data-architect",
-        "lesson": 2,
-        "excerpt": "How to make the modeling trade-offs that day one only named: normalization versus denormalization and when each wins on a shallow-query platform, extending standard objects versus building custom ones, and the Salesforce common data model built around accounts, contacts, and person accounts that underpins Customer 360. Includes a configuration walkthrough, the exam traps, and a worked example. Day 2 of the Platform Data Architect exam prep.",
-        "date": "September 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "17 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Data Modeling",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-03-dm-2a-designing-a-scalable-data-model-that-obeys-the-sec",
-        "title": "Data Architect DM-2A: Designing a Scalable Data Model That Obeys the Security and Sharing Model",
-        "series": "salesforce-data-architect",
-        "lesson": 3,
-        "excerpt": "How the Salesforce sharing stack really works: organization-wide defaults set the baseline, then the role hierarchy, sharing rules, teams, and manual sharing open access upward and outward. This lesson ties that stack to data modeling by showing how ownership and the lookup versus master-detail choice determine who can see each record, and how to design private-by-default, few-rules models that scale. Includes a configuration walkthrough, the exam traps, and a worked example. Day 3 of the Platform Data Architect exam prep.",
-        "date": "September 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "17 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Security",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-04-dm-2b-data-model-scenarios-given-security-sharing-constr",
-        "title": "Data Architect DM-2B: Data-Model Scenarios Given Security and Sharing Constraints",
-        "series": "salesforce-data-architect",
-        "lesson": 4,
-        "excerpt": "Security and sharing are not ornaments bolted onto a data model; they are constraints that decide which relationships and access mechanisms survive a design review. This lesson shows how to work backward from who must see what, to an Organization-Wide Defaults baseline, a role hierarchy, a small set of sharing rules, and the right relationship choices, then covers territories, account and opportunity teams, and Experience Cloud sharing sets for the access edge cases. Day 4 of the Platform Data Architect exam prep.",
-        "date": "September 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Data Modeling",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-05-dm-3a-business-and-technical-metadata-business-dictionar",
-        "title": "Data Architect DM-3A: Business and Technical Metadata: Business Dictionary, Data Lineage, Taxonomy, Data Classification",
-        "series": "salesforce-data-architect",
-        "lesson": 5,
-        "excerpt": "The difference between metadata that helps and metadata that lies is discipline. This lesson separates business metadata from technical metadata, distinguishes the business glossary from the technical data dictionary, and shows how data lineage, taxonomy, and data classification each answer a different question: where a value came from, how categories are controlled, and how sensitive a field is. It closes with why even good metadata needs owners, change control, and a review cadence to stay trustworthy. Day 5 of the Platform Data Architect exam prep.",
-        "date": "September 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Data Governance",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-06-dm-3b-capturing-and-managing-metadata-tools-governance-l",
-        "title": "Data Architect DM-3B: Capturing and Managing Metadata: Tools, Change Control, and Governance Linkage",
-        "series": "salesforce-data-architect",
-        "lesson": 6,
-        "excerpt": "Metadata that nobody can retrieve, diff, or report on is documentation, not governance. This lesson covers the tool families that capture metadata on the platform (Object Manager, Field Usage, the Setup Audit Trail, the Metadata API, the Tooling API), where enterprise catalogs and platform scanners fit, and why source-controlled deployment is metadata governance in practice. It closes on the linkage that turns a written standard into a running control: checked automatically, reconciled on a cadence, owned by a named steward. Day 6 of the Platform Data Architect exam prep.",
-        "date": "September 17, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Data Governance",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-07-dm-4a-big-objects-vs-standard-custom-objects-reasons-pro",
-        "title": "Data Architect DM-4A: Big Objects vs Standard/Custom Objects: Reasons, Pros and Cons, Async SOQL, Partitioning, and Indexing",
-        "series": "salesforce-data-architect",
-        "lesson": 7,
-        "excerpt": "The data model reaches a wall. A custom object can store a lot, but there is a limit to how many rows it holds comfortably and how fast an arbitrary query against them runs. Big Objects exist for the data that outgrows that wall: billions of rows of audit history, clickstream events, and IoT telemetry that must stay on the platform without dragging down the org. This lesson compares the reasons to choose Big Objects versus standard and custom objects, walks the pros and cons, and explains the three mechanics that decide whether a Big Object is usable: the composite primary key and its index, the prefix rule that governs query performance, and Async SOQL for extracting and aggregating the results. Day 7 of the Platform Data Architect exam prep.",
-        "date": "September 18, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Big Objects",
-          "Certification"
-        ],
-        "status": "published"
-      }
-    ],
-    "totalLessons": 7,
-    "curriculumLessons": 42
-  },
-  {
     "slug": "ai-at-work",
     "name": "AI at Work",
     "description": "A vendor-agnostic primer for using AI in day-to-day work: foundations, prompting, productivity, small automations, and team adoption. Company-wide training that works for any team and any AI tool.",
@@ -4012,6 +4029,23 @@ export const learnLessons: LearnLesson[] = [
       "Architecture",
       "Multi-Org",
       "Integration"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-08-dm-4b-big-object-scenarios-when-to-use-when-not",
+    "title": "Data Architect DM-4B: Big Object scenarios: when to use, when not",
+    "series": "salesforce-data-architect",
+    "lesson": 8,
+    "excerpt": "Lesson 7 built the mechanics of Big Objects. This lesson applies them to decisions. A customer hands you a scenario: a volume, an access pattern, a retention window, and often a cost constraint. You decide whether a Big Object is right, or whether the answer is a standard or custom object, an External Object that virtualizes instead of stores, or an off-platform store that the platform never serves. This lesson walks the fit criteria, compares the four alternatives, and works the two patterns the exam loves: archiving old records out of a standard object into a Big Object, and the aggregate-and-report loop where high-volume events land in a Big Object and summaries roll to a reportable object. Day 8 of the Platform Data Architect exam prep.",
+    "date": "September 19, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "16 min read",
+    "tags": [
+      "Salesforce",
+      "Data Architecture",
+      "Big Objects",
+      "Certification"
     ],
     "status": "published"
   },

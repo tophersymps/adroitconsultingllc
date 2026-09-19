@@ -1,0 +1,133 @@
+---
+title: "Data Architect DM-4B: Big Object scenarios: when to use, when not"
+slug: day-08-dm-4b-big-object-scenarios-when-to-use-when-not
+series: salesforce-data-architect
+lesson: 8
+excerpt: "Lesson 7 built the mechanics of Big Objects. This lesson applies them to decisions. A customer hands you a scenario: a volume, an access pattern, a retention window, and often a cost constraint. You decide whether a Big Object is right, or whether the answer is a standard or custom object, an External Object that virtualizes instead of stores, or an off-platform store that the platform never serves. This lesson walks the fit criteria, compares the four alternatives, and works the two patterns the exam loves: archiving old records out of a standard object into a Big Object, and the aggregate-and-report loop where high-volume events land in a Big Object and summaries roll to a reportable object. Day 8 of the Platform Data Architect exam prep."
+date: "September 19, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [Salesforce, Data Architecture, Big Objects, Certification]
+---
+
+Lesson 7 built the mechanics: what a Big Object is, the composite primary key and the prefix rule, the features it does not have, and how Async SOQL reads the results. This lesson applies those mechanics to a decision. Requirement dm-4b asks you to take a customer scenario, decide whether a Big Object is the right choice against the alternatives (a standard or custom object, an External Object, or an off-platform store), and justify the trade-offs. [^1] The exam will not ask you to recite a field limit. It will hand you a situation with a volume, an access pattern, a retention need, and often a cost constraint, and it will expect a store choice and a defense.
+
+The mechanics from Lesson 7 are the constraint that makes the decision real. A Big Object is append and scale oriented. [^7][^8] It trades away triggers, validation rules, roll-ups, standard reporting, and the editing UI. [^3][^9] So the decision is less "which store holds the most data" and more "which store matches how the data is used." Everything in this lesson flows from that framing.
+
+## Deep Dive
+
+### When a Big Object is the right choice
+
+A Big Object earns its place when four conditions line up: the volume is very high, the access is append and extract, the retention is long, and nobody needs interactive per-record edits. [^7]
+
+Start with volume. Big Objects exist for data approaching or exceeding hundreds of millions of records, into the billions. [^3][^11] Below that range, a standard or custom object often still works, and you may be solving a performance problem with archiving and index design rather than a storage problem with a different store. The moment the row count genuinely outgrows what a custom object holds comfortably, Big Object becomes a serious candidate.
+
+Next, access pattern. Big Object reads are either key-based lookups or asynchronous aggregates. [^8] The data is written once, usually at high volume, and read rarely, in bulk. Customer event history, clickstream records, IoT telemetry, and audit trails all fit this shape. [^3][^11] The key question is whether the workload is append-and-extract oriented. If it is, the Big Object design matches the workload out of the box. If the workload is interactive and transactional, the match fails.
+
+Retention matters because on-platform retention is often the whole reason to use a Big Object instead of pushing the data off the platform. Compliance scenarios require keeping years of history available. [^7] A Big Object holds that history on the platform at scale, and it does not count against the same storage limits that constrain standard and custom objects. [^10]
+
+Finally, the negative test. If users must edit the records, relate them, run standard reports on them, or query them ad hoc with sub-second response on arbitrary fields, then a Big Object is wrong no matter how much data there is. Those needs point to a standard or custom object. [^7][^9] A Big Object cannot deliver them, and no amount of data volume changes that.
+
+### When a Big Object is the wrong choice
+
+The flip side carries its own list, and it is where the exam's wrong answers live. Do not use a Big Object when users must edit records, because there is no editing UI and the append-oriented model does not support interactive updates. [^3][^9] Do not use one when the data needs relationships, roll-up summary fields, or validation rules, because none of those exist on a Big Object. [^3][^8][^9] Do not use one when you need standard reporting, because Big Objects do not support Report Builder or standard dashboards directly. [^9][^12] And do not use one when you need sub-second ad-hoc queries on arbitrary fields, because a Big Object only executes such queries efficiently on its index fields as a prefix. [^6]
+
+The trap here is reaching for a Big Object because the data is large without checking whether the workload is interactive. A large interactive workload is still an sObject problem; the answer is usually archiving, purge, index, and storage strategy, not a Big Object. [^7]
+
+### Comparing the four alternatives
+
+The exam frames the decision across four stores, and you need to know what each is good at.
+
+A standard or custom object is the workhorse for anything interactive. It supports validation, automation, sharing, reports, and relationships, and it is the only one of the four that does. [^7] Its ceiling is the LDV performance wall: as the object grows toward tens of millions of rows, list views slow, queries hit governor limits, and storage pressure climbs. [^10] That is the reason the other stores exist, and it is why archiving out of an overgrown sObject is such a common design move.
+
+An External Object, configured through Salesforce Connect, virtualizes external data without storing a copy on the platform. [^13][^14] It maps to data that lives and is managed outside Salesforce, and it makes that data readable through Salesforce tools. The defining property is that it does not copy the data. That makes it the right choice when the data must not be duplicated onto the platform, whether for sovereignty, cost, or because the source of truth must stay authoritative elsewhere. [^2] It is not a volume solution. Virtualizing a two-hundred-million-row source does not resolve the scale; it just avoids storing it, and performance depends on the external adapter and the query.
+
+An off-platform store, such as a data lake, S3 or R2 object storage, or Snowflake, is best when the platform does not need to serve the data at all. [^1] If the consumer is an analytics tool or a warehouse and Salesforce never has to show the rows, then paying to keep them on the platform is pointless. Off-platform is cheaper, unconstrained by Salesforce storage and license economics, and purpose-built for analytical workloads. The trade is that the data is not queryable inside Salesforce, so any Salesforce-facing view has to be built on summaries that are brought back.
+
+The choice rule that ties them together: interactive and transactional data stays in a standard or custom object; high-volume, append-only history that must stay on the platform goes into a Big Object; data that must not be copied is virtualized through an External Object; and data Salesforce never needs to serve lives off-platform. [^1][^7]
+
+### The archival pattern
+
+The archival pattern is the most common reason an architect introduces a Big Object into an existing org. A standard object has grown too large to stay fast, but the old records still need to be retained. The move is to shift the old records out of the standard object into a Big Object, then delete them from the source so the source wins back performance and storage. [^7]
+
+Walk through a concrete case. A service org's Case object holds 200 million rows. Most cases are closed and are only ever referenced during compliance lookups. The active working set, open cases and recently closed ones, is small. Keeping 200 million rows on Case means every list view pays the cost of a huge table, and the LDV performance wall is the result. [^10] The design that resolves this: define a retention threshold, say cases closed more than a set number of years, archive just those old closed cases into a Big Object, and delete the archived ones from Case. [^7] Active cases stay in Case where the interactive workflow needs them. The closed history stays on the platform in the Big Object for compliance lookups. Case itself shrinks back to a size where it performs.
+
+The detail that makes or breaks this pattern is the index on the Big Object. You design the composite primary key around the dominant query filter before you create the object, because you cannot edit the index after deployment. [^2][^11] For the compliance-lookup case, that is usually a date prefix plus an identifier, for example a year-and-account composite that lets lookups filter by date range and account without scanning. [^6][^7] A small, well-shaped index aligned to the access pattern is what turns a "store it for compliance" requirement into a queryable archive rather than a black box.
+
+The companion rule the exam tests directly: you must actually delete the archived source records. Archiving into a Big Object without deleting from the standard object gains nothing. [^7] The rows still sit on the big object, list views still scan them, and storage and performance stay at the wall. The benefit arrives only when the source is emptied of what moved.
+
+### The aggregate-and-report pattern
+
+The second pattern is about ingestion and reporting. You ingest high-volume events into a Big Object, run periodic Async SOQL aggregations in the background, and write the summarized results to a standard object that the business reports on. [^1][^8] Reporting happens on small, reportable data, while the raw volume stays in the Big Object where it scales.
+
+The loop matters because a Big Object is not standard-reportable and synchronous reads are limited. [^8][^9] Async SOQL runs a query or aggregate as a background job and writes the result to a target, typically a standard object or a file. [^1][^8] You schedule that job, it processes the accumulated events, and the summaries land in a reportable object. Dashboards and reports read the summary object, never the Big Object itself.
+
+This is the architecture behind a telemetry or event pipeline. Raw events stream into a Big Object continuously. A nightly Async SOQL job aggregates them by account and time window. The aggregated rows go into a standard object. Report Builder and dashboards run against that object, and performance stays fast because the reportable data is compact. [^12]
+
+Cost and license deserve a note. Big Objects consume data storage, and at some tiers there are additional license or capacity implications that you should confirm against current pricing and limits. [^1] They do not consume the same API and transaction envelope as interactive records, which is part of why high-volume ingestion is so much cheaper per event than storing the same rows as interactive sObjects. [^3] But "cheaper per event" is not "free," and a scenario that ignores the storage cost of several years of accumulated events is an incomplete appraisal. Confirm the current numbers rather than assuming a figure from memory. [^1]
+
+### Hybrid designs, and the anti-pattern
+
+Real architectures rarely use one store. The common shape is a hybrid: the recent window, often the last 12 to 24 months, stays in a standard object where users interact with it, older data lives in a Big Object or off-platform, and a unified view is presented through an External Object or a data-warehouse report. [^1]
+
+Consider the customer who needs a single view that blends recent interactive records with ten years of history, without duplicating the history onto the platform. Recent records stay native in a standard object, where they are editable and reportable. The old history is virtualized through an External Object, so it is available for reference without copying. The unified view combines the two. Neither a Big-Object-only design nor an external-only design fits: the first loses interactivity for the recent data, the second removes the native recent data the customer actually uses. [^2][^13]
+
+The anti-pattern is using a Big Object as the primary transactional store for a UI-driven process. It fails on every axis. Users cannot page through billions of rows, there is no page layout or detail page, there is no standard reporting, and there are no validation rules or relationships. [^3][^9] A UI that renders records and a Big Object are incompatible by design. If a scenario describes a screen that people work in, the store is an sObject, and a Big Object selected for that scenario is a wrong answer.
+
+## Configuration Walkthrough
+
+These five steps turn the archival decision into a working design. They mirror the reasoning the exam expects you to be able to walk through for a given scenario.
+
+1. Profile the access pattern first. Decide whether reads are per-record and interactive, in which case a standard object is correct, or bulk and analytical, in which case a Big Object earns its place. [^7] Do this before choosing the store, because the store follows the access pattern, not the other way around.
+
+2. Model the composite key and index around the dominant query filter before creating the Big Object. Write down the queries you will run, pick the fields they filter on, and order the index so those filters form a prefix, with the most selective field first. [^6] A date prefix with an account identifier is a common shape for archival and event workloads. Because the index is permanent once deployed, this step is where you commit. [^2][^11]
+
+3. Build the archival job that moves old records into the Big Object and then deletes them from the standard object. Use the Bulk API or a batch ETL so the move runs at volume without exhausting governor limits. [^3][^8] The two halves of the job must both run: load into the Big Object, then delete the archived rows from the source. Skipping the delete forfeits the performance and storage benefit. [^7]
+
+4. Create a scheduled Async SOQL job to aggregate the Big Object and write summaries to a standard object for reporting. Point the job at the raw history, let it run in the background, and land the aggregated rows in a reportable object. [^1][^8] Dashboards read that object, so reporting stays fast and stays on data the platform can report on. [^12]
+
+5. If the data must not be copied, define an External Object through Salesforce Connect instead, and compare its cost and latency to the Big Object option. [^13][^14] External Objects virtualize without storing, which suits data that must stay in its source. The comparison is not one line: the External Object avoids storage but depends on the adapter and the external system for every read, so weigh query latency and concurrency against the Big Object's storage cost.
+
+## Exam Traps
+
+**Trap one: choosing a Big Object for an interactive user workflow.** A Big Object lacks editing, page layouts, and standard reporting. [^3][^9] When a scenario describes users working records in the UI, the store is a standard or custom object, and a Big Object is the decoy. This is the trap the exam tip names: Big Object means append, scale, and extract, and if users edit it or report on it interactively, it is the wrong store.
+
+**Trap two: forgetting to delete the archived source records.** Moving rows into an archive without removing them from the standard object gains nothing. [^7] The big object still carries the rows, the source still scans them, and the performance wall stays. The archival pattern only pays off when the source is emptied.
+
+**Trap three: assuming a Big Object replaces a data warehouse.** If the platform never needs to serve the data, an off-platform store is cheaper and better suited. [^1] A Big Object is the right home for on-platform retention, not a substitute for a warehouse when the consumers live outside Salesforce.
+
+## Try It
+
+Knock out the two patterns on paper before you touch Setup. First, take the service org case: 200 million rows on Case, ninety-five percent closed and only referenced for compliance lookups. Decide the design and defend it. The move is to archive closed cases older than the retention threshold into a Big Object, delete them from Case, and keep a small index aligned to the compliance lookup pattern. [^6][^7] Explain why each rejected option fails: raising the index does not change the size of the table, moving all cases removes the interactive data, and Salesforce Connect virtualizes rather than resolves the volume. [^10][^13]
+
+Second, design an event pipeline. Events stream into a Big Object, a scheduled Async SOQL job aggregates them, and the summaries land in a standard object that the dashboard reads. [^1][^8] Write the index that supports the aggregate, and confirm the summary object is the only thing Report Builder ever touches.
+
+Then test the negative boundary. Given the customer who needs recent interactive records blended with ten years of history without duplicating the history, explain why the fit is a hybrid: recent records native, old history virtualized through an External Object. [^2][^13] That scenario is exactly where a Big-Object-only or external-only answer goes wrong, and being able to say why is the difference between a correct store choice and a plausible one.
+
+## What's Next
+
+You can now decide, from a customer scenario, whether a Big Object is right against a standard or custom object, an External Object, or an off-platform store, and justify the trade-offs. Lesson 9 shifts from storage to workload: data skew, covering record locking, sharing recalculation issues, and excessive child-to-parent relationships, which is where a data model that looked fine in isolation starts to break down under real concurrency and sharing. [^1]
+
+## Related Requirements
+
+- Lesson 7 of 42 (dm-4a): Big Objects vs standard/custom objects: reasons, pros and cons, Async SOQL, partitioning, and indexing
+- Lesson 9 of 42 (dm-5a): Data skew: record locking, sharing recalculation issues, excessive child-to-parent relationships
+- Lesson 31 of 42 (lv-2a): Archiving and purging fundamentals: strategies and Big Objects
+- Lesson 33 of 42 (lv-3a): Virtualized data fundamentals: External Objects and Salesforce Connect
+
+## References
+
+[^1]: Salesforce Certified Platform Data Architect Exam Guide (Big Objects and Async SOQL objectives). [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005298972&language=en_US&type=1)
+[^2]: Introduction to Big Objects, Trailhead module. [trailhead.salesforce.com](https://trailhead.salesforce.com/content/learn/modules/big_objects/big_objects_get_started)
+[^3]: Big Objects Implementation Guide (types, unsupported features, idempotent writes, transactions). [resources.docs.salesforce.com](https://resources.docs.salesforce.com/latest/latest/en-us/sfdc/pdf/big_objects_guide.pdf)
+[^4]: Big Objects, Salesforce Help (define and deploy custom Big Objects, index behavior). [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.big_objects_intro.htm&type=5)
+[^5]: Salesforce Dictionary: Big Objects (composite primary key as access pattern, indexed-field query requirement, Async SOQL). [salesforcedictionary.com](https://salesforcedictionary.com/terms/big-objects)
+[^6]: Indexed Big Object SOQL limitation in Apex (composite key prefix rule, no gaps, omit from the right only). [salesforce.stackexchange.com](https://salesforce.stackexchange.com/questions/248375/indexed-big-object-soql-limitation-in-apex-class)
+[^7]: Salesforce Dictionary: When Big Objects fit and when they do not (volume threshold, append-only, key-based and aggregate queries, feature trade-offs, archival and deletion). [salesforcedictionary.com](https://salesforcedictionary.com/terms/big-objects)
+[^8]: Salesforce Summaries: Async SOQL, Big Data Computing for the Salesforce Platform (background query, target object, processing time, non-key filters). [salesforceben.com](https://www.salesforceben.com/salesforce-summaries-async-soql-big-data-computing-for-the-salesforce-platform/)
+[^9]: Rackwave Help Center: Salesforce Big Objects (unsupported automation, wrong-tool guidance, reporting limits). [rackwave.io](https://rackwave.io/help-center/article/salesforce-big-objects)
+[^10]: Dazeworks: Big Objects and org data storage limits (not counted against storage, `__b` suffix, feature support). [dazeworks.com](https://dazeworks.com/blog/big-objects-works-against-org-data-storage-limits-2)
+[^11]: Big Objects Implementation Guide (billion-record scale, FieldHistoryArchive, index cannot be edited after deployment, lookup fields). [resources.docs.salesforce.com](https://resources.docs.salesforce.com/latest/latest/en-us/sfdc/pdf/big_objects_guide.pdf)
+[^12]: Salesforce Big Objects Guide: view Big Object data in reports and dashboards (direct standard reporting not supported; aggregate roll-up to reportable objects). [blog.anablock.com](https://blog.anablock.com/blog/salesforce-big-objects-guide)
+[^13]: Salesforce Connect, Salesforce Help (External Objects available to Salesforce tools). [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.platform_connect_about.htm&type=5)
+[^14]: External Objects in Salesforce Connect, Salesforce Help (compatibility and feature support). [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.platform_connect_considerations_compatibility.htm&type=5)
