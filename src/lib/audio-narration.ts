@@ -26,8 +26,11 @@
  * routing is gated on an interactive-heading ALLOWLIST — `Try It` (replaced
  * by a single spoken bridge line), `Related Requirements` and `References`
  * (skipped, nothing emitted) — and the knowledge-check transition is appended
- * once as the final line. Everything else (Deep Dive, Worked example, Config
- * walkthrough, Exam Traps, What's Next, ...) is read as learning content.
+ * once as the final line. A Configuration Walkthrough section is BRIDGED AND
+ * KEPT (ADR-106/107 keep + bridge): a spoken framing line is prepended before
+ * it, then the section body (sequence + why + traps) is read as normal — it
+ * is NOT cut like Try It. Everything else (Deep Dive, Worked example, Exam
+ * Traps, What's Next, ...) is read as learning content.
  */
 
 /** Diagram-source resolver: prefer an explicit description:: override, else alt. */
@@ -48,6 +51,14 @@ export interface NarrationOverrides {
   lesson?: boolean;
   /** Spoken line that replaces the `Try It` section body in lesson mode. */
   tryItBridge?: string;
+  /**
+   * Spoken framing line prepended before a Configuration Walkthrough section
+   * in lesson mode (ADR-106/107 keep + bridge). The walkthrough body is NOT
+   * cut (unlike Try It) — the bridge reframes the mouse-click steps for a
+   * listener, then the section content (sequence + why + traps) is read as
+   * normal. Defaults to a single em-dash-free line.
+   */
+  walkthroughBridge?: string;
   /** Closing knowledge-check hand-off, appended last in lesson mode. */
   knowledgeCheckTransition?: string;
 }
@@ -64,6 +75,8 @@ const defaultLeadIn = (alt: string) => `Diagram: ${alt}.`;
 /* Lesson-mode defaults (ADR-106/107). Em-dash-free spoken copy. */
 const DEFAULT_TRY_IT_BRIDGE =
   "This lesson includes a hands-on exercise you can do in your sandbox.";
+const DEFAULT_WALKTHROUGH_BRIDGE =
+  "Here is how this is configured in a sandbox. I will walk through the steps and the reasoning. You can run the exact clicks when you are back at the UI.";
 const DEFAULT_KC_TRANSITION =
   "That's the lesson. When you're ready, return to the lesson page to complete the knowledge check and test what you've heard.";
 
@@ -79,6 +92,24 @@ const DEFAULT_KC_TRANSITION =
 const isTryIt = (normalized: string) => /^try it([:\s]|$)/.test(normalized);
 const isExactInteractive = (normalized: string) =>
   normalized === "related requirements" || normalized === "references";
+
+/**
+ * Walkthrough-heading classifier for lesson mode (ADR-106/107 keep + bridge).
+ * A Configuration Walkthrough section is written for a reader at the UI
+ * (mouse-click steps), so the clicks are un-actionable to a listener — but it
+ * is where the mechanism and exam traps live, so it is NOT cut (unlike Try
+ * It). Instead a spoken framing line is prepended and the body is read as
+ * normal. The heading text varies across lessons ("Configuration
+ * Walkthrough", "Configuration steps", "Setup walkthrough", "Walkthrough"),
+ * so matching is anchored to the heading start on the NORMALIZED text and
+ * accepts a `configuration`/`config`/`setup` prefix followed by
+ * `walkthrough`/`steps`, or a bare `walkthrough`. Near-miss headings that
+ * merely contain the words ("Configuration: models and providers") do NOT
+ * match.
+ */
+const isWalkthrough = (normalized: string) =>
+  /^walkthrough([:\s]|$)/.test(normalized) ||
+  /^(configuration|config|setup)\s+(walkthrough|steps?)([:\s]|$)/.test(normalized);
 
 /** Normalize a heading's text for the interactive classifier. */
 const normalizeHeading = (text: string): string =>
@@ -184,9 +215,11 @@ export function mdxToNarration(
   // normally (so `What's Next` is read). skipLevel === 0 means "not skipping".
   const lesson = Boolean(opts.lesson);
   const tryItBridge = opts.tryItBridge ?? DEFAULT_TRY_IT_BRIDGE;
+  const walkthroughBridge = opts.walkthroughBridge ?? DEFAULT_WALKTHROUGH_BRIDGE;
   const kcTransition = opts.knowledgeCheckTransition ?? DEFAULT_KC_TRANSITION;
   let skipLevel = 0;
   let tryItBridged = false;
+  let walkthroughBridged = false;
   // True once any actual LEARNING line (heading, diagram, body prose) is
   // emitted. The Try It bridge alone is not lesson content, so a degenerate
   // interactive-only lesson must NOT get a KC hand-off pointing at a quiz
@@ -223,6 +256,16 @@ export function mdxToNarration(
           // Interactive: skip the section body, emit nothing.
           skipLevel = level;
           continue;
+        }
+        if (isWalkthrough(normalized)) {
+          // Keep + bridge (ADR-106/107): prepend a spoken framing line, then
+          // fall through to read the section body as normal. Unlike Try It,
+          // the walkthrough is NOT cut — the sequence, why, and traps must
+          // still come through to the listener.
+          if (!walkthroughBridged) {
+            walkthroughBridged = true;
+            out.push(walkthroughBridge);
+          }
         }
       }
 

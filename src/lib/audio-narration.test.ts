@@ -256,7 +256,56 @@ Requirement REQ-2 is listed here.
     expect(narration).toContain("Inside this section you do real work.");
   });
 
-  it("appends the KC transition exactly once as the final line", () => {
+  it("bridges AND keeps a Configuration Walkthrough (bridge line then body)", () => {
+      const narration = mdxToNarration(FULL_LESSON, { lesson: true });
+      // the spoken framing line is prepended before the section
+      expect(narration).toContain(
+        "Here is how this is configured in a sandbox. I will walk through the steps and the reasoning. You can run the exact clicks when you are back at the UI.",
+      );
+      // the section cue is still emitted
+      expect(narration).toContain("Section: Configuration Walkthrough.");
+      // the walkthrough BODY is NOT cut (unlike Try It) — sequence + why + traps
+      expect(narration).toContain("Configure these settings.");
+    });
+
+    it("emits the walkthrough bridge exactly once per lesson", () => {
+      const mdx =
+        "## Deep Dive\nSome learning.\n## Configuration Walkthrough\nStep one.\n## Setup walkthrough\nStep two.\n## What's Next\nRecap.";
+      const narration = mdxToNarration(mdx, { lesson: true });
+      expect(narration.match(/Here is how this is configured in a sandbox/g)).toHaveLength(1);
+      // both walkthrough bodies are read
+      expect(narration).toContain("Step one.");
+      expect(narration).toContain("Step two.");
+    });
+
+    it("detects walkthrough-style heading variants (Configuration steps, Setup walkthrough, Walkthrough)", () => {
+      for (const h of [
+        "## Configuration Walkthrough",
+        "## Configuration steps",
+        "## Setup walkthrough",
+        "## Walkthrough",
+      ]) {
+        const mdx = `## Deep Dive\nSome learning.\n${h}\nThe walkthrough body.\n## What's Next\nRecap.`;
+        const narration = mdxToNarration(mdx, { lesson: true });
+        expect(narration).toContain(
+          "Here is how this is configured in a sandbox. I will walk through the steps and the reasoning. You can run the exact clicks when you are back at the UI.",
+        );
+        expect(narration).toContain("The walkthrough body.");
+      }
+    });
+
+    it("does NOT bridge near-miss headings that merely contain the words", () => {
+      const mdx =
+        "## Deep Dive\nSome learning.\n## Configuration: models and providers\nRead this as learning.\n## What's Next\nRecap.";
+      const narration = mdxToNarration(mdx, { lesson: true });
+      // no bridge line emitted
+      expect(narration).not.toContain("Here is how this is configured in a sandbox");
+      // the near-miss heading is read as a normal learning section
+      expect(narration).toContain("Section: Configuration: models and providers.");
+      expect(narration).toContain("Read this as learning.");
+    });
+
+    it("appends the KC transition exactly once as the final line", () => {
     const narration = mdxToNarration(FULL_LESSON, { lesson: true });
     const lines = narration.split("\n");
     const kc =
