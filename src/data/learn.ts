@@ -8,6 +8,769 @@ import { LearnLesson, LearningSeries } from "./types";
 /** All series, sorted by newest lesson date DESC (ties → slug asc). Empty dirs included with lessons: []. */
 export const learnSeries: LearningSeries[] = [
   {
+    "slug": "agentic-ai",
+    "name": "Agentic AI Implementation Path",
+    "description": "From single-agent prototypes to multi-agent orchestration, a practitioner's curriculum for shipping agentic systems.",
+    "gradient": "from-amber to-yellow-600",
+    "lessons": [
+      {
+        "slug": "what-is-an-agent",
+        "title": "Lesson 1: What an Agent Actually Is (LLMs vs Rules vs Workflows)",
+        "series": "agentic-ai",
+        "lesson": 1,
+        "excerpt": "The definitions that matter for the whole track: what separates a rules system, an LLM workflow, and a true agent, plus how to tell which one you're actually building.",
+        "date": "August 04, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Salesforce"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "how-llms-work-tokens-context-inference",
+        "title": "Lesson 2: How LLMs Work for Implementers: Tokens, Context, Inference, Temperature",
+        "series": "agentic-ai",
+        "lesson": 2,
+        "excerpt": "The four knobs that decide every LLM bill, latency budget, and reliability call: what tokens actually are, how the context window constrains agents, how inference really runs, and what temperature does and doesn't do.",
+        "date": "August 05, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Salesforce"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "the-agent-loop-perceive-reason-act-observe",
+        "title": "Lesson 3: The Agent Loop: Perceive, Reason, Act, Observe, and Where Your Code Lives",
+        "series": "agentic-ai",
+        "lesson": 3,
+        "excerpt": "The one while loop that turns a language model into an agent: the five stages of the loop, the pseudocode that runs underneath every framework, and exactly which parts of it are your code versus the runtime's.",
+        "date": "August 06, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Salesforce"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "prompting-for-agents-system-prompts-few-shot",
+        "title": "Lesson 4: Prompting for Agents: System Prompts, Few-Shot, and When Prompts Aren't Enough",
+        "series": "agentic-ai",
+        "lesson": 4,
+        "excerpt": "In an agent, the prompt isn't a single message; it's the constitution the loop obeys on every iteration. The anatomy of a production system prompt, how few-shot examples actually work, and the escalation ladder for when words stop being enough.",
+        "date": "August 07, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Prompt Engineering"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "tokens-context-cost-engineering-agents",
+        "title": "Lesson 5: Tokens, Context Windows, and Cost Engineering for Agent Workloads",
+        "series": "agentic-ai",
+        "lesson": 5,
+        "excerpt": "Agents don't just use tokens; they burn them: roughly 4x a chat conversation, 15x for multi-agent. The four levers that control the bill (budgeting, compression, caching, and model routing), with the math worked out on a real 10-agent pipeline.",
+        "date": "August 08, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Performance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "choosing-models-providers-routing-fallbacks",
+        "title": "Lesson 6: Choosing Models & Providers: Capability Tiers, Routing, and Fallbacks",
+        "series": "agentic-ai",
+        "lesson": 6,
+        "excerpt": "The biggest agent-ops mistake is picking one 'best' model and pointing everything at it. This lesson builds the three-tier capability model, the three jobs of a router, and the fallback chains that keep agents alive when providers fail.",
+        "date": "August 09, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "8 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "structured-output-json-mode-function-calling-tool-schemas",
+        "title": "Lesson 7: Structured Output: JSON Mode, Function Calling, and Tool Schemas Done Right",
+        "series": "agentic-ai",
+        "lesson": 7,
+        "excerpt": "An agent is only as reliable as its data contracts. This lesson builds the structured-output ladder (JSON mode, Structured Outputs, function calling) and the tool-schema practices that keep tool calls valid, parseable, and safe in production.",
+        "date": "August 10, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "8 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "tool-design-schemas-error-handling-retries",
+        "title": "Lesson 8: Designing Tools That Fail Well: Schemas, Error Handling, and Retries",
+        "series": "agentic-ai",
+        "lesson": 8,
+        "excerpt": "A tool is an operational contract, not an API wrapper. This lesson covers the five-part anatomy of a production tool, structured error schemas the model can act on, and retry discipline (backoff with jitter, idempotency keys, and retry budgets), so agents survive failures without corrupting state.",
+        "date": "August 11, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "function-calling-parity-across-providers",
+        "title": "Lesson 9: Function-Calling Parity Across OpenAI, Azure, Anthropic, Gemini, and Local Models",
+        "series": "agentic-ai",
+        "lesson": 9,
+        "excerpt": "Every frontier provider exposes function calling, but none uses the same wire format. This lesson maps the request and response shapes across OpenAI, Azure, Anthropic, and Gemini, then shows why local models (llama.cpp) are the parity wildcard and how one internal schema plus thin per-provider adapters keeps an agent portable.",
+        "date": "August 12, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "rag-fundamentals-chunking-embeddings-retrieval",
+        "title": "Lesson 10: RAG Fundamentals: Chunking, Embeddings, Retrieval, and Why RAG Is the First Enterprise Pattern",
+        "series": "agentic-ai",
+        "lesson": 10,
+        "excerpt": "The pattern that grounds LLMs in your own knowledge: what RAG is and where it came from, why you chunk documents instead of feeding them whole, what embeddings actually are, how retrieval ranks chunks, and why RAG became the first pattern enterprises shipped.",
+        "date": "August 13, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "RAG"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "embeddings-models-similarity-when-they-fail",
+        "title": "Lesson 11: Embeddings: Models, Similarity, and When They Fail",
+        "series": "agentic-ai",
+        "lesson": 11,
+        "excerpt": "What an embedding actually is, how the popular models differ, why cosine similarity works, and the failure modes that make pure vector search miss the answer: rare terms, domain jargon, short queries, and model mismatch.",
+        "date": "August 14, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "RAG"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "vector-databases-pinecone-pgvector-milvus-weaviate",
+        "title": "Lesson 12: Vector Databases: Pinecone, pgvector, Milvus, Weaviate, and Choosing for Your Workload",
+        "series": "agentic-ai",
+        "lesson": 12,
+        "excerpt": "What a vector database actually does, why you need one instead of scanning vectors in memory, the approximate nearest neighbor tradeoff you are making, and how to choose between Pinecone, pgvector, Milvus, and Weaviate for your workload and your team.",
+        "date": "August 15, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "RAG"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "rag-quality-reranking-hybrid-search-metadata-filtering-freshness",
+        "title": "Lesson 13: RAG Quality: Reranking, Hybrid Search, Metadata Filtering, and Freshness",
+        "series": "agentic-ai",
+        "lesson": 13,
+        "excerpt": "The four levers that turn a RAG demo into a system you can trust: reranking to fix top-k precision, hybrid search so exact terms still win, metadata filtering so access control and scope survive retrieval, and freshness so the answers do not go stale.",
+        "date": "August 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "RAG"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "agent-memory-short-term-long-term-episodic-semantic",
+        "title": "Lesson 14: Agent Memory: Short-Term vs Long-Term, Episodic vs Semantic",
+        "series": "agentic-ai",
+        "lesson": 14,
+        "excerpt": "An agent with no memory answers the same question the same way forever. This lesson maps the memory taxonomy production systems borrow from cognitive science: the context window as working memory, long-term stores for persistence, episodic memory for what happened, semantic memory for what you know, and the pipeline that turns raw interactions into retrievable knowledge.",
+        "date": "August 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "context-engineering-what-to-include-trimming-summarization-windowing",
+        "title": "Lesson 15: Context Engineering: What to Include, Trim, Summarize, and Window",
+        "series": "agentic-ai",
+        "lesson": 15,
+        "excerpt": "The context window is finite and filling it sloppily degrades your agent before it ever fails. This lesson covers the four ways to keep a long-running loop coherent: deciding what to include, trimming what stops earning its keep, summarizing what still matters, and windowing what you can drop. With real numbers from JetBrains on which approach actually pays.",
+        "date": "August 18, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Prompt Engineering"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "multi-turn-agents-sessions-state-resuming-conversations",
+        "title": "Lesson 16: Multi-Turn Agents: Sessions, State, and Resuming Conversations",
+        "series": "agentic-ai",
+        "lesson": 16,
+        "excerpt": "An LLM is stateless: every call forgets the one before it, so multi-turn behavior has to be built, not assumed. This lesson defines the session, the state it carries, and the checkpointing that lets an agent resume where it left off: the difference between a thread and a durable store, why the state schema is the real design, and how production systems survive restarts and long conversations.",
+        "date": "August 19, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Salesforce"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "guardrails-prompt-injection-system-boundaries-input-validation",
+        "title": "Lesson 17: Guardrails I: Prompt Injection Defense, System Boundaries, and Input Validation",
+        "series": "agentic-ai",
+        "lesson": 17,
+        "excerpt": "Prompt injection tops the OWASP list of LLM risks for a reason: an agent that can act turns a misled model into an unauthorized action. This lesson separates direct from indirect injection, explains why input filters and prompt hardening alone will not stop it, and argues that the durable defense lives at the system boundary: least-privilege tools, hard containment on what the agent can reach, and human approval for high-impact actions.",
+        "date": "August 20, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "guardrails-output-validation-allowlists-pii-redaction",
+        "title": "Lesson 18: Guardrails II, Output Validation, Allowlists, PII Redaction, and Refusal Paths",
+        "series": "agentic-ai",
+        "lesson": 18,
+        "excerpt": "Input guardrails keep an attacker from pushing the agent past its boundary. Output guardrails keep the agent from pushing bad output out the other side: validation, allowlists, PII redaction, and refusal paths.",
+        "date": "August 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "evaluation-evals-golden-datasets-llm-as-judge",
+        "title": "Lesson 19: Evaluation: Evals, Golden Datasets, LLM-as-Judge, and When It Lies",
+        "series": "agentic-ai",
+        "lesson": 19,
+        "excerpt": "An agent you cannot measure is an agent you cannot trust, and the moment a model changes you have no way to know what you traded away. This lesson walks the evaluation stack from the bottom up: the golden dataset that anchors everything, the classic metrics that break on open-ended output, the LLM-as-judge technique that replaces them, and the biases that make a judge lie, from position and verbosity preference to rating its own output too high and being misled by a confident wrong answer.",
+        "date": "August 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "observability-tracing-logging-langsmith-opentelemetry-replay",
+        "title": "Lesson 20: Observability, Tracing, Logging, and Replay for Agents",
+        "series": "agentic-ai",
+        "lesson": 20,
+        "excerpt": "An agent runs several model calls, tool invocations, and retrieval steps inside one request, and when it returns the wrong answer you have no idea which step caused it. This lesson builds observability from the bottom up: the trace that records every step as a span, the trace tree that shows how they connect, the OpenTelemetry gen_ai.* conventions that give the telemetry a standard shape, the structured logs that answer 'why' when a trace only shows 'what,' and the replay loop that turns a captured trace back into a repeatable bug you can fix and verify.",
+        "date": "August 23, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Observability"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "agent-frameworks-overview-langchain-langgraph-crewai-openai-claude",
+        "title": "Lesson 21: Frameworks overview - LangChain, LangGraph, CrewAI, OpenAI Agents SDK, Claude Agent SDK",
+        "series": "agentic-ai",
+        "lesson": 21,
+        "excerpt": "By now you can build a single agent: a model, a loop, some tools. The hard part is deciding what holds the pieces together when the work grows. This lesson surveys the five frameworks you will actually meet in the wild, and it is honest about what each one is for. LangChain is an integration ecosystem. LangGraph is a stateful graph runtime for workflows that branch and loop. CrewAI is a role-based layer for teams of agents with jobs and backstories. The OpenAI Agents SDK is a deliberately tiny set of primitives with clean handoffs and guardrails. The Claude Agent SDK gives the agent a computer with built-in file, shell, and edit tools. You will learn the mental model behind each one, see the same small task written in two of them so the difference is concrete, and finish with a decision path for choosing a framework instead of trusting star counts.",
+        "date": "August 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Architecture"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "agent-loop-by-hand-no-framework",
+        "title": "Lesson 22: Building Without a Framework: the Agent Loop by Hand in 100 Lines",
+        "series": "agentic-ai",
+        "lesson": 22,
+        "excerpt": "Lesson 21 ended on a quiet note: sometimes you don't need a framework at all. This lesson makes that concrete. You write the loop yourself, in roughly a hundred lines, with nothing but an LLM API and a while loop. You see the canonical agent loop in real code, you build a working agent with two tools, you learn the one ordering mistake that trips up every beginner, and you find out exactly where a hand-rolled loop runs out of room and a framework starts to earn its complexity.",
+        "date": "August 25, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Architecture"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "agent-patterns-react-plan-execute-reflection-tool-loops",
+        "title": "Lesson 23: Agent Patterns: ReAct, Plan-and-Execute, Reflection, and Tool Loops",
+        "series": "agentic-ai",
+        "lesson": 23,
+        "excerpt": "Lesson 22 built the loop by hand. This lesson gives that loop its names. You learn the four patterns that dominate real agent work: ReAct (reason and act interleaved), plan-and-execute (plan first, then execute), reflection (evaluate and revise), and the tool loop they all run on, plus when each one earns its complexity.",
+        "date": "August 26, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Architecture"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "multi-agent-systems-orchestrator-worker-supervisor-debate",
+        "title": "Lesson 24: Multi-Agent Systems: Orchestrator-Worker, Supervisor, and Debate",
+        "series": "agentic-ai",
+        "lesson": 24,
+        "excerpt": "Lesson 23 taught you the single-agent patterns. This lesson puts several agents in one system. You learn the three coordination shapes that dominate real multi-agent work: orchestrator-worker (a central agent splits and delegates), supervisor (a coordinator routes to specialized workers via handoffs), and debate (multiple instances argue toward a consensus), plus when each one earns its complexity and when one agent is still the right call.",
+        "date": "August 27, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "human-in-the-loop-approvals-interrupts-escalation-kill-switches",
+        "title": "Lesson 25: Human-in-the-Loop, Approvals, Interrupts, Escalation, and Kill Switches",
+        "series": "agentic-ai",
+        "lesson": 25,
+        "excerpt": "An agent that can act on its own against a system that matters needs a person in the loop. This lesson builds the control layer: approvals that gate a single risky action, interrupts that pause the whole run and resume it later, escalation that hands an unsafe decision to a human, and a kill switch that stops a runaway system before it does damage.",
+        "date": "August 28, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "enterprise-deployment-serving-api-design-rate-limits-quotas",
+        "title": "Lesson 26: Enterprise Deployment, Serving, API Design, Rate Limits, and Quotas",
+        "series": "agentic-ai",
+        "lesson": 26,
+        "excerpt": "A working agent is a different thing from an agent many people can use. This lesson puts the three boundaries around it that make the difference: the serving layer that decides how much concurrent work the model can do, the API boundary that gives every consumer one stable interface, and the policy layer of rate limits and quotas that stops a single tenant from overwhelming the hardware or blowing the budget. It works through the numbers you need to size a deployment, and it shows how those three layers meet at the same number.",
+        "date": "August 29, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Delivery"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "cost-control-caching-model-tiers-budget-caps-spend-dashboards",
+        "title": "Lesson 27: Cost Control, Caching, Model Tiers, Budget Caps, and Spend Dashboards",
+        "series": "agentic-ai",
+        "lesson": 27,
+        "excerpt": "A working agent is cheaper to build than to keep. Lesson 26 stopped a single tenant from blowing the monthly bill in an afternoon; this lesson turns the bill itself into a number you manage. It covers the three cost levers in order: caching so you never pay twice for the same answer, model tiers and routing so you only pay frontier prices when a task actually needs them, and budget caps with spend dashboards so a surprise bill becomes an early-warning system instead. A worked example runs the arithmetic on a real agent workload, and the Fortress angle shows a hybrid two-tier stack doing all three at once.",
+        "date": "August 30, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Performance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "security-auth-authorization-secrets-management-for-agents",
+        "title": "Lesson 28: Security: Authentication, Authorization, and Secrets Management for Agents",
+        "series": "agentic-ai",
+        "lesson": 28,
+        "excerpt": "An agent is not a user and not a plain service. It carries two identities at once, the person it acts for and the machine it runs as, and it reaches for credentials with every tool call it makes. This lesson separates the three systems that keep that under control: authentication proves who is acting, authorization decides what that actor may do, and secrets management keeps the credentials that prove identity short-lived, tightly scoped, and out of the model's context.",
+        "date": "August 31, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "compliance-data-residency-audit-logging-retention",
+        "title": "Lesson 29: Compliance: Data Residency, Audit Logging, and Retention for AI Systems",
+        "series": "agentic-ai",
+        "lesson": 29,
+        "excerpt": "Security controls who can act. Compliance is the record of what that actor did with other people's data, and it lives in three separate controls. Data residency decides where the data is stored and processed and how it may cross borders. Audit logging keeps an immutable record of what happened, per action, so a regulator or an investigator can reconstruct it later. Retention puts a clock on how long you keep any of it. This lesson reads the EU AI Act's record-keeping article and GDPR's storage-limitation principle, then shows how a real agent pipeline turns its own event stream into an auditable trail.",
+        "date": "September 1, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Security",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "mcp-model-context-protocol-intro-build-server",
+        "title": "Lesson 30: The Model Context Protocol (MCP): What It Is, Why It Matters, and How to Build a Server",
+        "series": "agentic-ai",
+        "lesson": 30,
+        "excerpt": "The Model Context Protocol (MCP) is an open standard that connects AI applications to the tools and data they act on. It attacks a problem every agent builder hits: bespoke integrations do not scale. Without a common protocol, each AI app wires itself to each tool with its own custom connector, and the number of connectors grows as the product of apps times tools. MCP breaks that pattern by defining one client-server protocol, so an AI application that speaks it can use any server that speaks it, and a server author writes the integration once for every compliant client. This lesson explains the three participants in that architecture (host, client, server), the three things a server can expose (tools, resources, prompts), the two transports that carry the messages, and walks through building a real server with the Python SDK.",
+        "date": "September 2, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "MCP",
+          "Tool Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "mcp-deep-dive-tools-resources-prompts-sampling-auth",
+        "title": "Lesson 31: MCP Deep Dive: Tools, Resources, Prompts, and Auth",
+        "series": "agentic-ai",
+        "lesson": 31,
+        "excerpt": "Lesson 30 built a hello-world MCP server and left the deeper protocol features for later. This lesson is that later. It goes past the weather server into the four parts you will actually tune in production: how to design each of the three server primitives (tools, resources, prompts) so a model uses them well, and how OAuth 2.1 secures a remote server. It also covers sampling, the legacy feature that once let a server borrow the client's model instead of holding its own API keys, which is deprecated as of the 2026-07-28 spec revision and replaced by direct LLM provider API integration. Each section pairs the protocol method with the design decision behind it, and a single worked example ties them together: a project-intel server that exposes a tool, a resource, a prompt, and a sampling call, then gets locked down with real authorization.",
+        "date": "September 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "MCP",
+          "Tool Integration",
+          "OAuth"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "first-enterprise-agent-project-setup",
+        "title": "Lesson 32: Building your first enterprise agent: project setup, end to end",
+        "series": "agentic-ai",
+        "lesson": 32,
+        "excerpt": "You have the pieces: the loop, tools, context, memory, evaluation. This lesson is the first time they stop being separate techniques and become one running system. It walks the full setup of an enterprise agent project, from picking a bounded problem and scaffolding the repository, through wiring the model, defining the agent, and registering tools, to running it end to end behind a small API. The point is not to write clever code. It is to make the boring decisions deliberately, the ones that decide whether your agent survives contact with a real codebase, a real API key, and a real deployment. A worked example ties it together: a ticket-triager agent you stand up from an empty folder to a running endpoint in one pass.",
+        "date": "September 4, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Architecture",
+          "Tool Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "hands-on-one-framework-real-agent-real-work",
+        "title": "Lesson 33: Hands on with one framework, a real agent that does real work",
+        "series": "agentic-ai",
+        "lesson": 33,
+        "excerpt": "Lesson 32 gave you a running skeleton: a bounded task, an isolated repository, wired tools, typed state, an API in front. This lesson is where that skeleton stops being a scaffold and starts doing a real job. It picks the OpenAI Agents SDK, the framework the series has already leaned on, and walks every primitive that turns a model into an agent that an actual team can hand real work to. You will meet the Runner loop that owns the reason-act-observe cycle, function tools that reach a real system, a structured output the rest of your stack can consume, an input guardrail that blocks out-of-scope requests before they waste tokens, a session that carries memory across turns, and the tracing that is on by default. The worked example is the ticket resolver you stood up last lesson, grown from a classifier into an agent that gathers account context, checks the refund policy, and drafts a reply an agentic contact center could actually send. Define the terms, build it in numbered steps, and finish with a try-it prompt that makes the framework primitives yours.",
+        "date": "September 5, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Architecture",
+          "Tool Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "agent-ux-streaming-progress-seeing-the-loop",
+        "title": "Lesson 34: Agent UX: streaming output, progress indicators, and when users need to see the loop",
+        "series": "agentic-ai",
+        "lesson": 34,
+        "excerpt": "A chat model answers once and stops. An agent answers by running a loop: call the model, read the result, call a tool, feed the output back, call the model again, sometimes several times. That loop takes tens of seconds, and a single spinner is not enough. This lesson gives your agent a face. It sets up streaming output that delivers the reply as it is generated, progress indicators that show which step the loop is on, and the judgment about when the loop must be visible at all. You will learn the response-time limits that decide the question for you, the difference between streaming the answer and reporting progress on the work, and how to surface tool calls and interim messages without dumping raw reasoning on a user. The worked example takes the ticket resolver from lesson 33 and turns it into a streamed, progress-aware runner your team could actually show a customer.",
+        "date": "September 6, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "UX",
+          "Streaming",
+          "Progress"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "rag-at-scale-ingestion-refresh-versioning-deletion",
+        "title": "Lesson 35: RAG at Scale: Ingestion Pipelines, Refresh, Versioning, and Deletion",
+        "series": "agentic-ai",
+        "lesson": 35,
+        "excerpt": "The difference between a RAG demo and a RAG system is the write side. A demo indexes a static folder once. A system keeps a live corpus in sync with its sources: an ingestion pipeline that parses and chunks on the way in, a refresh strategy that re-embeds only what changed instead of rebuilding everything, versioning so a document or an embedding-model change is traceable and reversible, and deletion so removed or sensitive content actually disappears from retrieval. This lesson turns the read-side tuning you learned in lessons 10 through 13 into a lifecycle you can run in production.",
+        "date": "September 7, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "RAG",
+          "Data Engineering"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "testing-agents-unit-integration-regression-evals",
+        "title": "Lesson 36: Testing Agents: Unit Tests for Tools, Integration Tests, and Regression Evals",
+        "series": "agentic-ai",
+        "lesson": 36,
+        "excerpt": "You would not ship an API endpoint that you tested by curling it five times and nodding. Most agent teams do exactly that with the whole system: a playground, a few prompt experiments, a deployment. This lesson builds the three layers that replace the vibe check: unit tests that treat the deterministic machinery around the model, the prompt strings, the tool dispatch, the schemas, as ordinary software, integration tests that exercise the full agent loop against controlled tool side effects, and regression evals that score real model output against a frozen golden set. Together they turn a system that never gives the same answer twice into one you can gate a release on.",
+        "date": "September 8, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Testing",
+          "CI/CD"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "ci-cd-for-agents-prompt-versioning-model-registry-canary-releases",
+        "title": "Lesson 37: CI/CD for Agents: Prompt Versioning, Model Registries, and Canary Releases",
+        "series": "agentic-ai",
+        "lesson": 37,
+        "excerpt": "Lesson 36 gave you tests. This lesson turns them into a pipeline. A test proves an agent is good once; CI/CD proves it is still good every time a prompt, a model, or a line of configuration changes, and then routes that change into production in slices you can measure and reverse. That means three tools the last lesson never needed: prompt versioning so a one-word edit is a traced, reversible change instead of a silent memory, a model registry so you can name the exact model and provider version behind any output you inspect, and canary releases so a new prompt or model lands on a sliver of traffic, gets scored against the evals you built, and only rolls out wide when the numbers hold.",
+        "date": "September 9, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "CI/CD",
+          "MLOps",
+          "Deployment"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "observability-at-scale-metrics-alerts-slos",
+        "title": "Lesson 38: Observability at Scale: Metrics, Alerts, Cost Dashboards, and SLOs",
+        "series": "agentic-ai",
+        "lesson": 38,
+        "excerpt": "Lesson 20 taught you to open one trace and read it end to end. At scale you cannot read every trace, and you should not want to. This lesson turns observability into a system that watches itself: the metrics that tell you something changed, the alert tiers that decide who gets paged and who gets a ticket, the cost dashboard that makes spend a number you can steer, and the service-level objectives that turn 'reliable enough' from a phrase into a measured target with an error budget. A worked example builds an SLI-to-SLO chain for a customer support agent, and a try-it prompt has you define your own.",
+        "date": "September 10, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Observability",
+          "SRE"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "production-troubleshooting-loops-bad-tools-context-bloat",
+        "title": "Lesson 39: Production Troubleshooting: Debugging Loops, Bad Tools, and Context Bloat",
+        "series": "agentic-ai",
+        "lesson": 39,
+        "excerpt": "Lesson 38 gave you the detection layer: metrics, alerts, SLOs, a dashboard that tells you something changed. This lesson is what you do in the twenty minutes after the alert. Three failure classes cover most production incidents that are not infrastructure outages, and they are loops, bad tools, and context bloat. You get a triage order that tells you which one you are looking at, the diagnostic signature that finds the exact turn where an agent started going in circles, the tool contract that turns an opaque failure into an actionable one, and the measurement that tells you whether your context is growing past what the model can use. A worked example walks a runaway refund agent from symptom to root cause to the three fixes that stop it recurring.",
+        "date": "September 11, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Debugging",
+          "Operations"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "customer-support-agent-case-study",
+        "title": "Lesson 40: Case Study: Customer Support Agent Architecture",
+        "series": "agentic-ai",
+        "lesson": 40,
+        "excerpt": "This lesson stops teaching patterns one at a time and puts the whole path together. It walks a customer support agent from scratch: when the routing layer is a workflow rather than an agent, how the retrieval step keeps answers grounded, where you draw the tool boundary so the agent can act without becoming dangerous, how escalation to a human stays clean, and what you instrument so you can tell the difference between resolution and hallucination. Everything previous lessons covered, meaning intent detection, RAG, tool schemas, testing, and observability lands in one architecture, with each choice argued and each dead end named.",
+        "date": "September 12, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Case Study"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "research-summarization-agents-case-study",
+        "title": "Lesson 41: Case Study: Research & Summarization Agents",
+        "series": "agentic-ai",
+        "lesson": 41,
+        "excerpt": "This lesson puts the case study format to work on a second, very different shape of agent: research and summarization. Where the customer support agent from Lesson 40 was bounded, request-and-response, and routed, a research agent is open-ended, long-horizon, and built to gather across many sources before it writes anything. You watch the same underlying patterns, the augmented LLM, tool loops, context management, and observability, rebalance for a job where the hard part is deciding what to look at next, not knowing what you already have. It argues the case for an orchestrator-worker architecture, walks a research brief end to end, and explains why the token bill for these systems is so high.",
+        "date": "September 13, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "18 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Case Study",
+          "Research"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "workflow-automation-agents-case-study",
+        "title": "Lesson 42: Case Study: Workflow Automation Agents (Browsers, Clicks, and Typing)",
+        "series": "agentic-ai",
+        "lesson": 42,
+        "excerpt": "Third case study, and the one where the agent touches a screen. Workflow automation agents drive interfaces that were built for people: they read a page, click buttons, fill forms, and type into fields inside systems that never offered an API. This lesson works a licensing verification workflow end to end, compares the three ways an agent can see a page (pixels, accessibility tree, script), digs into why clicks miss their targets and how to fix that, does the arithmetic on what a per-step reliability claim actually means across a multi-step job, and covers the two risks this class of agent carries that no other does: a page is hostile input, and every action lands in a production system.",
+        "date": "September 15, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "18 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Case Study",
+          "Browser Automation"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "coding-agents-case-study",
+        "title": "Lesson 43: Case Study: Coding Agents (Hermes, Claude Code, and Copilot Under the Hood)",
+        "series": "agentic-ai",
+        "lesson": 43,
+        "excerpt": "The case study run closes with the class of agent closest to where you are reading this: coding agents, and what happens under the hood in tools like Hermes, Claude Code, and Copilot. This lesson walks the spectrum from inline autocomplete to fully asynchronous cloud agents, breaks down the documented agentic loop (gather context, take action, verify results), and names the one thing a coding agent has that no browser agent does: a verifier that runs itself. Code either compiles, passes tests, or it does not, and that changes the reliability arithmetic from the last lesson. You will trace a failing-test fix through the loop, see why context is the resource to manage, understand how the harness (models that reason, tools that act) is assembled, and learn the build order for adopting a coding agent safely.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Case Study",
+          "Coding Agents",
+          "Developer Tools"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "enterprise-integration-salesforce-erp-crm-data-warehouse",
+        "title": "Lesson 44: Enterprise Integration: Connecting Agents to Salesforce, ERP, CRM, and Data Warehouses",
+        "series": "agentic-ai",
+        "lesson": 44,
+        "excerpt": "Lesson 43 ended the case study run with the agent that writes code, and this lesson turns outward to the systems a company actually runs on. Connecting an agent to Salesforce, an ERP, a CRM, or a data warehouse is rarely a networking problem. The hard part is governance: deciding who the agent is, what that identity may read and write, and how to make its effects in live business data reversible. This lesson separates the read path from the write path, walks the connection shapes from direct APIs through MCP servers to managed agent platforms, and shows why identity is the security boundary on every one of them. A worked example connects one support agent to a data warehouse for history and a CRM for case updates, with the permission and guardrail choices made explicit.",
+        "date": "September 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "19 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Enterprise Integration",
+          "CRM",
+          "ERP",
+          "Data Warehousing"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "vector-db-operations-scaling-backups-consistency-cost",
+        "title": "Lesson 45: Vector DB Operations: Scaling, Backups, Consistency, and Cost",
+        "series": "agentic-ai",
+        "lesson": 45,
+        "excerpt": "Lesson 12 taught you how to choose a vector database. This lesson is about what it takes to run one. A vector database is not a static pile of vectors; it is a live system with a memory budget, a backup story, a consistency model, and a bill. This lesson covers how a vector database scales and why memory is the variable that decides it, why backing one up is different from backing up a normal database, how consistency and freshness are maintained as documents change, and what all of that actually costs. A worked example sizes a pgvector deployment by hand and walks the backup and consistency decisions for a real RAG workload.",
+        "date": "September 18, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "RAG",
+          "Vector Databases",
+          "Data Engineering"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "rag-data-pipelines-etl-connectors-cdc-incremental-refresh",
+        "title": "Lesson 46: Data Pipelines for RAG: ETL, Connectors, CDC, and Incremental Refresh",
+        "series": "agentic-ai",
+        "lesson": 46,
+        "excerpt": "Lesson 35 taught you the write side of RAG: how to keep an index in sync once you have one. This lesson is about how the data gets to the pipeline in the first place, and how a pipeline stays cheap as sources change. A RAG pipeline is ETL wearing an AI costume: it extracts from connectors, transforms raw records into clean text, and loads chunks into a vector store. The three decisions that separate a demo from a system are the connector style (pull versus push), whether the transform actually normalizes the data before it hits the embedding model, and how change is detected. Change data capture is the mechanism that turns a polling job into a live one, and incremental refresh is what keeps that live pipeline from re-embedding everything on every run. A worked example builds a change-driven ETL pipeline in pure Python, with a watermark for idempotency and delete handling.",
+        "date": "September 19, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "RAG",
+          "Data Engineering"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 46,
+    "curriculumLessons": 90
+  },
+  {
     "slug": "hermes-consultant",
     "name": "Hermes Agent Consultant",
     "description": "A path to becoming an agent-implementation consultant: scoping, implementation craft, delivery practice, and the business of consulting. Platform-agnostic skills with Hermes Agent as the working example.",
@@ -2459,752 +3222,6 @@ export const learnSeries: LearningSeries[] = [
     "curriculumLessons": 36
   },
   {
-    "slug": "agentic-ai",
-    "name": "Agentic AI Implementation Path",
-    "description": "From single-agent prototypes to multi-agent orchestration, a practitioner's curriculum for shipping agentic systems.",
-    "gradient": "from-amber to-yellow-600",
-    "lessons": [
-      {
-        "slug": "what-is-an-agent",
-        "title": "Lesson 1: What an Agent Actually Is (LLMs vs Rules vs Workflows)",
-        "series": "agentic-ai",
-        "lesson": 1,
-        "excerpt": "The definitions that matter for the whole track: what separates a rules system, an LLM workflow, and a true agent, plus how to tell which one you're actually building.",
-        "date": "August 04, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Salesforce"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "how-llms-work-tokens-context-inference",
-        "title": "Lesson 2: How LLMs Work for Implementers: Tokens, Context, Inference, Temperature",
-        "series": "agentic-ai",
-        "lesson": 2,
-        "excerpt": "The four knobs that decide every LLM bill, latency budget, and reliability call: what tokens actually are, how the context window constrains agents, how inference really runs, and what temperature does and doesn't do.",
-        "date": "August 05, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Salesforce"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "the-agent-loop-perceive-reason-act-observe",
-        "title": "Lesson 3: The Agent Loop: Perceive, Reason, Act, Observe, and Where Your Code Lives",
-        "series": "agentic-ai",
-        "lesson": 3,
-        "excerpt": "The one while loop that turns a language model into an agent: the five stages of the loop, the pseudocode that runs underneath every framework, and exactly which parts of it are your code versus the runtime's.",
-        "date": "August 06, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Salesforce"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "prompting-for-agents-system-prompts-few-shot",
-        "title": "Lesson 4: Prompting for Agents: System Prompts, Few-Shot, and When Prompts Aren't Enough",
-        "series": "agentic-ai",
-        "lesson": 4,
-        "excerpt": "In an agent, the prompt isn't a single message; it's the constitution the loop obeys on every iteration. The anatomy of a production system prompt, how few-shot examples actually work, and the escalation ladder for when words stop being enough.",
-        "date": "August 07, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Prompt Engineering"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "tokens-context-cost-engineering-agents",
-        "title": "Lesson 5: Tokens, Context Windows, and Cost Engineering for Agent Workloads",
-        "series": "agentic-ai",
-        "lesson": 5,
-        "excerpt": "Agents don't just use tokens; they burn them: roughly 4x a chat conversation, 15x for multi-agent. The four levers that control the bill (budgeting, compression, caching, and model routing), with the math worked out on a real 10-agent pipeline.",
-        "date": "August 08, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Performance"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "choosing-models-providers-routing-fallbacks",
-        "title": "Lesson 6: Choosing Models & Providers: Capability Tiers, Routing, and Fallbacks",
-        "series": "agentic-ai",
-        "lesson": 6,
-        "excerpt": "The biggest agent-ops mistake is picking one 'best' model and pointing everything at it. This lesson builds the three-tier capability model, the three jobs of a router, and the fallback chains that keep agents alive when providers fail.",
-        "date": "August 09, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "8 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "structured-output-json-mode-function-calling-tool-schemas",
-        "title": "Lesson 7: Structured Output: JSON Mode, Function Calling, and Tool Schemas Done Right",
-        "series": "agentic-ai",
-        "lesson": 7,
-        "excerpt": "An agent is only as reliable as its data contracts. This lesson builds the structured-output ladder (JSON mode, Structured Outputs, function calling) and the tool-schema practices that keep tool calls valid, parseable, and safe in production.",
-        "date": "August 10, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "8 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "tool-design-schemas-error-handling-retries",
-        "title": "Lesson 8: Designing Tools That Fail Well: Schemas, Error Handling, and Retries",
-        "series": "agentic-ai",
-        "lesson": 8,
-        "excerpt": "A tool is an operational contract, not an API wrapper. This lesson covers the five-part anatomy of a production tool, structured error schemas the model can act on, and retry discipline (backoff with jitter, idempotency keys, and retry budgets), so agents survive failures without corrupting state.",
-        "date": "August 11, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "function-calling-parity-across-providers",
-        "title": "Lesson 9: Function-Calling Parity Across OpenAI, Azure, Anthropic, Gemini, and Local Models",
-        "series": "agentic-ai",
-        "lesson": 9,
-        "excerpt": "Every frontier provider exposes function calling, but none uses the same wire format. This lesson maps the request and response shapes across OpenAI, Azure, Anthropic, and Gemini, then shows why local models (llama.cpp) are the parity wildcard and how one internal schema plus thin per-provider adapters keeps an agent portable.",
-        "date": "August 12, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "rag-fundamentals-chunking-embeddings-retrieval",
-        "title": "Lesson 10: RAG Fundamentals: Chunking, Embeddings, Retrieval, and Why RAG Is the First Enterprise Pattern",
-        "series": "agentic-ai",
-        "lesson": 10,
-        "excerpt": "The pattern that grounds LLMs in your own knowledge: what RAG is and where it came from, why you chunk documents instead of feeding them whole, what embeddings actually are, how retrieval ranks chunks, and why RAG became the first pattern enterprises shipped.",
-        "date": "August 13, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "RAG"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "embeddings-models-similarity-when-they-fail",
-        "title": "Lesson 11: Embeddings: Models, Similarity, and When They Fail",
-        "series": "agentic-ai",
-        "lesson": 11,
-        "excerpt": "What an embedding actually is, how the popular models differ, why cosine similarity works, and the failure modes that make pure vector search miss the answer: rare terms, domain jargon, short queries, and model mismatch.",
-        "date": "August 14, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "RAG"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "vector-databases-pinecone-pgvector-milvus-weaviate",
-        "title": "Lesson 12: Vector Databases: Pinecone, pgvector, Milvus, Weaviate, and Choosing for Your Workload",
-        "series": "agentic-ai",
-        "lesson": 12,
-        "excerpt": "What a vector database actually does, why you need one instead of scanning vectors in memory, the approximate nearest neighbor tradeoff you are making, and how to choose between Pinecone, pgvector, Milvus, and Weaviate for your workload and your team.",
-        "date": "August 15, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "RAG"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "rag-quality-reranking-hybrid-search-metadata-filtering-freshness",
-        "title": "Lesson 13: RAG Quality: Reranking, Hybrid Search, Metadata Filtering, and Freshness",
-        "series": "agentic-ai",
-        "lesson": 13,
-        "excerpt": "The four levers that turn a RAG demo into a system you can trust: reranking to fix top-k precision, hybrid search so exact terms still win, metadata filtering so access control and scope survive retrieval, and freshness so the answers do not go stale.",
-        "date": "August 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "RAG"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "agent-memory-short-term-long-term-episodic-semantic",
-        "title": "Lesson 14: Agent Memory: Short-Term vs Long-Term, Episodic vs Semantic",
-        "series": "agentic-ai",
-        "lesson": 14,
-        "excerpt": "An agent with no memory answers the same question the same way forever. This lesson maps the memory taxonomy production systems borrow from cognitive science: the context window as working memory, long-term stores for persistence, episodic memory for what happened, semantic memory for what you know, and the pipeline that turns raw interactions into retrievable knowledge.",
-        "date": "August 17, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "context-engineering-what-to-include-trimming-summarization-windowing",
-        "title": "Lesson 15: Context Engineering: What to Include, Trim, Summarize, and Window",
-        "series": "agentic-ai",
-        "lesson": 15,
-        "excerpt": "The context window is finite and filling it sloppily degrades your agent before it ever fails. This lesson covers the four ways to keep a long-running loop coherent: deciding what to include, trimming what stops earning its keep, summarizing what still matters, and windowing what you can drop. With real numbers from JetBrains on which approach actually pays.",
-        "date": "August 18, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Prompt Engineering"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "multi-turn-agents-sessions-state-resuming-conversations",
-        "title": "Lesson 16: Multi-Turn Agents: Sessions, State, and Resuming Conversations",
-        "series": "agentic-ai",
-        "lesson": 16,
-        "excerpt": "An LLM is stateless: every call forgets the one before it, so multi-turn behavior has to be built, not assumed. This lesson defines the session, the state it carries, and the checkpointing that lets an agent resume where it left off: the difference between a thread and a durable store, why the state schema is the real design, and how production systems survive restarts and long conversations.",
-        "date": "August 19, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Salesforce"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "guardrails-prompt-injection-system-boundaries-input-validation",
-        "title": "Lesson 17: Guardrails I: Prompt Injection Defense, System Boundaries, and Input Validation",
-        "series": "agentic-ai",
-        "lesson": 17,
-        "excerpt": "Prompt injection tops the OWASP list of LLM risks for a reason: an agent that can act turns a misled model into an unauthorized action. This lesson separates direct from indirect injection, explains why input filters and prompt hardening alone will not stop it, and argues that the durable defense lives at the system boundary: least-privilege tools, hard containment on what the agent can reach, and human approval for high-impact actions.",
-        "date": "August 20, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Security"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "guardrails-output-validation-allowlists-pii-redaction",
-        "title": "Lesson 18: Guardrails II, Output Validation, Allowlists, PII Redaction, and Refusal Paths",
-        "series": "agentic-ai",
-        "lesson": 18,
-        "excerpt": "Input guardrails keep an attacker from pushing the agent past its boundary. Output guardrails keep the agent from pushing bad output out the other side: validation, allowlists, PII redaction, and refusal paths.",
-        "date": "August 21, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Security"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "evaluation-evals-golden-datasets-llm-as-judge",
-        "title": "Lesson 19: Evaluation: Evals, Golden Datasets, LLM-as-Judge, and When It Lies",
-        "series": "agentic-ai",
-        "lesson": 19,
-        "excerpt": "An agent you cannot measure is an agent you cannot trust, and the moment a model changes you have no way to know what you traded away. This lesson walks the evaluation stack from the bottom up: the golden dataset that anchors everything, the classic metrics that break on open-ended output, the LLM-as-judge technique that replaces them, and the biases that make a judge lie, from position and verbosity preference to rating its own output too high and being misled by a confident wrong answer.",
-        "date": "August 22, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "observability-tracing-logging-langsmith-opentelemetry-replay",
-        "title": "Lesson 20: Observability, Tracing, Logging, and Replay for Agents",
-        "series": "agentic-ai",
-        "lesson": 20,
-        "excerpt": "An agent runs several model calls, tool invocations, and retrieval steps inside one request, and when it returns the wrong answer you have no idea which step caused it. This lesson builds observability from the bottom up: the trace that records every step as a span, the trace tree that shows how they connect, the OpenTelemetry gen_ai.* conventions that give the telemetry a standard shape, the structured logs that answer 'why' when a trace only shows 'what,' and the replay loop that turns a captured trace back into a repeatable bug you can fix and verify.",
-        "date": "August 23, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Observability"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "agent-frameworks-overview-langchain-langgraph-crewai-openai-claude",
-        "title": "Lesson 21: Frameworks overview - LangChain, LangGraph, CrewAI, OpenAI Agents SDK, Claude Agent SDK",
-        "series": "agentic-ai",
-        "lesson": 21,
-        "excerpt": "By now you can build a single agent: a model, a loop, some tools. The hard part is deciding what holds the pieces together when the work grows. This lesson surveys the five frameworks you will actually meet in the wild, and it is honest about what each one is for. LangChain is an integration ecosystem. LangGraph is a stateful graph runtime for workflows that branch and loop. CrewAI is a role-based layer for teams of agents with jobs and backstories. The OpenAI Agents SDK is a deliberately tiny set of primitives with clean handoffs and guardrails. The Claude Agent SDK gives the agent a computer with built-in file, shell, and edit tools. You will learn the mental model behind each one, see the same small task written in two of them so the difference is concrete, and finish with a decision path for choosing a framework instead of trusting star counts.",
-        "date": "August 24, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Architecture"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "agent-loop-by-hand-no-framework",
-        "title": "Lesson 22: Building Without a Framework: the Agent Loop by Hand in 100 Lines",
-        "series": "agentic-ai",
-        "lesson": 22,
-        "excerpt": "Lesson 21 ended on a quiet note: sometimes you don't need a framework at all. This lesson makes that concrete. You write the loop yourself, in roughly a hundred lines, with nothing but an LLM API and a while loop. You see the canonical agent loop in real code, you build a working agent with two tools, you learn the one ordering mistake that trips up every beginner, and you find out exactly where a hand-rolled loop runs out of room and a framework starts to earn its complexity.",
-        "date": "August 25, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Architecture"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "agent-patterns-react-plan-execute-reflection-tool-loops",
-        "title": "Lesson 23: Agent Patterns: ReAct, Plan-and-Execute, Reflection, and Tool Loops",
-        "series": "agentic-ai",
-        "lesson": 23,
-        "excerpt": "Lesson 22 built the loop by hand. This lesson gives that loop its names. You learn the four patterns that dominate real agent work: ReAct (reason and act interleaved), plan-and-execute (plan first, then execute), reflection (evaluate and revise), and the tool loop they all run on, plus when each one earns its complexity.",
-        "date": "August 26, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Architecture"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "multi-agent-systems-orchestrator-worker-supervisor-debate",
-        "title": "Lesson 24: Multi-Agent Systems: Orchestrator-Worker, Supervisor, and Debate",
-        "series": "agentic-ai",
-        "lesson": 24,
-        "excerpt": "Lesson 23 taught you the single-agent patterns. This lesson puts several agents in one system. You learn the three coordination shapes that dominate real multi-agent work: orchestrator-worker (a central agent splits and delegates), supervisor (a coordinator routes to specialized workers via handoffs), and debate (multiple instances argue toward a consensus), plus when each one earns its complexity and when one agent is still the right call.",
-        "date": "August 27, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "human-in-the-loop-approvals-interrupts-escalation-kill-switches",
-        "title": "Lesson 25: Human-in-the-Loop, Approvals, Interrupts, Escalation, and Kill Switches",
-        "series": "agentic-ai",
-        "lesson": 25,
-        "excerpt": "An agent that can act on its own against a system that matters needs a person in the loop. This lesson builds the control layer: approvals that gate a single risky action, interrupts that pause the whole run and resume it later, escalation that hands an unsafe decision to a human, and a kill switch that stops a runaway system before it does damage.",
-        "date": "August 28, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Security"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "enterprise-deployment-serving-api-design-rate-limits-quotas",
-        "title": "Lesson 26: Enterprise Deployment, Serving, API Design, Rate Limits, and Quotas",
-        "series": "agentic-ai",
-        "lesson": 26,
-        "excerpt": "A working agent is a different thing from an agent many people can use. This lesson puts the three boundaries around it that make the difference: the serving layer that decides how much concurrent work the model can do, the API boundary that gives every consumer one stable interface, and the policy layer of rate limits and quotas that stops a single tenant from overwhelming the hardware or blowing the budget. It works through the numbers you need to size a deployment, and it shows how those three layers meet at the same number.",
-        "date": "August 29, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Delivery"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "cost-control-caching-model-tiers-budget-caps-spend-dashboards",
-        "title": "Lesson 27: Cost Control, Caching, Model Tiers, Budget Caps, and Spend Dashboards",
-        "series": "agentic-ai",
-        "lesson": 27,
-        "excerpt": "A working agent is cheaper to build than to keep. Lesson 26 stopped a single tenant from blowing the monthly bill in an afternoon; this lesson turns the bill itself into a number you manage. It covers the three cost levers in order: caching so you never pay twice for the same answer, model tiers and routing so you only pay frontier prices when a task actually needs them, and budget caps with spend dashboards so a surprise bill becomes an early-warning system instead. A worked example runs the arithmetic on a real agent workload, and the Fortress angle shows a hybrid two-tier stack doing all three at once.",
-        "date": "August 30, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Performance"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "security-auth-authorization-secrets-management-for-agents",
-        "title": "Lesson 28: Security: Authentication, Authorization, and Secrets Management for Agents",
-        "series": "agentic-ai",
-        "lesson": 28,
-        "excerpt": "An agent is not a user and not a plain service. It carries two identities at once, the person it acts for and the machine it runs as, and it reaches for credentials with every tool call it makes. This lesson separates the three systems that keep that under control: authentication proves who is acting, authorization decides what that actor may do, and secrets management keeps the credentials that prove identity short-lived, tightly scoped, and out of the model's context.",
-        "date": "August 31, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Security"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "compliance-data-residency-audit-logging-retention",
-        "title": "Lesson 29: Compliance: Data Residency, Audit Logging, and Retention for AI Systems",
-        "series": "agentic-ai",
-        "lesson": 29,
-        "excerpt": "Security controls who can act. Compliance is the record of what that actor did with other people's data, and it lives in three separate controls. Data residency decides where the data is stored and processed and how it may cross borders. Audit logging keeps an immutable record of what happened, per action, so a regulator or an investigator can reconstruct it later. Retention puts a clock on how long you keep any of it. This lesson reads the EU AI Act's record-keeping article and GDPR's storage-limitation principle, then shows how a real agent pipeline turns its own event stream into an auditable trail.",
-        "date": "September 1, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Security",
-          "Governance"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "mcp-model-context-protocol-intro-build-server",
-        "title": "Lesson 30: The Model Context Protocol (MCP): What It Is, Why It Matters, and How to Build a Server",
-        "series": "agentic-ai",
-        "lesson": 30,
-        "excerpt": "The Model Context Protocol (MCP) is an open standard that connects AI applications to the tools and data they act on. It attacks a problem every agent builder hits: bespoke integrations do not scale. Without a common protocol, each AI app wires itself to each tool with its own custom connector, and the number of connectors grows as the product of apps times tools. MCP breaks that pattern by defining one client-server protocol, so an AI application that speaks it can use any server that speaks it, and a server author writes the integration once for every compliant client. This lesson explains the three participants in that architecture (host, client, server), the three things a server can expose (tools, resources, prompts), the two transports that carry the messages, and walks through building a real server with the Python SDK.",
-        "date": "September 2, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "MCP",
-          "Tool Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "mcp-deep-dive-tools-resources-prompts-sampling-auth",
-        "title": "Lesson 31: MCP Deep Dive: Tools, Resources, Prompts, and Auth",
-        "series": "agentic-ai",
-        "lesson": 31,
-        "excerpt": "Lesson 30 built a hello-world MCP server and left the deeper protocol features for later. This lesson is that later. It goes past the weather server into the four parts you will actually tune in production: how to design each of the three server primitives (tools, resources, prompts) so a model uses them well, and how OAuth 2.1 secures a remote server. It also covers sampling, the legacy feature that once let a server borrow the client's model instead of holding its own API keys, which is deprecated as of the 2026-07-28 spec revision and replaced by direct LLM provider API integration. Each section pairs the protocol method with the design decision behind it, and a single worked example ties them together: a project-intel server that exposes a tool, a resource, a prompt, and a sampling call, then gets locked down with real authorization.",
-        "date": "September 3, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "MCP",
-          "Tool Integration",
-          "OAuth"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "first-enterprise-agent-project-setup",
-        "title": "Lesson 32: Building your first enterprise agent: project setup, end to end",
-        "series": "agentic-ai",
-        "lesson": 32,
-        "excerpt": "You have the pieces: the loop, tools, context, memory, evaluation. This lesson is the first time they stop being separate techniques and become one running system. It walks the full setup of an enterprise agent project, from picking a bounded problem and scaffolding the repository, through wiring the model, defining the agent, and registering tools, to running it end to end behind a small API. The point is not to write clever code. It is to make the boring decisions deliberately, the ones that decide whether your agent survives contact with a real codebase, a real API key, and a real deployment. A worked example ties it together: a ticket-triager agent you stand up from an empty folder to a running endpoint in one pass.",
-        "date": "September 4, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Architecture",
-          "Tool Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "hands-on-one-framework-real-agent-real-work",
-        "title": "Lesson 33: Hands on with one framework, a real agent that does real work",
-        "series": "agentic-ai",
-        "lesson": 33,
-        "excerpt": "Lesson 32 gave you a running skeleton: a bounded task, an isolated repository, wired tools, typed state, an API in front. This lesson is where that skeleton stops being a scaffold and starts doing a real job. It picks the OpenAI Agents SDK, the framework the series has already leaned on, and walks every primitive that turns a model into an agent that an actual team can hand real work to. You will meet the Runner loop that owns the reason-act-observe cycle, function tools that reach a real system, a structured output the rest of your stack can consume, an input guardrail that blocks out-of-scope requests before they waste tokens, a session that carries memory across turns, and the tracing that is on by default. The worked example is the ticket resolver you stood up last lesson, grown from a classifier into an agent that gathers account context, checks the refund policy, and drafts a reply an agentic contact center could actually send. Define the terms, build it in numbered steps, and finish with a try-it prompt that makes the framework primitives yours.",
-        "date": "September 5, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Architecture",
-          "Tool Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "agent-ux-streaming-progress-seeing-the-loop",
-        "title": "Lesson 34: Agent UX: streaming output, progress indicators, and when users need to see the loop",
-        "series": "agentic-ai",
-        "lesson": 34,
-        "excerpt": "A chat model answers once and stops. An agent answers by running a loop: call the model, read the result, call a tool, feed the output back, call the model again, sometimes several times. That loop takes tens of seconds, and a single spinner is not enough. This lesson gives your agent a face. It sets up streaming output that delivers the reply as it is generated, progress indicators that show which step the loop is on, and the judgment about when the loop must be visible at all. You will learn the response-time limits that decide the question for you, the difference between streaming the answer and reporting progress on the work, and how to surface tool calls and interim messages without dumping raw reasoning on a user. The worked example takes the ticket resolver from lesson 33 and turns it into a streamed, progress-aware runner your team could actually show a customer.",
-        "date": "September 6, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "UX",
-          "Streaming",
-          "Progress"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "rag-at-scale-ingestion-refresh-versioning-deletion",
-        "title": "Lesson 35: RAG at Scale: Ingestion Pipelines, Refresh, Versioning, and Deletion",
-        "series": "agentic-ai",
-        "lesson": 35,
-        "excerpt": "The difference between a RAG demo and a RAG system is the write side. A demo indexes a static folder once. A system keeps a live corpus in sync with its sources: an ingestion pipeline that parses and chunks on the way in, a refresh strategy that re-embeds only what changed instead of rebuilding everything, versioning so a document or an embedding-model change is traceable and reversible, and deletion so removed or sensitive content actually disappears from retrieval. This lesson turns the read-side tuning you learned in lessons 10 through 13 into a lifecycle you can run in production.",
-        "date": "September 7, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "RAG",
-          "Data Engineering"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "testing-agents-unit-integration-regression-evals",
-        "title": "Lesson 36: Testing Agents: Unit Tests for Tools, Integration Tests, and Regression Evals",
-        "series": "agentic-ai",
-        "lesson": 36,
-        "excerpt": "You would not ship an API endpoint that you tested by curling it five times and nodding. Most agent teams do exactly that with the whole system: a playground, a few prompt experiments, a deployment. This lesson builds the three layers that replace the vibe check: unit tests that treat the deterministic machinery around the model, the prompt strings, the tool dispatch, the schemas, as ordinary software, integration tests that exercise the full agent loop against controlled tool side effects, and regression evals that score real model output against a frozen golden set. Together they turn a system that never gives the same answer twice into one you can gate a release on.",
-        "date": "September 8, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Testing",
-          "CI/CD"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "ci-cd-for-agents-prompt-versioning-model-registry-canary-releases",
-        "title": "Lesson 37: CI/CD for Agents: Prompt Versioning, Model Registries, and Canary Releases",
-        "series": "agentic-ai",
-        "lesson": 37,
-        "excerpt": "Lesson 36 gave you tests. This lesson turns them into a pipeline. A test proves an agent is good once; CI/CD proves it is still good every time a prompt, a model, or a line of configuration changes, and then routes that change into production in slices you can measure and reverse. That means three tools the last lesson never needed: prompt versioning so a one-word edit is a traced, reversible change instead of a silent memory, a model registry so you can name the exact model and provider version behind any output you inspect, and canary releases so a new prompt or model lands on a sliver of traffic, gets scored against the evals you built, and only rolls out wide when the numbers hold.",
-        "date": "September 9, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "17 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "CI/CD",
-          "MLOps",
-          "Deployment"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "observability-at-scale-metrics-alerts-slos",
-        "title": "Lesson 38: Observability at Scale: Metrics, Alerts, Cost Dashboards, and SLOs",
-        "series": "agentic-ai",
-        "lesson": 38,
-        "excerpt": "Lesson 20 taught you to open one trace and read it end to end. At scale you cannot read every trace, and you should not want to. This lesson turns observability into a system that watches itself: the metrics that tell you something changed, the alert tiers that decide who gets paged and who gets a ticket, the cost dashboard that makes spend a number you can steer, and the service-level objectives that turn 'reliable enough' from a phrase into a measured target with an error budget. A worked example builds an SLI-to-SLO chain for a customer support agent, and a try-it prompt has you define your own.",
-        "date": "September 10, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Observability",
-          "SRE"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "production-troubleshooting-loops-bad-tools-context-bloat",
-        "title": "Lesson 39: Production Troubleshooting: Debugging Loops, Bad Tools, and Context Bloat",
-        "series": "agentic-ai",
-        "lesson": 39,
-        "excerpt": "Lesson 38 gave you the detection layer: metrics, alerts, SLOs, a dashboard that tells you something changed. This lesson is what you do in the twenty minutes after the alert. Three failure classes cover most production incidents that are not infrastructure outages, and they are loops, bad tools, and context bloat. You get a triage order that tells you which one you are looking at, the diagnostic signature that finds the exact turn where an agent started going in circles, the tool contract that turns an opaque failure into an actionable one, and the measurement that tells you whether your context is growing past what the model can use. A worked example walks a runaway refund agent from symptom to root cause to the three fixes that stop it recurring.",
-        "date": "September 11, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "17 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Debugging",
-          "Operations"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "customer-support-agent-case-study",
-        "title": "Lesson 40: Case Study: Customer Support Agent Architecture",
-        "series": "agentic-ai",
-        "lesson": 40,
-        "excerpt": "This lesson stops teaching patterns one at a time and puts the whole path together. It walks a customer support agent from scratch: when the routing layer is a workflow rather than an agent, how the retrieval step keeps answers grounded, where you draw the tool boundary so the agent can act without becoming dangerous, how escalation to a human stays clean, and what you instrument so you can tell the difference between resolution and hallucination. Everything previous lessons covered, meaning intent detection, RAG, tool schemas, testing, and observability lands in one architecture, with each choice argued and each dead end named.",
-        "date": "September 12, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "17 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Case Study"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "research-summarization-agents-case-study",
-        "title": "Lesson 41: Case Study: Research & Summarization Agents",
-        "series": "agentic-ai",
-        "lesson": 41,
-        "excerpt": "This lesson puts the case study format to work on a second, very different shape of agent: research and summarization. Where the customer support agent from Lesson 40 was bounded, request-and-response, and routed, a research agent is open-ended, long-horizon, and built to gather across many sources before it writes anything. You watch the same underlying patterns, the augmented LLM, tool loops, context management, and observability, rebalance for a job where the hard part is deciding what to look at next, not knowing what you already have. It argues the case for an orchestrator-worker architecture, walks a research brief end to end, and explains why the token bill for these systems is so high.",
-        "date": "September 13, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "18 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Case Study",
-          "Research"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "workflow-automation-agents-case-study",
-        "title": "Lesson 42: Case Study: Workflow Automation Agents (Browsers, Clicks, and Typing)",
-        "series": "agentic-ai",
-        "lesson": 42,
-        "excerpt": "Third case study, and the one where the agent touches a screen. Workflow automation agents drive interfaces that were built for people: they read a page, click buttons, fill forms, and type into fields inside systems that never offered an API. This lesson works a licensing verification workflow end to end, compares the three ways an agent can see a page (pixels, accessibility tree, script), digs into why clicks miss their targets and how to fix that, does the arithmetic on what a per-step reliability claim actually means across a multi-step job, and covers the two risks this class of agent carries that no other does: a page is hostile input, and every action lands in a production system.",
-        "date": "September 15, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "18 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Case Study",
-          "Browser Automation"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "coding-agents-case-study",
-        "title": "Lesson 43: Case Study: Coding Agents (Hermes, Claude Code, and Copilot Under the Hood)",
-        "series": "agentic-ai",
-        "lesson": 43,
-        "excerpt": "The case study run closes with the class of agent closest to where you are reading this: coding agents, and what happens under the hood in tools like Hermes, Claude Code, and Copilot. This lesson walks the spectrum from inline autocomplete to fully asynchronous cloud agents, breaks down the documented agentic loop (gather context, take action, verify results), and names the one thing a coding agent has that no browser agent does: a verifier that runs itself. Code either compiles, passes tests, or it does not, and that changes the reliability arithmetic from the last lesson. You will trace a failing-test fix through the loop, see why context is the resource to manage, understand how the harness (models that reason, tools that act) is assembled, and learn the build order for adopting a coding agent safely.",
-        "date": "September 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "17 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Case Study",
-          "Coding Agents",
-          "Developer Tools"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "enterprise-integration-salesforce-erp-crm-data-warehouse",
-        "title": "Lesson 44: Enterprise Integration: Connecting Agents to Salesforce, ERP, CRM, and Data Warehouses",
-        "series": "agentic-ai",
-        "lesson": 44,
-        "excerpt": "Lesson 43 ended the case study run with the agent that writes code, and this lesson turns outward to the systems a company actually runs on. Connecting an agent to Salesforce, an ERP, a CRM, or a data warehouse is rarely a networking problem. The hard part is governance: deciding who the agent is, what that identity may read and write, and how to make its effects in live business data reversible. This lesson separates the read path from the write path, walks the connection shapes from direct APIs through MCP servers to managed agent platforms, and shows why identity is the security boundary on every one of them. A worked example connects one support agent to a data warehouse for history and a CRM for case updates, with the permission and guardrail choices made explicit.",
-        "date": "September 17, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "19 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Enterprise Integration",
-          "CRM",
-          "ERP",
-          "Data Warehousing"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "vector-db-operations-scaling-backups-consistency-cost",
-        "title": "Lesson 45: Vector DB Operations: Scaling, Backups, Consistency, and Cost",
-        "series": "agentic-ai",
-        "lesson": 45,
-        "excerpt": "Lesson 12 taught you how to choose a vector database. This lesson is about what it takes to run one. A vector database is not a static pile of vectors; it is a live system with a memory budget, a backup story, a consistency model, and a bill. This lesson covers how a vector database scales and why memory is the variable that decides it, why backing one up is different from backing up a normal database, how consistency and freshness are maintained as documents change, and what all of that actually costs. A worked example sizes a pgvector deployment by hand and walks the backup and consistency decisions for a real RAG workload.",
-        "date": "September 18, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "RAG",
-          "Vector Databases",
-          "Data Engineering"
-        ],
-        "status": "published"
-      }
-    ],
-    "totalLessons": 45,
-    "curriculumLessons": 90
-  },
-  {
     "slug": "ai-at-work",
     "name": "AI at Work",
     "description": "A vendor-agnostic primer for using AI in day-to-day work: foundations, prompting, productivity, small automations, and team adoption. Company-wide training that works for any team and any AI tool.",
@@ -4032,6 +4049,23 @@ export const learnSeries: LearningSeries[] = [
 
 /** Flat list of every lesson, NEWEST FIRST (for sitemap, nav, flat lookups). */
 export const learnLessons: LearnLesson[] = [
+  {
+    "slug": "rag-data-pipelines-etl-connectors-cdc-incremental-refresh",
+    "title": "Lesson 46: Data Pipelines for RAG: ETL, Connectors, CDC, and Incremental Refresh",
+    "series": "agentic-ai",
+    "lesson": 46,
+    "excerpt": "Lesson 35 taught you the write side of RAG: how to keep an index in sync once you have one. This lesson is about how the data gets to the pipeline in the first place, and how a pipeline stays cheap as sources change. A RAG pipeline is ETL wearing an AI costume: it extracts from connectors, transforms raw records into clean text, and loads chunks into a vector store. The three decisions that separate a demo from a system are the connector style (pull versus push), whether the transform actually normalizes the data before it hits the embedding model, and how change is detected. Change data capture is the mechanism that turns a polling job into a live one, and incremental refresh is what keeps that live pipeline from re-embedding everything on every run. A worked example builds a change-driven ETL pipeline in pure Python, with a watermark for idempotency and delete handling.",
+    "date": "September 19, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "15 min read",
+    "tags": [
+      "LLMs",
+      "AI Agents",
+      "RAG",
+      "Data Engineering"
+    ],
+    "status": "published"
+  },
   {
     "slug": "troubleshooting-in-production",
     "title": "Lesson 24: Troubleshooting in Production: Diagnosing a Broken Agent Without Breaking It More",

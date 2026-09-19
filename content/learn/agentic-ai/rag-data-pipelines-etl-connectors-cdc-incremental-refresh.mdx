@@ -1,0 +1,182 @@
+---
+title: "Lesson 46: Data Pipelines for RAG: ETL, Connectors, CDC, and Incremental Refresh"
+slug: rag-data-pipelines-etl-connectors-cdc-incremental-refresh
+series: "agentic-ai"
+lesson: 46
+excerpt: "Lesson 35 taught you the write side of RAG: how to keep an index in sync once you have one. This lesson is about how the data gets to the pipeline in the first place, and how a pipeline stays cheap as sources change. A RAG pipeline is ETL wearing an AI costume: it extracts from connectors, transforms raw records into clean text, and loads chunks into a vector store. The three decisions that separate a demo from a system are the connector style (pull versus push), whether the transform actually normalizes the data before it hits the embedding model, and how change is detected. Change data capture is the mechanism that turns a polling job into a live one, and incremental refresh is what keeps that live pipeline from re-embedding everything on every run. A worked example builds a change-driven ETL pipeline in pure Python, with a watermark for idempotency and delete handling."
+date: "September 19, 2026"
+author: "Adroit Consulting"
+readTime: "15 min read"
+tags: [LLMs, AI Agents, RAG, Data Engineering]
+---
+
+# Lesson 46: Data Pipelines for RAG: ETL, Connectors, CDC, and Incremental Refresh
+
+Lesson 35 taught you to treat embeddings as a materialized view and to keep that view in sync with your sources. This lesson steps one level back and asks where the view comes from. A RAG system is not a vector store with a retriever bolted on. The store is the tail of a pipeline, and the pipeline is ETL: extract from source systems through connectors, transform raw records into clean, retrievable text, and load the result into the index. A notebook RAG works fine on ten documents; production RAG breaks at a hundred thousand documents, where stale indexes drift, permission leaks turn into breach reports, and silent retrieval degradation poisons answers nobody is auditing. [^1]
+
+The framing that makes this lesson click: a RAG pipeline is a data engineering problem wearing an AI costume. [^2] It has the same failure modes as any ETL system, bad parsing, silent data loss, schema drift, no observability between the raw file and the row in the database, and it rewards the same fixes: real connectors, real normalization, real idempotency, and real tests. Once you see it that way, the model and the embedding space stop being the interesting decisions. The pipeline is where production RAG actually lives or dies.
+
+## Define the terms
+
+**A connector** is the component that reaches into a source system, a database, a wiki, an S3 bucket, a CRM, a ticketing system, and pulls or receives the records that change. Connectors come in two styles. Pull connectors run on a schedule and crawl the source for anything new or modified. Push connectors receive events, webhooks or change data capture, the moment a change happens. [^1]
+
+**ETL** is extract, transform, load, the classic data lineage: pull raw data out, reshape it into something clean, and write it where queries can reach it. In a RAG context the load step is embedding and upserting chunks into the vector store, and the transform step is the one most projects skip and then regret.
+
+**Normalization** is the transform. It turns a raw source record, nested JSON, HTML with navigation chrome, a scanned PDF, into clean text that carries the semantic signal and not the structural noise. Normalize before the embedding model sees anything, because the embedding model has no way to tell signal from syntax. [^3]
+
+**Change data capture**, CDC, is a set of patterns for identifying and tracking what changed in a source so another system can react. Instead of polling the whole dataset, CDC emits an event for every insert, update, and delete. [^4]
+
+**Incremental refresh** is the pipeline discipline of re-embedding only the records that actually changed, instead of replaying the entire corpus on every run. It is what makes a live pipeline affordable, and it depends on knowing precisely which document changed, which paragraph, which entry. [^5]
+
+**A watermark** is the pipeline's memory of how far it has gotten, the cursor past which extraction has already run. It is what makes a pull connector incremental instead of a full crawl every time. [^6] [^7]
+
+**Idempotency** is the property that running a pipeline step twice produces the same result as running it once. Because event delivery is at-least-once in most systems, the same update can arrive twice, and an idempotent pipeline deduplicates instead of doubling vectors. [^1] [^8]
+
+## Connectors: pull versus push
+
+The first decision in any RAG pipeline is how you get changes out of the source. The connector is the weakest link, because it is where authentication, pagination, rate limits, and schema mapping all live, and every source behaves differently. [^7] Connectors split into two styles, and the choice is a freshness trade you should make explicitly.
+
+**Pull connectors** run on a schedule, reach into the source, and fetch everything new or changed since the last run. They are simpler to build and to reason about, because you control the schedule, and for sources that change slowly they are the right call. [^1] The incremental form of a pull connector tracks a cursor, usually a last-modified timestamp, and only fetches records that moved since the last sync. [^7] Because there is no push channel, freshness is bounded by how often you poll. A sales rep asks the assistant about an opportunity that closed yesterday; if your nightly batch has not run, the answer is stale, and the rep stops trusting the tool. [^3]
+
+**Push connectors** receive events the moment a change happens. The channel is a webhook or CDC, and it gives you incremental, near-real-time updates, plus tombstone handling for deletes, because the source tells you directly when a record is removed. [^1] Push is what you want for any source that supports it, because it turns the pipeline from a periodic job into a live one. [^1]
+
+The rule of thumb: use pull for sources that only give you a schedule, and push for anything that emits events. Then design the pipeline so either can be the intake, because the downstream stages, normalize, chunk, embed, upsert, should not care whether the change arrived on a timer or on an event. The connector is the only stage that knows the source. Everything after it should be source-agnostic.
+
+## Transform: normalize before you embed
+
+The single most common mistake teams make is dumping raw source payloads straight into the chunker and embedding model. [^3] Raw SaaS JSON is hostile to vector retrieval. It is heavily nested, stuffed with internal system IDs, inconsistent enums, and metadata that carries zero semantic value. Embed it as-is and you get three compounding failures: token waste, because the context window of the embedding model fills with structural syntax, braces, brackets, and keys instead of meaning; attention dilution, because the model assigns weight to recurring system strings like `created_at` and `Status__c` instead of the human-readable text; and low-quality vectors that retrieve poorly and leak provider-specific noise into downstream prompts. [^3]
+
+The same failure shows up with web data. A single product page can carry 15,000 to 25,000 tokens of navigation chrome, analytics scripts, CSS classes, and ad placeholders, all of which the embedding model processes, the vector store stores, and retrieval searches through. [^9] Raw HTML is the worst possible input to a RAG pipeline, and embedding it wastes as much as 70 percent of your token budget on structure. [^10] Two product pages with identical descriptions but different ad networks produce wildly different embeddings, so your index is polluted by the ad vendor, not the content. [^9]
+
+The fix is a real transform stage, and it belongs to the pipeline, not the prompt. Normalize formatting, strip headers and footers that repeat on every page, drop boilerplate, collapse whitespace, dehyphenate words broken across line wraps, and, crucially, preserve structure. A raw text blob throws away the single most useful signal in most documents: structure. [^2] Keep headings, section hierarchy, table boundaries, and list structure in an intermediate representation instead of flattening everything to one string. [^11] Chunking quality is bounded by parse quality, so a pipeline that parses badly produces chunks that split a warranty clause from its exception, and the retriever faithfully returns the broken chunk while the LLM confidently hallucinates a bridge between unrelated fragments. [^2]
+
+The two pressure points that decide the transform are token reality and structure. You do not pay embedding tokens on noise, and you do not lose the boundaries that let your chunker make good splits.
+
+## Change data capture: turning a poller into a live system
+
+Polling the whole dataset is expensive and slow. Change data capture is the pattern that replaces it. CDC identifies and tracks changes in a database so that other systems can react, and instead of periodically scanning everything, it provides a stream of events representing inserts, updates, and deletes. [^4] For a RAG system, CDC is the difference between asking the index to guess what changed and being told exactly what changed, which document was added, which paragraph was modified, which entry was removed. [^5]
+
+The cleanest form is log-based CDC. Production databases keep a transaction log for replication and recovery, PostgreSQL's write-ahead log, MySQL's binary log, MongoDB's oplog, and CDC tools tap into that log to read committed changes with high fidelity and low overhead on the source. [^4] A connector, typically something like a Debezium connector running inside Kafka Connect, tails the transaction log and turns each entry into a structured change event carrying the operation type, create, update, or delete, plus the before and after state of the row. [^4]
+
+What makes CDC the right mechanism for RAG is that it hands your pipeline the exact inputs the incremental problem needs. Your consumer interprets the event, decide whether it is a create, an update, or a delete; triggers retrieval of the affected document if only an ID came through, or uses the payload directly; invokes chunking and preprocessing for new or updated content; orchestrates re-embedding of just those chunks; and issues the right command to the vector store, insert, upsert, or delete. [^4] That is the entire incremental pipeline in one paragraph, and every step traces back to the event that told you what changed.
+
+For sources that are not a single database, the same shape generalizes. A streaming data pipeline can capture changes from source databases via CDC and then transform and enrich those raw change records into context-ready documents using streaming SQL, joining rows and aggregating them the way you would in a warehouse, but maintained incrementally as events arrive. [^12] The pattern is the same whether the transform runs in a stream processor or a materialized view: raw change in, clean context-ready document out, only for the records that moved.
+
+## Incremental refresh: embed only what changed
+
+Incremental refresh is the discipline that makes a CDC-driven pipeline affordable. Without it, the naive pipeline re-embeds everything whenever anything changes, and at production scale that is a full re-embed to catch the few records that moved. [^4] Incremental vectorization inverts that: detect the change, filter and process only the affected records, and generate new embeddings only for new or updated content, then update or delete the relevant vectors in the store. [^5]
+
+The mechanics rest on two load-bearing habits, and both are boring. The first is idempotency. Assume at-least-once delivery and design the downstream stages to deduplicate, because the same update event can arrive twice and you do not want the document embedded three times and indexed three times. [^1] [^8] The standard tool is a stable identifier, a source ID plus a version, or a content hash, so a stage can check whether it already processed this exact input and no-op if it has. [^8] In ETL terms this shows up as the golden rule that every task be safely re-runnable: extract on a watermark so it only pulls docs modified since the last run, transform deterministically so the same input yields the same chunk IDs, embed conditionally so you skip embeddings that already exist for a content hash, and load with an upsert, insert on conflict update, never a blind insert. [^6]
+
+The second habit is that the index must be able to delete, which is the half most pipelines leave out. A deletion in the source does not propagate on its own, and a pipeline designed only to add is a pile, not a pipeline. [^1] With CDC you get a delete event, a tombstone that tells the pipeline exactly which record to purge, and the consumer issues the delete to the vector store. [^1] [^4] For pull connectors, the equivalent is a reconciliation pass: enumerate the source, compare against the stored IDs, and remove the diff, the records that are in the store but no longer in the source. [^6] Between tombstone handling and reconciliation, the index stays honest instead of quietly accumulating orphans.
+
+The freshness you get depends on the channel. A nightly batch pull caps freshness at a day. A push-driven CDC pipeline gets changes into the index within minutes or seconds, and that is the difference between a support agent answering from this morning versus this minute. [^3] The cost is the connective plumbing, but the plumbing is what separates a demo that feels smart from a system that gives current, correct answers.
+
+## Worked example: a change-driven ETL pipeline in pure Python
+
+To see the mechanics without a vector store or a message bus, build the whole pipeline in a small Python class. A source emits CDC-like change events, create, update, and delete. The pipeline normalizes each raw record into clean text, chunks it, and upserts by document ID with a content hash so a repeated event is a no-op. A watermark records which `(doc_id, version)` pairs were already processed, which is what makes the pipeline idempotent even when events are delivered twice.
+
+```python
+import hashlib
+
+class Pipeline:
+    """A minimal ETL pipeline for RAG. Extract (change events),
+    Transform (normalize + chunk), Load (upsert into an index).
+    Idempotent: a repeated event for the same version is a no-op."""
+
+    def __init__(self):
+        self.index = {}    # doc_id -> {"version": str, "chunks": [str]}
+        self.processed = set()   # {(doc_id, version)} watermark
+
+    @staticmethod
+    def normalize(record):
+        # Transform: raw nested record -> one clean line of text.
+        clean = f"{record.get('title', '')}. {record.get('body', '')}"
+        return " ".join(clean.split())   # collapse whitespace/newlines
+
+    @staticmethod
+    def chunk(text, size=6):
+        words = text.split()
+        return [" ".join(words[i:i + size]) for i in range(0, len(words), size)]
+
+    def _embed(self, text):
+        # Stand-in for an embedding call: a content hash stands in for the
+        # vector so we can detect change without a real model.
+        return hashlib.sha256(text.encode()).hexdigest()[:12]
+
+    def apply(self, event):
+        kind, doc_id, payload = event["op"], event["id"], event["payload"]
+        if kind == "delete":
+            removed = self.index.pop(doc_id, None)
+            self.processed.add((doc_id, payload.get("version", "*")))
+            return f"delete: removed {len(removed['chunks']) if removed else 0} chunks"
+
+        version = payload.get("version")
+        if (doc_id, version) in self.processed:
+            return "no-op: already processed this version"
+
+        clean = self.normalize(payload)
+        fixed = self._embed(clean)   # stands in for the semantic vector
+        stored = self.index.get(doc_id)
+        if stored and stored["vector"] == fixed:
+            # Content unchanged -> nothing to re-embed (incremental).
+            self.processed.add((doc_id, version))
+            return "unchanged: skip re-embed"
+
+        chunks = self.chunk(clean)
+        self.index[doc_id] = {"version": version, "chunks": chunks, "vector": fixed}
+        self.processed.add((doc_id, version))
+        return f"upsert: {len(chunks)} chunk(s) for {doc_id}"
+
+p = Pipeline()
+
+# Extract + load: a create event for a support article.
+p.apply({"op": "create", "id": "KB-1",
+         "payload": {"title": "Refund policy", "body": "Refunds " * 40, "version": "v2"}})
+# The same event arrives again (at-least-once delivery) -> no-op.
+p.apply({"op": "create", "id": "KB-1",
+         "payload": {"title": "Refund policy", "body": "Refunds " * 40, "version": "v2"}})
+# An update with identical content but a bumped version -> unchanged, no re-embed.
+p.apply({"op": "update", "id": "KB-1",
+         "payload": {"title": "Refund policy", "body": "Refunds " * 40, "version": "v3"}})
+# A real edit -> only this document re-embeds, nothing else.
+p.apply({"op": "update", "id": "KB-1",
+         "payload": {"title": "Refund policy", "body": "Refunds are 60 days. " * 7, "version": "v4"}})
+# A delete -> the tombstone purges the document's chunks.
+p.apply({"op": "delete", "id": "KB-1", "payload": {"version": "v5"}})
+print("index size:", len(p.index))
+print("watermark :", sorted(p.processed))
+```
+
+Run it and watch the lifecycle. The first create extracts the record, normalizes the raw payload into a single clean line, chunks it, and upserts it, and the watermark records `(KB-1, v2)`. The second identical event returns `no-op` because the same version is already in the watermark, which is the at-least-once deduplication that keeps a redundant delivery from burning embedding budget. The update to `v3` carries byte-identical content, so the transform hash matches the stored value and the pipeline returns `unchanged`, skipping the re-embed entirely, the incremental refresh in miniature. The `v4` update actually changes the body, so only KB-1 gets re-chunked and re-embedded while every other document in the index is left alone. The delete event acts as a tombstone and removes the document's chunks from the index. The final index is empty and the watermark holds every version it has seen, which is exactly how a real pipeline keeps a memory of what it processed so a rerun is safe.
+
+This is the skeleton under every production RAG ingestion path. The real system replaces the dict index with a vector store, the content hash with a real embedding model, and the synchronous `apply` loop with a CDC connector and a durable stream. The structure, extract, normalize, chunk, idempotent upsert, delete handling, watermark, is identical.
+
+## The pitfall to avoid
+
+The single mistake that undoes most RAG pipelines is skipping the transform. Teams wire a connector, or even a script that dumps a folder, straight into the embedding model, and then wonder why retrieval is bad. The raw payload was never cleaned, so the model spent its budget on braces and navigation bars, the chunks split at the wrong boundaries because structure was flattened away, and the index filled with noise that retrieves poorly and leaks provider-specific junk into every prompt. [^3] [^9] The model was never the problem. The pipeline that fed it was.
+
+The habits that prevent it are unglamorous and identical to good data engineering. Normalize before you embed, and preserve structure instead of flattening to a string. [^3] [^2] Make every stage idempotent with a stable identifier and a watermark, so a re-run or a duplicate event cannot double your vectors. [^6] [^8] Design the delete path from day one, with tombstone handling for push sources and reconciliation for pull sources, because an index that can only add starts lying the first time a source record is removed. [^1] And treat the pipeline as a first-class engineering surface with logging and tests, because it has the same failure modes as any ETL system, bad parsing, silent data loss, and schema drift, and those are the bugs that quietly rot your retrieval. [^2]
+
+## Try it
+
+1. **Run the lifecycle script.** Copy the worked example, run it, and confirm the four behaviors: a repeated event is a no-op, an identical-content update skips re-embedding, a real edit re-embeds only that document, and a delete purges the document from the index. Then add a second document and confirm that updating one leaves the other untouched, which is the whole point of incremental refresh.
+2. **Audit a real ingest path.** Look at code you control that feeds a vector store. Answer three questions. Does it normalize the source before chunking, or does it embed raw JSON or HTML? Does it upsert on a stable identifier with a content hash, or can a re-run double vectors? Does a source delete remove the vectors, or do chunks go stale? Each answer you cannot give is a finding.
+3. **Design the watermark.** For a source you pull from, write the cursor you would track to make the connector incremental, a last-modified timestamp or an event sequence number, and the check that makes extraction idempotent. Note what happens when the source reorders or redelivers records, and how your watermark would cope.
+
+## What's next
+
+You can now get data into a RAG pipeline and keep it current, with connectors that pull or receive change, normalization that cleans before embed, CDC that tells you exactly what changed, and incremental refresh that re-embeds only the records that moved. Lesson 47 turns from building the system to proving it: it covers building an eval program, meaning an eval harness, regression suites, and quality gates, so you can tell whether the RAG pipeline and the agents on top of it are actually getting better rather than just running. Where this lesson made the data flow dependable, lesson 47 makes the judgement about that flow measurable.
+
+[^1]: bigdataboutique.com. [RAG Pipeline: End-to-End Architecture Guide for Production Systems](https://bigdataboutique.com/blog/rag-pipeline-end-to-end-architecture-guide)
+[^2]: teachyou.ai. [RAG Data Pipeline: From Raw Documents to Searchable Chunks](https://teachyou.ai/blog/rag-data-pipeline)
+[^3]: truto.one. [How to Architect a Real-Time SaaS-to-Vector DB Pipeline for RAG](https://truto.one/blog/how-to-build-a-real-time-data-pipeline-from-enterprise-saas-to-a-vector-db)
+[^4]: apxml.com. [Change Data Capture for Real-time RAG Updates](https://apxml.com/courses/large-scale-distributed-rag/chapter-4-scalable-data-ingestion-processing-pipelines/change-data-capture-real-time-rag)
+[^5]: vroble.com. [How I Built a Real-time RAG System: Mastering Incremental Vectorization with PostgreSQL CDC](https://vroble.com/2025/11/how-i-built-real-time-rag-system.html)
+[^6]: c-sharpcorner.com. [Orchestrating Enterprise RAG ETL with Airflow Multi-Agent Integration](https://c-sharpcorner.com/article/orchestrating-enterprise-rag-etl-with-airflow-multi-agent-integration)
+[^7]: llmbook.icsgen-ai.org. [RAG Ingestion Pipelines and Connectors](https://llmbook.icsgen-ai.org/part-7-retrieval-information-extraction-with-llms/module-35-advanced-rag/section-35.5.html)
+[^8]: aakashx.com. [RAG Architecture: The Full Pipeline and Where It Fails](https://aakashx.com/blog/rag-architecture-pipeline-failure-modes)
+[^9]: dev.to (Alterlab). [Feed Clean Web Data to RAG Pipelines Without Wasting LLM Tokens](https://dev.to/alterlab/feed-clean-web-data-to-rag-pipelines-without-wasting-llm-tokens-125p)
+[^10]: searchcans.com. [Optimizing Vector Embeddings: Why Clean Data Matters More Than Your Model](https://searchcans.com/blog/optimizing-vector-embeddings)
+[^11]: aakashx.com. [RAG Architecture: The Full Pipeline and Where It Fails](https://aakashx.com/blog/rag-architecture-pipeline-failure-modes)
+[^12]: risingwave.com. [Real-Time Data Pipeline for RAG Applications](https://risingwave.com/blog/real-time-data-pipeline-rag-applications)
