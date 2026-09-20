@@ -2,6 +2,28 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "salesforce-error-recovery-2026",
+    "title": "Salesforce Fails at 2am: The Recovery Layer Nobody Builds",
+    "excerpt": "Most Salesforce failures are silent. What happens when automation breaks, and who notices? Fault paths, transaction control, and the recovery chain.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "September 20, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "13 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "Flow",
+      "Apex",
+      "Integration",
+      "Reliability"
+    ],
+    "bannerImage": "/banners/salesforce-error-recovery-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "design-debt-paydown-2026",
     "title": "Design Debt: Track It, Price It, Pay It Down",
     "excerpt": "Design debt compounds like technical debt, but teams rarely book it. The three types, how to measure each, and a pay-down routine that needs no redesign.",
