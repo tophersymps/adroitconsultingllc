@@ -32,6 +32,8 @@ The tools do not overlap cleanly. The class sharing keywords with sharing, witho
 
 That split is tested. When a scenario hands you a with sharing class and asks whether a hidden field is protected, the answer is no, a with sharing class does not enforce FLS by itself. Record visibility and field visibility are different gates, and a class that opens one does not open the other. [^3]
 
+![The two halves of Apex security: object and field access (CRUD plus FLS) is guarded by user mode, WITH SECURITY_ENFORCED, Security.stripInaccessible, and Schema describe checks, while record access (sharing) is controlled only by the class sharing keywords](</diagrams/day-09-p-5a-programmatic-enforcement-crud-fls-in-apex-stripina/1-two-halves-of-apex-security.png>)
+
 ### Explicit checks: Schema.SObjectType and the field accessibility methods
 
 The most explicit way to enforce CRUD and FLS is to ask, in code, whether the running user has the right access, and branch on the answer. Apex exposes this through the Schema class. Every object has an SObjectType descriptor, and that descriptor carries four permission methods: isAccessible, isCreateable, isUpdateable, and isDeletable. Each returns a Boolean for the running user. [^4]
@@ -73,6 +75,8 @@ This is also why a query behaves differently with the keyword than without it, w
 
 Two documented limits are worth knowing. First, WITH SECURITY_ENFORCED does not support traversing polymorphic fields with TYPEOF expressions or an ELSE clause, though the Owner, CreatedBy, and LastModifiedBy polymorphic lookups are exempt. Second, and this is the current-state note from the intro, at API v67 the keyword was renamed WITH USER_MODE, which is the form you will write in orgs compiled at the current API version. WITH USER_MODE does everything WITH SECURITY_ENFORCED did and additionally applies record sharing and supports polymorphic fields, which is why Salesforce recommends it and shipped it as the successor. On the exam, treat the mechanism the same under either name. [^5]
 
+![When a selected field is unreadable, the query keyword fails all-or-nothing: WITH SECURITY_ENFORCED throws the whole query and returns no data, while Security.stripInaccessible removes only the hidden field and returns the readable record](</diagrams/day-09-p-5a-programmatic-enforcement-crud-fls-in-apex-stripina/2-enforced-vs-strip.png>)
+
 ### stripInaccessible: graceful removal instead of failure
 
 Where WITH SECURITY_ENFORCED fails, Security.stripInaccessible removes. It is the method the quiz and the exam prefer for both reads and writes, because it degrades gracefully instead of throwing: instead of failing a whole query because one field is hidden, it strips the inaccessible fields from the records and tells you which ones it removed. [^8][^9]
@@ -105,6 +109,8 @@ The same reasoning applies to updates with AccessType.UPDATABLE. The principle i
 
 There is an optional third parameter, enforceRootObjectCRUD. When false, stripInaccessible only checks field-level access and skips the object-level CRUD check on the root object. The default behavior checks both. If you deliberately want to filter fields but not fail on object CRUD, pass false; otherwise leave it at the default so object and field access are both enforced. [^9]
 
+![Security.stripInaccessible guards both boundaries: on reads it strips unreadable fields before data leaves Apex, and on inbound writes it strips fields the user cannot create or update before the DML, closing the mass-assignment gap](</diagrams/day-09-p-5a-programmatic-enforcement-crud-fls-in-apex-stripina/3-stripinaccessible-read-write.png>)
+
 ### without sharing: what it really means
 
 The class-level sharing keyword is where the exam catches most candidates, because the name suggests more power than it has. A class declared without sharing runs in system mode for record access: it ignores the running user's org-wide defaults, role hierarchy, and sharing rules, and can read, insert, update, and delete any record in the org regardless of who is running the code. [^3][^7]
@@ -114,6 +120,8 @@ The critical correction is what it does not do. without sharing does not bypass 
 The second trap is even more subtle and it is about the running user's session. FLS under system mode is not automatic. CRUD and field checks come from the permission set of the user whose context the code runs in, and in system mode, the platform does not apply those checks for you. So a system-mode trigger or service class can leak a hidden field unless the code explicitly checks accessibility or strips. The absence of sharing enforcement does not equal the presence of field security; it means you have to supply the field security yourself. [^3]
 
 Appropriate use is narrow. A without sharing class earns its place when code must act across the whole org on behalf of a user, typically a batch job, a scheduled Apex job, an integration handler, or an admin tool with its own authorization. In those contexts the code is running a platform operation, not browsing as the user, and it may legitimately need to see records the user could not open. That is the standard, and the exam wants you to apply it strictly: without sharing for a system context with its own access control, with sharing as the default everywhere else. Never make it the default out of convenience. [^3][^7]
+
+![The without sharing trap: it opens record access by ignoring org-wide defaults, the role hierarchy, and sharing rules, but it never bypasses object permissions or field-level security, so a hidden field still needs an explicit check or a strip](</diagrams/day-09-p-5a-programmatic-enforcement-crud-fls-in-apex-stripina/4-without-sharing-trap.png>)
 
 ### with sharing: the user-mode default, and where sensitive data belongs
 
