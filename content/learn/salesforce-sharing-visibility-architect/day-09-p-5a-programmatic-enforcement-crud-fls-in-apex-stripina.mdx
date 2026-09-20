@@ -1,0 +1,217 @@
+---
+title: "Sharing & Visibility Architect P-5a: Programmatic Enforcement, CRUD/FLS in Apex, stripInaccessible, and Without Sharing"
+slug: day-09-p-5a-programmatic-enforcement-crud-fls-in-apex-stripina
+series: salesforce-sharing-visibility-architect
+lesson: 9
+excerpt: "Why objective p-5a exists: the Salesforce UI enforces object permissions, field-level security, and record sharing for you, but Apex does not do that by default, so custom automation is where security can silently leak. This lesson teaches the programmatic enforcement stack an architect owns: the Schema.SObjectType and field accessibility checks that guard CRUD and FLS, the WITH SECURITY_ENFORCED query keyword (renamed WITH USER_MODE at API v67) that enforces object and field permissions all-or-nothing, Security.stripInaccessible for reads and for inbound writes that closes the mass-assignment gap, and the real meaning of a without sharing class, which ignores record sharing but never bypasses the CRUD/FLS checks you write. Includes a worked Lightning-controller scenario, a five-step configuration walkthrough, exam traps, and a try-it exercise. Day 9 of the Platform Sharing and Visibility Architect exam prep."
+date: "September 20, 2026"
+author: "Adroit Consulting"
+readTime: "21 min read"
+tags: [Salesforce, Security, Sharing, Certification, Apex]
+---
+
+Everything you have enforced so far in this course has been declarative. Object permissions, field-level security, org-wide defaults, sharing rules, restriction rules: an administrator configures them in the user interface and the platform applies them. This lesson changes the register. Objective p-5a asks how you enforce the same security settings from code, when a piece of Apex runs on behalf of a user instead of the platform rendering a page. [^1]
+
+The reason this objective exists at all is a gap that is unique to Apex. The user interface quietly filters records a user cannot see and hides fields they cannot read. Apex does not. Historically, Apex database operations ran in system mode by default, which meant SOQL, SOSL, DML, and the Database class all executed with elevated access: object permissions, field-level security, and sharing rules were ignored unless the developer wrote code to enforce them. That is the whole problem p-5a is about. A custom button, a Lightning controller, or a REST endpoint that queries data without enforcing the running user's access returns records and fields the user should never see, and nothing warns you. [^2][^7]
+
+The fix is a deliberate, layered enforcement stack. This lesson teaches each layer: the explicit accessibility checks on objects and fields, the query keyword that turns enforcement on for a read, the stripInaccessible method that removes fields the user cannot touch, and the class sharing keyword that decides whether record sharing applies at all. By the end you should be able to look at any Apex class and say which of the two halves of security it enforces, which it assumes, and where it leaks.
+
+One current-state note before the mechanics, because a load-bearing detail changed recently. At API version 67.0, Summer '26, Salesforce shifted Apex toward secure by default: database operations now run in user mode unless you say otherwise, undeclared classes default to with sharing, and the SOQL keyword this exam objective names, WITH SECURITY_ENFORCED, was replaced by WITH USER_MODE. The exam guide and this course's quiz still use the classic name, so this lesson teaches the mechanism under that name and flags where the modern equivalent sits. The behavior the quiz tests, that enforcement is all-or-nothing and throws on an inaccessible field, is unchanged under either keyword. [^2][^5]
+
+## Deep Dive
+
+### The two halves of Apex security, and which one each tool owns
+
+Before any method name, the architect has to separate the two things Apex can enforce, because mixing them up is the most common design error in this objective.
+
+Half one is object and field access, what CRUD and FLS stand for. Object-level permissions decide whether the running user can read, create, update, or delete a particular object at all. Field-level security decides whether they can see or edit a particular field on that object. These are implemented by the permission set, and they are the front gate on every row the object holds.
+
+Half two is record access, what sharing means. Org-wide defaults, the role hierarchy, criteria-based and ownership-based sharing rules, public groups, and manual sharing decide which individual records a user with object access can actually open. This is the sharing model the other lessons in this course built.
+
+The tools do not overlap cleanly. The class sharing keywords with sharing, without sharing, and inherited sharing control half two only: they decide whether the running user's record-level sharing rules are applied to queries and DML. They never touch object or field permissions. Object and field access, half one, is controlled by user mode, Security.stripInaccessible, and the Schema describe methods. Salesforce's own security guidance states this split directly: with sharing enforces record-level security, while object-level and field-level security must be handled separately. [^3][^7]
+
+That split is tested. When a scenario hands you a with sharing class and asks whether a hidden field is protected, the answer is no, a with sharing class does not enforce FLS by itself. Record visibility and field visibility are different gates, and a class that opens one does not open the other. [^3]
+
+### Explicit checks: Schema.SObjectType and the field accessibility methods
+
+The most explicit way to enforce CRUD and FLS is to ask, in code, whether the running user has the right access, and branch on the answer. Apex exposes this through the Schema class. Every object has an SObjectType descriptor, and that descriptor carries four permission methods: isAccessible, isCreateable, isUpdateable, and isDeletable. Each returns a Boolean for the running user. [^4]
+
+```apex
+Boolean canRead = Schema.getGlobalDescribe().result.get('Account').isAccessible();
+Boolean canCreate = Schema.getGlobalDescribe().result.get('Account').isCreateable();
+Boolean canUpdate = Schema.getGlobalDescribe().result.get('Account').isUpdateable();
+Boolean canDelete = Schema.getGlobalDescribe().result.get('Account').isDeletable();
+```
+
+The parallel field-level form uses the field descriptor inside the object descriptor. Each field answers isAccessible, isUpdateable, and isCreateable. So a method that reads Account records can check that the user holds object read access and that each field it plans to return is readable, before it ever runs the query. [^4]
+
+```apex
+Schema.DescribeFieldResult fld = Schema.getGlobalDescribe().result.get('Account')
+    .fields.get('AnnualRevenue');
+Boolean fieldReadable = fld.isAccessible();
+Boolean fieldUpdatable = fld.isUpdateable();
+```
+
+These checks are the building block every other tool wraps. They are verbose, which is why they are usually reserved for decision points: "if the user cannot create this object, return early with a friendly error" or "if the user cannot read this field, select a different field set." They are not the right tool for every query, because writing describe checks by hand over a wide record is exactly what WITH SECURITY_ENFORCED and stripInaccessible automate. Use the explicit checks where you need to branch or to communicate a specific denial; use the automated tools where you need a whole read or write sanitized. [^4]
+
+### WITH SECURITY_ENFORCED: enforcement that is all-or-nothing
+
+The query-level keyword is the simplest correct guard for a user-mode read. Appending WITH SECURITY_ENFORCED to a SOQL SELECT tells the runtime to enforce object and field permissions for the running user on every object and field in the SELECT list. If the user lacks read access to any selected object or any selected field, the query throws an exception and no data is returned. [^5][^6]
+
+```apex
+List<Case> cases = [
+    SELECT Id, CaseNumber, Subject, Status, Is_Confidential__c
+    FROM Case
+    WHERE AccountId = :accountId
+    WITH SECURITY_ENFORCED
+];
+```
+
+The essential behavior to understand, and the fact behind quiz question two, is that enforcement is strict and atomic. It does not silently drop an inaccessible field and return the rest. If one selected field is unreadable, the whole query fails. That is not a bug; it is the intended contract. The alternative, quietly omitting the field, would hand the caller partial data and silently change what the query was supposed to return, and a developer comparing results would not know a field was missing. Failing loudly is the safe behavior. [^5][^6]
+
+This is also why a query behaves differently with the keyword than without it, which is the exact scenario the quiz describes. Without enforcement, the same SELECT list runs in system mode and returns every field, including one the user cannot read. With enforcement, that same user causes the query to throw. The difference is the point of the keyword. [^2][^6]
+
+Two documented limits are worth knowing. First, WITH SECURITY_ENFORCED does not support traversing polymorphic fields with TYPEOF expressions or an ELSE clause, though the Owner, CreatedBy, and LastModifiedBy polymorphic lookups are exempt. Second, and this is the current-state note from the intro, at API v67 the keyword was renamed WITH USER_MODE, which is the form you will write in orgs compiled at the current API version. WITH USER_MODE does everything WITH SECURITY_ENFORCED did and additionally applies record sharing and supports polymorphic fields, which is why Salesforce recommends it and shipped it as the successor. On the exam, treat the mechanism the same under either name. [^5]
+
+### stripInaccessible: graceful removal instead of failure
+
+Where WITH SECURITY_ENFORCED fails, Security.stripInaccessible removes. It is the method the quiz and the exam prefer for both reads and writes, because it degrades gracefully instead of throwing: instead of failing a whole query because one field is hidden, it strips the inaccessible fields from the records and tells you which ones it removed. [^8][^9]
+
+The signature is Security.stripInaccessible(AccessType, List<SObject>, optional enforceRootObjectCRUD). It returns an SObjectAccessDecision, and you read the sanitized records from its getRecords method and the removed fields from getRemovedFields. [^9]
+
+For a read path, the pattern is to query normally, then strip to the reader before the data leaves Apex. This is quiz question one. A method that returns Case records to a Lightning component should wrap its result in Security.stripInaccessible(AccessType.READABLE, cases) and return decision.getRecords(). Any field the calling user cannot read is removed before the JSON ever reaches the front end, so there is nothing for the UI to accidentally render and nothing an API consumer can read beyond the record. [^8][^9]
+
+```apex
+List<Case> cases = [SELECT Id, CaseNumber, Subject, Status, Is_Confidential__c FROM Case];
+SObjectAccessDecision decision = Security.stripInaccessible(AccessType.READABLE, cases);
+List<Case> safeCases = decision.getRecords();
+```
+
+The distractor answers to quiz question one all fail for instructive reasons. Returning the full records and trusting the UI to hide fields is not security, because the data is already off the server and any client can read it. A without sharing class says nothing about fields, only about record sharing, so it does not hide a field the user cannot read. Turning fields read-only changes whether they appear in an edit form, not whether a query returns the value. stripInaccessible is the only answer that actually removes the unreadable data before it reaches the client. [^8][^9]
+
+### stripInaccessible on inbound writes: the mass-assignment defense
+
+The same method protects the write direction, and this is the case the exam considers the FLS bypass risk. When a form, a Lightning page, or an external source sends a payload into your Apex, that payload may contain fields the current user has no permission to create or update. If you insert or update the raw map, you have let the user write those fields anyway, which is a mass-assignment or object injection style bypass of FLS. [^8][^9]
+
+The fix, quiz question three, is to strip the payload to the creator before the DML. Wrap the inbound records in Security.stripInaccessible(AccessType.CREATABLE, payload) and persist only decision.getRecords(). Any field the user is not allowed to create is stripped out, so the insert writes exactly the fields they are permitted to write and nothing more. [^8][^9]
+
+```apex
+List<Account> payload = deserializeAccounts(requestBody);
+SObjectAccessDecision decision = Security.stripInaccessible(AccessType.CREATABLE, payload);
+insert decision.getRecords();
+```
+
+The same reasoning applies to updates with AccessType.UPDATABLE. The principle is that inbound data is untrusted until it has been checked against the running user's field permissions, and stripInaccessible is the check. Inserting the raw payload, making the class without sharing, and adding the fields to a page layout each miss the point: none of them restricts what a crafted request can write. [^8][^9]
+
+There is an optional third parameter, enforceRootObjectCRUD. When false, stripInaccessible only checks field-level access and skips the object-level CRUD check on the root object. The default behavior checks both. If you deliberately want to filter fields but not fail on object CRUD, pass false; otherwise leave it at the default so object and field access are both enforced. [^9]
+
+### without sharing: what it really means
+
+The class-level sharing keyword is where the exam catches most candidates, because the name suggests more power than it has. A class declared without sharing runs in system mode for record access: it ignores the running user's org-wide defaults, role hierarchy, and sharing rules, and can read, insert, update, and delete any record in the org regardless of who is running the code. [^3][^7]
+
+The critical correction is what it does not do. without sharing does not bypass object permissions or field-level security. It only ignores record-level sharing. A without sharing class still has to pass whatever CRUD and FLS checks you write, and if you rely on it to give you access to a hidden field, the hidden field is still hidden. Record visibility and field visibility are separate, and without sharing opens only the first. This is the trap statement in the exam directive: hidden fields still require an explicit accessibility check or a strip. [^3][^7]
+
+The second trap is even more subtle and it is about the running user's session. FLS under system mode is not automatic. CRUD and field checks come from the permission set of the user whose context the code runs in, and in system mode, the platform does not apply those checks for you. So a system-mode trigger or service class can leak a hidden field unless the code explicitly checks accessibility or strips. The absence of sharing enforcement does not equal the presence of field security; it means you have to supply the field security yourself. [^3]
+
+Appropriate use is narrow. A without sharing class earns its place when code must act across the whole org on behalf of a user, typically a batch job, a scheduled Apex job, an integration handler, or an admin tool with its own authorization. In those contexts the code is running a platform operation, not browsing as the user, and it may legitimately need to see records the user could not open. That is the standard, and the exam wants you to apply it strictly: without sharing for a system context with its own access control, with sharing as the default everywhere else. Never make it the default out of convenience. [^3][^7]
+
+### with sharing: the user-mode default, and where sensitive data belongs
+
+The opposite keyword, with sharing, directs the class to enforce the running user's record-level sharing on its queries and DML. Combined with user mode and the accessibility tools, it is the configuration the architect wants for anything driven by a user: Apex controllers for Lightning and Aura, services called from flows, and REST endpoints. And a current-state change makes this the safer default: at API v67, an Apex class with no sharing declaration now defaults to with sharing, where before it inherited or ran without sharing by default. So the default posture has come to align with the recommended one. [^2][^3][^7]
+
+The architectural rule follows directly. Keep sensitive data-access code in user mode with explicit checks, whether those checks come from WITH USER_MODE on the query or stripInaccessible around the result. Reserve without sharing for the documented system context, and say in a comment why the elevated record access is required. The exam-expected stack for any programmatic security scenario is: user mode, plus WITH SECURITY_ENFORCED or stripInaccessible, plus explicit Schema accessibility checks where the code must branch, and without sharing only where the operation genuinely runs as a platform context. [^3]
+
+## Worked example: a Lightning controller that must not leak
+
+Suppose a support rep opens an Experience page that lists Case records, and the page must show the rep only the cases and only the fields their permission set allows. The Apex controller behind the page is the place where every previous layer could leak, so it is the place to enforce.
+
+```apex
+public with sharing class CasePortalController {
+    @AuraEnabled(cacheable=true)
+    public static List<Case> getVisibleCases(Id accountId) {
+        if (!Schema.getGlobalDescribe().result.get('Case').isAccessible()) {
+            throw new AuraHandledException('No access to Case records.');
+        }
+        List<Case> cases = [
+            SELECT Id, CaseNumber, Subject, Status, Is_Confidential__c
+            FROM Case
+            WHERE AccountId = :accountId
+            WITH SECURITY_ENFORCED
+        ];
+        SObjectAccessDecision decision = Security.stripInaccessible(
+            AccessType.READABLE, cases);
+        return decision.getRecords();
+    }
+}
+```
+
+Trace what each line contributes. The with sharing keyword on the class means the query only returns records the rep can open under the sharing model. The isAccessible guard returns a friendly message instead of an obscure permission exception when the object itself is denied. WITH SECURITY_ENFORCED enforces object and field access on the SELECT, so if the rep cannot read Is_Confidential__c, the query fails rather than returning that field. But strict failure is not always what a portal should do, so stripInaccessible then removes any field the rep cannot read, covering the case where only one field among several is restricted, and the page degrades gracefully instead of failing. The double guard is not redundant: one enforces and fails postured for the read, the other strips and returns a safe record for the client. [^8][^9]
+
+Now the inbound side of the same object. The form on that Experience page lets the rep create a Case, and the payload includes an Is_Confidential__c the rep cannot set. Without a guard, the insert would honor the crafted value.
+
+```apex
+public with sharing class CasePortalController {
+    @AuraEnabled
+    public static Id createCase(Case payload) {
+        List<Case> tmp = new List<Case>{ payload };
+        SObjectAccessDecision decision = Security.stripInaccessible(
+            AccessType.CREATABLE, tmp);
+        insert decision.getRecords();
+        return decision.getRecords()[0].Id;
+    }
+}
+```
+
+The stripInaccessible(CREATABLE) call strips Is_Confidential__c out of the payload before the insert, because the rep lacks create access to it. The record is persisted with only the fields the rep is allowed to write. This is the mass-assignment defense in action, and it is why the quiz's third question selects CREATABLE stripping over inserting the raw payload. [^8][^9]
+
+## Configuration Walkthrough
+
+1. Guard object and field access in data-access methods. Before a query or DML, check Schema.SObjectType isAccessible and isCreateable (and the field isAccessible or isUpdateable forms) where the method needs to branch, or annotate the query with WITH SECURITY_ENFORCED so the platform enforces object and field permissions for the running user. Choose the explicit checks where you need a specific denial message; choose the query keyword where you need the whole read enforced. [^4][^5]
+2. Wrap lists returned to Lightning or Experience clients with Security.stripInaccessible(AccessType.READABLE, records). Return decision.getRecords(), never the raw list, so fields the calling user cannot read never reach the front end. This is the standard Apex-to-client boundary. [^8][^9]
+3. Validate inbound DML inputs with Security.stripInaccessible(AccessType.CREATABLE, payload) and filter before insert or update. Treat every inbound payload as untrusted, strip it to the user's creatable fields, and persist only the decision's records. For updates, use AccessType.UPDATABLE the same way. [^8][^9]
+4. Review the class sharing keyword. Default to with sharing for user-invoked code, which at API v67 is also the platform default for an undeclared class. Reserve without sharing for explicit system-context needs, where the code acts across the org as a platform operation, and document why in the class. [^3][^7]
+5. Unit-test under a runAs user whose profile hides fields. Use System.runAs with a test user whose permission set hides a specific field, run the read path and assert the returned records exclude the hidden field, and run the inbound path and assert the hidden field is not persisted. This is the only way to prove the enforcement, because a full-access admin user would pass even broken code. [^3][^4]
+
+## Exam Traps
+
+Trap one: assuming without sharing bypasses field-level security. without sharing only ignores record-level sharing. A hidden field still requires an explicit accessibility check or a strip; the class keyword does not open hidden fields. This is the single most-tested misreading in the objective. [^3]
+
+Trap two: expecting WITH SECURITY_ENFORCED to drop an inaccessible field and continue. It fails the entire query instead. If one selected field or object is not readable by the running user, the enforcement is all-or-nothing and throws, returning no data. That is intended behavior, not a defect, and it is the exact reason quiz question two's answer is the strict all-or-nothing enforcement. [^5][^6]
+
+Trap three: relying on the running user's session for FLS in system mode. FLS is supplied by the permission set of the context user, and in system mode the platform does not apply it for you. A system-mode trigger or service class can leak hidden fields unless the code explicitly checks accessibility or strips. System mode removes the guard; it never adds one. [^3]
+
+Trap four: reaching for without sharing as a convenience default. It is appropriate only for platform-context operations, a job, a batch, an integration acting on behalf of a user, and never as the default for a user-driven controller. When a scenario asks how to expose data to a user, the answer is user mode with enforcement, not a wider record scope. [^3][^7]
+
+## Try It
+
+Build the enforcement so you have felt the failure mode, not just read about it. In a sandbox, create a custom field on Account named Is_Confidential__c and hide it from a test profile by unchecking Visible under field-level security for that profile.
+
+Create a test user on that profile. Write a with sharing class that queries the field with WITH SECURITY_ENFORCED and log in as the test user, call the method, and watch it throw the insufficient-permissions exception. Then write the same class with Security.stripInaccessible(AccessType.READABLE, records) around the query and, under the same test user, confirm the field is absent from the returned records while the rest of the record survives. That contrast, fail versus strip, is the decision an architect makes per read path.
+
+Then test the inbound defense. Write a method that takes an Account payload, calls Security.stripInaccessible(AccessType.CREATABLE, payload), and inserts the result. Under the test user, submit a payload that sets Is_Confidential__c and confirm the field is not persisted, then check the value on the inserted record to prove it was stripped.
+
+Finish by writing a unit test that wraps all of this in System.runAs, running as the restricted user, so the assertions prove the behavior against the hidden-profile user rather than an admin. That test is the artifact you will carry into the exam, because it encodes the exact judgment the objective scores. [^3][^4]
+
+## What's Next
+
+You can now enforce object permissions and field-level security from Apex using explicit Schema checks, WITH SECURITY_ENFORCED, and Security.stripInaccessible, and you can explain precisely what a without sharing class does and does not bypass. Lesson 10, Programmatic: With and Without Sharing, runAs, User vs System Mode, and When Apex Sharing Is Needed (p-5b), takes the model one step further. Where this lesson focused on object and field access, lesson 10 digs into the record-sharing half in code: the exact difference between with sharing and without sharing at runtime, how System.runAs changes whose context code runs in, how user mode and system mode differ for sharing and for CRUD/FLS, and the practical judgment of when Apex sharing enforcement is needed at all. The enforcement stack you built here is the object and field floor; lesson 10 shows how the record-sharing layer behaves when that stack runs as a different user or in system mode.
+
+## Related Requirements
+
+- Lesson 6 of 36 (p-3b): UI hiding versus real security, defense in depth
+- Lesson 8 of 36 (p-4b): Access controls for sensitive data, restriction rules, retention
+- Lesson 10 of 36 (p-5b): Programmatic with/without sharing, runAs, user vs system mode
+- Lesson 23 of 36 (r-7a): Programmatic sharing, Apex managed sharing
+- Lesson 24 of 36 (r-7b): Programmatic sharing scenarios, recalculation limits
+
+## References
+
+[^1]: Salesforce Certified Platform Sharing and Visibility Architect Exam Guide. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005298977&language=en_US&type=1)
+[^2]: Write Simplified and Secure Apex with Spring '23 Updates. [developer.salesforce.com](https://developer.salesforce.com/blogs/2023/05/write-simplified-and-secure-apex-with-spring-23-updates)
+[^3]: Use the with sharing, without sharing, and inherited sharing Keywords. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_classes_keywords_sharing.htm)
+[^4]: Apex Classes, Methods, and Variables: Schema. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_classes_in_namespace_schema.htm)
+[^5]: Platform Developer I Certification Maintenance: What's New in Apex. [trailhead.salesforce.com](https://trailhead.salesforce.com/en/content/learn/modules/platform-developer-i-certification-maintenance-winter-21/learn-whats-new-in-apex-for-platform-developers)
+[^6]: Spring '20: Field-Level Security in Apex. [developer.salesforce.com](https://developer.salesforce.com/blogs/2020/01/learn-moar-in-spring-20-with-field-level-security-in-apex.html)
+[^7]: Apex Sharing and Security in Salesforce (CertifySF reference). [certifysf.com](https://certifysf.com/apex-sharing-security-in-salesforce)
+[^8]: Apex Developer Guide: Security, stripInaccessible. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_classes_methods_System_Security_stripInaccessible.htm)
+[^9]: Get Hands-On with Field and Object-Level Security and the Safe Navigation Operator. [trailhead.salesforce.com](https://trailhead.salesforce.com/en/content/learn/modules/platform-developer-i-certification-maintenance-winter-21/get-handson-with-field-and-objectlevel-security-and-safe-navigation-operator)
