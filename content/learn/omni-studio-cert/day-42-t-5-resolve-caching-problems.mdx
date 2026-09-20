@@ -18,6 +18,8 @@ The distinction that organizes all of it is a two-way split. If the data is stal
 
 ## Deep Dive
 
+![Stale and wrong are the two classes of cache report; stale points to TTL and invalidation, wrong points to keys and scope.](</diagrams/day-42-t-5-resolve-caching-problems/1-split-symptom-first.png>)
+
 ### The signature symptom: stale data
 
 Stale data is the classic caching failure, and it is the first thing the exam wants you to recognize on sight. The symptom is always shaped the same way: the source changed, and users kept seeing the old value. An Integration Procedure's reference data was updated in Salesforce, or an external catalog changed upstream, and the page still shows last week's numbers. [^1]
@@ -33,6 +35,8 @@ Every cache has a Time To Live, the property that decides how long a stored resu
 The fix is not always to shorten the value. It is to match the value to volatility. Reference data that changes monthly can ride a long TTL safely, because even a day-old copy is still true, and the cache saves real work in the meantime. The same long TTL on data that changes hourly serves wrong values all afternoon. [^2][^3] So the diagnostic question is not "is the TTL too long," it is "longer than the data deserves?" Compare the TTL to how often the source actually changes, and adjust so the cache re-reads the source sooner than the data turns false. [^3]
 
 There are enforced bounds that matter on the exam. Session Cache defaults to 5 minutes with a 480 minute (8 hour) maximum, and it clears when the session ends regardless. Org Cache defaults to 1440 minutes (24 hours) with a 2880 minute (48 hour) maximum, and both have a 5 minute minimum. [^3] Every setting you choose sits inside those rails, and the session cache cannot outlive its session. Knowing the ceilings also tells you something practical: a value that needs to be fresher than 5 minutes should probably not be cached at all, because no cache, org or session, refreshes that fast.
+
+![Session Cache and Org Cache answer who can see a stored result differently; the table compares their scope, default TTL, maximum TTL, minimum, and what each should hold.](</diagrams/day-42-t-5-resolve-caching-problems/2-cache-scope-and-ttl-bounds.png>)
 
 ### The scope check: a shared cache handed a private answer
 
@@ -50,6 +54,8 @@ The classic example is a product's price. An Integration Procedure caches a pric
 
 This is why the guidance is that a cache key must cover everything that varies in the result. [^1] If the answer changes when the input changes, the input has to be part of the key, or the cache will conflate the two. The exam question states it plainly: a cached API result does not vary by input and returns wrong data, and the issue is that the cache keys do not distinguish the inputs. Not a TTL that is too short, not caching being disabled, not the endpoint being down. [^4] Each of those wrong answers describes a real problem, and none of them produces this specific symptom of "right answer, wrong request."
 
+![A coarse cache key collapses two requests onto one entry, so a request for product B returns product A's stored price; covering the varying input in the key lets each product resolve separately.](</diagrams/day-42-t-5-resolve-caching-problems/3-coarse-cache-keys.png>)
+
 ### Invalidation: the step people skip
 
 Every stale-data report eventually leads here. TTL is passive: it ages a value out on its own schedule, and until that minute arrives the old copy keeps being served. [^3] Invalidation is active: it removes the value now, so the next request rebuilds it from the source instead of returning the expired copy. When a source data change makes the cache contents wrong immediately, TTL is too slow and invalidation is the fix. [^2][^4]
@@ -57,6 +63,8 @@ Every stale-data report eventually leads here. TTL is passive: it ages a value o
 The exam wants you to treat invalidation as part of the design, not an afterthought. Three mechanisms cover the realistic options. You can clear the cache outright when the source changes, so the stored entry is gone before it can be served. You can rely on a short enough TTL that the cache expires soon after the source update. And you can version the cache keys, so a source change produces a new key and the old entry is never matched again. [^2][^4] The right choice depends on how immediate the freshness requirement is and how expensive a rebuild is. A catalog that changes weekly with a tolerance for day-old data can relax on TTL. Rates that must be current within minutes need an active clear or versioned keys. [^2]
 
 The diagnostic value is equal to the practical one. When users keep reporting stale data and the TTL looks reasonable, the next question is whether anything ever cleared the cache. A missing invalidation step explains reports that look like the data is stuck, because the source updates fire and nothing tells the cache to forget. [^4] On the job, treat invalidation as the default suspect for a persistent stale report, and confirm it is wired to the source change before you touch the TTL.
+
+![TTL ages a value out on its own schedule while invalidation removes it now; the three options are clearing the cache, shortening the TTL, or versioning the keys, chosen by how immediate the freshness need is.](</diagrams/day-42-t-5-resolve-caching-problems/4-invalidation-options.png>)
 
 ## Configuration Walkthrough
 
