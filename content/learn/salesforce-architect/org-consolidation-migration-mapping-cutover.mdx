@@ -1,0 +1,106 @@
+---
+title: "Lesson 47: Org Consolidation and Migration: Salesforce-to-Salesforce Movement, Field Mapping, and Cutover"
+slug: org-consolidation-migration-mapping-cutover
+series: "salesforce-architect"
+lesson: 47
+excerpt: "Consolidating two Salesforce orgs into one is two migrations at once, not one. It is a data migration, moving records between orgs, and a configuration migration, moving objects, fields, picklists, automation, and ownership models back into a single place. The hard parts are rarely the tooling. They are the field mapping decisions, the external-ID strategy that keeps parent and child records linked across staged loads, the merged picklist values, the owner records that must exist before any record can point at them, and a cutover that freezes both sources, loads in dependency order with automation suppressed, reconciles counts and lookups, and only then reopens the org. This lesson defines those terms, works a two-org consolidation end to end, and shows why the dry run that makes cutover night boring is the single most valuable hour of the project."
+date: "September 20, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [Salesforce, Migration, Data Migration, Consolidation, Cutover, Architecture]
+---
+
+# Lesson 47: Org Consolidation and Migration: Salesforce-to-Salesforce Movement, Field Mapping, and Cutover
+
+Lesson 46 made the case for keeping two orgs apart and showed the integration patterns that stitch them while the walls stay up. This lesson runs the decision in the other direction. At some point the cost of the split outlives the reason for it. Two orgs have drifted into duplicate customer records, double licenses, and two automation stacks that do the same work differently. The answer is to consolidate: move the records and the configuration back into a single org, cleanly, without losing data or trust. This is a data migration and a configuration migration in one, and the field mapping and cutover work you do determines whether the company lands in one org or in a messy middle where nobody trusts the numbers.
+
+## Define the terms
+
+- **Org consolidation**: collapsing two or more Salesforce orgs into one, moving both the data and the configuration so there is a single source of truth, license footprint, and governance model afterward.
+- **Data migration**: the controlled movement of records from a source org, database, or spreadsheet into the target org. In a consolidation this means sourcing records from another Salesforce org rather than from an external system, which changes the tooling and the load order.[^2]
+- **Configuration migration**: moving nonsalesforce metadata such as custom objects, fields, picklist values, validation rules, flows, triggers, sharing rules, and page layouts into the target org. Belt and suspenders: the data has nowhere useful to land if the matching fields, objects, and picklist values do not exist first.[^3]
+- **Field mapping**: the document that pairs every source field with a target field, and records what happens to the value in transit. A real mapping has five columns: source field, target field, transformation type, the rule for a missing value, and an input and output example. It is the difference between "source column A equals target field B" and a migration that survives date formats, unit changes, and picklist values that do not exist in the target.[^2]
+- **External ID**: a field in the target org that holds a unique key from the source system. Because it is unique and indexed by Salesforce, it lets you upsert the same record repeatedly without creating duplicates on re-runs, and it lets child records resolve their parent lookup by key instead of by captured Salesforce ID.[^3]
+- **Upsert**: an insert-or-update operation keyed on the external ID. If a record with that external ID exists, Salesforce updates it; if not, it inserts it. This is what makes repeated, recoverable loads possible.[^3]
+- **Load order**: the sequence in which objects must load so that parent records exist before child records can point at them. Users before accounts, accounts before contacts, contacts before cases, products before opportunities.[^3]
+- **Cutover**: the planned, rehearsed moment the production migration actually runs, when source writes are frozen, loads execute in dependency order with automation suppressed, and the org reopens only after reconciliation passes. Every step has an owner, an expected duration from the dry run, and a rollback trigger.[^2]
+- **Dry run**: a full, production-volume rehearsal of the cutover in a sandbox clone, run to surface the lock, limit, and timing failures that only appear at real scale. Its purpose is to make the real cutover boring.[^2]
+
+## The context: what Salesforce-to-Salesforce actually is now
+
+If you have two orgs sharing records through Salesforce-to-Salesforce (S2S), the phrase used to describe a native way to synchronize a set of shared records between orgs. That feature is retiring. Salesforce's own release guidance confirms that S2S is fully retired in the Spring '27 release, with the recommended replacements being Data Cloud One for unified data access across orgs, Partner Cloud for partner data, and MuleSoft for flow-based integration.[^1][^4] The lesson here is not the tool, it is the timing. Any consolidation plan that leans on the classic S2S shared-record model needs to treat that wiring as short-lived, and a consolidation is the natural moment to replace it with one org that holds one authoritative copy instead of two orgs bouncing records at each other.
+
+This matters more than it looks. A data migration between orgs used to lean on S2S as the "easy" path for a small shared object set. That path disappears in Spring '27. The durable answer, and the one this lesson builds toward, is a deliberate export and reload through the bulk data tools with a proper external-ID key, which does not depend on a feature that is going away.[^1][^4]
+
+## Two migrations in one place
+
+The trap in any consolidation is treating it as a data move. It is not. The records land somewhere, but if the target org does not have the matching custom objects, fields, and picklist values, the load fails at best and silently mutates data at worst. So a consolidation runs two tracks on one calendar.
+
+The configuration track runs first. You build or confirm the target org's custom objects and fields for every source object you plan to move. You merge the two picklists. Org A has a Status field with values Active, Inactive, Pending. Org B has Active, Inactive, Paused. The consolidated field must decide whether Paused stays as its own value, maps to Pending, or disappears, and that decision happens before any record loads, because a record carrying a picklist value the field no longer accepts will be rejected or forcibly changed.[^3]
+
+The data track follows. You extract records from both source orgs, transform them through the mapping, and load them into the target in dependency order. Along the way you reconcile the two orgs' shared entities. Org A knows a customer as Acme Corp, org B knows the same company as ACME Corporation. One survives as the record; the other's children must be re-parented through the external ID rather than left orphaned.[^3]
+
+## The external-ID strategy is the whole data plan
+
+The single decision that decides whether a consolidation loads cleanly or fights you the whole way is the external ID. Put a unique key on every object you migrate, holding a source-system key that survives the move. That one field unlocks everything else.
+
+Without it, your only path is the fragile two-pass dance: load parents, capture every new Salesforce ID your target generated, map them back to the source, then load children against that captured map. It works at ten records. It collapses at a million, because one mismatched parent ID orphans a whole subtree and you have no key to re-detach and undo it with.
+
+The disciplined approach is the external ID. You assign every account an external ID with its source key, such as `ACC-10293`. You load the accounts. Then you load the contacts, and instead of capturing the new account ID in a re-map pass, each contact's Account lookup resolves through the parent's external ID. The contact row knows its account by the account's source key, not by a Salesforce 18-character ID you had to carry around after the load. Re-runs become safe: the same external ID upserts rather than duplicating, so a partial load followed by a correction load leaves one account and one set of children, not two.[^3]
+
+A consolidation has the extra wrinkle that both source orgs have records for the same real-world entity. You need a dedup rule in the mapping before you load anything. Combine identifying fields such as name plus phone, or a company registration number if one exists, decide which record becomes the master (the most recently updated, or the most complete), and merge the losing record's children onto the winner through the external ID. This is where 3 to 8 percent true duplicates turn up in a typical customer extract, and it is far cheaper to handle in the mapping workbook than to fight in production.[^3]
+
+## Load order and the people problem
+
+Imagine loading a million accounts and contacts into a fresh target org. Every owner field on every record has to point at a user. If the owner on a migrated record does not exist in the target, the load is blocked or the record lands with a wrong or blank owner. So users load first, mapped from the source org's user list to the target's active users, before any owned record loads. That is the people problem hiding in a data plan, and it is why the load order always starts with users and users' roles and profiles before the first account.
+
+The reason the order is users, then accounts, then contacts and leads, then cases and opportunities, then products, is dependency direction. A child can only store a lookup if the parent exists. Load parents before children or you spend the whole run chasing validation failures on references that do not exist yet. These are not admin niceties; they are the mechanical cost of relationships that must land intact.[^3]
+
+## The cutover is a rehearsal, not an event
+
+Everything before this is rehearsal. The cutover is the production migration, and the reason teams dread it is that they treat the dry run as optional. On a consolidation of any real size, the dry run in a full sandbox matteres because only at production volume do you discover the lock contention on a shared parent, the hourly DML limit you will exceed if a flow stays enabled, or the validation rule that rejects every fifth record. Finding those during the rehearsal means fixing them at leisure. Finding them at 2am on cutover night is how a migration earns its bad reputation.[^2]
+
+A workable cutover sequence looks like this, and it is deliberately boring:
+
+1. Freeze writes to both source orgs. No user edits, no integrations pushing updates, for the whole window.
+2. Extract the final snapshot from each source.
+3. Suppress automation in the target: deactivate the flows and triggers that would otherwise fire on every bulk insert, and bypass the validation and duplicate rules you have agreed to bypass. This is a controlled decision with business sign-off, not a hack.
+4. Load in dependency order against the target's external IDs.
+5. Re-enable automation and recalculate sharing rules and any roll-up summary fields that bulk loading leaves out of date.
+6. Reconcile: row counts per object against the source, field fidelity on a representative sample, relationship integrity (no orphaned children, no missing lookups), and key rollups matched to expected totals.
+7. Open the org to users only when reconciliation passes.
+
+Every one of those steps carries an owner, the expected duration measured in the dry run, and a rollback trigger that names the condition under which you reverse rather than push through. A migration that has been rehearsed end to end is boring on cutover night, and boring is exactly the goal.[^2]
+
+## Worked example: Acme folds two orgs into one
+
+Acme runs Acme-US and Acme-APAC as separate orgs, a split that made sense a decade ago and no longer does. Both hold customer, opportunity, and case data, and the overlap has produced customer records that disagree between the two.
+
+The configuration track first. The architect confirms the target (one of the two orgs, expanded) has the custom objects both sources use, merges the two Status and Region picklists, and deletes the soon-to-retire S2S data-sharing connection rather than carrying it forward. Only then does the data work begin.
+
+For data, the architect assigns an external ID to Account, Contact, and Opportunity in the target, seeded from each source's existing key. The mapping workbook lists every source field, the target field it lands in, the transformation (such as a region-code expansion), and a value for when the source is empty (leave the target unchanged versus clear it). A dedup rule on name plus phone identifies roughly forty duplicate accounts across the two orgs; the more complete record wins, and the other's contacts and opportunities reparent onto the winner by the external ID.
+
+The cutover runs the sequence above. Writes freeze on Friday evening. The dry run a week earlier had already caught that a case-validation rule rejected a chunk of the finest-grained records once automation guardrails came off, so the architect secured approval to bypass that rule during the load and re-enable it after. Counts match at 3am, sharing recalculates, and the org opens Monday with one record per real customer. The company is on one license footprint, one automation stack, and one set of numbers it trusts.
+
+## Try it
+
+1. A consolidation loads a parent object, then loads 500,000 children through a captured Salesforce-ID map. What breaks, and what does an external ID fix instead? *(One mismatch orphans a subtree and there is no key to undo it with. An external ID lets each child resolve its parent by the parent's source key, makes loads repeatable, and makes a mistaken load recoverable.)*[^3]
+
+2. Two orgs both hold "Acme Corp" and "ACME Corporation" as separate accounts, each with its own opportunities. Where does the decision to merge them belong, and what re-parents the losing record's children? *(In the mapping workbook, before any load. A dedup rule picks the master, and the children reparent onto the winner through the external ID.)*[^3]
+
+3. A migrated record's owner field must point at a user in the target. Why does this force the load order to start with users? *(The owner value on every owned record must already exist in the target or the record is blocked or lands mis-owned, so users and their roles load before any owned record.)*[^3]
+
+4. A flow you leave enabled fires on every bulk insert and starts hitting the hourly DML limit halfway through cutover. When should you have found this? *(In the dry run at production volume, where lock contention, DML limits, and validation failures against real data surface. Discovery during the real cutover is the failure the dry run exists to prevent.)*[^2]
+
+5. Your consolidation plan currently leans on Salesforce-to-Salesforce to share a small object set between the two orgs. What architectural fact should change the plan? *(S2S is fully retired in Spring '27, with Data Cloud One, Partner Cloud, and MuleSoft as the recommended replacements, so the shared-record model built on it is short-lived and a consolidation should not carry it forward.)*[^1][^4]
+
+6. A picklist value in source org A does not exist in the target field. What must happen before a record carrying that value loads? *(The mapping decides whether the value stays, maps to an existing value, or disappears, and active picklist compatibility is resolved in the configuration track before any data moves, or the record is rejected or forcibly changed.)*[^3]
+
+## What's next
+
+You have now taken the company from two orgs back to one: the two-tracks model, the external-ID strategy that keeps relationships intact, the load order, and the rehearsed cutover that reopens the org with trustworthy numbers. One of the pressures forcing this migration, not just in consolidation but in every org, is where the data is allowed to live. Lesson 48 is about data residency and compliance: GDPR, data classification, retention, and audit. It picks up exactly where this lesson leaves off, because the field mapping and the residency rules have to be designed together, and the cleanest consolidation in the world fails its compliance review if the data ends up stored where the law says it cannot be.
+
+[^1]: salesforce.com. [Summer '26 Release Highlights for Salesforce Architects](https://salesforce.com/blog/summer-26-release-architect-highlights). Confirms Salesforce-to-Salesforce retires in Spring '27 and names Data Cloud One, Partner Cloud, and MuleSoft as recommended replacements.
+[^2]: help.salesforce.com. [Salesforce Data Migration Best Practices: How to Plan, Execute, and Validate a Data Import or Update](https://help.salesforce.com/s/articleView?id=Best-Practices-for-Loading-Data&language=en_US&type=1).
+[^3]: help.salesforce.com. [Import Related Records with an External ID in Salesforce Data Loader | Salesforce Help](https://help.salesforce.com/s/articleView?id=000383207&language=en_US&type=1).
+[^4]: help.salesforce.com. [Salesforce-to-Salesforce retirement | Salesforce Help](https://help.salesforce.com/s/articleView?id=005103355&type=1).
