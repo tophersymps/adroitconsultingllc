@@ -40,6 +40,8 @@ The configuration track runs first. You build or confirm the target org's custom
 
 The data track follows. You extract records from both source orgs, transform them through the mapping, and load them into the target in dependency order. Along the way you reconcile the two orgs' shared entities. Org A knows a customer as Acme Corp, org B knows the same company as ACME Corporation. One survives as the record; the other's children must be re-parented through the external ID rather than left orphaned.[^3]
 
+![Two migrations run on one calendar: the configuration track (confirm objects and fields, merge the picklists, resolve owners) runs first so the data has somewhere to land, then the data track (extract, transform, load in dependency order, reconcile) moves the records through the mapping.](</diagrams/org-consolidation-migration-mapping-cutover/1-two-tracks.png>)
+
 ## The external-ID strategy is the whole data plan
 
 The single decision that decides whether a consolidation loads cleanly or fights you the whole way is the external ID. Put a unique key on every object you migrate, holding a source-system key that survives the move. That one field unlocks everything else.
@@ -49,6 +51,8 @@ Without it, your only path is the fragile two-pass dance: load parents, capture 
 The disciplined approach is the external ID. You assign every account an external ID with its source key, such as `ACC-10293`. You load the accounts. Then you load the contacts, and instead of capturing the new account ID in a re-map pass, each contact's Account lookup resolves through the parent's external ID. The contact row knows its account by the account's source key, not by a Salesforce 18-character ID you had to carry around after the load. Re-runs become safe: the same external ID upserts rather than duplicating, so a partial load followed by a correction load leaves one account and one set of children, not two.[^3]
 
 A consolidation has the extra wrinkle that both source orgs have records for the same real-world entity. You need a dedup rule in the mapping before you load anything. Combine identifying fields such as name plus phone, or a company registration number if one exists, decide which record becomes the master (the most recently updated, or the most complete), and merge the losing record's children onto the winner through the external ID. This is where 3 to 8 percent true duplicates turn up in a typical customer extract, and it is far cheaper to handle in the mapping workbook than to fight in production.[^3]
+
+![The external ID decides whether the load stays clean: the captured-ID remap path works at ten records but collapses at a million because one mismatched parent ID orphans a subtree, while the external-ID upsert path resolves each child's parent by its source key and makes re-runs safe.](</diagrams/org-consolidation-migration-mapping-cutover/2-external-id.png>)
 
 ## Load order and the people problem
 
@@ -71,6 +75,8 @@ A workable cutover sequence looks like this, and it is deliberately boring:
 7. Open the org to users only when reconciliation passes.
 
 Every one of those steps carries an owner, the expected duration measured in the dry run, and a rollback trigger that names the condition under which you reverse rather than push through. A migration that has been rehearsed end to end is boring on cutover night, and boring is exactly the goal.[^2]
+
+![The rehearsed cutover sequence freezes writes to both sources, extracts a final snapshot, suppresses automation in the target, loads in dependency order against external IDs, re-enables automation and recalculates sharing, reconciles counts and relationships, and opens the org to users only when reconciliation passes.](</diagrams/org-consolidation-migration-mapping-cutover/3-cutover-sequence.png>)
 
 ## Worked example: Acme folds two orgs into one
 
