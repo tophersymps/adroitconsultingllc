@@ -1,0 +1,112 @@
+---
+title: "Data Architect DM-5A: Data Skew: Record Locking, Sharing Recalculation Issues, Excessive Child-to-Parent Relationships"
+slug: day-09-dm-5a-data-skew-record-locking-sharing-recalculation-iss
+series: salesforce-data-architect
+lesson: 9
+excerpt: "A data model can be perfectly normalized and still collapse under real load when the data is skewed. This lesson defines the three shapes of data skew the exam tests, ownership skew, lookup skew, and the account skew they both produce, and explains why each turns into record-lock timeouts and sharing recalculation bottlenecks. It walks the mechanisms: why updating a parent with millions of children serializes on a lock, why reparenting a heavily-referenced record fans out cascades, and why a roll-up summary can make a skewed relationship worse instead of better. The mitigation play is concrete: distribute ownership across queues and integration users, shard a hot parent into intermediate parent records, run Bulk API in serial mode with larger batches, avoid reparenting high-volume children, and defer sharing calculation during bulk loads. Day 9 of the Platform Data Architect exam prep, requirement dm-5a."
+date: "September 20, 2026"
+author: "Adroit Consulting"
+readTime: "17 min read"
+tags: [Salesforce, Data Architecture, Data Skew, Certification]
+---
+
+Lesson 8 gave you the storage side of scale. Big Objects exist for the data that outgrows a standard object. This lesson is about a different failure: data that is small enough to live in an object but distributed so unevenly that the object becomes unusable. That uneven distribution is data skew, and it is one of the most tested scenario topics in the Platform Data Architect exam because it is the most common real-world reason a perfectly reasonable data model starts throwing lock and timeout errors.
+
+Requirement dm-5a asks you to look at a customer scenario, identify and explain data skew, and recommend ways to avoid it. [^1] The exam names three problems to recognize, ownership skew, lookup skew, and record-locking or sharding problems, and it lists the techniques to prevent them: record locking, sharing calculation issues, and excessive child-to-parent relationships. [^1][^7] To answer a skew scenario correctly you need the mechanism underneath the symptom. A "unable to obtain row lock" error in a load log is not random flakiness. It is often the direct evidence that one parent record or one owner has become a hotspot. This lesson builds from that mechanism outward.
+
+## Deep Dive
+
+### What data skew actually is
+
+Data skew is an uneven distribution of data, or of processing load, across an object, a parent record, or an owner. [^5][^6] The platform is a multitenant database that shares time and lock resources across all tenants. [^2] When one user owns a huge share of records, or one parent has hundreds of thousands of children, every operation that touches that hotspot pays a cost proportional to the whole skewed set, not to the single record you edited. [^6][^7]
+
+The harm shows up in the same three places every time. Record locks: concurrent updates to records that share a hot parent serialize and time out. [^3][^6] Sharing recalculation: when ownership, roles, or territories change, the platform recalculates which users can see which records, and a skewed owner forces that recalculation to churn through an enormous record set. [^5][^8] And roll-up or cascade fan-out: an update to a parent with many children touches every one of those children through the relationship. [^6][^7] The exam wants you to spot these symptoms in a scenario and name the skew that produced them.
+
+### Ownership skew: too many records in one owner's hands
+
+Ownership skew is when a single user, or a small set of users and queues, owns a disproportionately large number of records on an object. [^5][^7] The canonical case is an integration user that owns every record a bulk load inserts, because nobody bothered to assign ownership as part of the load. [^5][^8] A "System User" or a queue with hundreds of thousands of records is the classic signature. [^8]
+
+Why it breaks sharing: in a private or controlled sharing model, Salesforce recalculates sharing when ownership, role, or territory changes. [^5][^7] Those recalculations run per owner. [^7] The more records one owner holds, the more sharing rows that one owner's change touches, and the longer the recalculation runs. [^5][^7][^8] The result is a bottleneck that degrades even when there is no single "hot" parent in the picture. A load that rotates every new record to one integration user creates a quiet ownership-skew time bomb: nothing fails today, but the first role change or user deactivation on that owner triggers a sharing recalculation that locks the org for hours. [^5][^8]
+
+The exam trap here is thinking ownership skew only matters when a parent is hot. [^5] It does not. You can have perfectly distributed child-to-parent relationships and still suffer ownership skew, because the bottleneck is the sharing recalculation that ownership changes trigger, not the parent-child tree. [^5][^7] Every scenario that hands you a single integration user or queue receiving all records should make you say "ownership skew."
+
+### Lookup skew: too many children pointing at one parent
+
+Lookup skew is the mirror image. A very large number of records on one object point to a single parent through a lookup field. [^5][^6] The classic case is millions of contacts all linked to one Account. [^5] The parent becomes a hotspot: any update to the parent, any operation that must lock the parent, and any bulk operation on its children serializes against that one record, producing lock contention and timeouts. [^3][^5][^6]
+
+The platform reports this as a row-lock failure. When a bulk load inserts or updates children that reference the same parent, the transaction locks the parent to maintain integrity, and parallel batches contending for that same lock wait until the lock frees or fail with "unable to obtain row lock." [^3][^6][^9] The load that looks like it should parallelize is actually bottlenecked on a single lock, which is why "increase the batch size and parallelize harder" is the wrong answer to a lookup-skew problem. More parallelism means more batches fighting for the same parent lock. [^3]
+
+### Account data skew: the canonical exam scenario
+
+Account data skew is what the two skew types produce when they combine on the Account object. One account accumulates millions of related records, so updates to that account, its sharing, or bulk operations on its children hit record-lock timeouts and slow sharing recalculations. [^5][^6] This is the single most common skew scenario on the exam, so learn to recognize its shape: a B2C or self-service org that puts every customer under one generic Account, or an org with a few massive accounts and thousands of tiny ones. [^7]
+
+The reason Account is the canonical example is that it is the pivot object for both skews at once. The one account owns millions of children (lookup skew toward a single parent) and is frequently owned by a single integration user or queue (ownership skew). [^5][^7] The two skews compound. When you see "millions of contacts and opportunities under one Account, and loads keep timing out," you are looking at account skew, and the mitigation is the sharding play in the configuration walkthrough below.
+
+### Record locking and parent-child serialization
+
+The lock mechanism is what turns skew from a data problem into a failure. When you update a child and its parent's roll-up summary, or update a parent that has many children, the platform locks the parent for the duration of the transaction. [^3][^6] Concurrent updates to children of the same parent therefore serialize: each waits for the parent lock to free before its transaction can complete. [^3][^6] On a skewed parent with enough concurrent writers, those waits exceed the lock timeout and the transaction fails with a row-lock error. [^3][^6][^9]
+
+The Bulk API does not fail immediately on a lock. It waits a few seconds for the lock to free, and if the lock is not released, the record is marked failed. [^3] If more than 100 records in a batch hit lock problems, the remainder of the batch is returned to the queue. [^3] That behavior is useful to know, because it explains why a skewed load produces a distinctive failure pattern: a few hundred records fail, the rest of the batch requeues, and the job crawls while retrying the same hotspot. [^3]
+
+A roll-up summary field makes this worse rather than better on a skewed relationship. [^5][^6] The summary field is a denormalized aggregate on the parent, so every child update that feeds the roll-up forces an update and a lock on the parent to keep the summary current. [^6] On a relationship where one parent has millions of children, that means every single child write acquires the parent lock. [^6] The "safe, useful" roll-up is anything but safe on a skewed relationship; sometimes a lookup plus a Flow that computes the aggregate is the better trade. [^5][^6]
+
+### Excessive child-to-parent relationships
+
+The last mechanism is structural. Very deep or very wide relationship chains make cascade operations and sharing recalculation fan out. [^6][^7] Reparenting a heavily-referenced record is the most dangerous case: moving a parent that has millions of children to a new owner or a new parent makes the platform touch every one of those children, recalculation sharing across the whole set at once. [^6][^7] That is why the exam warns explicitly against reparenting high-volume child records. [^1] If reparenting is unavoidable, it must be batched and scheduled off-peak so the lock contention spreads instead of concentrating. [^5]
+
+The general rule to hold: a relationship is not just a line on a diagram. Every relationship carries a lock and sharing cost per operating unit, and a relationship that concentrates thousands or millions of units under one node concentrates that cost. [^6][^7] Designing to distribute children across parents is not optional polish, it is the prevention that keeps the mechanism from ever becoming a hotspot.
+
+## Configuration Walkthrough
+
+These six steps turn the skew diagnosis into a working mitigation, in the order the exam expects you to apply them. They mirror the configuration moves Salesforce recommends for large, skewed loads. [^2][^4]
+
+1. **Set Organization-Wide Defaults to Private and control when sharing recalculates.** Start in Setup, then Sharing Settings, and confirm the OWD for the skewed object is Private where the scenario warrants it. [^5] For large loads, defer sharing calculation before loading and resume it during a maintenance window afterward. [^2][^4] Deferring sharing calculation suspends group membership and sharing rule calculation while you run the load, then runs the single recalculation at a time you choose, which avoids re-running the expensive sharing calculation for every batched insert. [^2] This is the single largest speedup available for a large load into a private-sharing object. [^2][^4]
+
+2. **Distribute record ownership across queues and integration users.** Never default bulk-loaded records to one "data" owner or System User. [^5][^8] Use queues, or assign ownership by business logic during the load so no single user or queue accumulates a disproportionate share. [^7] If records are already concentrated, reassign them in batches of roughly 2,000 or fewer during off-peak hours to avoid triggering mass sharing recalculations, and defer sharing calculation around the reassignment. [^5]
+
+3. **Shard skewed lookups with intermediate parent records.** For the hot parent, introduce intermediate parents, divisions, sub-accounts, or region segments, and distribute the children across them so no single parent holds the whole set. [^5][^7] This breaks the lock hotspot: concurrent writes now target different parents instead of fighting for one lock. [^5][^7] This is the standard fix for lookup and account skew. [^5]
+
+4. **Run the affected object's load through Bulk API in serial mode with larger batch sizes.** Serial mode processes batches one at a time, which minimizes lock contention at the cost of throughput, and it is the correct choice when parallel mode repeatedly times out on parent locks and you cannot reorganize the batches. [^3][^4] Group child records so that records referencing the same parent land in the same batch, which greatly reduces the risk of record-locking errors. [^4] Use larger batches so the job runs fewer of them, since more batches means more chances to hit the lock and more requests in the async queue. [^3]
+
+5. **Avoid reparenting high-volume child records.** If a parent has hundreds of thousands or millions of children, do not reparent it as a normal operation. [^1][^7] When reparenting is genuinely required, batch the move and schedule it off-peak with sharing deferred, so the lock and cascade load spreads instead of concentrating on the target parent. [^5]
+
+6. **Reconsider whether a relationship needs to be a roll-up at all.** On a skewed relationship, a roll-up summary field forces a parent lock on every child update and worsens contention. [^6] Where you only need an aggregate for reporting, a lookup plus a Flow that computes the aggregate can avoid the parent lock entirely. [^5][^6] The architect's job is to weigh the convenience of the roll-up against the lock behavior it imposes on the data distribution you actually have.
+
+## Exam Traps
+
+**Trap one: ignoring ownership skew because there is no hot parent.** Ownership skew degrades sharing recalculation even with no single parent holding millions of children. [^5][^7] A scenario that mentions one integration user or queue owning all records is an ownership-skew scenario, and distribution across owners is the fix. Do not wait for a hotspot to call it skew. [^5][^8]
+
+**Trap two: reparenting a heavily-referenced record.** Reparenting a parent with many children fans out locking and cascade operations across the entire child set at once. [^6][^7] The mitigation is not "do it during quiet hours and hope," it is "avoid it, and when unavoidable, batch it, defer sharing, and schedule it off-peak." [^5]
+
+**Trap three: assuming a roll-up summary is always safe.** A roll-up summary on a skewed relationship worsens parent lock contention because every child update locks the parent to refresh the summary. [^6] Sometimes a lookup plus a Flow is the better trade-off than a roll-up. [^5][^6] The exam tests the judgment call: the roll-up is convenient, but on the skewed distribution it is the wrong tool.
+
+## Try It
+
+Work these on paper before you think about Setup. First, take the contacts scenario: a bulk load of millions of contacts fails with row-lock timeouts, and every contact points at one Account through a lookup. [^5] Name the skew, ownership, lookup, or account, and defend what it is: lookup skew on a hot parent, since the children concentrate against a single parent. [^5][^6] Then recommend the most direct fix, sharding the relationship so children distribute across multiple intermediate parents, and explain why each rejected answer fails: raising the batch size and parallelizing harder increases contention on the same lock, changing the lookup to a master-detail makes locking worse because MD adds parent-level integrity and ownership, and setting the Account OWD to public does nothing to the lock behavior. [^3][^5]
+
+Second, work the ownership scenario. A private-sharing org rotates every new Opportunity to one integration user, and role changes take hours because sharing recalculation never finishes. [^5][^8] Identify ownership skew, and walk the mitigation: distribute ownership across queues or by business logic, defer sharing calculation around the load, and reassign the concentrated records in small off-peak batches. [^5][^7]
+
+Third, test the trade-off. Your org has one Account with two million Cases and wants a summary of open Cases on the Account. [^6] Explain why adding a roll-up summary field is risky on this relationship, because every Case update would lock the Account to refresh the summary, and prescribe the alternative: a lookup plus a scheduled Flow that computes and stores the aggregate. [^5][^6] Being able to state that trade cleanly is the difference between a correct mitigation and a plausible one.
+
+## What's Next
+
+You can now identify ownership skew, lookup skew, and account skew from a customer scenario, explain the record-locking and sharing-recalculation mechanisms behind them, and lay out the concrete mitigation play: distribute ownership, shard hot parents, run Bulk API in serial mode with grouping by parent, avoid reparenting high-volume children, and defer sharing calculation during bulk loads. [^3][^5] Lesson 10 turns the diagnosis into design: it covers data-skew scenarios, avoidance, and the design patterns that prevent skew from the model up, including polymorphic relationships, junction objects, and denormalization. [^1]
+
+## Related Requirements
+
+- Lesson 8 of 42 (dm-4b): Big Object scenarios: when to use, when not
+- Lesson 10 of 42 (dm-5b): Data-skew scenarios: avoidance and design patterns (polymorphic, junction, denormalization)
+- Lesson 29 of 42 (lv-1a): LDV fundamentals: skinny tables, indexing, selective filters
+- Lesson 41 of 42 (dm-5c): Data skew: extreme cases and advanced mitigation patterns
+
+## References
+
+[^1]: Salesforce Certified Platform Data Architect Exam Guide (Data Modeling objectives, including data skew and requirements dm-5a, dm-5b). [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005298972&language=en_US&type=1)
+[^2]: Best Practices for Deployments with Large Data Volumes, Salesforce (Defer Sharing Calculation: suspending and resuming sharing rule and group membership calculation, maintenance window). [resources.docs.salesforce.com](https://resources.docs.salesforce.com/latest/latest/en-us/sfdc/pdf/salesforce_large_data_volumes_bp.pdf)
+[^3]: General Guidelines for Data Loads, Salesforce Bulk API Developer Guide (parallel vs serial concurrency, lock contention, lock wait and batch requeue behavior, grouping by parent). [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api-asynch/guide/asynch-api-planning-guidelines.html)
+[^4]: Extreme Force.com Data Loading, Part 4: Sequencing Load Operations (defer sharing calculation, group children by ParentId, serial mode for avoiding lock contention). [developer.salesforce.com](https://developer.salesforce.com/blogs/2013/06/extreme-force-com-data-loading-part-4-sequencing-load-operations)
+[^5]: SalesForce Developers, Data Skew: Remediation Strategies (the three skew types, ownership skew detection, reassign in batches of 2,000 or fewer, defer sharing calculation). [sfdcdevelopers.com](https://sfdcdevelopers.com/2026/05/11/salesforce-data-skew-remediation-strategies)
+[^6]: SalesForce Developers, What is Data Skew in Salesforce? Explanation, Examples and Mitigation (lookup skew, roll-up and sharing recalculation fan-out, row-lock errors, detection SOQL). [sfdcdevelopers.com](https://sfdcdevelopers.com/2025/10/09/what-is-data-skew-in-salesforce-explanation-examples-mitigation)
+[^7]: DGT27, Salesforce Data Skew Optimization Guide (account, ownership, and lookup skew; distributing ownership; reducing sharing complexity). [dgt27.com](https://dgt27.com/blog/salesforce-data-skew)
+[^8]: SalesForce Ben, Data Skew: What to Do When Prevention Is Already Too Late (integration users and queues as ownership-skew drivers, sharing recalculation lock-ups). [salesforceben.com](https://salesforceben.com/salesforce-data-skew-what-to-do-when-prevention-is-already-too-late)
+[^9]: Salesforce StackExchange, How to prevent UNABLE_TO_LOCK_ROW via the REST API? (concurrent transactions contending for a row lock). [salesforce.stackexchange.com](https://salesforce.stackexchange.com/questions/105649/how-to-prevent-unable-to-lock-row-via-the-rest-api/105652)
