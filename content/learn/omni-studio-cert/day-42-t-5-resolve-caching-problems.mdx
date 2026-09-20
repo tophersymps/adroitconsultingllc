@@ -1,0 +1,113 @@
+---
+title: "OmniStudio T-5: Resolve Caching Problems"
+slug: day-42-t-5-resolve-caching-problems
+series: omni-studio-cert
+lesson: 42
+excerpt: "Diagnose and fix caching problems the way the exam grades: split the symptom first. Stale data, old values served after the source changed, points at a TTL that outlived the data's volatility or an invalidation that never ran. Wrong data, one user's values or one product's price shown to someone else, points at cache scope and cache keys. This lesson teaches the three checks that resolve almost every field report: confirm the symptom is staleness, review the TTL against how fast the data changes, review scope and keys, then implement invalidation on source change. The compact rule to remember: stale means TTL or invalidation, wrong means keys or scope."
+date: "September 20, 2026"
+author: "Adroit Consulting"
+readTime: "20 min read"
+tags: [OmniStudio, Troubleshooting]
+---
+
+A user opens the record and the price on screen is three days old. Another user opens the same page and sees somebody else's account balance. Both are cache complaints, and people who lump them together fix neither. The first is a freshness problem: the cache is serving a correct answer that stopped being true. The second is an identity problem: the cache served the right answer to the wrong request. Different symptoms, different dials, different exam answers. The whole of requirement T-5 is learning to tell them apart and then turning the one control that fits. [^1][^2]
+
+Lesson 26 (IP-5) taught the design side: how to configure caching in an Integration Procedure to make it fast, where Org Cache and Session Cache differ, and what Time To Live does. This lesson is the troubleshooting half. It starts where a production system does, with a user complaint and a cache that is already running. You do not redesign the cache here. You figure out which of three things is wrong, TTL, scope, or keys, and you fix that one thing. [^1][^2][^3]
+
+The distinction that organizes all of it is a two-way split. If the data is stale, the cache kept running past the point where its contents turned false, and the fix lives in TTL and invalidation. If the data is wrong, the cache returned a stored result that was never meant for this request, and the fix lives in keys and scope. [^3] Confusing the two sends you rebuilding components that were never broken. Getting the split right points you at a single property in the Procedure Configuration. That asymmetry is why this lesson drills the split before anything else.
+
+## Deep Dive
+
+### The signature symptom: stale data
+
+Stale data is the classic caching failure, and it is the first thing the exam wants you to recognize on sight. The symptom is always shaped the same way: the source changed, and users kept seeing the old value. An Integration Procedure's reference data was updated in Salesforce, or an external catalog changed upstream, and the page still shows last week's numbers. [^1]
+
+Nothing about the procedure is broken. The query still runs, the mapping still maps, the response still returns. The cache simply has not expired, so the stored copy is being handed back as if it were current. [^1][^4] That is what makes caching problems sneaky. A normal bug produces an error you can read. A stale cache produces data that looks legitimate, because it used to be correct, and it stays that way until either the cache ages out or something explicitly clears it. [^4]
+
+The quiz question for this symptom is nearly always the same framing: users see stale data after a reference value changed, and the likely cause is caching, a stale cache whose TTL has not expired, so the fix is to invalidate it or adjust the TTL. Not a FlexCard state, not a missing permission set, not a timezone. [^1][^4] Those distractor answers describe real OmniStudio problems that produce nothing like this symptom, which is why the exam uses them to catch people who guess instead of distinguishing. The moment you hear "old data after the source changed," you should be in cache-freshness territory before you finish the sentence.
+
+### The TTL check: a freshness dial set for the wrong volatility
+
+Every cache has a Time To Live, the property that decides how long a stored result is allowed to sit before it is treated as stale and recomputed. In an Integration Procedure the value is Time To Live In Minutes, configured at the procedure level for top-level data, or per block for a Cache Block. [^3][^5] The number you set is a contract with the data: it declares how long a copy may stay valid without being refreshed. When that contract is longer than the data's actual rate of change, users get stale results. [^3]
+
+The fix is not always to shorten the value. It is to match the value to volatility. Reference data that changes monthly can ride a long TTL safely, because even a day-old copy is still true, and the cache saves real work in the meantime. The same long TTL on data that changes hourly serves wrong values all afternoon. [^2][^3] So the diagnostic question is not "is the TTL too long," it is "longer than the data deserves?" Compare the TTL to how often the source actually changes, and adjust so the cache re-reads the source sooner than the data turns false. [^3]
+
+There are enforced bounds that matter on the exam. Session Cache defaults to 5 minutes with a 480 minute (8 hour) maximum, and it clears when the session ends regardless. Org Cache defaults to 1440 minutes (24 hours) with a 2880 minute (48 hour) maximum, and both have a 5 minute minimum. [^3] Every setting you choose sits inside those rails, and the session cache cannot outlive its session. Knowing the ceilings also tells you something practical: a value that needs to be fresher than 5 minutes should probably not be cached at all, because no cache, org or session, refreshes that fast.
+
+### The scope check: a shared cache handed a private answer
+
+The second failure class is a cache that returns data across the wrong boundary. The symptom sounds different from staleness: one user sees another user's records, or a value that should be private to one person shows up for everyone. [^2]
+
+The root cause is scope. OmniStudio offers two cache types, and they answer one question differently: who is allowed to see a stored result? Org Cache is shared across all users in the org, so a result placed there can be returned to any user who requests the same thing. [^1][^2] Session Cache is per user and per session, private to the user who created it. [^1][^2] The exam trap is putting user-specific data into a shared cache. The moment a value that depends on the caller, a private balance, an account number, a quote assembled from a user's entitlements, lands in Org Cache, every other user becomes a potential recipient. [^2]
+
+Salesforce is explicit that Org Cache should hold only non-sensitive, non-user-specific data. [^2] The rule of thumb to internalize is: if the correct answer varies by who is asking, the cache must be scoped per-user, which means Session Cache, or the data should not be cached. [^1][^2] The exam question on this is nearly canonical: a shared cache serves one user's data to another, and the fix is that user-specific data belongs in a per-user scope. Not a theme, not a license, not a browser. [^2] Scope is the whole answer, because the leak is not a permissions bug so much as a cache that was given a boundary it was never designed to enforce.
+
+### The key check: a cache that cannot tell two requests apart
+
+The third failure is subtlest, because the cache behaves perfectly and still returns garbage. A cached result is stored under a key, and a later request gets that result only if its key matches. If the key ignores something the result depends on, two different requests collapse onto the same entry and the second one gets the first one's data. [^1][^4]
+
+The classic example is a product's price. An Integration Procedure caches a price lookup keyed only to the product family, or keyed to nothing at all. A request for product A populates the cache, and a request for product B, whose key looks identical to the cache, gets product A's stored price. [^4] From the user's side it looks like the procedure is returning the wrong record. It is not. It is returning the right record for a different input, because the cache keys did not capture what makes the inputs different. [^1][^4]
+
+This is why the guidance is that a cache key must cover everything that varies in the result. [^1] If the answer changes when the input changes, the input has to be part of the key, or the cache will conflate the two. The exam question states it plainly: a cached API result does not vary by input and returns wrong data, and the issue is that the cache keys do not distinguish the inputs. Not a TTL that is too short, not caching being disabled, not the endpoint being down. [^4] Each of those wrong answers describes a real problem, and none of them produces this specific symptom of "right answer, wrong request."
+
+### Invalidation: the step people skip
+
+Every stale-data report eventually leads here. TTL is passive: it ages a value out on its own schedule, and until that minute arrives the old copy keeps being served. [^3] Invalidation is active: it removes the value now, so the next request rebuilds it from the source instead of returning the expired copy. When a source data change makes the cache contents wrong immediately, TTL is too slow and invalidation is the fix. [^2][^4]
+
+The exam wants you to treat invalidation as part of the design, not an afterthought. Three mechanisms cover the realistic options. You can clear the cache outright when the source changes, so the stored entry is gone before it can be served. You can rely on a short enough TTL that the cache expires soon after the source update. And you can version the cache keys, so a source change produces a new key and the old entry is never matched again. [^2][^4] The right choice depends on how immediate the freshness requirement is and how expensive a rebuild is. A catalog that changes weekly with a tolerance for day-old data can relax on TTL. Rates that must be current within minutes need an active clear or versioned keys. [^2]
+
+The diagnostic value is equal to the practical one. When users keep reporting stale data and the TTL looks reasonable, the next question is whether anything ever cleared the cache. A missing invalidation step explains reports that look like the data is stuck, because the source updates fire and nothing tells the cache to forget. [^4] On the job, treat invalidation as the default suspect for a persistent stale report, and confirm it is wired to the source change before you touch the TTL.
+
+## Configuration Walkthrough
+
+Work a real report end to end. Customers say a quote service shows last week's shipping rates, and one account manager swears she saw another salesperson's quote on it. Two complaints, probably two causes. Run the resolution as a sequence, confirming the symptom before changing a single property. [^1][^3]
+
+1. **Confirm the symptom is staleness, then classify it as stale or wrong.** Ask what the user actually saw. A user who saw an old but consistent version of the data, last week's rate for the right route, is describing staleness, which points at TTL and invalidation. A user who saw a value that belongs to a different request, one person's quote or one product's price, is describing wrong data, which points at keys and scope. [^1] Do not skip this step. It decides everything that follows, and jumping past it is how people rebuild a healthy procedure.
+
+2. **Review the TTL against the data's volatility, and adjust it.** Open the Procedure Configuration in the Integration Procedure Designer and read the Time To Live In Minutes for the top-level cache and for any Cache Block. [^3][^5] Compare each value to how often the source actually changes. Shipping rates that change monthly do not need a 5 minute TTL, and rates that change hourly cannot survive a 24 hour one. [^3] For the stale-rate symptom, if the TTL is longer than the source's cadence, shorten it to a value comfortably under the real change interval, within the enforced floor and ceiling. [^3]
+
+3. **Review the scope and the keys together.** Ask two questions in the same pass. Is the data user-specific? If the correct answer varies by caller, confirm the cache is Session Cache, per-user, and never Org Cache, because a shared scope with private data is the cross-user leak. [^1][^2] And does the key cover the input? Confirm that every input the result depends on, a route, a product, a customer, is part of what the cache keys on, so two different inputs never land on one stored result. [^1][^4] For the account-manager symptom, the leak is scope: a quote that includes caller-specific data has no business in a shared cache, so the first fix is moving it to Session Cache or turning the cache off for that value. [^2]
+
+4. **Implement invalidation on source change.** With the TTL and scope corrected, make the cache forget when the source updates, instead of waiting for an aging value to expire. [^2][^4] Wire the source-change event, the rate update or the quote revision, to clear the affected cache. If an immediate refresh is required, use an explicit clear or versioned keys so the old entry is orphaned the moment the source changes; if a slight delay is acceptable, a short TTL may be enough. [^2][^4] Then confirm the invalidation actually fires by changing the source and watching the next request come back fresh instead of stale. [^6]
+
+5. **Re-test with caching deliberately toggled.** Activate the version and exercise the cache in Preview, using the caching options in the Options JSON, `ignoreCache` and `resetCache`, to prove the fix. [^6][^4] Run once to populate the cache, confirm a second run with the same input returns the cached value, then change the input and confirm the result differs, which proves the keys distinguish inputs. [^6][^4] Finally change the source data, run again, and confirm the fresh value appears, which proves the invalidation or the corrected TTL took effect. [^6] A resolution is only real when you have watched each symptom disappear under the same input it appeared under.
+
+## Exam Traps
+
+- **Rebuilding components when the cache is the problem.** The most expensive way to fail T-5. The procedure's configuration, its mappings, its formulas, are all healthy, so rebuilding them changes nothing. The stale result comes from the cache holding an old copy, and the fix is TTL, invalidation, or scope, not a rewire of the procedure. [^1][^4] When the report is stale or wrong data and you feel the urge to rebuild, stop and check the cache first.
+
+- **Shared cache with user-specific data.** Org Cache is shared across all users, so any user-specific or access-restricted result placed there is one request away from being served to the wrong person. [^2] The exam gives this as a leak symptom, and the correct answer is that user-specific values need a per-user scope, meaning Session Cache, or no cache. [^1][^2] Reading it as a permissions problem sends you down the wrong chain.
+
+- **Keys that do not distinguish inputs.** A cache key that ignores what varies returns a stored result for the wrong request. [^1][^4] One product's price shown for another, or a lookup that answers with whatever got cached first, is a keys problem, not a TTL problem. The cache is doing exactly what it was told; it was keyed too coarsely to tell the requests apart. Keys must cover everything that varies in the result. [^4]
+
+## Exam Tip
+
+Compress all of T-5 into one sentence: stale means TTL or invalidation, wrong means keys or scope. [^1][^3] Split the symptom first. Old data after the source changed is stale, and it is fixed by shortening the TTL to match volatility or by invalidating the cache when the source updates. [^3][^4] Data that belongs to a different request, one user's values or one product's price, is wrong, and it is fixed by checking that the scope is per-user for user-specific data and that the cache keys cover every input that varies. [^1][^2][^4] Run every report through that split before changing anything, and the correct dial reveals itself.
+
+## Try It
+
+Build a cached Integration Procedure in a sandbox and make it fail on purpose, because a cache problem you have reproduced is one you will recognize. Set up a procedure with a Data Mapper Extract that pulls a record by an ID input, cache its top-level response with Org Cache and a long TTL, and activate it. [^3][^6]
+
+First reproduce staleness. Change the source record, then re-run the procedure with the same input and watch it return the old value, because the TTL has not expired. [^6] Fix it the TTL way and the invalidation way in turn: shorten the Time To Live so the cache re-reads sooner, and clear the cache, through the Developer Console or via a versioned key, so the next request rebuilds from the source. [^2][^4] Confirm the fresh value appears after each fix.
+
+Then reproduce the wrong-data class. Change the input ID to a second record and run again. If the cache returns the first record's data, the key is ignoring the input that varies it. [^4] Confirm the cause, then confirm the fix by making the input part of the key so each ID resolves to its own stored result. [^1][^4] Finally, if you have any user-specific value in the flow, test it with Session Cache versus Org Cache and watch the shared entry leak across callers. [^2] After those three reproductions, you can look at a cache report, name it stale or wrong, and reach for the single control that fits, which is the whole of T-5.
+
+## What's Next
+
+You can now classify a cache report as stale or wrong, adjust a TTL to the data's volatility, move user-specific values out of a shared scope, confirm cache keys cover the inputs, and wire invalidation to source changes. [^1][^2][^3][^4] Lesson 43, Resolve Permissions and Access Issues (T-6), stays in the Troubleshooting and Debugging domain and trades cache boundaries for access boundaries. It covers why a user can do one thing but not another, walking the chain from licensing through permission sets to CRUD, field-level security, and sharing, and it teaches how to tell a license problem from a permissions problem from a data-policy problem before you change any of them. [^2]
+
+## Related Requirements
+
+- FlexCard Best Practices, lesson 15 of 46 (FC-9)
+- Caching in Integration Procedures, lesson 26 of 46 (IP-5)
+- Resolve Integration Procedure Execution Errors, lesson 41 of 46 (T-4)
+- Resolve Permissions and Access Issues, lesson 43 of 46 (T-6)
+
+## References
+
+[^1]: [Improve Performance by Using Caching, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_cache_for_dataraptors_and_integration_procedures_54751.htm&type=5)
+[^2]: [Cache for OmniStudio Integration Procedures, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_cache_for_dataraptors_and_integration_procedures_1.htm&type=5)
+[^3]: [Configure Top-Level Caching for an Integration Procedure, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_configure_top_level_caching_for_an_integration_procedure_54929.htm&language=en_US&type=5)
+[^4]: [Cache for Top-Level Integration Procedure Data, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_cache_for_top_level_integration_procedure_data_54841.htm&language=en_US&type=5)
+[^5]: [Enhance Performance by Using Cache Blocks, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_enhance_performance_using_cache_blocks_48810.htm&language=en_US&type=5)
+[^6]: [Create a Top-Level Caching Example, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_create_a_top_level_caching_example_54974.htm&language=en_US&type=5)
