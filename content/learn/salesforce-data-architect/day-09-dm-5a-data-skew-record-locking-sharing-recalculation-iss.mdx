@@ -42,6 +42,8 @@ Account data skew is what the two skew types produce when they combine on the Ac
 
 The reason Account is the canonical example is that it is the pivot object for both skews at once. The one account owns millions of children (lookup skew toward a single parent) and is frequently owned by a single integration user or queue (ownership skew). [^5][^7] The two skews compound. When you see "millions of contacts and opportunities under one Account, and loads keep timing out," you are looking at account skew, and the mitigation is the sharding play in the configuration walkthrough below.
 
+![Ownership skew concentrates records under one owner, lookup skew points many children at one parent, and account skew combines both on a single Account, which is the canonical exam scenario.](</diagrams/day-09-dm-5a-data-skew-record-locking-sharing-recalculation-iss/1-three-shapes-of-data-skew.png>)
+
 ### Record locking and parent-child serialization
 
 The lock mechanism is what turns skew from a data problem into a failure. When you update a child and its parent's roll-up summary, or update a parent that has many children, the platform locks the parent for the duration of the transaction. [^3][^6] Concurrent updates to children of the same parent therefore serialize: each waits for the parent lock to free before its transaction can complete. [^3][^6] On a skewed parent with enough concurrent writers, those waits exceed the lock timeout and the transaction fails with a row-lock error. [^3][^6][^9]
@@ -49,6 +51,8 @@ The lock mechanism is what turns skew from a data problem into a failure. When y
 The Bulk API does not fail immediately on a lock. It waits a few seconds for the lock to free, and if the lock is not released, the record is marked failed. [^3] If more than 100 records in a batch hit lock problems, the remainder of the batch is returned to the queue. [^3] That behavior is useful to know, because it explains why a skewed load produces a distinctive failure pattern: a few hundred records fail, the rest of the batch requeues, and the job crawls while retrying the same hotspot. [^3]
 
 A roll-up summary field makes this worse rather than better on a skewed relationship. [^5][^6] The summary field is a denormalized aggregate on the parent, so every child update that feeds the roll-up forces an update and a lock on the parent to keep the summary current. [^6] On a relationship where one parent has millions of children, that means every single child write acquires the parent lock. [^6] The "safe, useful" roll-up is anything but safe on a skewed relationship; sometimes a lookup plus a Flow that computes the aggregate is the better trade. [^5][^6]
+
+![Concurrent updates to children of a skewed parent all queue on one parent lock, and when the waits exceed the lock timeout the transaction fails with a row-lock error; a roll-up summary and Bulk API retries both make the contention worse.](</diagrams/day-09-dm-5a-data-skew-record-locking-sharing-recalculation-iss/2-parent-lock-serialization.png>)
 
 ### Excessive child-to-parent relationships
 
@@ -59,6 +63,8 @@ The general rule to hold: a relationship is not just a line on a diagram. Every 
 ## Configuration Walkthrough
 
 These six steps turn the skew diagnosis into a working mitigation, in the order the exam expects you to apply them. They mirror the configuration moves Salesforce recommends for large, skewed loads. [^2][^4]
+
+![The six-step mitigation play: set OWD to Private and defer sharing calculation, distribute ownership, shard hot parents with intermediates, run Bulk API serial with larger batches, avoid reparenting high-volume children, and reconsider the roll-up.](</diagrams/day-09-dm-5a-data-skew-record-locking-sharing-recalculation-iss/3-mitigation-play.png>)
 
 1. **Set Organization-Wide Defaults to Private and control when sharing recalculates.** Start in Setup, then Sharing Settings, and confirm the OWD for the skewed object is Private where the scenario warrants it. [^5] For large loads, defer sharing calculation before loading and resume it during a maintenance window afterward. [^2][^4] Deferring sharing calculation suspends group membership and sharing rule calculation while you run the load, then runs the single recalculation at a time you choose, which avoids re-running the expensive sharing calculation for every batched insert. [^2] This is the single largest speedup available for a large load into a private-sharing object. [^2][^4]
 
