@@ -66,6 +66,7 @@ export const articleAudio: ArticleAudio[] = [
   { slug: "multi-agent-failure-structural-2026", voice: "af_heart", storagePath: "blog/multi-agent-failure-structural-2026/af_heart.mp3", timingsStoragePath: "blog/multi-agent-failure-structural-2026/af_heart.timing.json" },
   { slug: "multi-agent-orchestration-production-lessons", voice: "af_heart", storagePath: "blog/multi-agent-orchestration-production-lessons/af_heart.mp3", timingsStoragePath: "blog/multi-agent-orchestration-production-lessons/af_heart.timing.json" },
   { slug: "nextjs-16-3-instant-navigations", voice: "af_heart", storagePath: "blog/nextjs-16-3-instant-navigations/af_heart.mp3", timingsStoragePath: "blog/nextjs-16-3-instant-navigations/af_heart.timing.json" },
+  { slug: "nextjs-16-cache-lifecycle-2026", voice: "af_heart", storagePath: "blog/nextjs-16-cache-lifecycle-2026/af_heart.mp3", timingsStoragePath: "blog/nextjs-16-cache-lifecycle-2026/af_heart.timing.json" },
   { slug: "opentofu-vs-terraform-2026", voice: "af_heart", storagePath: "blog/opentofu-vs-terraform-2026/af_heart.mp3", timingsStoragePath: "blog/opentofu-vs-terraform-2026/af_heart.timing.json" },
   { slug: "pmi-pulse-complexity-2026", voice: "af_heart", storagePath: "blog/pmi-pulse-complexity-2026/af_heart.mp3", timingsStoragePath: "blog/pmi-pulse-complexity-2026/af_heart.timing.json" },
   { slug: "production-rag-retrieval-quality-2026", voice: "af_heart", storagePath: "blog/production-rag-retrieval-quality-2026/af_heart.mp3", timingsStoragePath: "blog/production-rag-retrieval-quality-2026/af_heart.timing.json" },
