@@ -18,6 +18,8 @@ Here is the distinction that separates the two lessons. A single eval run is a p
 
 The one idea to carry out: **an eval program is reproducibility plus a decision. The harness makes runs comparable, the suites tell you what you are measuring, and the gate acts on the delta.** Most teams build some of these and skip the rest. They run evals occasionally but never pin the judge, then wonder why scores drift for no reason. Or they build a beautiful suite and never wire it to stop a merge. All three pieces have to be present, because each one only bites when the other two hold it in place.
 
+![The eval program as three connected boxes: the harness makes runs comparable, the suites say what a score means, and the gate turns a delta into a stop, hold, or go decision](</diagrams/building-an-eval-program-harness-regression-suites-quality-gates/1-eval-program-three-parts.png>)
+
 ## Define the terms
 
 **An eval program** is the whole discipline: the harness that runs evaluations, the suites that organize them into measurable questions, and the gates that act on the results in the delivery pipeline. It is the difference between an engineer running a few evals before a release and a system that watches quality continuously and blocks a bad change by default.
@@ -42,6 +44,8 @@ The practical culprit is almost always the judge model. Platform providers updat
 
 Then pin everything else that could vary. The application model version, and its temperature, so you are not measuring sampling noise. The dataset version, so you know exactly which commit of the golden examples a run scored against. A random seed for example ordering, because some judge models show position effects on long batches, and fixing the seed keeps runs reproducible. The batch size and concurrency settings, because rate limiting and retries that differ between runs change which examples time out and distort the aggregate. [^3]
 
+![A table of what a harness pins, the judge snapshot, judge prompt, model version and temperature, dataset version, random seed, and batch settings, each with the reason it keeps scores comparable](</diagrams/building-an-eval-program-harness-regression-suites-quality-gates/2-pinned-harness.png>)
+
 The payoff of pinning all of this is that you can diagnose a regression. Log the metadata with every run: dataset commit, judge prompt hash, model version, application commit. Without it you know quality dropped but not what changed. With it you can point at the exact model swap, prompt edit, or dataset change that moved the number. [^3] Galtea calls this out as the difference between "quality dropped" and "I know what changed and when." [^3]
 
 ## Capability suites and regression suites: two buckets, one program
@@ -55,6 +59,8 @@ Regression evals answer "does the agent still handle all the tasks it used to?" 
 The relationship between the two is the part people miss. A capability eval that the agent has mastered does not stay a capability eval forever. Once an eval hits a persistently high pass rate, it graduates into the regression suite, where it stops measuring "can we do this at all" and starts measuring "can we still do this reliably." [^1] [^2] This is the self-healing structure that keeps the program honest: the regression suite grows as you climb hills, so nothing you have already proven can quietly regress underneath you.
 
 If you skip the separation, you get one of two failure modes. If you only chase capability evals, you ship regressions because you are always pushing forward and never guarding what works. If you only defend a regression suite, you stop improving because every new eval is protecting old behavior and nothing is pushing you up the hill. [^2] The two buckets have to exist together.
+
+![Side by side comparison of capability evals, which ask what the agent can do and start at a low pass rate, and regression evals, which protect shipped behavior at near-100 percent; a mastered eval graduates from capability into the regression suite](</diagrams/building-an-eval-program-harness-regression-suites-quality-gates/3-two-buckets.png>)
 
 ## Sourcing the regression suite: from traces to tasks
 
@@ -77,6 +83,8 @@ Version the datasets alongside the code. Braintrust makes the point directly: te
 The harness produces trustworthy numbers, and the suites tell you what they mean. None of that matters unless the number does something. A quality gate is where the eval program becomes operational.
 
 The canonical flow, from the LangChain checklist, runs a staged pipeline. A code or prompt change triggers the run. Offline evals run: unit tests, integration tests, and evaluation against curated datasets using cheap, fast graders. If those pass, a preview deployment goes up. Online evals then run against the preview with live data and, by preference, LLM-as-judge graders. Production gets the change only if all gates pass; otherwise the failing traces route to annotation queues and the team gets alerted. [^2]
+
+![The staged quality gate flow from a code or prompt change through offline evals with cheap fast graders, a preview deploy, and online evals with LLM-as-judge graders to production; any failing gate routes traces to annotation and alerts the team](</diagrams/building-an-eval-program-harness-regression-suites-quality-gates/4-quality-gate-pipeline.png>)
 
 The cost discipline is the part that keeps the gate alive. Use cheap, code-based graders in CI on every commit, and reserve the expensive LLM-as-judge evaluations for preview and production. [^2] A gate that costs real money on every commit gets switched off the first month. Wire the cheap layers to run everywhere and the expensive ones to run only when they matter.
 
