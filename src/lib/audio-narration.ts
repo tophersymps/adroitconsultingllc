@@ -269,7 +269,12 @@ export function mdxToNarration(
         }
       }
 
-      if (text && !/^sources$/i.test(text)) {
+      if (text && level > 1 && !/^sources$/i.test(text)) {
+        // Emit a section cue for h2+ headings. The h1 is the document title
+        // (already shown on the page), so speaking it is redundant — and it
+        // has no matching block in the player's scroll-sync extraction, so an
+        // h1 cue segment would mis-align and jump the page past the opening
+        // paragraphs (t_<lesson-followalong>). Skip it.
         out.push(`Section: ${text}.`);
         learningEmitted = lesson;
       }
@@ -280,7 +285,6 @@ export function mdxToNarration(
       }
       continue;
     }
-
     // Inside a skipped interactive section: drop paragraphs, diagrams,
     // footnote definitions, and deeper headings until the boundary above.
     if (skipLevel > 0) continue;

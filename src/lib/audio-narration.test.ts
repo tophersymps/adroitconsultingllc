@@ -89,6 +89,23 @@ describe("mdxToNarration", () => {
     expect(narration).toContain("LangChain found this in 2026.");
   });
 
+  it("does NOT speak the h1 document title (redundant with the page title, and it has no scroll-sync block)", () => {
+    // Lessons carry `# Lesson N: Title` as the document title. The page already
+    // shows it, so speaking it is redundant — and the player's scroll-sync
+    // block extraction excludes h1, so an h1 cue segment would mis-align and
+    // jump the page past the opening paragraphs. The h1 must be silent.
+    const mdx = `# Lesson 1: What AI Actually Is
+Every department is getting the same pitch right now.
+## What AI actually is
+Strip away the hype.`;
+    const narration = mdxToNarration(mdx, { lesson: true });
+    expect(narration).not.toContain("Section: Lesson 1: What AI Actually Is.");
+    // the first spoken line is the opening paragraph, not the title
+    expect(narration.startsWith("Every department is getting the same pitch right now.")).toBe(true);
+    // h2 section cues are still emitted
+    expect(narration).toContain("Section: What AI actually is.");
+  });
+
   it("applies a custom leadIn wrapper for diagrams", () => {
     const mdx = "![An architecture diagram](</diagrams/a.png>)";
     const narration = mdxToNarration(mdx, {
@@ -96,7 +113,6 @@ describe("mdxToNarration", () => {
     });
     expect(narration).toBe("Figure spoken: An architecture diagram.");
   });
-
   it("does not emit a double period when the alt already ends in a period", () => {
     // Real lesson diagram alts end in a sentence-ending period; the default
     // lead-in appends its own `.`, which previously produced a double stop
