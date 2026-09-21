@@ -2,6 +2,28 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "nextjs-16-cache-lifecycle-2026",
+    "title": "Next.js 16 Caching: Three Numbers, stale, revalidate, expire",
+    "excerpt": "Next.js 16's Cache Components replaced the implicit fetch/revalidate era with three explicit timing values on every cached unit.",
+    "category": "React & Web Dev",
+    "categoryColor": "react",
+    "categoryGradient": "from-emerald to-emerald-dark",
+    "date": "September 21, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "11 min read",
+    "featured": false,
+    "tags": [
+      "Next.js",
+      "React",
+      "Caching",
+      "Data Fetching",
+      "Web Development"
+    ],
+    "bannerImage": "/banners/nextjs-16-cache-lifecycle-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "salesforce-error-recovery-2026",
     "title": "Salesforce Fails at 2am: The Recovery Layer Nobody Builds",
     "excerpt": "Most Salesforce failures are silent. What happens when automation breaks, and who notices? Fault paths, transaction control, and the recovery chain.",
