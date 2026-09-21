@@ -808,9 +808,25 @@ export const learnSeries: LearningSeries[] = [
           "Workflow"
         ],
         "status": "published"
+      },
+      {
+        "slug": "auditing-how-you-actually-work-finding-the-repetitive-20-percent",
+        "title": "Lesson 2: Auditing How You Actually Work: Finding the Repetitive 20 Percent",
+        "series": "ai-power-user",
+        "lesson": 2,
+        "excerpt": "Lesson 1 told you the payoff lives in the repetitive slice of your work. This lesson gives you the method to find that slice honestly: a time audit that measures where your week actually goes, a way to separate the tasks worth automating from the ones that are not, and a concrete worked example of one person running the audit. It ends with a try-it prompt that produces your own list of the repetitive 20 percent, ready for Lesson 3.",
+        "date": "September 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow"
+        ],
+        "status": "published"
       }
     ],
-    "totalLessons": 1,
+    "totalLessons": 2,
     "curriculumLessons": 30
   },
   {
@@ -4290,6 +4306,22 @@ export const learnLessons: LearnLesson[] = [
     "date": "September 21, 2026",
     "author": "Adroit Consulting",
     "readTime": "9 min read",
+    "tags": [
+      "LLMs",
+      "AI Power User",
+      "Workflow"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "auditing-how-you-actually-work-finding-the-repetitive-20-percent",
+    "title": "Lesson 2: Auditing How You Actually Work: Finding the Repetitive 20 Percent",
+    "series": "ai-power-user",
+    "lesson": 2,
+    "excerpt": "Lesson 1 told you the payoff lives in the repetitive slice of your work. This lesson gives you the method to find that slice honestly: a time audit that measures where your week actually goes, a way to separate the tasks worth automating from the ones that are not, and a concrete worked example of one person running the audit. It ends with a try-it prompt that produces your own list of the repetitive 20 percent, ready for Lesson 3.",
+    "date": "September 21, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "10 min read",
     "tags": [
       "LLMs",
       "AI Power User",
