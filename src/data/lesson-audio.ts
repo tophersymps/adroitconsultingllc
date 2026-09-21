@@ -98,4 +98,6 @@ export const lessonAudio: LessonAudio[] = [
   { series: "hermes-consultant", slug: "mcp-servers-and-integrations", voice: "af_heart", storagePath: "learn/hermes-consultant/mcp-servers-and-integrations/af_heart.mp3", timingsStoragePath: "learn/hermes-consultant/mcp-servers-and-integrations/af_heart.timing.json" },
   { series: "hermes-consultant", slug: "monitoring-and-observability", voice: "af_heart", storagePath: "learn/hermes-consultant/monitoring-and-observability/af_heart.mp3", timingsStoragePath: "learn/hermes-consultant/monitoring-and-observability/af_heart.timing.json" },
   { series: "hermes-consultant", slug: "packaging-reusable-skills", voice: "af_heart", storagePath: "learn/hermes-consultant/packaging-reusable-skills/af_heart.mp3", timingsStoragePath: "learn/hermes-consultant/packaging-reusable-skills/af_heart.timing.json" },
+  { series: "hermes-consultant", slug: "quality-gates-and-review", voice: "af_heart", storagePath: "learn/hermes-consultant/quality-gates-and-review/af_heart.mp3", timingsStoragePath: "learn/hermes-consultant/quality-gates-and-review/af_heart.timing.json" },
+  { series: "hermes-consultant", slug: "security-and-credentials", voice: "af_heart", storagePath: "learn/hermes-consultant/security-and-credentials/af_heart.mp3", timingsStoragePath: "learn/hermes-consultant/security-and-credentials/af_heart.timing.json" },
 ];
