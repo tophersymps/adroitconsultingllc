@@ -50,6 +50,13 @@ describe("AudioPlayer", () => {
     expect(document.querySelector("audio")).toBeNull();
   });
 
+  it("renders 'Listen to this lesson' when the player is used on a Learn lesson", () => {
+    authState = { user: null, isLoading: false };
+    render(<AudioPlayer slug={SLUG} hasAudio label="lesson" />);
+
+    expect(screen.getByText(/Listen to this lesson/i)).toBeInTheDocument();
+  });
+
   it("renders the native player with src=/api/audio/<slug> for a signed-in reader", () => {
     authState = {
       user: { id: "u1", email: "a@b.c", isAdmin: false },
