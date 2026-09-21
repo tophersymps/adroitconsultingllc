@@ -1,0 +1,134 @@
+---
+title: "Data Architect DM-5B: Data-Skew Scenarios: Avoidance and Design Patterns (Polymorphic, Junction, Denormalization)"
+slug: day-10-dm-5b-data-skew-scenarios-avoidance-and-design-patterns
+series: salesforce-data-architect
+lesson: 10
+excerpt: "Lesson 9 showed you how skewed data turns a healthy org into a wall of row-lock timeouts. This lesson moves from diagnosis to design: the durable fixes that prevent skew from the model up. You will learn four structural patterns that spread reference concentration instead of tolerating it. Polymorphic relationships let one field point at several object types and fan references across many parents. Junction objects flatten many-to-many relationships laterally so no single parent collects the children. Intermediate (shard) parents insert a segment object between a hot parent and its children so no one record owns millions. Denormalization copies the shared hot value onto the child so frequent paths stop touching the parent at all. The lesson also covers what does not fix skew: deferring sharing and running off-peak shrink the blast radius of a load but leave the concentration in place, and a roll-up summary on a skewed relationship makes parent locking worse. A five-step configuration walkthrough, three exam traps, and a try-it exercise round out requirement dm-5b. Day 10 of the Platform Data Architect exam prep."
+date: "September 21, 2026"
+author: "Adroit Consulting"
+readTime: "15 min read"
+tags: [Salesforce, Data Architecture, Data Skew, Certification]
+---
+
+Lesson 9 taught you to recognize data skew when you see it: ownership skew, lookup skew, and the account skew they combine into, each with its record-locking and sharing-recalculation symptoms. [^8] Diagnosis is only half the job. This lesson is the design half. Requirement dm-5b asks you to look at a customer scenario and recommend the approaches and design patterns that avoid data skew in the first place: polymorphic relationships, junction objects, and denormalization, and to explain why each one helps. [^1]
+
+The core idea to hold across every pattern in this lesson is that the durable fix for skew changes the shape of the model, not the schedule of the load. A skewed relationship is a single record or a single owner holding an outsized share of references. [^3][^8] Every durable pattern here spreads that concentration across more parents, more objects, or more copies of the value. Keep that lens and the four patterns below stop being a list to memorize and become four ways to answer one question: how do I stop any single record from being the only reason everyone waits on one lock?
+
+## Deep Dive
+
+### Polymorphic relationships: spreading references across multiple parents
+
+A polymorphic relationship is a relationship field that can point to more than one object type. [^4] Instead of one child field that can only reference, say, Account, a polymorphic lookup holds a reference that may resolve to any of several objects. The standard, most recognized example is activity: the Task and Event objects carry two polymorphic fields. WhoId references a person and can point to a Contact or a Lead, while WhatId references the record the activity is about and can point to an Account, an Opportunity, a Case, a Campaign, a Contract, or a custom object. [^4][^5]
+
+Why does a polymorphic relationship help with data skew? The key is dispersion of reference load. Think about a service org that logs every interaction against a customer record. If every Task points at the Account through a single non-polymorphic AccountId field, then a customer with millions of touchpoints concentrates every one of those Tasks against one Account record, and that Account becomes a lookup-skew hotspot. [^3] Now give that activity collection a polymorphic WhatId field instead. A Task that is about a specific Case points at the Case, a Task about a renewal points at the Opportunity, and only tasks that are genuinely about the account at large point at the Account. [^5] The references that used to pile onto one parent now fan out across however many objects a real interaction touches.
+
+That is the pattern: a polymorphic field does not remove the load, it redistributes it across the set of objects the field can point at, so no single parent carries all of it. [^1] The measure of success is not fewer activities, it is a lower count of children per parent, which keeps each parent under the region where record-lock and sharing recalculation costs become severe. [^2]
+
+The trade-off is real and the exam wants you to name it. Polymorphic relationships cost you query and reporting simplicity. Standard reports and SOQL cannot always traverse a polymorphic field as freely as a fixed lookup, and when you need fields from the referenced record you may have to branch with TYPEOF to read fields that differ by object type. [^4] You are trading away some query convenience to buy back lock health on a hot parent. That is typical of every pattern in this lesson: each one adds a little complexity or lookup depth, and your job as the architect is to spend the smallest amount of that complexity that removes the concentration. [^1]
+
+You should also know that the platform does not let you build a custom polymorphic lookup as freely as the standard WhatId. The WhatId/WhoId shape is provided on Task and Event, and where you need a custom relationship that fans across several custom objects you model it deliberately. [^1][^4] On the exam, when a scenario describes an activity log that is drowning a single parent, the expected recognition is that activity is natively polymorphic and should be used to spread those references, not forced onto one lookup.
+
+### Junction objects: distributing many-to-many laterally
+
+A junction object is the Salesforce pattern for a many-to-many relationship. It is a child object that holds two relationships, one to each of the two objects being linked. [^6] The classic setup uses two master-detail relationships, so the junction record inherits the security and cascade behavior of its parents and enables roll-up summaries on them. [^6] An enrollment object between Students and Courses is the textbook example: a student takes many courses and a course has many students, and each Enrollment row links one student to one course and can carry its own data such as grade, semester, and status. [^6]
+
+Junction objects are a skew answer because they distribute relationships laterally instead of piling children onto one parent. [^1] Here is the failure they prevent. Suppose you model a customer to product relationship as a naive one-to-many: a child record on the customer with a lookup to the product. With millions of customers, that single product record quickly becomes the parent that every customer row references, and you have engineered a lookup-skew hotspot on the most-referenced product. A junction object fixes that by standing the relationship on its side. Instead of one hot product parent owning millions of customer children, a junction record is created for each customer-product pair, so no single parent on either side accumulates the whole set. [^6]
+
+The junction is the modeling answer when a naive one-to-many would create a hot parent. [^1][^7] It does not move the skew so much as spread it: every new link becomes its own row that distributes writes across many parents rather than concentrating them as children of one record.
+
+The exam trap embedded here is subtler than it looks and it is the second part of the deep-dive. A junction object only helps if both of the parents joined are reasonable fan-out points. [^1] If you build a junction where one side of the join is itself a single ultra-high-volume parent, you have just relocated the skew rather than removed it. Imagine a junction between an Account and a Product line where every account links to a handful of products but all sales flow through one central "Miscellaneous" account. That central account becomes the hot parent of the junction, and the junction has not solved anything, it has moved the concentration one object over. The correct design check is to confirm that neither end of the junction is an extreme fan-out point before you commit to the pattern. [^1][^6]
+
+Junction objects cost you a record per relationship, and every junction record is a physical row that must be maintained and linked. That is the complexity you trade: a many-to-many with a million links is a million junction rows. But for the skew scenario, a million thin rows distributed across many parents beats one parent holding a million children, because the latter serializes every write on a single lock and the former does not. [^3]
+
+### The intermediate parent (shard parent) pattern
+
+Where a junction object works for many-to-many, the shard parent pattern is the answer when you have a genuine one-to-many where one parent naturally owns a very large set of children. The canonical case is an Account that is the parent of millions of Contacts, Cases, or Notes. [^2][^3] You cannot turn that into a many-to-many, because each child really does belong to that one account. What you can do is insert an intermediate object between the hot parent and its children so the children distribute across many intermediate records instead of one.
+
+The pattern: create an intermediate parent object, sometimes called a shard, a segment, or a division, and give it a lookup to the real parent. The children then hang off the intermediate object instead of off the real parent. [^8] Concretely, instead of one Account directly owning 5 million Notes, you create region or division records under the Account, perhaps by date, territory, or sub-unit, and each Note points at a division rather than at the Account. No single division now holds more than a fraction of the Notes, so no single record is the hotspot, and concurrent writes to Notes target different divisions and therefore different locks. [^3][^8]
+
+This is the direct answer to the most heavily tested scenario in this domain, the one where a single parent with millions of children locks on every update. [^1][^2] The shard removes the single hot parent, which is precisely why the first quiz scenario points at it: an Account with 5 million related Notes that locks on any update is best fixed by introducing intermediate parent records so the Notes distribute across many parents. [^8]
+
+Two cautions attach to the shard pattern. First, an intermediate parent adds a level of lookup depth and a new relationship to maintain, which is the complexity you accepted in exchange for the fix. [^1] Second, the shard split has to carry business meaning or at least a stable partition, because you do not want to reparent millions of children every time a division changes. Choose the shard axis for something stable such as region or record type, and document it. [^1][^8]
+
+### Denormalization: carrying the hot value on the child
+
+Denormalization is the deliberate copying of a value that would otherwise live on one parent onto the child records, or onto a formula that computes it from the child, so that frequent hot paths no longer need to touch the parent at all. [^7] It is usually described as a reporting convenience, and it is, but in a skew context it is also a locking mitigation.
+
+The mechanism works like this. If a shared value, say a region or a segment, lives only on a parent record and every child operation needs it, then every child operation must resolve the parent lookup, and any write that locks both child and parent serializes against the parent. [^7] Denormalize that value: copy region onto the child, or derive it in a formula field from data the child already has, and the child becomes self-contained on hot paths. Frequent reads and writes stop acquiring the parent lock because the value is already there. [^1][^7]
+
+The exam scenario for denormalization is narrower and worth stating plainly. When a shared value would otherwise sit on one over-referenced parent, copying it onto the children removes the need for the parent lookup on hot paths and eases locking. [^1] That is the exact content of the quiz question on denormalization: it mitigates skew not by encrypting records, not by archiving them into a Big Object, and not by increasing the fan-out, but by carrying the value on the child so the hot parent lookup and its lock disappear from the frequent path. [^7]
+
+The trade-off is data consistency. A denormalized copy can drift out of sync when the parent value changes, so the copy must be managed automatically rather than by hand, typically through a formula or a flow or scheduled job that keeps it fresh. [^7] You are trading a little storage and a consistency obligation for a large reduction in parent lock traffic. On a skewed relationship that trade is often the right one, because the parent lock was the thing making the org slow.
+
+### What changes the shape, and what only shrinks the blast radius
+
+The four patterns above, polymorphic, junction, shard parent, and denormalization, share one property: they change the shape of the model so the concentration stops existing. [^1] Two other mitigations from Lesson 9, deferring sharing and operating off-peak, do something fundamentally different. They reduce the blast radius of a load, the number of locks and recalculations that happen at once, but they do not change the underlying concentration. [^1][^8][^9]
+
+This distinction is a favorite exam trap. Deferring sharing calculation suspends the sharing recalculation during a bulk load and runs it once in a maintenance window, which avoids re-running the expensive sharing calculation for every batch. [^9] Running a load off-peak spreads the lock contention over a quieter period. Both are legitimate and useful during a big load. Neither removes the hot parent or the single overloaded owner. [^1] The lock is still there tomorrow when someone touches that parent during the day; you only moved when the contention is paid. [^1][^8]
+
+The rule to carry: defer and schedule are operational first aid, not model fixes. The durable fix is to change the shape, and the architect selects the least complex pattern that removes the concentration and documents the trade-off. [^1] You should be able to say, for a given scenario, which pattern fixes the shape and what complexity it adds, and to distinguish that forever-fix from the temporary comfort of running the next load at 2 a.m. [^1]
+
+### Avoiding the features that amplify skew
+
+Beyond the four shape patterns, requirement dm-5b expects you to know which existing features make skew worse so you avoid deploying them on a skewed relationship.
+
+Roll-up summary fields are the first. A roll-up summary computes an aggregate on the parent from its children, which means every child update locks the parent to keep the summary current. [^3] On a relationship where one parent has a huge child count, that turns every child write into a parent lock and amplifies the very contention you are trying to remove. [^3] The correct move is to replace a roll-up summary on a skewed relationship with a scheduled aggregate, computed by Flow, Apex, or an Async SOQL summary, and written to a denormalized field on the parent. [^1][^8] The scheduled aggregate gives you the same total without forcing the parent lock on every child transaction.
+
+Ownership skew avoidance is the second. A single user or queue should never own tens of millions of records, because sharing recalculation churn on that one owner becomes a bottleneck. [^2][^8] On bulk loads, route records to queues or to multiple integration users, and rotate owners, so no one owner accumulates the set. [^1][^8][^9] Ownership skew can exist with no hot parent at all, so it needs its own mitigation independent of the parent-child patterns. [^8]
+
+## Configuration Walkthrough
+
+These five steps put the patterns into Setup in the order the exam expects you to reason about them. They mirror the configuration moves Salesforce recommends for large, skewed loads. [^8][^9]
+
+1. **Create a custom polymorphic lookup to fan references across parents.** Where the platform permits a relationship field that can reference multiple parent object types, configure the relationship field to allow those multiple parent types, and route child records at their natural owner object rather than dumping every reference onto one parent. [^1][^4] For activity-style data, use the standard WhatId/WhoId shape so each Task or Event points at the record it is actually about (the Account, Case, Opportunity, or Contact) instead of all of them collapsing onto a single customer parent. [^4][^5]
+
+2. **Model many-to-many as a junction object with two master-detail relationships.** Create the junction object and add one master-detail relationship to each of the two joined objects. [^6] Before you commit, verify that neither side of the junction is itself an extreme fan-out point, because a junction that still hangs off a single ultra-high-volume parent just moves the skew. [^1][^6] Store any relationship-specific data, such as a status or a date, directly on the junction row. [^6]
+
+3. **Insert an intermediate division or segment object to shard a hot one-to-many.** For a parent that owns millions of children, add an intermediate object between the parent and the children, give the children a lookup to the intermediate instead of to the real parent, and partition the children across intermediate records by a stable axis such as region or record type. [^8] Confirm the split brings each intermediate parent's child count back under the region where lock contention becomes severe. [^2][^8]
+
+4. **Replace a roll-up summary on a skewed relationship with a scheduled aggregate.** Remove the roll-up summary field that forces parent locks on every child write, and add a denormalized aggregate field on the parent instead. Populate it with a scheduled Flow, an Apex batch, or an Async SOQL summary that recomputes the total on a cadence you control rather than on every child transaction. [^1][^3][^8]
+
+5. **Distribute ownership and defer sharing on bulk loads.** When you bulk load, route records to queues or to several integration users and rotate owners so no single owner accumulates the set, and defer sharing calculation around the load, running the single recalculation in a maintenance window. [^1][^8][^9] Remember the distinction: this step reduces the blast radius of the load, and it is necessary, but it is not the durable shape fix, which is steps one through four. [^1]
+
+## Exam Traps
+
+**Trap one: keeping a roll-up summary on a massively skewed master-detail relationship.** A roll-up summary on a skewed relationship locks the hot parent on every child update and amplifies contention. [^3] Replacing it with a scheduled aggregate written to a denormalized field delivers the same number without the per-write parent lock. [^1][^8] Do not mistake the convenient roll-up for a safe one on a skewed distribution.
+
+**Trap two: building a junction object but leaving one side as a single ultra-high-volume parent.** A junction only spreads skew when both parents are reasonable fan-out points. [^1] If you join a hot parent to a junction, every relationship still piles onto that one record and you have relocated the concentration, not removed it. Check both ends of the junction before you treat the pattern as a fix. [^6]
+
+**Trap three: believing deferring sharing fixes skew.** Deferring sharing calculation and operating off-peak reduce the impact of a load, but they do not change the model's structural concentration. [^1][^8] The hot parent and the overloaded owner are still there afterward. The durable fix changes the shape through a polymorphic relationship, a junction, an intermediate parent, or denormalization, and the architect must say which one and what it costs. [^1]
+
+## Try It
+
+Work these on paper before you reach for Setup.
+
+First, the classic: one Account holds 5 million related Notes, and any update to that Account locks and times out. [^2][^8] Name the skew, lookup skew on a single hot parent, then recommend the most direct fix. Shard the relationship by inserting intermediate parent records so the Notes distribute across many parents instead of one, and explain why each rejected answer fails: a roll-up summary (A) and converting to master-detail (C) both worsen locking, and Big Objects (D) cannot participate in the relationship, so none of them remove the concentration that sharding does. [^1][^3][^8]
+
+Second, work the two-pattern question. Which two designs help avoid data skew? A polymorphic relationship that fans references across multiple parents, and a junction object that distributes many-to-many relationships. [^1] Be ready to say why the others fail: a single queue owning all integration-loaded records creates ownership skew, and a roll-up summary on the most-referenced parent worsens lock contention. [^1][^3][^8]
+
+Third, test the denormalization trade. Your org has one shared segment value living on a parent, and every child operation resolves that parent lookup and pays the lock. [^7] Explain why denormalization mitigates the skew: copying the value onto the child removes the need for the hot parent lookup on frequent paths and eases locking, because the value is already on the child. [^1][^7] It does not encrypt records, archive them to a Big Object, or increase the fan-out; it carries the value on the child. [^7] Then name the cost of that choice, the duplication that must be kept in sync automatically, so the interviewer sees you understand the trade and not just the trick. [^7]
+
+## What's Next
+
+You can now take a data-skew scenario and pick the durable design fix: spread references with polymorphic relationships, flatten many-to-many with a junction object, shard a hot one-to-many with an intermediate parent, and denormalize the shared value onto the child so hot paths stop touching the parent. You can also say which mitigations, deferring sharing and off-peak operation, only shrink the blast radius without fixing the shape, and you can replace a skewed roll-up with a scheduled aggregate. [^1][^3][^8]
+
+Lesson 11 turns from data distribution to master data management: it covers MDM styles, including registry, consolidation, co-existence, and centralized master data, and how to choose and apply each one.
+
+## Related Requirements
+
+- Lesson 9 of 42 (dm-5a): Data skew: record locking, sharing recalculation, and excessive child-to-parent relationships
+- Lesson 11 of 42 (md-1a): MDM styles: registry, consolidation, co-existence, centralized
+- Lesson 29 of 42 (lv-1a): LDV fundamentals: skinny tables, indexing, selective filters
+- Lesson 41 of 42 (dm-5c): Data skew: extreme cases and advanced mitigation patterns
+
+## References
+
+[^1]: Salesforce Certified Platform Data Architect Exam Guide (Data Modeling/Database Design objectives, requirement dm-5b: recommend polymorphic relationships, junction objects, and denormalization to avoid data skew, and explain why each helps). [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005298972&language=en_US&type=1)
+[^2]: Trailhead, Optimize Large Data Volume & Avoid Data Skew (the threshold where child-per-parent concentration becomes problematic; ownership skew; account skew; plan enough parents to keep child counts manageable). [trailhead.salesforce.com](https://trailhead.salesforce.com/content/learn/modules/large-data-volumes/design-your-data-model)
+[^3]: DGT27, Salesforce Data Skew Optimization Guide (lookup, account, and ownership skew; distributed parents; roll-up and lock contention; reparenting and sharding). [dgt27.com](https://dgt27.com/blog/salesforce-data-skew)
+[^4]: Salesforce SOQL and SOSL Reference, "Understanding Relationship Fields and Polymorphic Fields" (a polymorphic field can reference more than one object type; WhoId/WhatId on activity; TYPEOF for per-type fields). [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.soql_sosl.meta/soql_sosl/sforce_api_calls_soql_relationships_and_polymorphic_keys.htm)
+[^5]: DESelect, WhoId and WhatId in Salesforce: Clear Definitions, Examples and SOQL Usage (WhoId points to a Contact or Lead; WhatId points to Account, Opportunity, Case, Campaign, Contract, or custom objects). [deselect.com](https://deselect.com/blog/whoid-and-whatid-in-salesforce-clear-definitions-examples-and-soql-usage)
+[^6]: SFDC Developers, Salesforce Junction Object: Many-to-Many Relationship Guide (two master-detail fields; junction stores relationship data; duplicate-record guard; watch one parent holding thousands of junction links). [sfdcdevelopers.com](https://sfdcdevelopers.com/2025/11/20/salesforce-junction-object-guide)
+[^7]: SalesforceCodex, Avoid Overuse of Lookups & Master-Detail in Salesforce (denormalize high-usage attributes onto the child object; junction objects for many-to-many; scheduled jobs for pre-aggregation; avoid master-detail on very high-volume child objects). [salesforcecodex.com](https://salesforcecodex.com/salesforce/the-hidden-risks-of-overusing-lookups-in-salesforce)
+[^8]: SFDC Developers, Salesforce Data Skew: Remediation Strategies (reparent and shard large parents into intermediate parents; distribute ownership across queues and integration users; defer sharing calculation; thresholds where skew becomes critical). [sfdcdevelopers.com](https://sfdcdevelopers.com/2026/05/11/salesforce-data-skew-remediation-strategies)
+[^9]: Best Practices for Deployments with Large Data Volumes, Salesforce (defer sharing calculation, suspend and resume group membership and sharing rule calculation, distribute ownership during load). [resources.docs.salesforce.com](https://resources.docs.salesforce.com/latest/latest/en-us/sfdc/pdf/salesforce_large_data_volumes_bp.pdf)
