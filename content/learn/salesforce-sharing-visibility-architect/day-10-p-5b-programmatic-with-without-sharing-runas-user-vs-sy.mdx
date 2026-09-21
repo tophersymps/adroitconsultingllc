@@ -1,0 +1,158 @@
+---
+title: "Sharing & Visibility Architect P-5b: Programmatic with/without Sharing, runAs, User vs System Mode, and When Apex Sharing Is Needed"
+slug: day-10-p-5b-programmatic-with-without-sharing-runas-user-vs-sy
+series: salesforce-sharing-visibility-architect
+lesson: 10
+excerpt: "Why objective p-5b exists: the class sharing keywords and the runAs method are the two levers an architect pulls when code must behave differently from the declarative sharing model. This lesson teaches the exact runtime meaning of with sharing and without sharing, why the class keyword never changes who the running user is, how system mode and user mode differ for record access and for CRUD/FLS, how System.runAs lets a test verify the security model from another user's perspective, and the decision rule for when Apex Managed Sharing is the right tool instead of a sharing rule. Includes a worked queueable scenario, a five-step configuration walkthrough, exam traps, and a try-it exercise. Day 10 of the Platform Sharing and Visibility Architect exam prep."
+date: "September 21, 2026"
+author: "Adroit Consulting"
+readTime: "21 min read"
+tags: [Salesforce, Security, Sharing, Certification, Apex]
+---
+
+Lesson 9 taught you how to enforce object permissions and field-level security from Apex: the Schema describe checks, WITH SECURITY_ENFORCED, and Security.stripInaccessible. That was the object and field half of programmatic security. Objective p-5b is the other half, the record-sharing half, and it is where the exam separates candidates who understand the runtime from candidates who memorize keywords. [^1]
+
+The question p-5b asks is deceptively short: given a scenario, recommend the right programmatic solution, and decide when Apex sharing is required. Behind that sentence sit four distinct mechanisms that people routinely blur together. The class sharing keywords with sharing and without sharing. The runAs method. The difference between user mode and system mode. And Apex Managed Sharing, which is a completely different tool from the sharing keywords even though both have the word sharing in them. This lesson separates all four, because the exam hands you a scenario and expects you to pick the one that actually solves it.
+
+The single most important correction to internalize before any of the mechanics: the class sharing keyword does not change who the running user is. It changes whether that user's record-level sharing rules are applied to the code's queries and DML. A without sharing class does not run as the system user, and a with sharing class does not run as the record owner. The running user stays the same in both cases. What changes is how much of that user's record access the platform honors. Hold onto that, because it is the root of most wrong answers in this objective. [^2]
+
+## Deep Dive
+
+### with sharing and without sharing: what the keyword actually controls
+
+A class declared with sharing runs its queries and DML with the running user's record-level sharing applied. Org-wide defaults, the role hierarchy, criteria-based and ownership-based sharing rules, public groups, and manual sharing all filter what the code can see and touch. A user who can open only their own accounts sees only their own accounts through a with sharing class, no matter what the query asks for. [^2]
+
+A class declared without sharing runs in system mode for record access. It ignores the running user's org-wide defaults, role hierarchy, and sharing rules, and it can read, insert, update, and delete any record in the org regardless of who is running the code. This is the elevated record scope that makes without sharing dangerous and, in the right context, necessary. [^2]
+
+The critical boundary, and the fact behind quiz question one, is that the keyword controls record sharing only. It does not touch object permissions or field-level security. A without sharing class still has to pass whatever CRUD and FLS checks you write, and if you rely on it to read a field the user cannot see, the field is still hidden. Record visibility and field visibility are separate gates, and without sharing opens only the first. [^2][^3]
+
+There is a third keyword, inherited sharing, that is worth knowing even though the exam rarely tests it directly. A class declared inherited sharing runs with the sharing mode of the class that called it. If a with sharing controller calls an inherited sharing service, the service runs with sharing; if a without sharing batch calls it, the service runs without sharing. It is the right default for a service layer that must behave consistently with whatever context invoked it, and it is the modern recommended default for most Apex. [^2]
+
+### System mode versus user mode: two different questions
+
+The terms system mode and user mode get used loosely, so pin them down. They describe two different things, and the exam wants you to keep them apart.
+
+System mode is about record access. When code runs in system mode, the platform does not apply the running user's record-level sharing. OWD, the role hierarchy, and sharing rules are bypassed, and the code can reach records the user could not open. This is what a without sharing class, a trigger, a scheduled job, and a queueable without an explicit mode all do by default. [^2][^3]
+
+User mode is the opposite. When code runs in user mode, the platform applies the running user's record-level sharing, so the code sees only the records that user can open. A with sharing class runs in user mode for record access. [^2]
+
+Here is the trap the exam leans on. System mode bypasses record sharing, but it does not automatically bypass CRUD or FLS. Object permissions and field-level security come from the permission set of the context user, and in system mode the platform does not apply those checks for you. A system-mode trigger or service class can leak a hidden field unless the code explicitly checks accessibility or strips it. System mode removes the record-sharing guard; it never adds a field-security guard. [^2][^3]
+
+The second trap is about when system mode is even the right answer. Most read-every-record needs can be met with a permission, not with elevated code. If a user genuinely needs to see every record of an object, grant View All on that object in their permission set, and let a with sharing class run in user mode. That is declarative, auditable, and does not require a without sharing class. System-mode code earns its place only when the operation itself is a platform context, a batch, a scheduled job, a queueable, an integration handler, and the code must act across ownership boundaries as part of that platform operation. [^2][^3]
+
+### runAs: how you test any of it
+
+System.runAs is the tool that lets a test execute code as a different user. Inside the runAs block, the running user becomes the user you pass in, and the code behaves exactly as that user would experience it: record sharing, field-level security, and object permissions all resolve against that user's permission set and sharing model. [^4]
+
+The essential fact, and the answer to quiz question two, is what runAs does and does not do. It changes the running user within the transaction for testing. It does not disable sharing enforcement. It does not grant the test user any permissions. It does not require the system user. It simply lets you assert what a specific user can and cannot see, which is exactly what a security-matrix test needs. [^4]
+
+```apex
+@IsTest
+static void verifyRecordVisibility() {
+    User restrictedUser = createUserWithRestrictedProfile();
+    Account acct = new Account(Name = 'Test Account');
+    insert acct;
+
+    System.runAs(restrictedUser) {
+        List<Account> visible = [SELECT Id FROM Account];
+        System.assertEquals(0, visible.size(),
+            'Restricted user must not see the account.');
+    }
+}
+```
+
+runAs is restricted in certain contexts. It is supported in test methods and in code called from test methods, but it is not available in all asynchronous contexts, and it cannot be used to run as a user who is not active or who lacks a license. The practical rule: use runAs to verify the security model from a representative user's perspective, and write both a positive assertion, the user sees the record they should, and a negative assertion, an unrelated user does not. [^4]
+
+### When Apex sharing is required: the decision rule
+
+The declarative sharing model is the default answer, and the exam wants you to reach for it first. OWD, the role hierarchy, sharing rules, public groups, and manual sharing express most access requirements without a line of code. Apex sharing is required only when those declarative tools cannot express the access, and the exam frames that as a specific condition: the access criteria are too complex or too dynamic for a criteria-based sharing rule. [^5]
+
+That is the answer to quiz question three. A sharing rule matches records against a fixed set of criteria, owner, or a lookup field, and it is evaluated on a schedule. When the access decision depends on runtime conditions a sharing rule cannot express, a complex matrix across multiple objects, a threshold computed at runtime, a relationship that changes frequently, then Apex Managed Sharing is the tool. It lets you insert share rows programmatically to grant record access to specific users or groups. [^5][^6]
+
+Apex Managed Sharing works through the object's share table. Every shareable object has one: AccountShare, CaseShare, OpportunityShare, and for custom objects, `YourObject__Share`. You build a share record, set the ParentId to the record being shared, set UserOrGroupId to the user or group receiving access, set the AccessLevel to Read, Edit, or All, and set a RowCause. For Apex Managed Sharing, the RowCause must be a custom sharing reason you define on the object, not a standard reason like Manual or Rule. [^5][^6]
+
+```apex
+public static void shareProjectWithReviewer(Id projectId, Id reviewerId) {
+    Project__Share share = new Project__Share();
+    share.ParentId = projectId;
+    share.UserOrGroupId = reviewerId;
+    share.AccessLevel = 'Read';
+    share.RowCause = Schema.Project__Share.RowCause.Reviewer_Access__c;
+    insert share;
+}
+```
+
+Three limits on Apex Managed Sharing matter for the exam. First, it grants record access only. It does not grant object or field permissions, so the target user still needs the underlying CRUD and FLS to do anything with the record. Second, it only grants access to specific users or groups; it cannot restrict access, and it does not run as the target user. Third, share rows you insert are not automatically cleaned up, so when the relationship that justified the share changes, you must delete the stale share rows yourself or they accumulate. [^5][^6]
+
+The decision rule, stated plainly: prefer declarative first. Reach for Apex sharing only when the criteria are too complex for a sharing rule, or when programmatic access, a batch deriving access from data, is the only feasible design. And when you do use it, pair it with cleanup and, for large volumes, a governor-aware batch that recalculates and deletes stale shares. [^5][^6]
+
+## Worked example: a queueable that must act across ownership boundaries
+
+Suppose a nightly job must re-score every Account in the org based on a custom scoring field, regardless of which user owns each account. The accounts are owned by reps across many divisions, and the job must modify all of them. This is the exact scenario quiz question one describes, and it is the clearest case for system mode.
+
+```apex
+public without sharing class AccountScoringQueueable implements Queueable {
+    public void execute(QueueableContext context) {
+        List<Account> accounts = [
+            SELECT Id, AnnualRevenue, Risk_Score__c
+            FROM Account
+        ];
+        for (Account a : accounts) {
+            a.Risk_Score__c = computeScore(a);
+        }
+        update accounts;
+    }
+}
+```
+
+Trace the decision. The class is declared without sharing because the operation is platform-context: a queueable scheduled by the system, not a user browsing records. It must read and update accounts owned by users across many divisions, and honoring the running user's record sharing would restrict it to a subset. System mode is the correct mode here, and without sharing is the correct declaration. [^2]
+
+Now check the distractors from quiz question one, because each fails for an instructive reason. A with sharing class would apply the running user's sharing rules and restrict the job to records that user can open, which defeats the purpose. A permission set with View All changes what a user can see, but it does not change how a queueable processes records, and it does not make the job run in system mode. runAs(`someUser`) changes the running user within a test, but it does not switch the queueable to system mode, and it is not available in this production context anyway. Only the without sharing declaration, or the default system mode for a queueable with no explicit mode, lets the job act across ownership boundaries. [^2][^4]
+
+The one thing to add before this ships is the field-security guard. The class is without sharing, so it ignores record sharing, but it still must not leak fields the running user cannot read. In practice the job runs as the scheduler, and the scoring fields are internal, so the risk is low, but the architect's habit is to strip or check anyway. System mode removes the record-sharing guard; it never adds a field guard. [^2][^3]
+
+## Configuration Walkthrough
+
+1. Decide the running user and mode first. Keep user-facing data classes with sharing, so a controller, an @AuraEnabled method, or an invocable action honors the calling user's record sharing. Use system mode, a without sharing class, only for platform-triggered jobs, a batch, a scheduled job, a queueable, an integration handler, and document the reason in a comment on the class. [^2]
+2. Write unit tests with System.runAs(user) to assert the effective record and field visibility matches the security model for representative users. Create a test user on a restricted profile, run the code inside System.runAs, and assert both that the intended user sees the intended records and that an unrelated user does not. This is the security-matrix test. [^4]
+3. If declarative sharing cannot express the access, design an Apex Managed Sharing class. Insert Share records with a custom RowCause and the correct AccessLevel, and grant Modify All on the object to the user who runs the sharing code, because inserting share rows requires that permission. [^5][^6]
+4. Add cleanup. Delete stale share rows when the relationship that justified them changes, and if share volume is large, wrap the recalculation in a governor-aware batch so you do not hit DML limits or the sharing table growth limits. [^5][^6]
+5. Validate with a runAs test that the target user now sees the intended records and that an unrelated user still does not. This proves the share rows work and that you did not over-grant. [^4][^5]
+
+## Exam Traps
+
+Trap one: assuming without sharing changes the running user or bypasses CRUD/FLS. It does neither. It runs in system mode for record access, which ignores record sharing, but the running user stays the same, and object and field permissions still require explicit checks. It also cannot be used to give a regular user access to records; that requires Managed Sharing or permission-based access. [^2][^3]
+
+Trap two: expecting System.runAs to switch to system mode. It does not. runAs just changes the running user within the transaction for testing, so you can verify that user's effective access. It is restricted in certain contexts and does not grant permissions or disable sharing. [^4]
+
+Trap three: treating Apex Managed Sharing as a full-access grant. It only grants record access to specific users or groups. It does not grant object or field permissions, so the target user still needs the underlying CRUD and FLS, and it cannot restrict access. [^5][^6]
+
+## Try It
+
+Build the three mechanisms so you have felt each one. In a sandbox, create a custom object named Project with a custom sharing reason, and create two test users on different profiles.
+
+First, test the sharing keywords. Create an Account owned by user A, then write a with sharing class that queries accounts and a without sharing class that queries the same. Run both as user B, who has no sharing access to the account, and confirm the with sharing class returns nothing while the without sharing class returns the record. That contrast is the entire point of the keyword.
+
+Second, test runAs. Write a unit test that creates a restricted user, inserts an account, and inside System.runAs(restrictedUser) asserts the account is not visible. Then grant the user access through a sharing rule or manual share and re-run, asserting the account is now visible. The test proves the security model from that user's perspective.
+
+Third, test Apex Managed Sharing. Write a method that inserts a Project__Share row with a custom RowCause for a reviewer user, then a runAs test that confirms the reviewer sees the project and an unrelated user does not. Then change the relationship and confirm the stale share row must be deleted manually, which is the cleanup lesson. That full cycle encodes the judgment the objective scores. [^4][^5]
+
+## What's Next
+
+You can now explain what with sharing and without sharing do at runtime, how system mode and user mode differ for record access and for CRUD/FLS, how System.runAs verifies the security model from another user's perspective, and when Apex Managed Sharing is the right tool instead of a sharing rule. Lesson 11, Organization-Wide Defaults Fundamentals: The Matrix, Per-Object Defaults, and Public/Private/Controlled by Parent (r-1a), steps back from code to the foundation every sharing decision sits on. It teaches the OWD matrix, how each object's default is set independently, and the meaning of Public Read/Write, Public Read Only, Private, and Controlled by Parent, which is the floor that every other sharing mechanism, including the programmatic tools in this lesson, can only open wider. The programmatic levers you just learned operate on top of that floor, so lesson 11 is where the model they manipulate gets defined.
+
+## Related Requirements
+
+- Lesson 9 of 36 (p-5a): Programmatic enforcement, CRUD/FLS, stripInaccessible
+- Lesson 11 of 36 (r-1a): Organization-wide defaults fundamentals, the matrix
+- Lesson 23 of 36 (r-7a): Programmatic sharing, Apex managed sharing
+- Lesson 24 of 36 (r-7b): Programmatic sharing scenarios, recalculation limits
+
+## References
+
+[^1]: Salesforce Certified Platform Sharing and Visibility Architect Exam Guide. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005298977&language=en_US&type=1)
+[^2]: Use the with sharing, without sharing, and inherited sharing Keywords. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_classes_keywords_sharing.htm)
+[^3]: Apex Sharing and Security in Salesforce (CertifySF reference). [certifysf.com](https://certifysf.com/apex-sharing-security-in-salesforce)
+[^4]: System Class: runAs Method. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_classes_methods_system_system.htm)
+[^5]: Apex Sharing Considerations. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_force_com_sharing_considerations.htm)
+[^6]: Using Apex Managed Sharing to Create Custom Record Sharing Logic. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_force_com_sharing_considerations.htm)
