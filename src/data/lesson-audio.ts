@@ -100,4 +100,6 @@ export const lessonAudio: LessonAudio[] = [
   { series: "hermes-consultant", slug: "packaging-reusable-skills", voice: "af_heart", storagePath: "learn/hermes-consultant/packaging-reusable-skills/af_heart.mp3", timingsStoragePath: "learn/hermes-consultant/packaging-reusable-skills/af_heart.timing.json" },
   { series: "hermes-consultant", slug: "quality-gates-and-review", voice: "af_heart", storagePath: "learn/hermes-consultant/quality-gates-and-review/af_heart.mp3", timingsStoragePath: "learn/hermes-consultant/quality-gates-and-review/af_heart.timing.json" },
   { series: "hermes-consultant", slug: "security-and-credentials", voice: "af_heart", storagePath: "learn/hermes-consultant/security-and-credentials/af_heart.mp3", timingsStoragePath: "learn/hermes-consultant/security-and-credentials/af_heart.timing.json" },
+  { series: "hermes-consultant", slug: "stakeholder-mapping", voice: "af_heart", storagePath: "learn/hermes-consultant/stakeholder-mapping/af_heart.mp3", timingsStoragePath: "learn/hermes-consultant/stakeholder-mapping/af_heart.timing.json" },
+  { series: "hermes-consultant", slug: "testing-and-verification", voice: "af_heart", storagePath: "learn/hermes-consultant/testing-and-verification/af_heart.mp3", timingsStoragePath: "learn/hermes-consultant/testing-and-verification/af_heart.timing.json" },
 ];
