@@ -28,6 +28,8 @@ The critical boundary, and the fact behind quiz question one, is that the keywor
 
 There is a third keyword, inherited sharing, that is worth knowing even though the exam rarely tests it directly. A class declared inherited sharing runs with the sharing mode of the class that called it. If a with sharing controller calls an inherited sharing service, the service runs with sharing; if a without sharing batch calls it, the service runs without sharing. It is the right default for a service layer that must behave consistently with whatever context invoked it, and it is the modern recommended default for most Apex. [^2]
 
+![A comparison of the class sharing keywords: with sharing runs the code in user mode with the running user's record-level sharing applied, while without sharing runs in system mode that bypasses record sharing; inherited sharing follows the calling class, and neither keyword changes the running user or object and field access](</diagrams/day-10-p-5b-programmatic-with-without-sharing-runas-user-vs-sy/1-sharing-keyword-controls-record-access.png>)
+
 ### System mode versus user mode: two different questions
 
 The terms system mode and user mode get used loosely, so pin them down. They describe two different things, and the exam wants you to keep them apart.
@@ -39,6 +41,8 @@ User mode is the opposite. When code runs in user mode, the platform applies the
 Here is the trap the exam leans on. System mode bypasses record sharing, but it does not automatically bypass CRUD or FLS. Object permissions and field-level security come from the permission set of the context user, and in system mode the platform does not apply those checks for you. A system-mode trigger or service class can leak a hidden field unless the code explicitly checks accessibility or strips it. System mode removes the record-sharing guard; it never adds a field-security guard. [^2][^3]
 
 The second trap is about when system mode is even the right answer. Most read-every-record needs can be met with a permission, not with elevated code. If a user genuinely needs to see every record of an object, grant View All on that object in their permission set, and let a with sharing class run in user mode. That is declarative, auditable, and does not require a without sharing class. System-mode code earns its place only when the operation itself is a platform context, a batch, a scheduled job, a queueable, an integration handler, and the code must act across ownership boundaries as part of that platform operation. [^2][^3]
+
+![A two-column table comparing system mode and user mode across record access and object and field access, showing that system mode bypasses record sharing while user mode applies it, and that neither mode automatically bypasses CRUD or field-level security](</diagrams/day-10-p-5b-programmatic-with-without-sharing-runas-user-vs-sy/2-system-vs-user-mode.png>)
 
 ### runAs: how you test any of it
 
@@ -85,6 +89,8 @@ public static void shareProjectWithReviewer(Id projectId, Id reviewerId) {
 Three limits on Apex Managed Sharing matter for the exam. First, it grants record access only. It does not grant object or field permissions, so the target user still needs the underlying CRUD and FLS to do anything with the record. Second, it only grants access to specific users or groups; it cannot restrict access, and it does not run as the target user. Third, share rows you insert are not automatically cleaned up, so when the relationship that justified the share changes, you must delete the stale share rows yourself or they accumulate. [^5][^6]
 
 The decision rule, stated plainly: prefer declarative first. Reach for Apex sharing only when the criteria are too complex for a sharing rule, or when programmatic access, a batch deriving access from data, is the only feasible design. And when you do use it, pair it with cleanup and, for large volumes, a governor-aware batch that recalculates and deletes stale shares. [^5][^6]
+
+![A decision flow showing declarative sharing first, then Apex Managed Sharing only when the access criteria are too complex or dynamic for a sharing rule, with the four share-row fields and the three limits of a record-only grant](</diagrams/day-10-p-5b-programmatic-with-without-sharing-runas-user-vs-sy/3-apex-sharing-decision.png>)
 
 ## Worked example: a queueable that must act across ownership boundaries
 
