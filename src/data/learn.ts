@@ -8,6 +8,813 @@ import { LearnLesson, LearningSeries } from "./types";
 /** All series, sorted by newest lesson date DESC (ties → slug asc). Empty dirs included with lessons: []. */
 export const learnSeries: LearningSeries[] = [
   {
+    "slug": "salesforce-architect",
+    "name": "Salesforce System Architect Primer",
+    "description": "A practical deep dive into Flow design, Apex patterns, and platform architecture for teams scaling on Salesforce.",
+    "gradient": "from-sky to-blue-600",
+    "lessons": [
+      {
+        "slug": "what-salesforce-system-architect-does",
+        "title": "Lesson 1: What a Salesforce System Architect Actually Does: Role, Cert Track, CTA Endgame",
+        "series": "salesforce-architect",
+        "lesson": 1,
+        "excerpt": "The Salesforce architect arc in one lesson: what System vs Application vs Technical Architects actually do, the certification ladder, and the CTA endgame.",
+        "date": "August 04, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "8 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "multi-tenant-platform-architecture",
+        "title": "Lesson 2: Multi-Tenant Platform Architecture: Orgs, Environments, and the Instance Model",
+        "series": "salesforce-architect",
+        "lesson": 2,
+        "excerpt": "Why every Salesforce org rents a slice of a shared platform: multi-tenancy, metadata-driven design, the instance model, and the sandbox environments that keep Dev/QA/UAT/Prod safe.",
+        "date": "August 05, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "8 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "core-building-blocks-objects-fields-relationships",
+        "title": "Lesson 3: Core Building Blocks: Objects, Fields, Relationships, Record Types, and Formula vs Roll-Up",
+        "series": "salesforce-architect",
+        "lesson": 3,
+        "excerpt": "The architect's canvas: standard and custom objects, field types, lookup vs master-detail relationships, record types for process variation, and when to compute with a formula field vs a roll-up summary.",
+        "date": "August 06, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "8 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Data"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "integration-fundamentals-rest-soap-bulk-apis",
+        "title": "Lesson 4: Integration Fundamentals: REST, SOAP, Bulk APIs, and Picking the Right One",
+        "series": "salesforce-architect",
+        "lesson": 4,
+        "excerpt": "The System Architect's home turf: when to call Salesforce with REST, when to reach for SOAP, when to hand it a CSV via Bulk API 2.0, and the request limits that make the choice matter.",
+        "date": "August 07, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "systems-architecture-what-it-means-ai-patterns",
+        "title": "Lesson 5: General Systems Architecture: What 'Architecture' Means and Why AI Systems Reuse the Same Patterns",
+        "series": "salesforce-architect",
+        "lesson": 5,
+        "excerpt": "The foundational concepts of systems architecture (components, interfaces, and design principles) and why every AI agent pattern (sequential, parallel, hierarchical) is a remix of patterns engineers have known for decades.",
+        "date": "August 08, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "Architecture",
+          "AI at Work"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "integration-patterns-request-reply-fire-forget-batch",
+        "title": "Lesson 6: Integration Patterns: Request-Reply, Fire-and-Forget, and Batch (Inbound & Outbound)",
+        "series": "salesforce-architect",
+        "lesson": 6,
+        "excerpt": "The three archetype integration patterns every Salesforce architect must recognize (request-reply, fire-and-forget, and batch data synchronization), plus the selection matrix, the limits that shape each choice, and a worked example that combines all three.",
+        "date": "August 09, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "event-driven-integration-platform-events-change-data-capture",
+        "title": "Lesson 7: Event-Driven Integration: Platform Events + Change Data Capture",
+        "series": "salesforce-architect",
+        "lesson": 7,
+        "excerpt": "The Salesforce event bus, Platform Events vs. Change Data Capture: when to publish business intent vs. record state, how to consume on- and off-platform, and the hard truth about ordering, replay, and allocations.",
+        "date": "August 10, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "8 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Integration",
+          "Data"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "middleware-tradeoffs-mulesoft-boomi-custom-salesforce-hub",
+        "title": "Lesson 8: Middleware Tradeoffs: MuleSoft vs Boomi vs Custom (and When Salesforce Is the Hub)",
+        "series": "salesforce-architect",
+        "lesson": 8,
+        "excerpt": "How to choose the integration layer: MuleSoft's API-led pro-code platform, Boomi's low-code iPaaS, hand-rolled custom code, and the decision matrix for when Salesforce itself should be the hub instead of any middleware at all.",
+        "date": "August 11, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Integration",
+          "Platform Engineering"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "integration-reliability-idempotency-retries-error-handling-dead-letter-design",
+        "title": "Lesson 9: Integration Reliability: Idempotency, Retries, Error Handling, and Dead-Letter Design",
+        "series": "salesforce-architect",
+        "lesson": 9,
+        "excerpt": "The reliability toolkit every integration needs: idempotency keys and message IDs so retries are safe, the transient vs. poisoned error taxonomy, bounded retry policies with backoff, per-pattern error handling, and dead-letter design with error tables so nothing is silently lost.",
+        "date": "August 12, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Integration",
+          "Reliability"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "sync-async-queues-eventual-consistency-agent-pipelines",
+        "title": "Lesson 10: Sync vs Async, Queues, and Eventual Consistency: The Laws That Shape Agent Pipelines",
+        "series": "salesforce-architect",
+        "lesson": 10,
+        "excerpt": "The three operating laws that govern any pipeline spanning more than one system: synchronous calls block, asynchronous calls decouple, and distributed systems settle into eventual consistency. Queues are the buffer that makes async safe. And the same laws that drive Salesforce governor limits now shape multi-agent AI pipelines.",
+        "date": "August 13, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "Architecture",
+          "Integration",
+          "Reliability",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "security-architecture-sharing-model-owd-role-hierarchy-sharing-rules",
+        "title": "Lesson 11: Security Architecture: The Sharing Model, OWD, Role Hierarchy, Sharing Rules, and Manual Sharing",
+        "series": "salesforce-architect",
+        "lesson": 11,
+        "excerpt": "Who can see a given record? The four record-level controls that answer it: org-wide defaults, the role hierarchy, sharing rules, and manual sharing. How they layer, how they only ever open access, and why 'most permissive wins' is the whole game.",
+        "date": "August 14, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "security-profiles-permission-sets-permission-set-groups-mfa-session-policies",
+        "title": "Lesson 12: Security, Part 2: Profiles, Permission Sets, Permission Set Groups, MFA, and Session Policies",
+        "series": "salesforce-architect",
+        "lesson": 12,
+        "excerpt": "Who can do what in an org. The move from profile-led to permission-set-led access, what a permission set group bundles together, the 2026 MFA enforcement that now touches every login, and the session policies that decide how long a session lives.",
+        "date": "August 15, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "security-external-access-oauth-saml-connected-apps-communities",
+        "title": "Lesson 13: Security, Part 3: External Access, OAuth, SAML/SSO, Connected Apps, and Communities",
+        "series": "salesforce-architect",
+        "lesson": 13,
+        "excerpt": "How outside systems and outside people get in. OAuth flows for machine access, SAML single sign-on for employee logins, connected apps as the doorway, and Experience Cloud communities as the portal where customers and partners authenticate without touching your internal identity system.",
+        "date": "August 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "data-architecture-data-model-design-patterns-data-skew",
+        "title": "Lesson 14: Data Architecture: Data Model Design, Common Data Model Patterns, and Data Skew",
+        "series": "salesforce-architect",
+        "lesson": 14,
+        "excerpt": "Data is the load-bearing wall of every org. Designing a data model that scales means deciding where each relationship lives, recognizing the recurring shapes that solve real problems, and keeping the load off any single parent record or owner. This lesson covers data model design, the common patterns (one-to-many, many-to-many, hierarchical, and data tiering), and the three data skews that quietly break performance.",
+        "date": "August 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Data"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "data-architecture-for-ai-vector-databases-embeddings",
+        "title": "Lesson 15: Data Architecture for AI: Databases, Vector DBs, Embeddings, and the Same Modeling Discipline",
+        "series": "salesforce-architect",
+        "lesson": 15,
+        "excerpt": "The data side of AI systems. Embeddings, vector databases, chunking, and why the modeling discipline from a Salesforce data model (records, relationships, source of truth, scale) carries over unchanged when the storage engine becomes a vector store. Includes a worked example of a RAG knowledge base, a pgvector walkthrough, and the Data Cloud vector database connection.",
+        "date": "August 18, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "Architecture",
+          "Data",
+          "LLMs",
+          "RAG"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "data-migration-strategy-etl-elt-tools-validation-cutover-rollback",
+        "title": "Lesson 16: Data Migration Strategy: ETL vs ELT, Tools, Validation, Cutover, and Rollback",
+        "series": "salesforce-architect",
+        "lesson": 16,
+        "excerpt": "The full migration lifecycle: ETL vs ELT, the Salesforce tool options (Data Import Wizard vs Data Loader vs enterprise ETL), dependency-ordered loading with external IDs, validation by record count and spot check, and the cutover and rollback plan that keeps a bad load from becoming a disaster.",
+        "date": "August 19, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Data"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "large-data-volumes-archiving-big-objects-skinny-tables-indexing",
+        "title": "Lesson 17: Large Data Volumes: Archiving, Big Objects, Skinny Tables, and Indexing Strategy",
+        "series": "salesforce-architect",
+        "lesson": 17,
+        "excerpt": "How an org stays fast and inside its storage as volume grows: selectivity and custom indexes, skinny tables for read-heavy hot data, big objects for bulk historical storage, and archiving as the tier that sheds cold data before it drags everything down.",
+        "date": "August 20, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Data",
+          "RAG"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "system-limits-governor-api-storage-planning",
+        "title": "Lesson 18: System Limits: Governor, API, and Storage Limits, and Planning Around Them",
+        "series": "salesforce-architect",
+        "lesson": 18,
+        "excerpt": "Governors exist to keep a multitenant platform fair. Learn the limits, then bulkify, batch, and monitor so they never fire on your watch.",
+        "date": "August 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "environment-release-strategy-sandboxes-change-sets-devops",
+        "title": "Lesson 19: Environment and Release Strategy: Sandbox Types, Change Sets vs DevOps (sf/sfdx)",
+        "series": "salesforce-architect",
+        "lesson": 19,
+        "excerpt": "Where work happens and how it moves to production. The four sandbox types (Developer, Developer Pro, Partial Copy, Full), what each copies and how often it refreshes, then the release-mechanism fork: click-based change sets versus source-driven deployment with the sf CLI and a Git-based source of truth, including Salesforce DX and DevOps Center.",
+        "date": "August 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Delivery",
+          "DevOps"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "environments-cicd-in-ml-ai-pipelines",
+        "title": "Lesson 20: General Systems Architecture: Environments and CI/CD in ML and AI Pipelines",
+        "series": "salesforce-architect",
+        "lesson": 20,
+        "excerpt": "The same environment-and-release discipline from Lesson 19, applied to machine learning and AI systems. Why the ML artifact is more than code (code, data, and model all change), the continuous X's (CI, CD, CT, CM), the MLOps maturity levels, how a model promotes from a development environment to production, and what changes when the artifact is a nondeterministic agent that needs eval gates instead of unit tests.",
+        "date": "August 23, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Architecture",
+          "AI Infrastructure",
+          "CI/CD",
+          "Delivery",
+          "AI Agents"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "solution-design-requirement-to-architecture-doc-nfrs-tradeoffs",
+        "title": "Lesson 21: Solution Design: Turning a Requirement Into an Architecture Document (NFRs and Tradeoffs)",
+        "series": "salesforce-architect",
+        "lesson": 21,
+        "excerpt": "How a requirement becomes an architecture document: separating the business why from the what and the how, writing measurable non-functional requirements using the Salesforce Well-Architected framework (Trusted, Easy, Adaptable), resolving design tradeoffs explicitly, and recording each decision with its rationale so the delivery team can build without re-litigating every choice.",
+        "date": "August 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "architecture-review-design-reviews-decision-records-saying-no",
+        "title": "Lesson 22: Architecture Review: Design Reviews, Decision Records, and How to Say No",
+        "series": "salesforce-architect",
+        "lesson": 22,
+        "excerpt": "The review discipline that keeps architecture coherent as the org grows: design review as a forum, not a gate, the ADR as durable decision memory, and how to decline a bad how without rejecting the person behind it.",
+        "date": "August 25, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "error-handling-monitoring-debug-logs-event-monitoring-health-checks-alerts",
+        "title": "Lesson 23: Error Handling and Monitoring: Debug Logs, Event Monitoring, Health Checks, and Alerts",
+        "series": "salesforce-architect",
+        "lesson": 23,
+        "excerpt": "The observability layer of a Salesforce org: debug logs and trace flags when a transaction misbehaves, Event Monitoring when you need who, what, and when across the whole org, health checks for the security baseline and the platform status, and the alerting that turns all of it into action instead of archaeology.",
+        "date": "August 26, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Observability",
+          "Reliability"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "performance-query-optimization-selective-soql-indexes-caching",
+        "title": "Lesson 24: Performance: Query Optimization, Selective SOQL, Indexes, and Caching",
+        "series": "salesforce-architect",
+        "lesson": 24,
+        "excerpt": "How a query becomes fast: the selectivity thresholds the optimizer uses to decide whether an index is worth it, how to write SOQL that the optimizer will actually treat well, how to measure and index, and Platform Cache as the lever that skips the query entirely.",
+        "date": "August 27, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Performance",
+          "RAG"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "performance-engineering-ai-latency-caching-throughput-batching",
+        "title": "Lesson 25: Performance Engineering for AI: Latency Budgets, Caching, Throughput, and Batching",
+        "series": "salesforce-architect",
+        "lesson": 25,
+        "excerpt": "Performance stops being about one query and becomes a system-wide budget the moment AI is in the path. This lesson covers latency budgets, the difference between throughput and latency, the batch that makes LLM inference affordable, and the caches that skip work entirely.",
+        "date": "August 28, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Architecture",
+          "Performance",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "enterprise-rest-api-design-versioning-pagination-bulk-best-practices",
+        "title": "Lesson 26: Enterprise REST API Design: Versioning, Pagination, Bulk, and Best Practices",
+        "series": "salesforce-architect",
+        "lesson": 26,
+        "excerpt": "The design layer under every REST integration: how Salesforce versions its API, how to page through large result sets without breaking, when bulk writes beat synchronous calls, and the habits that keep an integration alive for years.",
+        "date": "August 30, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "integration-security-named-credentials-jwt-certificates-ip-allowlisting",
+        "title": "Lesson 27: Integration Security: Named Credentials, JWT, Certificates, and IP Allowlisting",
+        "series": "salesforce-architect",
+        "lesson": 27,
+        "excerpt": "The security layer under every integration: named credentials that keep endpoints and secrets out of code, JWT bearer for server-to-server auth, certificates for signing and mutual TLS, and IP allowlisting as the last fence that says who is even allowed to knock.",
+        "date": "August 31, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Integration",
+          "Security",
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "high-volume-event-patterns-streaming-pacing-platform-event-limits",
+        "title": "Lesson 28: High-Volume Event Patterns: Streaming, Pacing, and Platform Event Limits",
+        "series": "salesforce-architect",
+        "lesson": 28,
+        "excerpt": "What changes when event volume stops being a trickle and becomes a flood: streaming with the Pub/Sub API, pacing publish rates against rolling limits, and the platform event allocations that decide whether your bus survives the day.",
+        "date": "September 1, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Integration",
+          "Web Development",
+          "Project Management"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "testing-integrations-mocking-sandbox-test-strategy-integration-suites",
+        "title": "Lesson 29: Testing Integrations: Mocking, Sandbox Test Strategy, and Integration Test Suites",
+        "series": "salesforce-architect",
+        "lesson": 29,
+        "excerpt": "Testing an integration is not the same as testing the code on one side of it. You have to fake the external system to unit test your Apex, pick the right sandbox to test against real data, and build suites that prove the pieces work together before they reach production. This lesson covers each layer: mocking callouts, a sandbox strategy, and integration test suites.",
+        "date": "September 2, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Architecture",
+          "Testing",
+          "Integrations"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "testing-ai-systems-evals-golden-sets-canaries-regression",
+        "title": "Lesson 30: General Systems Architecture: Testing AI Systems: Evals, Golden Sets, Canaries, and Regression",
+        "series": "salesforce-architect",
+        "lesson": 30,
+        "excerpt": "A model is not a method you can pin to a single expected output. This lesson covers the testing discipline that replaces the unit test for AI systems: evals as structured tests, golden sets as the regression anchor, and canary deployments as the production safety net, with the Salesforce tools that already ship this discipline.",
+        "date": "September 03, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Architecture",
+          "AI Infrastructure",
+          "Testing",
+          "AI Agents"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "apex-architecture-service-layer-domain-selector-patterns",
+        "title": "Lesson 31: Apex Architecture: Service Layer, Domain, and Selector Patterns",
+        "series": "salesforce-architect",
+        "lesson": 31,
+        "excerpt": "Apex triggers and classes are where business logic actually lives, and how you organize that code decides whether a solution stays maintainable for five years or turns into spaghetti the first time a requirement changes. This lesson covers the three enterprise patterns that keep Apex code organized: the service layer for orchestrating processes, the domain layer for object behavior, and the selector layer for all your SOQL. It covers why they matter, how they fit together, and a worked example of all three in action.",
+        "date": "September 4, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Architecture",
+          "Apex",
+          "Patterns"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "flow-architecture-flow-vs-apex-vs-external-automation",
+        "title": "Lesson 32: Flow Architecture: Flow vs Apex vs External Automation, Decision Framework",
+        "series": "salesforce-architect",
+        "lesson": 32,
+        "excerpt": "A repeatable framework for choosing where a process runs: Record-Triggered Flow for low-density automation, the hybrid Flow plus invocable Apex pattern for medium density, Apex triggers for high density, and the boundary where automation should leave the org entirely for external, agentic, or cross-system work.",
+        "date": "September 5, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Flow",
+          "Apex"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "bulkification-trigger-frameworks-limits-aware-design",
+        "title": "Lesson 33: Bulkification & Trigger Frameworks: Limits-Aware Design That Scales",
+        "series": "salesforce-architect",
+        "lesson": 33,
+        "excerpt": "The reason a trigger that works on one record fails on a data load. Governor limits put a hard ceiling on SOQL, DML, heap, and CPU per transaction. Bulkification keeps every layer working on collections, and a trigger framework keeps one handler in charge of the object so the code that touches the platform is tiny and the logic is testable.",
+        "date": "September 6, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Apex",
+          "Triggers"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "data-model-design-inheritance-polymorphic-denormalization",
+        "title": "Lesson 34: Data Model Design: Inheritance, Polymorphic Relationships, and Denormalization Tradeoffs",
+        "series": "salesforce-architect",
+        "lesson": 34,
+        "excerpt": "Three data modeling tools that people reach for when records stop being uniform: inheritance for records that are kinds of a common thing, polymorphic relationships for a single field that must point at several object types, and denormalization for precomputing data so reads get fast. Each solves a real problem, and each hides a cost. This lesson defines them precisely, shows how Salesforce represents each one, and walks a worked example that forces you to use all three at once.",
+        "date": "September 7, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Data"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "domain-modeling-entities-aggregates-bounded-contexts-agent-design",
+        "title": "Lesson 35: Domain Modeling: Entities, Aggregates, and Bounded Contexts Applied to Agent Design",
+        "series": "salesforce-architect",
+        "lesson": 35,
+        "excerpt": "The strategic and tactical tools of domain modeling (entities, aggregates, bounded contexts, ubiquitous language) and how the same discipline that keeps a data model coherent also keeps a multi-agent system from collapsing into a tangle of overlapping prompts.",
+        "date": "September 08, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Architecture",
+          "AI at Work"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "sharing-architecture-deep-dive-recalculation-implicit-sharing-limits",
+        "title": "Lesson 36: Sharing Architecture Deep Dive: Recalculation, Implicit Sharing, and When Sharing Can't Do the Job",
+        "series": "salesforce-architect",
+        "lesson": 36,
+        "excerpt": "Sharing is not static, and it is not unlimited. When an org-wide default changes, the platform recalculates share records across the org, and on a big data volume that job can churn for hours. Implicit sharing hands out access automatically through parent-child relationships, whether you asked for it or not. And at a certain scale, declarative sharing stops being the right tool, which is when Apex managed sharing and restriction rules take over.",
+        "date": "September 9, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "asynchronous-apex-choosing-batch-queueable-scheduled-future",
+        "title": "Lesson 37: Asynchronous Apex: Batch, Queueable, Scheduled, and Future, and How to Choose",
+        "series": "salesforce-architect",
+        "lesson": 37,
+        "excerpt": "Four ways to move work out of the user's transaction, and they are not interchangeable. Future methods are fire-and-forget with primitive parameters only, queueable jobs carry real objects and hand back a job Id you can monitor, batch Apex trades immediacy for volume by running each chunk as its own transaction, and scheduled Apex is a timer that should do nothing but start one of the other three. Pick wrong and you either hit the synchronous ceiling you were escaping or you burn the org's shared async budget on work a single call could have done.",
+        "date": "September 10, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Apex",
+          "Asynchronous"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "governor-limit-aware-design-soql-sosl-dml-budgets",
+        "title": "Lesson 38: Governor-Limit-Aware Design: SOQL, SOSL, and DML Budgets",
+        "series": "salesforce-architect",
+        "lesson": 38,
+        "excerpt": "A transaction does not get a budget per trigger or per class. It gets 100 SOQL queries, 150 DML statements, 50,000 returned query rows, and 10,000 DML rows as one pool, and every trigger, record-triggered Flow, and uncertified package in that transaction spends from it. Designing limits-aware means knowing which calls consume a statement, which consume a row, and why the two meters fail at different batch sizes. This lesson covers the SQL and DML meters, where SOSL fits in the same budget, and the review habits that catch a limit exception before a data load does.",
+        "date": "September 11, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Apex",
+          "Limits",
+          "SOQL"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "transaction-lifecycle-state-save-order-trigger-contexts",
+        "title": "Lesson 39: Transaction Lifecycle: State, Save Order, and the 4 Trigger Contexts in One Transaction",
+        "series": "salesforce-architect",
+        "lesson": 39,
+        "excerpt": "A record save is not one moment. It is a transaction that walks a fixed sequence: the record loads, system validation runs, before-save Flows and before triggers fire, custom validation and duplicate rules run, the record writes to the database but does not commit, after triggers fire, then assignment, workflow, escalation, roll-up, and sharing logic run, and only then does the transaction commit. Each phase sees the record in a different state, and that state difference is what before-save logic exploits and after-save logic must respect. This lesson walks a single save through that lifecycle, defines the four trigger contexts (before insert, before update, after insert, after update) that one transaction can run, and shows why a workflow field update re-fires triggers while a validation failure rolls everything back.",
+        "date": "September 12, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "Salesforce",
+          "Apex",
+          "Triggers",
+          "Transaction",
+          "Architecture"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "stateful-vs-stateless-agents-context-memory-tool-state",
+        "title": "Lesson 40: Stateful vs Stateless Agents: Context, Memory, and Tool State",
+        "series": "salesforce-architect",
+        "lesson": 40,
+        "excerpt": "Why a language model remembers almost nothing and knows a great deal, what it costs to ship a purely stateless agent, and how context, memory, and tool state become the architecture that decides whether an agent is useful on day one or day thirty.",
+        "date": "September 13, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "Architecture",
+          "AI at Work",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "experience-cloud-architecture-sites-communities-licensing-sharing",
+        "title": "Lesson 41: Experience Cloud Architecture: Sites, Communities, Licensing, and Sharing",
+        "series": "salesforce-architect",
+        "lesson": 41,
+        "excerpt": "Experience Cloud as architecture: what a site actually is, why the framework you build it on (LWR versus Aura) changes your whole subsystem design, how licensing attaches to users rather than pages, and the external sharing architecture that keeps an outsider's window exactly the right size.",
+        "date": "September 14, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Experience Cloud"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "lightning-web-components-architecture-composition-wire-data-services",
+        "title": "Lesson 42: Lightning Web Components Architecture: Composition, Wire Service, and Data Services",
+        "series": "salesforce-architect",
+        "lesson": 42,
+        "excerpt": "How Lightning Web Components are built from smaller pieces and fed data: component composition and the data-down/events-up contract, the wire service and its reactivity, and the Lightning Data Service cache that shares one version of a record across every component that renders it.",
+        "date": "September 15, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Lightning Web Components"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "lightning-performance-caching-static-resources-what-slows-users-down",
+        "title": "Lesson 43: Lightning Performance: Caching, Static Resources, and What Slows Users Down",
+        "series": "salesforce-architect",
+        "lesson": 43,
+        "excerpt": "Where a Lightning page's load time actually goes, the cache layers that cut it down (secure browser caching, the Salesforce CDN, the Lightning Data Service client cache, and cacheable Apex), and how to ship static resources so third-party assets stop sitting in the critical path.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Lightning",
+          "Performance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "security-review-owasp-apex-soql-injection-crud-fls",
+        "title": "Lesson 44: Security Review: OWASP for Apex, SOQL Injection, and Enforcing CRUD and FLS",
+        "series": "salesforce-architect",
+        "lesson": 44,
+        "excerpt": "How a security review actually reads Apex: the two shapes of SOQL injection and how bind variables and allowlists close them, why with sharing is not access control, and the enforcement tools (WITH USER_MODE, stripInaccessible, AccessLevel, describe checks) that turn CRUD and field-level security into something a reviewer can verify.",
+        "date": "September 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Security",
+          "Apex"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "security-architecture-for-ai-prompt-injection-tool-permissions-least-privilege",
+        "title": "Lesson 45: Security Architecture for AI: Prompt Injection, Tool Permissions, and Least Privilege",
+        "series": "salesforce-architect",
+        "lesson": 45,
+        "excerpt": "Why an AI agent fails security reviews for reasons no classic control catches: prompt injection as an injection class of its own, the tools as the real attack surface, and least privilege, extended to least agency, as the principle that keeps an agent from becoming the most privileged identity in your stack.",
+        "date": "September 18, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "Architecture",
+          "AI at Work",
+          "Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "multi-org-architecture-when-to-split-org-to-org-integration-patterns",
+        "title": "Lesson 46: Multi-Org Architecture: When to Split, and Org-to-Org Integration Patterns",
+        "series": "salesforce-architect",
+        "lesson": 46,
+        "excerpt": "The org is the biggest structural decision a Salesforce architect makes, and it is the hardest to undo. This lesson gives you a test for when a second org is legitimate and when it is an expensive way to dodge a governance problem, then shows the patterns that connect orgs that must stay separate: hub-and-spoke with master data, Salesforce Connect's cross-org adapter, event-driven bridging, and batch synchronization.",
+        "date": "September 19, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Multi-Org",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "org-consolidation-migration-mapping-cutover",
+        "title": "Lesson 47: Org Consolidation and Migration: Salesforce-to-Salesforce Movement, Field Mapping, and Cutover",
+        "series": "salesforce-architect",
+        "lesson": 47,
+        "excerpt": "Consolidating two Salesforce orgs into one is two migrations at once, not one. It is a data migration, moving records between orgs, and a configuration migration, moving objects, fields, picklists, automation, and ownership models back into a single place. The hard parts are rarely the tooling. They are the field mapping decisions, the external-ID strategy that keeps parent and child records linked across staged loads, the merged picklist values, the owner records that must exist before any record can point at them, and a cutover that freezes both sources, loads in dependency order with automation suppressed, reconciles counts and lookups, and only then reopens the org. This lesson defines those terms, works a two-org consolidation end to end, and shows why the dry run that makes cutover night boring is the single most valuable hour of the project.",
+        "date": "September 20, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "Salesforce",
+          "Migration",
+          "Data Migration",
+          "Consolidation",
+          "Cutover",
+          "Architecture"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "data-residency-compliance-gdpr-classification-retention-audit",
+        "title": "Lesson 48: Data Residency and Compliance: GDPR, Data Classification, Retention, and Audit",
+        "series": "salesforce-architect",
+        "lesson": 48,
+        "excerpt": "Compliance is not a checkbox you tick at the end of a build. It is a set of constraints you design into the org from the first field. Data residency decides which country's laws govern a record, because the record physically lives in a data center that sits inside a jurisdiction. GDPR decides what you may do with personal data and what a data subject can demand you do with it. Data classification labels every field by sensitivity so the residency and retention rules have something to attach to. Retention decides how long a record and its history survive, and audit decides whether you can prove, after the fact, who saw and changed what. This lesson defines those terms, works a European fintech org through the residency, classification, retention, and audit decisions end to end, and shows why the architect who treats compliance as a design input instead of a cleanup task ships an org that passes review the first time.",
+        "date": "September 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "Salesforce",
+          "Data Residency",
+          "GDPR",
+          "Compliance",
+          "Data Classification",
+          "Retention",
+          "Audit",
+          "Architecture"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 48,
+    "curriculumLessons": 90
+  },
+  {
     "slug": "hermes-consultant",
     "name": "Hermes Agent Consultant",
     "description": "A path to becoming an agent-implementation consultant: scoping, implementation craft, delivery practice, and the business of consulting. Platform-agnostic skills with Hermes Agent as the working example.",
@@ -1035,792 +1842,6 @@ export const learnSeries: LearningSeries[] = [
     ],
     "totalLessons": 42,
     "curriculumLessons": 46
-  },
-  {
-    "slug": "salesforce-architect",
-    "name": "Salesforce System Architect Primer",
-    "description": "A practical deep dive into Flow design, Apex patterns, and platform architecture for teams scaling on Salesforce.",
-    "gradient": "from-sky to-blue-600",
-    "lessons": [
-      {
-        "slug": "what-salesforce-system-architect-does",
-        "title": "Lesson 1: What a Salesforce System Architect Actually Does: Role, Cert Track, CTA Endgame",
-        "series": "salesforce-architect",
-        "lesson": 1,
-        "excerpt": "The Salesforce architect arc in one lesson: what System vs Application vs Technical Architects actually do, the certification ladder, and the CTA endgame.",
-        "date": "August 04, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "8 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "multi-tenant-platform-architecture",
-        "title": "Lesson 2: Multi-Tenant Platform Architecture: Orgs, Environments, and the Instance Model",
-        "series": "salesforce-architect",
-        "lesson": 2,
-        "excerpt": "Why every Salesforce org rents a slice of a shared platform: multi-tenancy, metadata-driven design, the instance model, and the sandbox environments that keep Dev/QA/UAT/Prod safe.",
-        "date": "August 05, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "8 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "core-building-blocks-objects-fields-relationships",
-        "title": "Lesson 3: Core Building Blocks: Objects, Fields, Relationships, Record Types, and Formula vs Roll-Up",
-        "series": "salesforce-architect",
-        "lesson": 3,
-        "excerpt": "The architect's canvas: standard and custom objects, field types, lookup vs master-detail relationships, record types for process variation, and when to compute with a formula field vs a roll-up summary.",
-        "date": "August 06, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "8 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Data"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "integration-fundamentals-rest-soap-bulk-apis",
-        "title": "Lesson 4: Integration Fundamentals: REST, SOAP, Bulk APIs, and Picking the Right One",
-        "series": "salesforce-architect",
-        "lesson": 4,
-        "excerpt": "The System Architect's home turf: when to call Salesforce with REST, when to reach for SOAP, when to hand it a CSV via Bulk API 2.0, and the request limits that make the choice matter.",
-        "date": "August 07, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "systems-architecture-what-it-means-ai-patterns",
-        "title": "Lesson 5: General Systems Architecture: What 'Architecture' Means and Why AI Systems Reuse the Same Patterns",
-        "series": "salesforce-architect",
-        "lesson": 5,
-        "excerpt": "The foundational concepts of systems architecture (components, interfaces, and design principles) and why every AI agent pattern (sequential, parallel, hierarchical) is a remix of patterns engineers have known for decades.",
-        "date": "August 08, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "Architecture",
-          "AI at Work"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "integration-patterns-request-reply-fire-forget-batch",
-        "title": "Lesson 6: Integration Patterns: Request-Reply, Fire-and-Forget, and Batch (Inbound & Outbound)",
-        "series": "salesforce-architect",
-        "lesson": 6,
-        "excerpt": "The three archetype integration patterns every Salesforce architect must recognize (request-reply, fire-and-forget, and batch data synchronization), plus the selection matrix, the limits that shape each choice, and a worked example that combines all three.",
-        "date": "August 09, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "event-driven-integration-platform-events-change-data-capture",
-        "title": "Lesson 7: Event-Driven Integration: Platform Events + Change Data Capture",
-        "series": "salesforce-architect",
-        "lesson": 7,
-        "excerpt": "The Salesforce event bus, Platform Events vs. Change Data Capture: when to publish business intent vs. record state, how to consume on- and off-platform, and the hard truth about ordering, replay, and allocations.",
-        "date": "August 10, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "8 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Integration",
-          "Data"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "middleware-tradeoffs-mulesoft-boomi-custom-salesforce-hub",
-        "title": "Lesson 8: Middleware Tradeoffs: MuleSoft vs Boomi vs Custom (and When Salesforce Is the Hub)",
-        "series": "salesforce-architect",
-        "lesson": 8,
-        "excerpt": "How to choose the integration layer: MuleSoft's API-led pro-code platform, Boomi's low-code iPaaS, hand-rolled custom code, and the decision matrix for when Salesforce itself should be the hub instead of any middleware at all.",
-        "date": "August 11, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Integration",
-          "Platform Engineering"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "integration-reliability-idempotency-retries-error-handling-dead-letter-design",
-        "title": "Lesson 9: Integration Reliability: Idempotency, Retries, Error Handling, and Dead-Letter Design",
-        "series": "salesforce-architect",
-        "lesson": 9,
-        "excerpt": "The reliability toolkit every integration needs: idempotency keys and message IDs so retries are safe, the transient vs. poisoned error taxonomy, bounded retry policies with backoff, per-pattern error handling, and dead-letter design with error tables so nothing is silently lost.",
-        "date": "August 12, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Integration",
-          "Reliability"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "sync-async-queues-eventual-consistency-agent-pipelines",
-        "title": "Lesson 10: Sync vs Async, Queues, and Eventual Consistency: The Laws That Shape Agent Pipelines",
-        "series": "salesforce-architect",
-        "lesson": 10,
-        "excerpt": "The three operating laws that govern any pipeline spanning more than one system: synchronous calls block, asynchronous calls decouple, and distributed systems settle into eventual consistency. Queues are the buffer that makes async safe. And the same laws that drive Salesforce governor limits now shape multi-agent AI pipelines.",
-        "date": "August 13, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "Architecture",
-          "Integration",
-          "Reliability",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "security-architecture-sharing-model-owd-role-hierarchy-sharing-rules",
-        "title": "Lesson 11: Security Architecture: The Sharing Model, OWD, Role Hierarchy, Sharing Rules, and Manual Sharing",
-        "series": "salesforce-architect",
-        "lesson": 11,
-        "excerpt": "Who can see a given record? The four record-level controls that answer it: org-wide defaults, the role hierarchy, sharing rules, and manual sharing. How they layer, how they only ever open access, and why 'most permissive wins' is the whole game.",
-        "date": "August 14, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Security"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "security-profiles-permission-sets-permission-set-groups-mfa-session-policies",
-        "title": "Lesson 12: Security, Part 2: Profiles, Permission Sets, Permission Set Groups, MFA, and Session Policies",
-        "series": "salesforce-architect",
-        "lesson": 12,
-        "excerpt": "Who can do what in an org. The move from profile-led to permission-set-led access, what a permission set group bundles together, the 2026 MFA enforcement that now touches every login, and the session policies that decide how long a session lives.",
-        "date": "August 15, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Security"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "security-external-access-oauth-saml-connected-apps-communities",
-        "title": "Lesson 13: Security, Part 3: External Access, OAuth, SAML/SSO, Connected Apps, and Communities",
-        "series": "salesforce-architect",
-        "lesson": 13,
-        "excerpt": "How outside systems and outside people get in. OAuth flows for machine access, SAML single sign-on for employee logins, connected apps as the doorway, and Experience Cloud communities as the portal where customers and partners authenticate without touching your internal identity system.",
-        "date": "August 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Security"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "data-architecture-data-model-design-patterns-data-skew",
-        "title": "Lesson 14: Data Architecture: Data Model Design, Common Data Model Patterns, and Data Skew",
-        "series": "salesforce-architect",
-        "lesson": 14,
-        "excerpt": "Data is the load-bearing wall of every org. Designing a data model that scales means deciding where each relationship lives, recognizing the recurring shapes that solve real problems, and keeping the load off any single parent record or owner. This lesson covers data model design, the common patterns (one-to-many, many-to-many, hierarchical, and data tiering), and the three data skews that quietly break performance.",
-        "date": "August 17, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Data"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "data-architecture-for-ai-vector-databases-embeddings",
-        "title": "Lesson 15: Data Architecture for AI: Databases, Vector DBs, Embeddings, and the Same Modeling Discipline",
-        "series": "salesforce-architect",
-        "lesson": 15,
-        "excerpt": "The data side of AI systems. Embeddings, vector databases, chunking, and why the modeling discipline from a Salesforce data model (records, relationships, source of truth, scale) carries over unchanged when the storage engine becomes a vector store. Includes a worked example of a RAG knowledge base, a pgvector walkthrough, and the Data Cloud vector database connection.",
-        "date": "August 18, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "Architecture",
-          "Data",
-          "LLMs",
-          "RAG"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "data-migration-strategy-etl-elt-tools-validation-cutover-rollback",
-        "title": "Lesson 16: Data Migration Strategy: ETL vs ELT, Tools, Validation, Cutover, and Rollback",
-        "series": "salesforce-architect",
-        "lesson": 16,
-        "excerpt": "The full migration lifecycle: ETL vs ELT, the Salesforce tool options (Data Import Wizard vs Data Loader vs enterprise ETL), dependency-ordered loading with external IDs, validation by record count and spot check, and the cutover and rollback plan that keeps a bad load from becoming a disaster.",
-        "date": "August 19, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Data"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "large-data-volumes-archiving-big-objects-skinny-tables-indexing",
-        "title": "Lesson 17: Large Data Volumes: Archiving, Big Objects, Skinny Tables, and Indexing Strategy",
-        "series": "salesforce-architect",
-        "lesson": 17,
-        "excerpt": "How an org stays fast and inside its storage as volume grows: selectivity and custom indexes, skinny tables for read-heavy hot data, big objects for bulk historical storage, and archiving as the tier that sheds cold data before it drags everything down.",
-        "date": "August 20, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Data",
-          "RAG"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "system-limits-governor-api-storage-planning",
-        "title": "Lesson 18: System Limits: Governor, API, and Storage Limits, and Planning Around Them",
-        "series": "salesforce-architect",
-        "lesson": 18,
-        "excerpt": "Governors exist to keep a multitenant platform fair. Learn the limits, then bulkify, batch, and monitor so they never fire on your watch.",
-        "date": "August 21, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "environment-release-strategy-sandboxes-change-sets-devops",
-        "title": "Lesson 19: Environment and Release Strategy: Sandbox Types, Change Sets vs DevOps (sf/sfdx)",
-        "series": "salesforce-architect",
-        "lesson": 19,
-        "excerpt": "Where work happens and how it moves to production. The four sandbox types (Developer, Developer Pro, Partial Copy, Full), what each copies and how often it refreshes, then the release-mechanism fork: click-based change sets versus source-driven deployment with the sf CLI and a Git-based source of truth, including Salesforce DX and DevOps Center.",
-        "date": "August 22, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Delivery",
-          "DevOps"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "environments-cicd-in-ml-ai-pipelines",
-        "title": "Lesson 20: General Systems Architecture: Environments and CI/CD in ML and AI Pipelines",
-        "series": "salesforce-architect",
-        "lesson": 20,
-        "excerpt": "The same environment-and-release discipline from Lesson 19, applied to machine learning and AI systems. Why the ML artifact is more than code (code, data, and model all change), the continuous X's (CI, CD, CT, CM), the MLOps maturity levels, how a model promotes from a development environment to production, and what changes when the artifact is a nondeterministic agent that needs eval gates instead of unit tests.",
-        "date": "August 23, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "Architecture",
-          "AI Infrastructure",
-          "CI/CD",
-          "Delivery",
-          "AI Agents"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "solution-design-requirement-to-architecture-doc-nfrs-tradeoffs",
-        "title": "Lesson 21: Solution Design: Turning a Requirement Into an Architecture Document (NFRs and Tradeoffs)",
-        "series": "salesforce-architect",
-        "lesson": 21,
-        "excerpt": "How a requirement becomes an architecture document: separating the business why from the what and the how, writing measurable non-functional requirements using the Salesforce Well-Architected framework (Trusted, Easy, Adaptable), resolving design tradeoffs explicitly, and recording each decision with its rationale so the delivery team can build without re-litigating every choice.",
-        "date": "August 24, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "architecture-review-design-reviews-decision-records-saying-no",
-        "title": "Lesson 22: Architecture Review: Design Reviews, Decision Records, and How to Say No",
-        "series": "salesforce-architect",
-        "lesson": 22,
-        "excerpt": "The review discipline that keeps architecture coherent as the org grows: design review as a forum, not a gate, the ADR as durable decision memory, and how to decline a bad how without rejecting the person behind it.",
-        "date": "August 25, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Governance"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "error-handling-monitoring-debug-logs-event-monitoring-health-checks-alerts",
-        "title": "Lesson 23: Error Handling and Monitoring: Debug Logs, Event Monitoring, Health Checks, and Alerts",
-        "series": "salesforce-architect",
-        "lesson": 23,
-        "excerpt": "The observability layer of a Salesforce org: debug logs and trace flags when a transaction misbehaves, Event Monitoring when you need who, what, and when across the whole org, health checks for the security baseline and the platform status, and the alerting that turns all of it into action instead of archaeology.",
-        "date": "August 26, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Observability",
-          "Reliability"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "performance-query-optimization-selective-soql-indexes-caching",
-        "title": "Lesson 24: Performance: Query Optimization, Selective SOQL, Indexes, and Caching",
-        "series": "salesforce-architect",
-        "lesson": 24,
-        "excerpt": "How a query becomes fast: the selectivity thresholds the optimizer uses to decide whether an index is worth it, how to write SOQL that the optimizer will actually treat well, how to measure and index, and Platform Cache as the lever that skips the query entirely.",
-        "date": "August 27, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Performance",
-          "RAG"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "performance-engineering-ai-latency-caching-throughput-batching",
-        "title": "Lesson 25: Performance Engineering for AI: Latency Budgets, Caching, Throughput, and Batching",
-        "series": "salesforce-architect",
-        "lesson": 25,
-        "excerpt": "Performance stops being about one query and becomes a system-wide budget the moment AI is in the path. This lesson covers latency budgets, the difference between throughput and latency, the batch that makes LLM inference affordable, and the caches that skip work entirely.",
-        "date": "August 28, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "Architecture",
-          "Performance",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "enterprise-rest-api-design-versioning-pagination-bulk-best-practices",
-        "title": "Lesson 26: Enterprise REST API Design: Versioning, Pagination, Bulk, and Best Practices",
-        "series": "salesforce-architect",
-        "lesson": 26,
-        "excerpt": "The design layer under every REST integration: how Salesforce versions its API, how to page through large result sets without breaking, when bulk writes beat synchronous calls, and the habits that keep an integration alive for years.",
-        "date": "August 30, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "integration-security-named-credentials-jwt-certificates-ip-allowlisting",
-        "title": "Lesson 27: Integration Security: Named Credentials, JWT, Certificates, and IP Allowlisting",
-        "series": "salesforce-architect",
-        "lesson": 27,
-        "excerpt": "The security layer under every integration: named credentials that keep endpoints and secrets out of code, JWT bearer for server-to-server auth, certificates for signing and mutual TLS, and IP allowlisting as the last fence that says who is even allowed to knock.",
-        "date": "August 31, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Integration",
-          "Security",
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "high-volume-event-patterns-streaming-pacing-platform-event-limits",
-        "title": "Lesson 28: High-Volume Event Patterns: Streaming, Pacing, and Platform Event Limits",
-        "series": "salesforce-architect",
-        "lesson": 28,
-        "excerpt": "What changes when event volume stops being a trickle and becomes a flood: streaming with the Pub/Sub API, pacing publish rates against rolling limits, and the platform event allocations that decide whether your bus survives the day.",
-        "date": "September 1, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Integration",
-          "Web Development",
-          "Project Management"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "testing-integrations-mocking-sandbox-test-strategy-integration-suites",
-        "title": "Lesson 29: Testing Integrations: Mocking, Sandbox Test Strategy, and Integration Test Suites",
-        "series": "salesforce-architect",
-        "lesson": 29,
-        "excerpt": "Testing an integration is not the same as testing the code on one side of it. You have to fake the external system to unit test your Apex, pick the right sandbox to test against real data, and build suites that prove the pieces work together before they reach production. This lesson covers each layer: mocking callouts, a sandbox strategy, and integration test suites.",
-        "date": "September 2, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Architecture",
-          "Testing",
-          "Integrations"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "testing-ai-systems-evals-golden-sets-canaries-regression",
-        "title": "Lesson 30: General Systems Architecture: Testing AI Systems: Evals, Golden Sets, Canaries, and Regression",
-        "series": "salesforce-architect",
-        "lesson": 30,
-        "excerpt": "A model is not a method you can pin to a single expected output. This lesson covers the testing discipline that replaces the unit test for AI systems: evals as structured tests, golden sets as the regression anchor, and canary deployments as the production safety net, with the Salesforce tools that already ship this discipline.",
-        "date": "September 03, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "Architecture",
-          "AI Infrastructure",
-          "Testing",
-          "AI Agents"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "apex-architecture-service-layer-domain-selector-patterns",
-        "title": "Lesson 31: Apex Architecture: Service Layer, Domain, and Selector Patterns",
-        "series": "salesforce-architect",
-        "lesson": 31,
-        "excerpt": "Apex triggers and classes are where business logic actually lives, and how you organize that code decides whether a solution stays maintainable for five years or turns into spaghetti the first time a requirement changes. This lesson covers the three enterprise patterns that keep Apex code organized: the service layer for orchestrating processes, the domain layer for object behavior, and the selector layer for all your SOQL. It covers why they matter, how they fit together, and a worked example of all three in action.",
-        "date": "September 4, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "Architecture",
-          "Apex",
-          "Patterns"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "flow-architecture-flow-vs-apex-vs-external-automation",
-        "title": "Lesson 32: Flow Architecture: Flow vs Apex vs External Automation, Decision Framework",
-        "series": "salesforce-architect",
-        "lesson": 32,
-        "excerpt": "A repeatable framework for choosing where a process runs: Record-Triggered Flow for low-density automation, the hybrid Flow plus invocable Apex pattern for medium density, Apex triggers for high density, and the boundary where automation should leave the org entirely for external, agentic, or cross-system work.",
-        "date": "September 5, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Flow",
-          "Apex"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "bulkification-trigger-frameworks-limits-aware-design",
-        "title": "Lesson 33: Bulkification & Trigger Frameworks: Limits-Aware Design That Scales",
-        "series": "salesforce-architect",
-        "lesson": 33,
-        "excerpt": "The reason a trigger that works on one record fails on a data load. Governor limits put a hard ceiling on SOQL, DML, heap, and CPU per transaction. Bulkification keeps every layer working on collections, and a trigger framework keeps one handler in charge of the object so the code that touches the platform is tiny and the logic is testable.",
-        "date": "September 6, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Apex",
-          "Triggers"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "data-model-design-inheritance-polymorphic-denormalization",
-        "title": "Lesson 34: Data Model Design: Inheritance, Polymorphic Relationships, and Denormalization Tradeoffs",
-        "series": "salesforce-architect",
-        "lesson": 34,
-        "excerpt": "Three data modeling tools that people reach for when records stop being uniform: inheritance for records that are kinds of a common thing, polymorphic relationships for a single field that must point at several object types, and denormalization for precomputing data so reads get fast. Each solves a real problem, and each hides a cost. This lesson defines them precisely, shows how Salesforce represents each one, and walks a worked example that forces you to use all three at once.",
-        "date": "September 7, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Data"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "domain-modeling-entities-aggregates-bounded-contexts-agent-design",
-        "title": "Lesson 35: Domain Modeling: Entities, Aggregates, and Bounded Contexts Applied to Agent Design",
-        "series": "salesforce-architect",
-        "lesson": 35,
-        "excerpt": "The strategic and tactical tools of domain modeling (entities, aggregates, bounded contexts, ubiquitous language) and how the same discipline that keeps a data model coherent also keeps a multi-agent system from collapsing into a tangle of overlapping prompts.",
-        "date": "September 08, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "Architecture",
-          "AI at Work"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "sharing-architecture-deep-dive-recalculation-implicit-sharing-limits",
-        "title": "Lesson 36: Sharing Architecture Deep Dive: Recalculation, Implicit Sharing, and When Sharing Can't Do the Job",
-        "series": "salesforce-architect",
-        "lesson": 36,
-        "excerpt": "Sharing is not static, and it is not unlimited. When an org-wide default changes, the platform recalculates share records across the org, and on a big data volume that job can churn for hours. Implicit sharing hands out access automatically through parent-child relationships, whether you asked for it or not. And at a certain scale, declarative sharing stops being the right tool, which is when Apex managed sharing and restriction rules take over.",
-        "date": "September 9, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Security"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "asynchronous-apex-choosing-batch-queueable-scheduled-future",
-        "title": "Lesson 37: Asynchronous Apex: Batch, Queueable, Scheduled, and Future, and How to Choose",
-        "series": "salesforce-architect",
-        "lesson": 37,
-        "excerpt": "Four ways to move work out of the user's transaction, and they are not interchangeable. Future methods are fire-and-forget with primitive parameters only, queueable jobs carry real objects and hand back a job Id you can monitor, batch Apex trades immediacy for volume by running each chunk as its own transaction, and scheduled Apex is a timer that should do nothing but start one of the other three. Pick wrong and you either hit the synchronous ceiling you were escaping or you burn the org's shared async budget on work a single call could have done.",
-        "date": "September 10, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Apex",
-          "Asynchronous"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "governor-limit-aware-design-soql-sosl-dml-budgets",
-        "title": "Lesson 38: Governor-Limit-Aware Design: SOQL, SOSL, and DML Budgets",
-        "series": "salesforce-architect",
-        "lesson": 38,
-        "excerpt": "A transaction does not get a budget per trigger or per class. It gets 100 SOQL queries, 150 DML statements, 50,000 returned query rows, and 10,000 DML rows as one pool, and every trigger, record-triggered Flow, and uncertified package in that transaction spends from it. Designing limits-aware means knowing which calls consume a statement, which consume a row, and why the two meters fail at different batch sizes. This lesson covers the SQL and DML meters, where SOSL fits in the same budget, and the review habits that catch a limit exception before a data load does.",
-        "date": "September 11, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Apex",
-          "Limits",
-          "SOQL"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "transaction-lifecycle-state-save-order-trigger-contexts",
-        "title": "Lesson 39: Transaction Lifecycle: State, Save Order, and the 4 Trigger Contexts in One Transaction",
-        "series": "salesforce-architect",
-        "lesson": 39,
-        "excerpt": "A record save is not one moment. It is a transaction that walks a fixed sequence: the record loads, system validation runs, before-save Flows and before triggers fire, custom validation and duplicate rules run, the record writes to the database but does not commit, after triggers fire, then assignment, workflow, escalation, roll-up, and sharing logic run, and only then does the transaction commit. Each phase sees the record in a different state, and that state difference is what before-save logic exploits and after-save logic must respect. This lesson walks a single save through that lifecycle, defines the four trigger contexts (before insert, before update, after insert, after update) that one transaction can run, and shows why a workflow field update re-fires triggers while a validation failure rolls everything back.",
-        "date": "September 12, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "Salesforce",
-          "Apex",
-          "Triggers",
-          "Transaction",
-          "Architecture"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "stateful-vs-stateless-agents-context-memory-tool-state",
-        "title": "Lesson 40: Stateful vs Stateless Agents: Context, Memory, and Tool State",
-        "series": "salesforce-architect",
-        "lesson": 40,
-        "excerpt": "Why a language model remembers almost nothing and knows a great deal, what it costs to ship a purely stateless agent, and how context, memory, and tool state become the architecture that decides whether an agent is useful on day one or day thirty.",
-        "date": "September 13, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "Architecture",
-          "AI at Work",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "experience-cloud-architecture-sites-communities-licensing-sharing",
-        "title": "Lesson 41: Experience Cloud Architecture: Sites, Communities, Licensing, and Sharing",
-        "series": "salesforce-architect",
-        "lesson": 41,
-        "excerpt": "Experience Cloud as architecture: what a site actually is, why the framework you build it on (LWR versus Aura) changes your whole subsystem design, how licensing attaches to users rather than pages, and the external sharing architecture that keeps an outsider's window exactly the right size.",
-        "date": "September 14, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Experience Cloud"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "lightning-web-components-architecture-composition-wire-data-services",
-        "title": "Lesson 42: Lightning Web Components Architecture: Composition, Wire Service, and Data Services",
-        "series": "salesforce-architect",
-        "lesson": 42,
-        "excerpt": "How Lightning Web Components are built from smaller pieces and fed data: component composition and the data-down/events-up contract, the wire service and its reactivity, and the Lightning Data Service cache that shares one version of a record across every component that renders it.",
-        "date": "September 15, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Lightning Web Components"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "lightning-performance-caching-static-resources-what-slows-users-down",
-        "title": "Lesson 43: Lightning Performance: Caching, Static Resources, and What Slows Users Down",
-        "series": "salesforce-architect",
-        "lesson": 43,
-        "excerpt": "Where a Lightning page's load time actually goes, the cache layers that cut it down (secure browser caching, the Salesforce CDN, the Lightning Data Service client cache, and cacheable Apex), and how to ship static resources so third-party assets stop sitting in the critical path.",
-        "date": "September 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Lightning",
-          "Performance"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "security-review-owasp-apex-soql-injection-crud-fls",
-        "title": "Lesson 44: Security Review: OWASP for Apex, SOQL Injection, and Enforcing CRUD and FLS",
-        "series": "salesforce-architect",
-        "lesson": 44,
-        "excerpt": "How a security review actually reads Apex: the two shapes of SOQL injection and how bind variables and allowlists close them, why with sharing is not access control, and the enforcement tools (WITH USER_MODE, stripInaccessible, AccessLevel, describe checks) that turn CRUD and field-level security into something a reviewer can verify.",
-        "date": "September 17, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Security",
-          "Apex"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "security-architecture-for-ai-prompt-injection-tool-permissions-least-privilege",
-        "title": "Lesson 45: Security Architecture for AI: Prompt Injection, Tool Permissions, and Least Privilege",
-        "series": "salesforce-architect",
-        "lesson": 45,
-        "excerpt": "Why an AI agent fails security reviews for reasons no classic control catches: prompt injection as an injection class of its own, the tools as the real attack surface, and least privilege, extended to least agency, as the principle that keeps an agent from becoming the most privileged identity in your stack.",
-        "date": "September 18, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "Architecture",
-          "AI at Work",
-          "Security"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "multi-org-architecture-when-to-split-org-to-org-integration-patterns",
-        "title": "Lesson 46: Multi-Org Architecture: When to Split, and Org-to-Org Integration Patterns",
-        "series": "salesforce-architect",
-        "lesson": 46,
-        "excerpt": "The org is the biggest structural decision a Salesforce architect makes, and it is the hardest to undo. This lesson gives you a test for when a second org is legitimate and when it is an expensive way to dodge a governance problem, then shows the patterns that connect orgs that must stay separate: hub-and-spoke with master data, Salesforce Connect's cross-org adapter, event-driven bridging, and batch synchronization.",
-        "date": "September 19, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "Salesforce",
-          "Architecture",
-          "Multi-Org",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "org-consolidation-migration-mapping-cutover",
-        "title": "Lesson 47: Org Consolidation and Migration: Salesforce-to-Salesforce Movement, Field Mapping, and Cutover",
-        "series": "salesforce-architect",
-        "lesson": 47,
-        "excerpt": "Consolidating two Salesforce orgs into one is two migrations at once, not one. It is a data migration, moving records between orgs, and a configuration migration, moving objects, fields, picklists, automation, and ownership models back into a single place. The hard parts are rarely the tooling. They are the field mapping decisions, the external-ID strategy that keeps parent and child records linked across staged loads, the merged picklist values, the owner records that must exist before any record can point at them, and a cutover that freezes both sources, loads in dependency order with automation suppressed, reconciles counts and lookups, and only then reopens the org. This lesson defines those terms, works a two-org consolidation end to end, and shows why the dry run that makes cutover night boring is the single most valuable hour of the project.",
-        "date": "September 20, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "Salesforce",
-          "Migration",
-          "Data Migration",
-          "Consolidation",
-          "Cutover",
-          "Architecture"
-        ],
-        "status": "published"
-      }
-    ],
-    "totalLessons": 47,
-    "curriculumLessons": 90
   },
   {
     "slug": "salesforce-data-architect",
@@ -4134,6 +4155,27 @@ export const learnSeries: LearningSeries[] = [
 
 /** Flat list of every lesson, NEWEST FIRST (for sitemap, nav, flat lookups). */
 export const learnLessons: LearnLesson[] = [
+  {
+    "slug": "data-residency-compliance-gdpr-classification-retention-audit",
+    "title": "Lesson 48: Data Residency and Compliance: GDPR, Data Classification, Retention, and Audit",
+    "series": "salesforce-architect",
+    "lesson": 48,
+    "excerpt": "Compliance is not a checkbox you tick at the end of a build. It is a set of constraints you design into the org from the first field. Data residency decides which country's laws govern a record, because the record physically lives in a data center that sits inside a jurisdiction. GDPR decides what you may do with personal data and what a data subject can demand you do with it. Data classification labels every field by sensitivity so the residency and retention rules have something to attach to. Retention decides how long a record and its history survive, and audit decides whether you can prove, after the fact, who saw and changed what. This lesson defines those terms, works a European fintech org through the residency, classification, retention, and audit decisions end to end, and shows why the architect who treats compliance as a design input instead of a cleanup task ships an org that passes review the first time.",
+    "date": "September 21, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "17 min read",
+    "tags": [
+      "Salesforce",
+      "Data Residency",
+      "GDPR",
+      "Compliance",
+      "Data Classification",
+      "Retention",
+      "Audit",
+      "Architecture"
+    ],
+    "status": "published"
+  },
   {
     "slug": "engagement-models-and-pricing",
     "title": "Lesson 25: Engagement Models and Pricing: Fixed-Fee vs Hourly vs Retainer, and When Each Fits",
