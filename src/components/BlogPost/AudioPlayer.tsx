@@ -40,6 +40,12 @@ export interface AudioPlayerProps {
    * timingsStoragePath) is never serialized to the client (DoD-4).
    */
   hasAudio?: boolean;
+  /**
+   * What the narrated content is called, for the player's title + aria-label.
+   * Blog articles default to "article"; the Learn lesson page passes "lesson"
+   * so its player reads "Listen to this lesson".
+   */
+  label?: string;
 }
 
 const SPEEDS = [1, 1.25, 1.5] as const;
@@ -79,7 +85,7 @@ function nowMs(): number {
   return typeof performance !== "undefined" ? performance.now() : Date.now();
 }
 
-export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
+export default function AudioPlayer({ slug, hasAudio, label = "article" }: AudioPlayerProps) {
   const { user, isLoading } = useAuth();
   const audioRef = useRef<HTMLAudioElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -467,7 +473,7 @@ export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
     return (
       <div className="my-6 flex flex-col items-center gap-3 rounded-2xl border border-gray-200 bg-white px-6 py-6 text-center dark:border-[var(--border-default)] dark:bg-[var(--surface-card)]">
         <p className="text-sm font-semibold text-gray-800 dark:text-[var(--ink-primary)]">
-          🎧 Listen to this article
+          🎧 Listen to this {label}
         </p>
         <p className="text-xs text-gray-500 dark:text-[var(--ink-muted)]">
           Audio is a free perk for signed-in readers.
@@ -494,7 +500,7 @@ export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
     >
       <div className="mb-2 flex items-center justify-between gap-3">
         <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-[var(--ink-muted)]">
-          Listen to this article
+          Listen to this {label}
         </span>
         <div className="flex items-center gap-3">
           {timings && timings.length > 0 && (
@@ -531,7 +537,7 @@ export default function AudioPlayer({ slug, hasAudio }: AudioPlayerProps) {
         controls
         preload="none"
         className="w-full"
-        aria-label="Article audio player"
+        aria-label={`${label.charAt(0).toUpperCase()}${label.slice(1)} audio player`}
         src={`/api/audio/${slug}`}
         onTimeUpdate={handleTimeUpdate}
       />

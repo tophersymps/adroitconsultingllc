@@ -250,7 +250,7 @@ export default async function LessonPage({ params }: Props) {
             across the catalogue, so the player fetches /api/audio/<slug>. */}
         {audio && (
           <div className="sticky top-16 z-40 max-w-[920px] mx-auto px-6 my-6">
-            <AudioPlayerLazy slug={slug} hasAudio />
+            <AudioPlayerLazy slug={slug} hasAudio label="lesson" />
           </div>
         )}
 

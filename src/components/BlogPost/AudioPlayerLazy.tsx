@@ -21,8 +21,10 @@ const AudioPlayer = dynamic(() => import("@/components/BlogPost/AudioPlayer"), {
 export interface AudioPlayerLazyProps {
   slug: string;
   hasAudio?: boolean;
+  /** Passed through to AudioPlayer — see AudioPlayerProps.label. */
+  label?: string;
 }
 
-export function AudioPlayerLazy({ slug, hasAudio }: AudioPlayerLazyProps) {
-  return <AudioPlayer slug={slug} hasAudio={hasAudio} />;
+export function AudioPlayerLazy({ slug, hasAudio, label }: AudioPlayerLazyProps) {
+  return <AudioPlayer slug={slug} hasAudio={hasAudio} label={label} />;
 }
