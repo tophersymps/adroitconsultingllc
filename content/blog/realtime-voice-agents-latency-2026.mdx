@@ -1,0 +1,109 @@
+---
+title: "Voice Agents Are a Latency Problem Disguised as AI"
+slug: realtime-voice-agents-latency-2026
+excerpt: "A voice agent is a latency system wrapped around an LLM. Every stage owns a slice of the 300-800ms turn, and turn-taking decides who stays on the line."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "September 22, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "12 min read"
+tags: [AI Agents, Voice Agents, Realtime API, AI Infrastructure, Speech-to-Speech, Latency Engineering]
+bannerImage: "/banners/realtime-voice-agents-latency-2026.png"
+---
+
+Type "what's the weather?" into a chatbot and wait two seconds for an answer. It feels normal, because you are reading text and your eyes are already moving. Say the same thing out loud and wait two seconds in silence. It feels broken. The person on the other end is either thinking very hard, distracted, or dead.[^1]
+
+That gap is the whole discipline of voice agents, and it is why a voice agent is not a chatbot with a microphone bolted on. It is a soft real-time media system wrapped around an LLM. The reasoning is the easy part. The hard part is timing: get audio in, decide when the human actually stopped talking, think, and get audio back out fast enough that the conversation feels alive. Miss the timing and callers talk over the agent, repeat themselves, and hang up.[^2]
+
+Conversational research puts the comfortable inter-turn gap at 200 to 300 milliseconds in English, roughly 250ms on average. It varies by language and culture, Japanese sits closer to 7ms while Danish sits closer to 470ms, but the English figure is the one most teams build against. Cross 500ms and the user perceives lag. Cross 1000ms and the user starts talking over you. Cross 2000ms and they hang up.[^1] Those four thresholds are the product spec, whether anyone writes them down or not.
+
+## Two architectures, and why one is structurally faster
+
+There are two ways to build a voice agent, and the choice determines your latency ceiling before you write a line of code.
+
+The first is a chained pipeline: speech-to-text, then an LLM, then text-to-speech. Each stage is a separate service with its own queue, its own connection, and its own tokenization cost. A classic stack of a GPT-class model with a hosted STT and TTS provider lands at 1.5 to 2.0 seconds before the user hears the first phoneme, because the stages cannot overlap. You cannot start TTS until the LLM finishes, and the LLM cannot start until the transcription returns.[^1][^3] That is the gap that made every voice assistant from 2014 to 2023 feel robotic, and it is a structural property of the chain, not a tuning problem.
+
+The second is a speech-to-speech model: a single model that takes audio in and emits audio out, skipping the text round-trip entirely. OpenAI's Realtime API is the reference implementation. It is a WebSocket-based API that streams audio in both directions simultaneously, using one model that accepts and produces audio natively, which eliminates the latency introduced by converting between modalities at each step.[^4] The model also hears how you said something, the sarcasm, the hesitation, the urgency, information that is destroyed when audio becomes text.[^1]
+
+![Two voice-agent architectures side by side: the chained STT to LLM to TTS pipeline on the left with its three sequential hops and 1.5 to 2.0 second floor, and the single speech-to-speech model on the right with one streaming path and a 300 to 600 millisecond first-audio time](</diagrams/realtime-voice-agents-latency-2026/1-two-architectures.png>)
+
+The latency difference is not marginal. A speech-to-speech session typically delivers first audio 300 to 600ms after the user stops speaking, inside the range of a natural pause.[^1] A chained pipeline sits at 1.5 to 2.0 seconds, past the point where a caller assumes the line dropped. The chained path still earns its place when you need a model that has no speech-to-speech mode, a Claude-class reasoning model or a custom fine-tune, a specific cloned voice, or fine-grained control over each stage.[^1][^5] But if you are starting fresh and the model quality bar is met, the speech-to-speech path is the default, because the product is the budget and the budget is structurally smaller.
+
+## The budget is the product
+
+Every stage in a voice pipeline owns a slice of the turn, and the slices add up fast. The 2026 production stack, stage by stage, looks like this. Voice activity detection, deciding when speech starts and stops, runs 50 to 150ms. Streaming speech-to-text returns a first partial in 100 to 300ms and a final transcript in 200 to 500ms. The reasoning model emits a first token in 300 to 800ms. Text-to-speech produces a first audio frame in 100 to 400ms. The orchestrator that overlaps all of it adds 20 to 50ms of framework overhead.[^1]
+
+Stack those numbers as sequential waits and you are back above a second. The trick is that they are not supposed to be sequential. The orchestrator overlaps them: speech-to-text feeds the LLM as words arrive, the LLM streams tokens into TTS, and the user hears the first audio while the rest of the pipeline keeps running.[^3] The industry target for an instant feel is a total turn latency of roughly 300 to 800ms at the 95th percentile, and the per-stage ledger for a well-built streaming system lands near that: microphone capture and VAD at 20 to 40ms, network uplink at 10 to 40ms, ASR first result at 150 to 300ms, LLM first token at 100 to 300ms, TTS first audio at 150 to 350ms, and network down plus playback at 20 to 60ms, for a total of about 450 to 1,100ms.[^3]
+
+![The voice agent latency budget as a stacked ledger: each stage from microphone capture through playback owns a millisecond slice, with the streaming overlap shaded and the 300 to 800 millisecond p95 target marked against the total](</diagrams/realtime-voice-agents-latency-2026/2-latency-ledger.png>)
+
+Two things follow from that ledger. First, there is no single dial that fixes latency. You cannot buy your way out of it with a better model if the transport or the VAD is eating the budget. Second, the p95 matters more than the median. Do not measure the happy path. Record end-to-end, "I spoke at time zero, I heard the reply at time one," as a p50 and p95 distribution, because the tail is where fast breaks and where callers hang up.[^3]
+
+## Turn-taking is the make-or-break feature
+
+Latency gets the headlines, but the feature that decides whether a voice agent feels human is turn-taking: knowing when the user has finished and it is your turn to speak. A voice activity detector hears silence and guesses. Get it wrong and the agent either cuts the user off on a false end-of-turn or sits in awkward silence on a missed one.[^1]
+
+The bar your users measure against is another human on a phone call. People are extremely tuned to violations of normal turn-taking, and they pre-signal the end of their turn with falling intonation, breath patterns, and eye contact, none of which is in a transcript.[^1] A naive VAD that fires on silence alone will interrupt someone who paused to think. That is why the best 2026 systems moved past energy-based detection. OpenAI's Realtime API offers server-side VAD, where the model itself decides when the user stopped talking, and a semantic mode where the model judges the turn using content and prosody rather than silence alone.[^6][^7]
+
+The end-of-turn silence threshold is the single most tunable knob, and the most dangerous one to cut. A shorter threshold feels snappier but cuts off slow speakers. A 500ms default is a reasonable starting point, and 700ms suits accessibility use cases where the user may pause to think.[^1]
+
+The other half of turn-taking is barge-in: the user interrupts the agent mid-response. Without it, users feel trapped inside the agent's monologue.[^3] The pattern is to cancel the in-flight response the moment the user starts speaking. On the Realtime API, the client watches for the speech-started event and sends a cancel, stopping TTS playback and discarding the queued buffer before the model says another word.[^1]
+
+![The voice turn lifecycle as a timeline: user speech, VAD end-point, streaming transcript, LLM first token, TTS first audio, with a barge-in branch showing the user interrupting mid-response and the cancel path that halts playback](</diagrams/realtime-voice-agents-latency-2026/3-turn-lifecycle.png>)
+
+The single most common production bug in 2026 is answering too early. The agent hears a pause, finalizes the turn, and interrupts the user's actual question. The mitigation is a small confirmation delay after the VAD endpoint, enough for the user to continue and short enough to feel instant. One team's tuning guide notes that this one knob moves perceived quality more than any model swap.[^3]
+
+## Transport and the edge
+
+The transport matters as much as the models. For browser and mobile clients that capture audio directly, WebRTC is the default, because its built-in jitter buffer and forward error correction protect the human ear from packet loss. For server-side media pipelines, phone calls, or broadcast ingest, WebSocket is the right choice, because you are already inside an audio bridge that handles loss for you. For telephony, SIP is the telephony-native path.[^8][^4]
+
+The transport decision changed shape in May 2026, when OpenAI rearchitected the Realtime API's WebRTC stack to serve more than 900 million weekly active ChatGPT users plus the developer API. The headline change was a split between two services. A thin edge transceiver terminates the client WebRTC connection, owning ICE, DTLS, SRTP keys, and session lifecycle, and converts media into a simpler internal protocol. A separate relay layer carries that protocol over a small set of stable UDP addresses to the inference, transcription, TTS, tool, and orchestration services in the data center.[^9]
+
+The consequence for builders is that "model plus WebRTC SDK on a single VM" is now the slow architecture. In the old design, the model server had to speak the full WebRTC protocol, jitter buffers, NACK, FEC, RED, congestion control, and live next to the user. In the split design, only the edge speaks WebRTC, so the model can sit in the cheapest, hottest GPU pool on the planet without sacrificing the conversational feel.[^9] One production fleet that consumes the hosted API measured a 28.6 percent drop in median voice-to-voice latency, from 612ms to 437ms, after the rollout completed, without shipping a line of code, because the change was server-side.[^9]
+
+Two smaller wins came with it. Because the edge transceiver maintains a continuous audio stream, the model can detect a user starting to talk within about one packet, roughly 20ms, which makes clean mid-sentence interruption easier. And tool calls can fire in parallel with TTS playback instead of waiting for the audio response to finish.[^9]
+
+## The cost and protocol reality
+
+Voice is priced differently from text, and the difference catches teams off guard. OpenAI's current realtime flagship, `gpt-realtime-2`, carries a 128,000-token context window and a 32,000-token max output, and it prices audio tokens far above text. Audio input runs $32 per million tokens, cached audio input $0.40, and audio output $64 per million. Text input is $4 per million, cached $0.40, and output $24. The prior model, `gpt-realtime-1.5`, priced output at $16 per million.[^10]
+
+Because a voice session re-sends its accumulated audio history each turn, the token bill grows with call length. A five-minute call with a 60,000-token running context costs noticeably more than a one-minute call, so teams should budget per minute of call time, not per utterance.[^3] The Realtime API supports automatic context truncation and manual summarization to keep the window from filling, and both are worth setting up before a long session degrades.[^11]
+
+The commercial landscape has a second player. By mid-2026, Google's Gemini Live API offered audio pricing roughly ten times cheaper than OpenAI's per-minute equivalents, with audio input around $3 per million tokens and output around $12 per million on its Flash Live tier.[^12] That gap is the reason teams build provider adapters at all rather than staying single-provider. The practical pattern that has won in the field is asymmetric adaptation: treat the OpenAI Realtime WebSocket event schema as the de facto standard, since several vendors now expose OpenAI-compatible endpoints directly, and write a translation adapter for anything that does not already speak it.[^12]
+
+![A cost comparison table for realtime voice: OpenAI gpt-realtime-2 audio input and output token pricing against Gemini Live Flash, with the roughly tenfold per-minute gap, the 128k context window, and the session-length limits for each provider](</diagrams/realtime-voice-agents-latency-2026/4-cost-comparison.png>)
+
+The two protocols disagree on almost every wire-level detail, event names, turn lifecycle, VAD tuning, sample rates, and how thinking interacts with spoken output, which is exactly why a provider-neutral abstraction written by hand tends to be wasted effort. The adapter pattern, one shim that makes the second provider look like the first to the rest of your codebase, is cheaper than rewriting both sides against a third internal protocol.[^12]
+
+## The failure modes that eat the budget
+
+The failure modes of a voice agent are not the failure modes of a chatbot. Three are worth naming because they are subtle and expensive.
+
+Echo cancellation is the silent killer. If the model hears itself, transcribes it, and replies to it, the call becomes a loop. It shows up on real phone calls with background traffic, cafe noise, or a Bluetooth headset that does its own aggressive noise gating, and it is the reason client-side VAD alone is not enough. The fix is acoustic echo cancellation plus server-side VAD, which sees both the audio and the model's expectation of when speech is plausible.[^1]
+
+Hallucinated speech in long silences is a real failure mode of speech-to-speech models. When the user goes quiet for three to five seconds, the model, tuned to keep the conversation going, may generate a turn out of nowhere: "Hello? Are you there?" The fix is to detect prolonged silence on your side and explicitly cancel the response, or set turn detection so responses are created only after a confirmed user turn.[^1]
+
+Context bloat is the cost failure. Because the transcript and audio history re-enter the window every turn, a long call's token bill grows linearly with call length. The fix is rolling summarization between segments, and it is the difference between a voice agent that stays cheap on a twenty-minute call and one that quietly quadruples its per-minute cost.[^3]
+
+## Measure the tail, then tune one knob at a time
+
+The discipline that separates a demo from a call center that carries load is measurement. Instrument first-audio-frame latency on every session, record the p50 and p95 of "user stops speaking to agent first audio," and report it on the same dashboard as billing.[^1][^3] The same eval infrastructure you would build for a text agent, the offline replay of recorded sessions against a fixed rubric, carries over to voice, with one addition: a latency regression check that fails a release when the p95 turn time creeps past the budget.[^3] We covered the shape of that eval harness in our notes on [agent evaluation infrastructure](/field-notes/agent-eval-infrastructure-2026). Place the stack in the region your callers are in, because network round-trip is a slice of the budget you can move cheaply. And when you tune, change one knob at a time, the VAD silence threshold, the confirmation delay, the transport, and re-measure, because the stages interact and a change that helps latency can break turn-taking.
+
+Real-time voice is the rare system where load testing changes the architecture. At concurrency, the ASR service queues, the reasoning model backs up on token-stream rate limits, and the TTS fan-out saturates. Test at the tail with realistic pause-and-resume patterns, and add backpressure so the media server throttles politely rather than dropping frames when the model backs up.[^3]
+
+The through-line is that a voice agent is not judged on whether it can talk. It is judged on whether it holds sub-second responsiveness at the 95th percentile under real call load, with turn-taking that never cuts a caller off. That is the product, and every stage, the VAD, the transcript, the model, the TTS, the transport, owns a slice of it. Build the budget first, measure the tail, and the conversation takes care of itself.
+
+[^1]: Masst, "Voice agents" (2026 production reference). The 200 to 300ms comfortable inter-turn gap in English, the 500ms lag / 1000ms talk-over / 2000ms hang-up thresholds, the 1.5 to 2.0 second chained-pipeline floor, the 300 to 600ms speech-to-speech first-audio time, the per-stage latency budget table, the server-versus-client VAD distinction, the barge-in cancel pattern, the 500ms / 700ms silence thresholds, and the echo and hallucinated-silence failure modes. [Masst, Voice agents](https://docs.masst.dev/ai/edges/voice)
+[^2]: ombharatiya, "Real-Time Voice Agents," AI System Design Guide (GitHub). The framing of a voice agent as a soft real-time media system wrapped around an LLM, and the timing failure modes of callers talking over, repeating, and hanging up. [AI System Design Guide, Real-Time Voice Agents](https://github.com/ombharatiya/ai-system-design-guide/blob/main/18-voice-and-audio-agents/01-realtime-voice-agents.md)
+[^3]: DailyAI World (Deepak Bagada), "AI Voice Agents in 2026: The Real-Time Voice Stack, Latency Budgets & Enterprise Deployment." The streaming-pipeline model, the 300 to 800ms p95 turn-latency target, the per-stage budget ledger, the barge-in requirement, the answering-too-early bug and confirmation-delay fix, context-bloat cost growth, and load-testing guidance. [DailyAI World, AI Voice Agents in 2026](https://dailyaiworld.com/blogs/ai-voice-agents-2026-real-time-voice-stack-latency-budgets)
+[^4]: OpenAI, "Realtime and audio" (API guide). The WebSocket-based Realtime API, the single-model speech-to-speech design that eliminates modality-conversion latency, and the WebRTC / WebSocket / SIP transport guidance. [OpenAI, Realtime and audio](https://developers.openai.com/api/docs/guides/realtime)
+[^5]: Masst, "Voice agents," pipeline-architecture section. When the chained STT-to-LLM-to-TTS path is the right choice, including Claude-class reasoning models, custom fine-tunes, and cloned voices. [Masst, Voice agents](https://docs.masst.dev/ai/edges/voice)
+[^6]: Masst, "Voice agents," server-VAD section. Server-side end-of-turn detection and the `silence_duration_ms` tuning knob. [Masst, Voice agents](https://docs.masst.dev/ai/edges/voice)
+[^7]: RedlineSoft, "Realtime Agents: Low-Latency Multimodal Voice Interfaces over WebSocket." Semantic voice activity detection, where the model judges the turn using content and prosody rather than silence thresholds, and the `semantic_vad` / `interrupt_response` configuration. [RedlineSoft, Realtime Agents](https://blog.redlinesoft.net/posts/realtime-agents-low-latency-multimodal-voice-websocket)
+[^8]: OpenAI, "Realtime and audio," connection-method section. WebRTC for browser and mobile clients, WebSocket for server-side media pipelines and phone calls, SIP for telephony. [OpenAI, Realtime and audio](https://developers.openai.com/api/docs/guides/realtime)
+[^9]: CallSphere, "OpenAI's May 2026 WebRTC Rearchitecture: How Voice Latency Got Real." The May 4, 2026 split-relay plus edge-transceiver design, the 900 million weekly active users figure, the roughly 20ms barge-in detection, parallel tool calls during TTS, and the measured 28.6 percent median latency drop from 612ms to 437ms. [CallSphere, OpenAI's May 2026 WebRTC Rearchitecture](https://callsphere.ai/blog/vw1a-openai-realtime-may-2026-webrtc-edge-rearchitecture)
+[^10]: OpenAI, "GPT-Realtime-2 Model" (live model page). The 128,000-token context window, 32,000-token max output, and the current audio and text token pricing for `gpt-realtime-2` and `gpt-realtime-1.5`. [OpenAI, GPT-Realtime-2 Model](https://developers.openai.com/api/docs/models/gpt-realtime-2)
+[^11]: OpenAI Cookbook, "Building voice agents with the OpenAI Realtime API." Automatic context truncation and manual summarization for long voice sessions. [OpenAI Cookbook, Building voice agents](https://mintlify.wiki/openai/openai-cookbook/examples/voice-agents)
+[^12]: Zylos Research, "Cross-Provider Realtime Voice: Adapting Gemini Live to the OpenAI Realtime Surface." The two dominant speech-to-speech protocols, the roughly tenfold Gemini Live price gap, the asymmetric-adaptation pattern, and the wire-level differences between the OpenAI and Gemini protocols. [Zylos Research, Cross-Provider Realtime Voice](https://zylos.ai/research/2026-07-19-realtime-voice-api-protocol-adaptation/)
