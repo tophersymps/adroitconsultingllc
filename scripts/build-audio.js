@@ -517,14 +517,29 @@ async function runLearn({ env, dualWrite, mdxToNarration }) {
       fs.mkdirSync(path.dirname(out), { recursive: true });
       const engine = path.join(ROOT, "scripts", "tts", "engines", "engine_kokoro.py");
       const venvPython = path.join(ROOT, "scripts", "tts", ".venv", "bin", "python");
-      try {
-        execFileSync(
-          venvPython,
-          [engine, "--text", narration, "--voice", voice, "--bitrate", bitrate, "--out", out, "--timing", timingPath],
-          { timeout: ttsTimeoutMs(narration), encoding: "utf-8" }
-        );
-      } catch (e) {
-        console.error(`ERROR ${series}/${slug}: TTS failed (${String(e.message).slice(0, 400)})`);
+      // Transient TTS hangs (MPS/GPU contention after many lessons) abort the
+      // whole --force backfill on the first error. Retry a few times with a
+      // fresh engine process before giving up; a hang is usually transient.
+      const TTS_RETRIES = 3;
+      let synthError;
+      for (let attempt = 1; attempt <= TTS_RETRIES; attempt++) {
+        synthError = null;
+        try {
+          execFileSync(
+            venvPython,
+            [engine, "--text", narration, "--voice", voice, "--bitrate", bitrate, "--out", out, "--timing", timingPath],
+            { timeout: ttsTimeoutMs(narration), encoding: "utf-8" }
+          );
+          break;
+        } catch (e) {
+          synthError = e;
+          if (attempt < TTS_RETRIES) {
+            console.error(`WARN ${series}/${slug}: TTS attempt ${attempt}/${TTS_RETRIES} failed (${String(e.message).slice(0, 200)}); retrying`);
+          }
+        }
+      }
+      if (synthError) {
+        console.error(`ERROR ${series}/${slug}: TTS failed after ${TTS_RETRIES} attempts (${String(synthError.message).slice(0, 400)})`);
         process.exit(1);
       }
       let finfo = "";
