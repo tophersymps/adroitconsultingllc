@@ -8,6 +8,32 @@ import { LearnLesson, LearningSeries } from "./types";
 /** All series, sorted by newest lesson date DESC (ties → slug asc). Empty dirs included with lessons: []. */
 export const learnSeries: LearningSeries[] = [
   {
+    "slug": "ai-adoption",
+    "name": "AI Adoption",
+    "description": "The Level 3 capstone of the AI at Work arc, for the person who owns AI in an organization. Lead, govern, and scale a company's AI use: adoption metrics, change management, policy, data safety, vendor evaluation, security and privacy ownership, budgeting, ROI, and the ongoing program. Vendor-agnostic for a non-technical owner.",
+    "gradient": "from-emerald-500 to-purple-600",
+    "lessons": [
+      {
+        "slug": "the-adoption-owners-job-from-rollout-to-running-program",
+        "title": "Lesson 1: The Adoption Owner's Job: From Rollout to Running Program",
+        "series": "ai-adoption",
+        "lesson": 1,
+        "excerpt": "Someone in your organization has to own AI, not just launch it. This first lesson draws the line between a rollout, a bounded project with a finish line, and a running program, an ongoing discipline with no end date. It defines the adoption owner's real job, walks through one person making that shift, and ends with a try-it exercise that maps who owns AI in your organization today.",
+        "date": "September 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Adoption",
+          "Leadership"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 1,
+    "curriculumLessons": 40
+  },
+  {
     "slug": "salesforce-architect",
     "name": "Salesforce System Architect Primer",
     "description": "A practical deep dive into Flow design, Apex patterns, and platform architecture for teams scaling on Salesforce.",
@@ -4297,20 +4323,27 @@ export const learnSeries: LearningSeries[] = [
     ],
     "totalLessons": 20,
     "curriculumLessons": 20
-  },
-  {
-    "slug": "ai-adoption",
-    "name": "AI Adoption",
-    "description": "The Level 3 capstone of the AI at Work arc, for the person who owns AI in an organization. Lead, govern, and scale a company's AI use: adoption metrics, change management, policy, data safety, vendor evaluation, security and privacy ownership, budgeting, ROI, and the ongoing program. Vendor-agnostic for a non-technical owner.",
-    "gradient": "from-emerald-500 to-purple-600",
-    "lessons": [],
-    "totalLessons": 0,
-    "curriculumLessons": 40
   }
 ];
 
 /** Flat list of every lesson, NEWEST FIRST (for sitemap, nav, flat lookups). */
 export const learnLessons: LearnLesson[] = [
+  {
+    "slug": "the-adoption-owners-job-from-rollout-to-running-program",
+    "title": "Lesson 1: The Adoption Owner's Job: From Rollout to Running Program",
+    "series": "ai-adoption",
+    "lesson": 1,
+    "excerpt": "Someone in your organization has to own AI, not just launch it. This first lesson draws the line between a rollout, a bounded project with a finish line, and a running program, an ongoing discipline with no end date. It defines the adoption owner's real job, walks through one person making that shift, and ends with a try-it exercise that maps who owns AI in your organization today.",
+    "date": "September 22, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "10 min read",
+    "tags": [
+      "LLMs",
+      "AI Adoption",
+      "Leadership"
+    ],
+    "status": "published"
+  },
   {
     "slug": "metadata-packaging-managed-unmanaged-unlocked-packages-release-cadence",
     "title": "Lesson 49: Metadata and Packaging: Managed vs Unmanaged, Unlocked Packages, and Release Cadence",
