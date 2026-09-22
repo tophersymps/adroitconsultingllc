@@ -83,7 +83,13 @@ const BUCKET = "audio";
  */
 const TTS_TIMEOUT = {
   baseMs: 30_000,
-  perWordMs: 90,
+  // Measured on this machine (Apple Silicon, MPS): ~86ms/word for a warm
+  // model, plus 30-60s cold-load on the first run. The old 90ms/word left
+  // long lessons (2.5k+ words) with only seconds of headroom, so a cold
+  // first synthesis blew past the timeout and aborted the whole backfill
+  // (t_<audio-regen-timeout>). 150ms/word is ~1.7x the warm rate and absorbs
+  // cold-load + variance; the 15-min ceiling still catches a real hang.
+  perWordMs: 150,
   ceilingMs: 900_000, // 15 min hard cap: a real hang still dies
 };
 function ttsTimeoutMs(narration) {
