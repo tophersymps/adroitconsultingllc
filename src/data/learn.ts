@@ -831,6 +831,64 @@ export const learnSeries: LearningSeries[] = [
     "curriculumLessons": 40
   },
   {
+    "slug": "ai-power-user",
+    "name": "AI Power User",
+    "description": "The Level 2 follow-on to AI at Work for professionals who use AI daily and want to build and own their own automations: designing repeatable workflows, making them reliable, and sustaining them. Vendor-agnostic and buildable without code.",
+    "gradient": "from-cyan-500 to-purple-600",
+    "lessons": [
+      {
+        "slug": "from-user-to-power-user-owning-your-workflow",
+        "title": "Lesson 1: From User to Power User: What Owning Your Workflow Means",
+        "series": "ai-power-user",
+        "lesson": 1,
+        "excerpt": "You already use AI every day. This lesson is about the step between using a tool and owning a workflow: what separates a user from a power user, what it actually means to own the way you work, and why the payoff lives in a small slice of your recurring tasks. It defines the terms, walks through one person making the shift, and ends with a try-it prompt that starts the audit you will run in Lesson 2.",
+        "date": "September 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "auditing-how-you-actually-work-finding-the-repetitive-20-percent",
+        "title": "Lesson 2: Auditing How You Actually Work: Finding the Repetitive 20 Percent",
+        "series": "ai-power-user",
+        "lesson": 2,
+        "excerpt": "Lesson 1 told you the payoff lives in the repetitive slice of your work. This lesson gives you the method to find that slice honestly: a time audit that measures where your week actually goes, a way to separate the tasks worth automating from the ones that are not, and a concrete worked example of one person running the audit. It ends with a try-it prompt that produces your own list of the repetitive 20 percent, ready for Lesson 3.",
+        "date": "September 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "decomposing-a-task-into-a-repeatable-flow-input-tool-output-review",
+        "title": "Lesson 3: Decomposing a Task into a Repeatable Flow: Input, Tool, Output, Review",
+        "series": "ai-power-user",
+        "lesson": 3,
+        "excerpt": "Lesson 2 gave you a named task, the frequent, same-shaped, low-risk one. This lesson turns that task into a flow by decomposing it into the four parts every workflow needs: input, tool, output, and review. It defines each part, walks through one person decomposing their weekly status email, and ends with a try-it prompt that produces your own four-part design, ready for Lesson 4.",
+        "date": "September 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 3,
+    "curriculumLessons": 30
+  },
+  {
     "slug": "hermes-consultant",
     "name": "Hermes Agent Consultant",
     "description": "A path to becoming an agent-implementation consultant: scoping, implementation craft, delivery practice, and the business of consulting. Platform-agnostic skills with Hermes Agent as the working example.",
@@ -3559,48 +3617,6 @@ export const learnSeries: LearningSeries[] = [
     "curriculumLessons": 36
   },
   {
-    "slug": "ai-power-user",
-    "name": "AI Power User",
-    "description": "The Level 2 follow-on to AI at Work for professionals who use AI daily and want to build and own their own automations: designing repeatable workflows, making them reliable, and sustaining them. Vendor-agnostic and buildable without code.",
-    "gradient": "from-cyan-500 to-purple-600",
-    "lessons": [
-      {
-        "slug": "from-user-to-power-user-owning-your-workflow",
-        "title": "Lesson 1: From User to Power User: What Owning Your Workflow Means",
-        "series": "ai-power-user",
-        "lesson": 1,
-        "excerpt": "You already use AI every day. This lesson is about the step between using a tool and owning a workflow: what separates a user from a power user, what it actually means to own the way you work, and why the payoff lives in a small slice of your recurring tasks. It defines the terms, walks through one person making the shift, and ends with a try-it prompt that starts the audit you will run in Lesson 2.",
-        "date": "September 21, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "auditing-how-you-actually-work-finding-the-repetitive-20-percent",
-        "title": "Lesson 2: Auditing How You Actually Work: Finding the Repetitive 20 Percent",
-        "series": "ai-power-user",
-        "lesson": 2,
-        "excerpt": "Lesson 1 told you the payoff lives in the repetitive slice of your work. This lesson gives you the method to find that slice honestly: a time audit that measures where your week actually goes, a way to separate the tasks worth automating from the ones that are not, and a concrete worked example of one person running the audit. It ends with a try-it prompt that produces your own list of the repetitive 20 percent, ready for Lesson 3.",
-        "date": "September 21, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow"
-        ],
-        "status": "published"
-      }
-    ],
-    "totalLessons": 2,
-    "curriculumLessons": 30
-  },
-  {
     "slug": "ai-at-work",
     "name": "AI at Work",
     "description": "A vendor-agnostic primer for using AI in day-to-day work: foundations, prompting, productivity, small automations, and team adoption. Company-wide training that works for any team and any AI tool.",
@@ -4458,6 +4474,22 @@ export const learnLessons: LearnLesson[] = [
       "LLMs",
       "AI Adoption",
       "Leadership"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "decomposing-a-task-into-a-repeatable-flow-input-tool-output-review",
+    "title": "Lesson 3: Decomposing a Task into a Repeatable Flow: Input, Tool, Output, Review",
+    "series": "ai-power-user",
+    "lesson": 3,
+    "excerpt": "Lesson 2 gave you a named task, the frequent, same-shaped, low-risk one. This lesson turns that task into a flow by decomposing it into the four parts every workflow needs: input, tool, output, and review. It defines each part, walks through one person decomposing their weekly status email, and ends with a try-it prompt that produces your own four-part design, ready for Lesson 4.",
+    "date": "September 22, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "10 min read",
+    "tags": [
+      "LLMs",
+      "AI Power User",
+      "Workflow"
     ],
     "status": "published"
   },
