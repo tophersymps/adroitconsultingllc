@@ -1,6 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { getSeriesProgress, toIsoDate } from "@/lib/learn";
+import { getSeriesProgress, stripLessonTitleH1, toIsoDate } from "@/lib/learn";
 import type { LearningSeries } from "@/data/types";
+
+describe("stripLessonTitleH1 (visual title dedup t_<lesson-h1>)", () => {
+  it("removes the leading h1 document title, keeping h2+ headings", () => {
+    const body = `# Lesson 1: What AI Actually Is
+
+Every department is getting the same pitch right now.
+
+## What AI actually is
+
+Strip away the hype.`;
+    const out = stripLessonTitleH1(body);
+    expect(out).not.toContain("# Lesson 1: What AI Actually Is");
+    expect(out).toContain("Every department is getting the same pitch right now.");
+    expect(out).toContain("## What AI actually is");
+  });
+
+  it("returns the body unchanged when there is no h1", () => {
+    const body = "## Section one\nSome prose.";
+    expect(stripLessonTitleH1(body)).toBe(body);
+  });
+});
 
 describe("toIsoDate (SEO ISO-8601 structured data t_fa2f15c7)", () => {
   it("converts a human-readable 'Month DD, YYYY' lesson date to ISO-8601", () => {

@@ -14,6 +14,7 @@ import {
   getLessonsForSeries,
   getSeriesBySlug,
   stripMDXFrontmatter,
+  stripLessonTitleH1,
   toIsoDate,
 } from "@/lib/learn";
 import { linkifySourceCitations } from "@/lib/mdx";
@@ -74,7 +75,9 @@ export default async function LessonPage({ params }: Props) {
   // replicated for Learn; see lib/learn.ts stripMDXFrontmatter)
   const mdxContent = getLearnMDXContent(series, slug);
   if (!mdxContent) notFound();
-  const mdxBody = linkifySourceCitations(stripMDXFrontmatter(mdxContent));
+  const mdxBody = linkifySourceCitations(
+    stripLessonTitleH1(stripMDXFrontmatter(mdxContent)),
+  );
 
   const lessons = getLessonsForSeries(series);
 

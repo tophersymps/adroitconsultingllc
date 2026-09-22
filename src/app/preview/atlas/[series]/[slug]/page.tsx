@@ -12,6 +12,7 @@ import {
   getSeriesBySlug,
   getAuthorInitials,
   stripMDXFrontmatter,
+  stripLessonTitleH1,
 } from "@/lib/learn";
 import { parseMDXFrontmatter, linkifySourceCitations } from "@/lib/mdx";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
@@ -81,7 +82,9 @@ export default async function PreviewLearnPage({ params }: Props) {
   }
 
   // Allowlisted editor — render the draft preview.
-  const mdxBody = linkifySourceCitations(stripMDXFrontmatter(mdxContent));
+  const mdxBody = linkifySourceCitations(
+    stripLessonTitleH1(stripMDXFrontmatter(mdxContent)),
+  );
 
   const title = (fm?.title as string) || slug;
   const lessonNumber = Number.isNaN(parseInt(String(fm?.lesson ?? ""), 10))
