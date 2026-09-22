@@ -1,0 +1,125 @@
+---
+title: "Lesson 49: Metadata and Packaging: Managed vs Unmanaged, Unlocked Packages, and Release Cadence"
+slug: metadata-packaging-managed-unmanaged-unlocked-packages-release-cadence
+series: "salesforce-architect"
+lesson: 49
+excerpt: "Every Salesforce org is a pile of metadata, and packaging is how that pile becomes something you can ship, version, and install somewhere else. This lesson separates the three package types an architect actually chooses between. Unmanaged packages are a one-time copy with no versioning and no upgrade path, fine for sharing a template with another org. Managed packages add a namespace, IP protection, releases, and subscriber upgrades, which is why they are the only route to the AppExchange. Unlocked packages sit in the middle: versioned and upgradeable like managed, but editable in the target org and namespace optional, which makes them the tool of choice for breaking your own org into modular, source-driven units. The lesson closes on release cadence, the three-times-a-year platform calendar that every release plan has to respect."
+date: "September 22, 2026"
+author: "Adroit Consulting"
+readTime: "15 min read"
+tags: [Salesforce, Metadata, Packaging, Managed Package, Unlocked Package, Unmanaged Package, 2GP, Release Cadence, Architecture]
+---
+
+# Lesson 49: Metadata and Packaging: Managed vs Unmanaged, Unlocked Packages, and Release Cadence
+
+Lesson 19 laid out how metadata moves from a developer sandbox to production with change sets and source-driven deployment. This lesson zooms in on the unit those strategies move. Everything you build in a Salesforce org, the objects, the fields, the Apex, the flows, the layouts, is metadata. When you want to hand a coherent slice of that metadata to another org, whether your own sandbox or a customer's, you have to package it, which means bundling the pieces into a single artifact you can install, version, and later upgrade.
+
+Packaging is where a lot of architects get fuzzy, because the word covers three different systems with overlapping names and different tradeoffs. Get the terms clear and the choice for any given situation becomes obvious. Get them muddled and you ship the wrong kind of package for the job, then discover it on install day.
+
+## Define the terms first
+
+- **Metadata**: the configuration and code that define what an org can do. Custom objects, custom fields, picklists, validation rules, flows, Apex classes and triggers, Lightning Web Components, permission sets, layouts, and everything else a developer or admin creates. It is the whole of the "custom" side of the platform, distinct from the data records that live inside the objects. [^1]
+- **Package**: a bundle of related metadata, transportable as a single unit, that can be installed into another org. Installing a package adds its metadata to the target org. [^6]
+- **Unmanaged package**: a one-time copy of a set of metadata. After installation the components belong to the target org, editable and deletable like anything else, with no connection back to the source package and no way to push an upgrade. [^2] [^3]
+- **Managed package**: a package with a developer-controlled lifecycle. It carries a namespace, protects the developer's code as intellectual property, has explicit releases and versions, and supports subscriber upgrades. Only managed packages can be distributed on the AppExchange. [^2] [^4] [^5]
+- **Unlocked package**: a second-generation package type aimed at a team's own org estate rather than public distribution. It is versioned and upgradeable like a managed package, but the metadata stays editable in the target org and a namespace is optional, so it works when the subscriber is your own team. [^6] [^7]
+- **First-generation packaging (1GP)**: the original managed-package model, built from a stateful packaging org that is the source of truth for the metadata. [^5]
+- **Second-generation packaging (2GP)**: the modern, source-driven package model in which your version control system is the source of truth and package versions are built from that source with the Salesforce CLI. Applies to both managed and unlocked packages. [^5] [^6] [^7]
+- **Namespace**: a unique, registered prefix attached to a package and its components, used to avoid collisions with other orgs' metadata. Required for managed packages, optional for unlocked. [^4] [^7]
+- **Release cadence**: the calendar on which the platform itself ships changes. Salesforce delivers three major releases a year, Spring, Summer, and Winter, and every org receives them on a fixed schedule. [^8] [^9]
+
+## The three package types
+
+Salesforce gives you three ways to package metadata, and they are not three flavors of the same thing. They sit at different points on the spectrum from "these are my components, take a copy" to "this is a product I distribute and maintain."
+
+### Unmanaged packages: one-time copies
+
+An unmanaged package is the closest thing Salesforce has to sending someone a folder of your work. You select the metadata components you want to share, bundle them, and install them into a target org. That is the end of the relationship. Once installed, each component belongs to the target org. An admin there can edit or delete anything, and there is no record of which package it came from, no version number, and no mechanism to push an update later. [^2] [^3]
+
+That combination, editable and un-versioned, makes unmanaged packages wrong for anything you need to maintain. They are useful for exactly one-way transfers: sharing a template with a consultant, handing open-source-style sample code to another org, or moving a batch of metadata once when you accept that it will live in the destination on its own from then on. [^2] [^3]
+
+### Managed packages: distribution and IP protection
+
+A managed package is how a vendor turns a set of Salesforce components into a product others can install, rely on, and upgrade. Everything about the design supports that job. A registered namespace prefixes every component, which prevents collisions if a customer also has components of their own. Because the package is managed, the source code inside it is hidden from the installing org, which is what lets a vendor ship a commercial app without giving away its implementation. [^4]
+
+Managed packages also carry the lifecycle machinery distribution needs. The developer publishes explicit releases, customers install them, and the vendor can later push upgrades to every subscriber org. An installed managed package is intentionally locked: the components are read-only in the target org, so a customer cannot silently fork a commercial product, and the vendor's version remains authoritative. [^2] [^4]
+
+This is the only package type that can go on the AppExchange, and it is what you choose when the "customer" is not your own team. [^2] [^5]
+
+### Unlocked packages: the internal middle ground
+
+Unlocked packages were built for a problem neither of the other two answers well. A team wants the discipline of packaging, versioning, and upgrade paths for its own org, but the people installing the package are colleagues, not customers, so the IP protection and locked components of a managed package would just get in the way.
+
+An unlocked package is versioned and upgradeable. The metadata is organized into modular, independently deployable units, dependencies between packages are declared and enforced, and you can install a specific version and upgrade it later. But the components stay editable in the target org, because the team that installs it is the same team that built it, and a namespace is optional. [^6] [^7]
+
+For an architect structuring a large, tangled org, unlocked packages are the tools that let you carve it into modules, like a core-objects package, a sales-functions package, and an integrations package, each deployable on its own with an upgrade path. This is the packaging model Salesforce pushes for non-ISV teams doing modular, source-driven development. [^6] [^7]
+
+## First-generation versus second-generation
+
+Packaging has a fault line that cuts across the managed and unlocked types: how old the machinery is. Understanding it matters, because it decides where your source of truth lives and what you can automate.
+
+First-generation packaging grew out of the original managed-package days. Its defining trait is that a stateful packaging org is the source of truth. You build all the components in a special Developer Edition org, create the package there, and upload versions from it. This is an org-centric model, and it brings a set of costs: a dedicated packaging org to maintain, no clean link into modern source control, and limited support for breaking a large app into modular packages or spinning up scratch orgs during development. [^5]
+
+Second-generation packaging (2GP) inverts that. Your version control system becomes the source of truth, and a package version is built from that source rather than from the current state of a packaging org. The workflow runs through the Salesforce CLI on a project rooted in Git: `sf package create` defines the package, `sf package version create` builds a version from your source, you install that version into a scratch or sandbox org to test it, and `sf package version promote` marks a version as released once it passes. [^5] [^6] [^7]
+
+The 2GP model gives you things 1GP could not: explicit declarative dependencies in the project file, flexible version ancestry so you can branch and abandon versions, and full automation, which is why the whole workflow slots into a CI/CD pipeline. It removes the packaging and patch orgs that 1GP needed, because the source, not an org, is the authority. Salesforce recommends 2GP for all new managed and unlocked package work, while keeping 1GP for products already shipping on it. [^5] [^6]
+
+## What carries forward from Lesson 19
+
+If you read Lesson 19, the appeal is immediate. Change sets give you no versioning, no rollback, and no dependency tracking, and the org is the only record of what is live. The packaging types here are the upgrade path away from that. An unlocked package gives your metadata the same versioning, rollback through installed versions, and repeatability that a Git-based source of truth brings to source-driven deployment, and it does it as a single installable unit rather than a hand-built change set.
+
+The two lessons fit together. Source-driven development with the sf CLI is how you build and test. Packaging is how you define the boundaries of what ships. You do not have to choose between a big graph of `sf project deploy` calls and a package; a mature team uses unlocked packages to group related metadata into coherent, upgradeable modules and deploys those modules through the same CLI pipeline.
+
+## A worked example: packaging a growing in-house app
+
+To make the choice concrete, follow a team that has built a field-service scheduling app inside its own mailing-org estate. They have been shipping it with change sets, and the pain has grown: two developers editing nearby objects collide in validation, nobody can answer what changed between last month's deploy and this one, and rolling back a bad release means rebuilding the previous state by hand.
+
+1. **Break the app into unlocked packages.** They define three: `core` for the shared objects and fields, `scheduling` for the flows and Apex that run the actual scheduling, and `integrations` for the webhook handlers and the permission sets that expose the app. Each is a package directory rooted in their Git repository, built with `sf package create --package-type Unlocked`. [^6] [^7]
+
+2. **Declare the dependency.** Because `scheduling` needs the objects in `core`, they declare that dependency in the project file. The CLI makes it explicit and enforced, so a version cannot be built against assumptions about what `core` installed. [^6] [^7]
+
+3. **Build and test a version in isolation.** For each release they run `sf package version create`, install the resulting version into a fresh scratch org, run the Apex and integration tests there, and only promote it to released once it passes. A failed test means the version never ships. [^7]
+
+4. **Upgrade by installing the next version.** The next release is not a fresh deploy but an install of the next package version, which gives them the rollback they could not get from change sets: if a release breaks, reinstall the prior version and the org is back where it was. [^6] [^7]
+
+5. **Keep unmanaged packages only for one-off sharing.** When they hand a template of the scheduling objects to a consultant, they share it as an unmanaged package, accepting that the consultant's copy edits freely and never comes back to them for an upgrade. [^2] [^3]
+
+The result is an app whose metadata is modular, versioned, and upgradeable, with rollback built in, and the whole release described in the same Git commits the developers already make. That is the difference packaging makes when the org is your own.
+
+## Release cadence: the calendar you do not control
+
+Metadata and packaging work inside a fixed platform calendar, and an architect ignores it at their own risk. Salesforce ships three major releases a year, named for the season and the year they carry you into: Winter, Spring, and Summer. Each release lands automatically in every org on a maintenance schedule specific to that org, so nobody opts in or out, and the exact production window for your instance is shown in Setup under Company Information. [^8] [^9]
+
+Two implications follow for anyone packaging and releasing.
+
+First, the release is the one moment you do not want a package to ship. The sandbox preview window is your safe rehearsal ground. Sandboxes receive the upcoming release before production does, which is the window in which you test that your packaged components still work against the new platform version before that version reaches production. Upgrading your preview sandbox before the cutoff is how you confirm a release change will not break the org, and it is far cheaper than discovering the break on a production weekend. [^8] [^9]
+
+Second, release cadence sets your own cadence's upper bound. You can ship your packages as often as your pipeline allows, but every one of those ships lands on top of a platform that is changing three times a year underneath you. The release notes, published on the Salesforce Help site before each release's preview window, are the reading you do to know what changed before it affects your metadata. An architect who tracks the releases their org is about to receive, and tests packaged components in the preview sandbox, keeps the platform calendar from turning a routine package install into an unpredicted breakage. [^8] [^9]
+
+## The pitfall to avoid
+
+**Reaching for a managed package when you mean an unlocked package.** For an in-house team, managed packaging's locked components, required namespace, and IP protection are not features, they are friction. A managed package is for distributing a product to other orgs, typically through the AppExchange, where protecting the code and controlling upgrades matter. If the "subscriber" is your own org or your own team, an unlocked package gives you versioning and upgrades without the locking, and it is the tool designed for the job. The flip side, choosing unmanaged because it is simplest, means giving up versioning and upgrades entirely, which is a bad deal the day you want to change something twice. [^3] [^4] [^6] [^7]
+
+## Try it
+
+Your org estate has grown a customer-success app that your own support team uses, and your leadership now wants to sell the same app to three external customers. Answer before reading on.
+
+1. Which package type do you use for the external customers, and why does the in-house version have to be a different package? *(Managed packages, the only type that can go on the AppExchange, with IP protection and a namespace; for your own org you would build the app as an unlocked package, versioned and upgradeable but editable in your own org, since the locking and IP protection of a managed package buy you nothing internally.)* [^2] [^4] [^6]
+2. A colleague hands you an unmanaged package containing a validation rule you will never need more than once. After you install it, can they ever push an update to it? *(No. An unmanaged package is a one-time copy; after install the component belongs to your org with no link to the source and no upgrade mechanism.)* [^2] [^3]
+3. Your backlog says "move the org to 2GP." What actually changes about where your source of truth lives? *(Your version control system becomes the source of truth for the package metadata, instead of a stateful packaging org, and package versions are built from that source with the Salesforce CLI.)* [^5] [^6]
+4. A release breaks production on a Thursday and you need the org back to last known good. Which packaging approach gives you that, and how? *(Packages with an upgrade path, managed or unlocked: you reinstall the prior version. Unmanaged and change-set deploys give you no such rollback because they keep no usable version history.)* [^6] [^7]
+5. You are planning a production package install for mid-October. What does release cadence tell you to check first? *(The Winter release lands around that time, so check whether your org's maintenance window conflicts and use the sandbox preview window to test your packaged components against the new platform version before production.)* [^8] [^9]
+
+## What's next
+
+You now know the three package types, where the source of truth lives under first- and second-generation packaging, and why the release calendar governs when your own releases can safely land. The next lesson steps back from Salesforce metadata altogether and treats the org as one instance of a larger pattern. Lesson 50 is a General System Architecture for AI lesson on AI governance: model risk, compliance, and audit trails. It is the right next step, because every decision you have made across this Salesforce track, how you control access, how you track what changed, how you certify a release, reappears there as the discipline you have to apply to the models and systems you put on top of the platform.
+
+[^1]: developer.salesforce.com. [Salesforce Metadata API Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.api_meta.meta/api_meta/meta_intro.htm). Introduces metadata as the components and metadata types that define all customizations in an org, and the API used to deploy metadata between orgs.
+[^2]: salesforceben.com. [Unlocked Packages in Salesforce: A Comprehensive Guide](https://salesforceben.com/unlocked-packages-in-salesforce-a-comprehensive-guide-for-developers). Summarizes the three package types, notes that managed packages are for AppExchange distribution with read-only components and upgrade paths, unmanaged packages are fully editable one-time installs, and unlocked packages are the source-driven middle ground.
+[^3]: micropyramid.com. [Types of Packages in Salesforce](https://micropyramid.com/blog/what-are-different-types-of-packages-in-salesforce). Describes unmanaged packages as a one-time copy whose installed components belong to and are editable in the destination org with no versioning or upgrade path, and directs non-ISV teams to unlocked packages.
+[^4]: sfxsupport.com. [Salesforce Managed Packages and AppExchange Guide](https://sfxsupport.com/salesforce-packaging). Covers the characteristics common to managed packages, including the registered namespace, hidden source code, and the read-only, upgradeable relationship managed packages enforce with the installing org.
+[^5]: developer.salesforce.com. [Comparison of First- and Second-Generation Managed Packages](https://developer.salesforce.com/docs/platform/pkg2-dev/guide/sfdx-dev-dev2gp-comparison.html). States that in first-generation managed packages the packaging org is the source of truth, while in second-generation packages your version control system is, and that 2GP does not use packaging or patch orgs.
+[^6]: developer.salesforce.com. [Unlocked Packages | Salesforce DX Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.sfdx_dev.meta/sfdx_dev/sfdx_dev_unlocked_pkg_intro.htm). Defines unlocked packages as modular containers of related metadata that are versioned and upgradeable, editable in the target org, and used for organizing an org's own metadata.
+[^7]: developer.salesforce.com. [Second-Generation Managed Packaging Developer Guide: Workflow](https://developer.salesforce.com/docs/platform/pkg2-dev/guide/sfdx-dev-dev2gp-workflow.html). Walks the 2GP workflow of package create, version create, install, and promote, driven from source control with the Salesforce CLI.
+[^8]: help.salesforce.com. [Salesforce Release Notes | Salesforce Help](https://help.salesforce.com/s/articleView?id=release-notes.salesforce_release_notes.htm&type=5). Documents that Salesforce ships major releases three times a year and describes the release-notes resource reviewed ahead of each release's preview and production windows.
+[^9]: salesforcetutorial.com. [Salesforce Release Notes Guide: Winter, Spring, Summer](https://salesforcetutorial.com/salesforce-release-notes-introduction). Lays out the three-release annual calendar, the sandbox preview window ahead of each release, and the automatically applied production rollout.
