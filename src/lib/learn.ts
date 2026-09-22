@@ -168,6 +168,24 @@ export function stripMDXFrontmatter(raw: string): string {
   return lines.slice(end + 1).join("\n");
 }
 
+/**
+ * Remove the leading h1 document title from a lesson MDX body.
+ *
+ * Lesson MDX files carry `# Lesson N: Title` as the document title, but the
+ * lesson page already renders that title in its hero. Keeping the h1 in the
+ * article body duplicates it visually. The narration generator also reads it
+ * as a redundant section cue (skipped there too). This strips the FIRST h1
+ * heading line so the hero stays the single source of the title; h2+ section
+ * headings are untouched.
+ */
+export function stripLessonTitleH1(body: string): string {
+  const lines = body.split("\n");
+  const idx = lines.findIndex((l) => /^\s*#\s+\S/.test(l));
+  if (idx === -1) return body;
+  lines.splice(idx, 1);
+  return lines.join("\n");
+}
+
 /** All MDX slugs available in a series dir (mirrors lib/mdx.ts). */
 export function getAllLearnMDXSlugs(series: string): string[] {
   const dir = path.join(process.cwd(), "content", "learn", series);
