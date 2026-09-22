@@ -4297,6 +4297,15 @@ export const learnSeries: LearningSeries[] = [
     ],
     "totalLessons": 20,
     "curriculumLessons": 20
+  },
+  {
+    "slug": "ai-adoption",
+    "name": "AI Adoption",
+    "description": "The Level 3 capstone of the AI at Work arc, for the person who owns AI in an organization. Lead, govern, and scale a company's AI use: adoption metrics, change management, policy, data safety, vendor evaluation, security and privacy ownership, budgeting, ROI, and the ongoing program. Vendor-agnostic for a non-technical owner.",
+    "gradient": "from-emerald-500 to-purple-600",
+    "lessons": [],
+    "totalLessons": 0,
+    "curriculumLessons": 40
   }
 ];
 
