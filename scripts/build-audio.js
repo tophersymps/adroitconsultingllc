@@ -404,10 +404,28 @@ async function writeObject({ env, storagePath, buf, dualWrite }) {
   );
   console.log(`OK ${storagePath} r2://${env.R2_BUCKET}/${storagePath} ${head.size} bytes (verified)`);
   if (dualWrite) {
-    await uploadSupabase(env, storagePath, buf, r2.contentTypeForKey(storagePath));
-    console.log(`OK ${storagePath} supabase://${BUCKET}/${storagePath} ${buf.byteLength} bytes (dual write)`);
+    // R2 is the PRIMARY store the reader serves from; the Supabase copy is a
+    // redundant rollback mirror. A transient Supabase 502 (gateway blip) must
+    // not abort the whole --force backfill — retry a couple times, then warn
+    // and continue (the R2 write above is already verified).
+    let supabaseOk = false;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await uploadSupabase(env, storagePath, buf, r2.contentTypeForKey(storagePath));
+        supabaseOk = true;
+        break;
+      } catch (e) {
+        if (attempt < 3) {
+          console.error(`WARN ${storagePath}: supabase dual-write attempt ${attempt}/3 failed (${String(e.message).slice(0, 200)}); retrying`);
+        } else {
+          console.error(`WARN ${storagePath}: supabase dual-write failed after 3 attempts (${String(e.message).slice(0, 200)}); R2 primary write already verified — continuing`);
+        }
+      }
+    }
+    if (supabaseOk) {
+      console.log(`OK ${storagePath} supabase://${BUCKET}/${storagePath} ${buf.byteLength} bytes (dual write)`);
+    }
   }
-  return head.size;
 }
 
 /** @returns the R2_* vars that are absent from `env`. */
