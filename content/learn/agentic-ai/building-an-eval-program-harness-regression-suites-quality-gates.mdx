@@ -1,0 +1,180 @@
+---
+title: "Lesson 47: Building an Eval Program: Eval Harnesses, Regression Suites, and Quality Gates"
+slug: building-an-eval-program-harness-regression-suites-quality-gates
+series: "agentic-ai"
+lesson: 47
+excerpt: "Lesson 36 taught you the individual tests: unit tests over the deterministic machinery, integration tests across the loop, and regression evals that score real output. Lesson 46 kept the data feeding a RAG pipeline fresh. Both assumed you could run a suite and read a number. This lesson builds the system that makes that number trustworthy and repeatable after the hundredth run. A single eval run is a point in time. An eval program is the process that keeps every run consistent, organizes suites so you know what each score means, and turns a score change into a stop, hold, or go decision at the gate. You build a harness whose consistency makes scores comparable, split suites into capability and regression buckets, and wire cheap code-based graders into every commit while reserving expensive judges for release. A worked example runs a minimal harness with pinned model, judge, and dataset versions, then the gate logic that blocks a drop.\"
+date: "September 21, 2026"
+author: "Adroit Consulting"
+readTime: "15 min read"
+tags: [LLMs, AI Agents, Evaluation, CI/CD]
+---
+
+# Lesson 47: Building an Eval Program: Eval Harnesses, Regression Suites, and Quality Gates
+
+Lesson 36 taught you the individual tests: unit tests over the deterministic machinery, integration tests across the loop, and regression evals that score real output. Lesson 46 kept the data feeding a RAG pipeline fresh. Both assumed you could run a suite and read a number. This lesson builds the system that keeps that number trustworthy after the hundredth run, when the rookie enthusiasm is gone and a bad model swap can silently break what used to work.
+
+Here is the distinction that separates the two lessons. A single eval run is a point in time. It tells you how the agent scored on a fixed set of examples on one afternoon. That point is only useful if you can compare it to the point from last week, and that comparison is only meaningful if nothing about the measuring equipment changed in between. An eval program is the process that guarantees the comparison: a harness that keeps every run consistent, suites organized so you know which question a score answers, and quality gates that convert a score change into a stop, hold, or go decision. The tests from lesson 36 are the atoms. This lesson is the machine that runs them reliably and acts on the results.
+
+The one idea to carry out: **an eval program is reproducibility plus a decision. The harness makes runs comparable, the suites tell you what you are measuring, and the gate acts on the delta.** Most teams build some of these and skip the rest. They run evals occasionally but never pin the judge, then wonder why scores drift for no reason. Or they build a beautiful suite and never wire it to stop a merge. All three pieces have to be present, because each one only bites when the other two hold it in place.
+
+![The eval program as three connected boxes: the harness makes runs comparable, the suites say what a score means, and the gate turns a delta into a stop, hold, or go decision](</diagrams/building-an-eval-program-harness-regression-suites-quality-gates/1-eval-program-three-parts.png>)
+
+## Define the terms
+
+**An eval program** is the whole discipline: the harness that runs evaluations, the suites that organize them into measurable questions, and the gates that act on the results in the delivery pipeline. It is the difference between an engineer running a few evals before a release and a system that watches quality continuously and blocks a bad change by default.
+
+**An eval harness** is the infrastructure that runs evals end to end. It loads examples, calls the model, calls the grader, and aggregates the scores. Anthropic gives the tight definition: it provides instructions and tools, runs tasks concurrently, records all the steps, grades outputs, and aggregates results. [^1] The harness is the code that makes any single score happen, and consistency is its non-negotiable property. [^3]
+
+**An evaluation suite** is a collection of tasks, called eval cases or test cases, designed to measure a specific capability or behavior. Tasks in a suite share a broad goal; a customer support suite might test refunds, cancellations, and escalations. [^1]
+
+**A regression suite** is the specific suite that protects what already works. It should sit near a 100 percent pass rate, and any decline is a signal that something broke. [^1]
+
+**A quality gate** is a threshold plus a consequence wired into the delivery pipeline. If the threshold passes, the change proceeds; if it does not, the change blocks, pages a human, or routes the failures to a review queue. [^2]
+
+**Capability evals and regression evals** are the two buckets every program must keep separate. Capability evals ask what the agent can do, start at a low pass rate, and give the team a hill to climb. Regression evals ask whether the agent still handles everything it used to, and should pass nearly every time. [^1] [^2]
+
+The shared vocabulary from lesson 36 still applies, and it matters here because it names the parts the harness orchestrates. A task is a single test with defined inputs and success criteria. A trial is one attempt at a task, run multiple times because model output varies between runs. A grader is the logic that scores part of the agent's performance. A transcript is the complete record of a trial: output, tool calls, reasoning, intermediate results. The outcome is the final state in the environment, not the agent's closing words. [^1]
+
+## The eval harness: consistency is the cargo
+
+The entire program rests on one property. The same input must produce the same score across runs, so that a difference between two scores reflects a quality change and not noise in the harness. [^3] If the harness is sloppy, every comparison you make is fiction.
+
+The practical culprit is almost always the judge model. Platform providers update models behind the same version name, so pin the judge snapshot, not just the friendly alias. A grader that silently changes between runs is a measurement instrument that moved, and every trend line drawn across it is meaningless. The same logic applies to the judge prompt. That prompt is the rubric, so version it in git alongside the application code. A change to the judge prompt redefines what you are measuring; score trends that span a judge prompt change are not comparable unless you re-run the old baseline under the new judge first. [^3]
+
+Then pin everything else that could vary. The application model version, and its temperature, so you are not measuring sampling noise. The dataset version, so you know exactly which commit of the golden examples a run scored against. A random seed for example ordering, because some judge models show position effects on long batches, and fixing the seed keeps runs reproducible. The batch size and concurrency settings, because rate limiting and retries that differ between runs change which examples time out and distort the aggregate. [^3]
+
+![A table of what a harness pins, the judge snapshot, judge prompt, model version and temperature, dataset version, random seed, and batch settings, each with the reason it keeps scores comparable](</diagrams/building-an-eval-program-harness-regression-suites-quality-gates/2-pinned-harness.png>)
+
+The payoff of pinning all of this is that you can diagnose a regression. Log the metadata with every run: dataset commit, judge prompt hash, model version, application commit. Without it you know quality dropped but not what changed. With it you can point at the exact model swap, prompt edit, or dataset change that moved the number. [^3] Galtea calls this out as the difference between "quality dropped" and "I know what changed and when." [^3]
+
+## Capability suites and regression suites: two buckets, one program
+
+The most important organizational decision in an eval program is that you never keep one undifferentiated pile of evals. You keep two buckets with different jobs, and tasks graduate between them over time.
+
+Capability evals answer "what can this agent do well?" They should start with a low pass rate, targeting tasks the agent struggles with, and they give the team a hill to climb. These are the evals you use during development to discover where the agent fails and what change moves the needle. [^1]
+
+Regression evals answer "does the agent still handle all the tasks it used to?" They should hold a near-100 percent pass rate, because the entire point is to protect the behavior you already shipped. A decline in a regression score is an alarm that a change broke something elsewhere. [^1]
+
+The relationship between the two is the part people miss. A capability eval that the agent has mastered does not stay a capability eval forever. Once an eval hits a persistently high pass rate, it graduates into the regression suite, where it stops measuring "can we do this at all" and starts measuring "can we still do this reliably." [^1] [^2] This is the self-healing structure that keeps the program honest: the regression suite grows as you climb hills, so nothing you have already proven can quietly regress underneath you.
+
+If you skip the separation, you get one of two failure modes. If you only chase capability evals, you ship regressions because you are always pushing forward and never guarding what works. If you only defend a regression suite, you stop improving because every new eval is protecting old behavior and nothing is pushing you up the hill. [^2] The two buckets have to exist together.
+
+![Side by side comparison of capability evals, which ask what the agent can do and start at a low pass rate, and regression evals, which protect shipped behavior at near-100 percent; a mastered eval graduates from capability into the regression suite](</diagrams/building-an-eval-program-harness-regression-suites-quality-gates/3-two-buckets.png>)
+
+## Sourcing the regression suite: from traces to tasks
+
+A regression suite is only as good as the cases in it, so building it is a deliberate act of curation. The sources are close at hand, and the discipline is to keep them separate.
+
+Before you build any eval infrastructure, review real traces by hand. LangChain recommends starting with 20 to 50 real agent traces, reviewed manually, because the failure patterns you see will teach you more than any automated system. [^2] Out of that review you build a failure taxonomy: prompt problems, tool design problems, model limitations, tool failures, data gaps. An ambiguity that two experts cannot agree on is a sign the task needs refinement, not a test you should run. [^2]
+
+For the cold start, when you have no production logs yet, hand-write seed examples. Define the dimensions of variation for the task, topic, edge case type, query complexity, and manually create around 20 inputs that cover them. Run them through your agent, review the results, and store the ones you trust as ground truth. A handful of hand-reviewed examples you are confident in beats hundreds of synthetic examples you never verified. [^2]
+
+Once you are past the cold start, three strategies keep the pipeline feeding. Dogfood the agent daily and turn every error into an eval. Cherry-pick tasks from external benchmarks you actually care about rather than running whole benchmark suites in aggregate. And write focused tests by hand for specific behaviors you think matter, like whether the agent parallelizes tool calls or asks a clarifying question for a vague request. [^2]
+
+Then production failures feed the loop. A failed production query becomes a regression test that prevents the same failure from recurring. [^4] The flywheel works because every real incident is the most valuable eval you will ever write: it is a case the agent actually hit in front of a user. [^2]
+
+Here is the subtle rule that keeps the golden set honest, carried over from lesson 36. Keep a small, frozen, hand-curated core that nobody touches as your regression baseline, and put new discoveries from production into a separate, growing set. If you refresh the baseline from production output, and production output reflects what your current model returns, you eventually train the evaluator to agree with whatever the model already does. That is contamination. The frozen core defends correctness; the growing set finds new failures. [^4]
+
+Version the datasets alongside the code. Braintrust makes the point directly: test datasets should be versioned in the same commit as the code they validate, so that when the agent changes, the tests validating it change with it. [^4] A score improvement that coincides with a dataset change is not a quality improvement, and you cannot tell the difference unless the dataset is under version control. [^3]
+
+## Quality gates: turning a score into a decision
+
+The harness produces trustworthy numbers, and the suites tell you what they mean. None of that matters unless the number does something. A quality gate is where the eval program becomes operational.
+
+The canonical flow, from the LangChain checklist, runs a staged pipeline. A code or prompt change triggers the run. Offline evals run: unit tests, integration tests, and evaluation against curated datasets using cheap, fast graders. If those pass, a preview deployment goes up. Online evals then run against the preview with live data and, by preference, LLM-as-judge graders. Production gets the change only if all gates pass; otherwise the failing traces route to annotation queues and the team gets alerted. [^2]
+
+![The staged quality gate flow from a code or prompt change through offline evals with cheap fast graders, a preview deploy, and online evals with LLM-as-judge graders to production; any failing gate routes traces to annotation and alerts the team](</diagrams/building-an-eval-program-harness-regression-suites-quality-gates/4-quality-gate-pipeline.png>)
+
+The cost discipline is the part that keeps the gate alive. Use cheap, code-based graders in CI on every commit, and reserve the expensive LLM-as-judge evaluations for preview and production. [^2] A gate that costs real money on every commit gets switched off the first month. Wire the cheap layers to run everywhere and the expensive ones to run only when they matter.
+
+The gate also has to know when to fire. Galtea identifies three triggers that must run evaluation automatically: model version or configuration changes, prompt changes, and retrieval configuration changes for RAG systems, since chunking strategy, embedding model, re-ranker, and similarity thresholds all change what the model receives. [^3] A pipeline that does not trigger on model configuration files misses the most common source of silent regression. [^3]
+
+The gate should judge trends and per-category signals, not a single aggregate with a brittle pass/fail. Track the faithfulness category, the tool-selection category, the safety category, each against its own threshold, because a drop confined to one category tells you where the failure lives. [^3] And make the decision deterministic: a promote, hold, or rollback decision grounded in the measured dimensions, so the pipeline can act without a human rereading a dashboard. A quality bar that needs a meeting to interpret is not a gate, it is a suggestion.
+
+Speed matters as much as correctness. A full CI eval suite that takes 45 minutes kills developer velocity, and teams quietly start skipping it. Keep the full pre-release gate fast enough that running it on every pull request is not a burden; the field target most teams quote is well under fifteen minutes. [^6]
+
+## Worked example: a minimal eval harness with a gate
+
+Let me put all three pieces together on a concrete system. You maintain a support agent with a small suite, and you want a harness that produces comparable scores plus a gate that blocks a drop.
+
+A minimal harness has to do four things: load the examples, shuffle them reproducibly, run the model and the judge on each, and log the metadata that makes the run diagnosable. The following shell captures the shape, with the judge as a separate, pinned artifact.
+
+```
+def run_harness(dataset_path, dataset_commit, app_model,
+                judge_snapshot, seed):
+    examples = load(dataset_path)              # golden set, one JSON per line
+    seeded_shuffle(examples, seed)              # fixed seed, reproducible order
+    results = []
+    for ex in examples:
+        output = call_model(app_model, ex["query"], temperature=0)
+        verdict = call_judge(judge_snapshot, {
+            "query": ex["query"],
+            "context": ex.get("context", ""),
+            "response": output,
+        })
+        results.append({
+            "example_id": ex["id"],
+            "verdict": verdict,
+            "dataset_commit": dataset_commit,
+            "judge_snapshot": judge_snapshot,
+            "app_commit": current_commit(),
+        })
+    return aggregate(results)
+```
+
+The pieces do the work. `temperature=0` on the application model removes sampling noise from your measurement. `seeded_shuffle` makes example order the same every run, so a position-sensitive judge cannot skew one run against another. The `judge_snapshot` is pinned to a specific snapshot string, not a friendly alias that moves. And every result row carries the dataset commit, the judge snapshot, and the application commit, so when a score drops you can say which change caused it. [^3]
+
+Now the gate. Aggregate the verdicts into a passing rate for the suite, compare it against your stored baseline and per-category thresholds, and emit a decision. The gate does not need to be clever; it needs to be deterministic and, for a release candidate, it needs to block by default.
+
+```
+def gate(run, baseline, thresholds):
+    drops = []
+    for category, threshold in thresholds.items():
+        delta = run.scores[category] - baseline[category]
+        if delta < -threshold:
+            drops.append(category)
+    if drops:
+        page_oncall(drops, failing_ids=run.failing_example_ids())
+        return "HOLD"
+    return "PROMOTE"
+```
+
+Notice what this assumes. `baseline` is the frozen core from lesson 36, and `run.scores` only means something because the harness pinned the judge, the seed, and the dataset. And the HOLD decision does real work: it pages the oncall and names the failing example IDs, so a human has a place to start instead of a vague "quality dropped." That is the difference between an eval program and a pile of tests. The gate fails a release when the regression suite drops below threshold, exactly the way a unit test failure blocks a merge. [^4]
+
+## The pitfalls that rot an eval program
+
+The first pitfall is an unpinned harness. If the judge model snapshot, the judge prompt, or the dataset version move between runs, your score trends are fiction, and worse, you will chase phantom regressions. Pinning looks like bureaucracy until the day a silent platform update shifts your judge and every category drops two points, and you waste a week hunting a bug in code that never changed. [^3]
+
+The second is refreshing the golden set from production. It feels like progress and it quietly destroys the baseline. A golden set must be frozen and hand-curated, or it becomes a mirror that blesses whatever the current model happens to produce. Keep the frozen core and a separate growing set for new failure modes. [^4]
+
+The third is eval saturation. A regression eval pinned at 100 percent protects the status quo but gives you no signal to improve. Once an eval saturates and adding more cases of the same type stops revealing new failure modes, graduate it and find a harder hill. An eval program that stopped adding harder cases is a program that stopped teaching you anything. [^1] [^2]
+
+The fourth is trusting scores you never read. Anthropic is blunt: do not take eval scores at face value until someone digs into the transcripts and grades. A "failed" task might be a creative valid solution your grader did not anticipate, and an LLM judge rejects valid solutions more often than you would like. Reading transcripts is how you know your graders are fair. [^1] [^2]
+
+The fifth is treating a probabilistic score like a deterministic binary. One run of one suite proves little; run it several times and gate on the rate, with a confidence interval before you declare improvement. [^1] And route borderline failures in aggregate to human review rather than hard-blocking on a single noisy case. [^3]
+
+The sixth is the cost trap: running expensive judges on every commit until the bill forces the whole gate off. The field answer is the same one mature software uses for slow integration tests. Cheap code-based graders run everywhere; expensive judges run at release. [^2]
+
+## The Fortress angle: a gate you are passing right now
+
+None of this is theory in this organization. The verify gate this lesson itself runs through is a working quality gate. `verify-lessons.py` hard-fails on em-dashes and clear AI-slop phrases, refuses to publish a lesson that lacks its three-question quiz sidecar, and flags lessons under the depth floor. Before any lesson can commit, that gate has to exit zero. That is a deterministic grader wired into the publish pipeline, and it has stopped real problems from shipping.
+
+And the course you are reading maintains its own regression suite. The `generate-course-tiers.py` script regenerates every lesson's knowledge checks and the final exam from the full sidecar set, so the tiers stay aligned with the lessons as the course grows. That is the graduate-into-the-regression-suite pattern in action: each lesson's quiz starts as a capability check and becomes a permanent part of the exam bank. When you build your eval program, you are copying the discipline this course already runs on.
+
+## Try it
+
+1. Pin your harness. Take the eval you run by hand today, or the minimal harness from this lesson, and write down every setting that must stay fixed for a score to be comparable: judge snapshot, judge prompt, dataset version, seed, application model, temperature. Then act on the one that is currently slipping, usually the unpinned judge. [^3]
+2. Split your suites. Go through your existing evals and label each one capability or regression. Find the one that asks "can it do this" and the one that asks "can it still do this," and write the rule that moves an eval from the first bucket to the second once it hits a high pass rate. [^1] [^2]
+3. Wire a real gate. Pick one change that must be blocked if quality drops: a prompt edit, a model swap, or a retrieval config change. Add a threshold and a HOLD decision to your pipeline for that one change, and let it fire on a unit test, not just in your head, so you have proof the gate works. [^3] [^4]
+
+## What's next
+
+You can now build the three pieces that make agent quality measurable over time: a harness whose consistency makes scores comparable, capability and regression suites that tell you what each number means, and a gate that converts a drop into a decision. Lesson 48 turns the focus outward from proving the system works to governing it in a regulated world. It covers governance: AI policies, review boards, and model risk management, meaning the organizational structures that decide who is allowed to change a model, how risk gets assessed before an agent touches production data, and what a review board actually reviews. Where this lesson made quality a repeatable measurement, lesson 48 makes that measurement a thing an organization can stand behind.
+
+[^1]: anthropic.com (Anthropic Engineering). [Demystifying evals for AI agents](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents)
+[^2]: langchain.com (LangChain). [Agent Evaluation Readiness Checklist](https://www.langchain.com/blog/agent-evaluation-readiness-checklist)
+[^3]: galtea.ai (Galtea). [Automated LLM evaluation: building a CI/CD quality gate that actually runs](https://galtea.ai/blog/automated-llm-evaluation-building-a-ci-cd-quality-gate-that-actually-runs)
+[^4]: braintrust.dev (Braintrust). [AI agent evaluation: a practical framework for testing multi-step workflows](https://www.braintrust.dev/articles/ai-agent-evaluation-framework)
+[^5]: aishwaryasrinivasan.substack.com (AI with Aish). [Setting up evaluations for LLMs](https://aishwaryasrinivasan.substack.com/p/setting-up-evaluations-for-llms)
+[^6]: medium.com (Srinivas Bommena). [Your CI/CD pipeline is your last line of defence for LLM quality](https://medium.com/@srinib100/your-ci-cd-pipeline-is-your-last-line-of-defence-for-llm-quality-3fef6a86208b)
