@@ -2,6 +2,27 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "feature-flags-deploy-release-2026",
+    "title": "Feature Flags: Deploy the Code, Release It Separately",
+    "excerpt": "Deploy and release are separate events. A feature flag puts the switch between them in your hands, so a bad release is a seconds-long rollback, not a redeploy.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "September 22, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "DevOps",
+      "CI/CD",
+      "Feature Flags",
+      "Platform Engineering"
+    ],
+    "bannerImage": "/banners/feature-flags-deploy-release-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "realtime-voice-agents-latency-2026",
     "title": "Voice Agents Are a Latency Problem Disguised as AI",
     "excerpt": "A voice agent is a latency system wrapped around an LLM. Every stage owns a slice of the 300-800ms turn, and turn-taking decides who stays on the line.",

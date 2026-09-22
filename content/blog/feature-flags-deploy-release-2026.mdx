@@ -1,0 +1,95 @@
+---
+title: "Feature Flags: Deploy the Code, Release It Separately"
+slug: feature-flags-deploy-release-2026
+excerpt: "Deploy and release are separate events. A feature flag puts the switch between them in your hands, so a bad release is a seconds-long rollback, not a redeploy."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "September 22, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "12 min read"
+tags: [DevOps, CI/CD, Feature Flags, Platform Engineering]
+bannerImage: /banners/feature-flags-deploy-release-2026.png
+---
+
+Most teams treat a deploy and a release as the same event. Merge to main, the pipeline runs, and the new code is live for every user before anyone has a chance to watch it. That coupling is where a lot of production pain comes from, and it is optional. A feature flag is a conditional in the code that decides at runtime which path runs. With one in place, the code can sit in a production deploy, dormant, and be exposed on your schedule, to your audience, and pulled back in seconds if something goes wrong. This article covers how that separation works, the four flag categories you need to know, how flags are evaluated fast enough to sit on the request path, and the lifecycle discipline that keeps flags from becoming their own kind of debt.
+
+The idea sits cleanly inside the deployment story this blog has been building. The [control-plane model](/field-notes/control-planes-infrastructure-delivery-2026) reconciles state instead of executing pipelines, and the [rollout strategy](/field-notes/kubernetes-rollout-strategies-2026) moves a new version to production traffic by shifting pods or weights. A feature flag is a third control point: it works after the rollout has finished, deciding which already-deployed behavior users actually see. The three pieces layer cleanly. The control plane reconciles the desired infra state, the rollout strategy moves the new version onto traffic, and the flag decides whether that new version is released. They answer different questions, and conflating them is how teams end up doing a redeploy to roll back a release.
+
+## Deploy and release are different control points
+
+A deploy moves code to production infrastructure. A release exposes a behavior to users. When these are the same event, every merge becomes a launch: high stakes, all or nothing, hard to unwind. The whole point of release tooling is to break that link so code can sit in a production deploy without running [^1]. LaunchDarkly's definition puts it plainly: feature flags "decouple deploy from release, letting new code exist in production without executing" [^2]. Once you separate the two, the deploy cadence can stay high because the risk leaves the deploy: the code is in production, but the flag keeps it dark until you say otherwise.
+
+![Deploy and release are separate control points: a deploy lands code on production infrastructure, while a flag decides when users actually see it run](</diagrams/feature-flags-deploy-release-2026/1-deploy-vs-release.png>)
+
+Separating them changes the go/no-go decision in a way that matters to a consultant. In the coupled model, the release decision has to be made at deploy time, before anyone has seen the new code under real traffic. In the decoupled model, the release decision is made after the deploy, against real production behavior, and it can be reversed in seconds without a new build. DORA's data explains why teams carry this: in the 2025 report, only about 16% of organizations deploy on demand multiple times a day, while roughly a quarter deploy less than once a month [^3]. The gap is not a capability gap. It is a risk-management gap, and decoupling deploy from release is the mechanism that closes it.
+
+## The four flag categories
+
+Not every flag is the same shape, and the mistakes start when a team treats them all alike. The standard taxonomy comes from Martin Fowler's feature-toggle work, which sorts flags along two axes: how long they live and how dynamic the decision must be [^4]. On the longevity axis, a flag is either temporary (created for a rollout, removed soon after) or long-lived (part of the operational architecture). On the dynamism axis, a flag is either static (the decision is the same for everyone, toggled once) or dynamic (decided per request, per user or context). That grid produces four categories that behave very differently.
+
+![The four flag categories: release flags are temporary and static, experiment flags temporary and dynamic, ops kill switches long-lived and dynamic, and permission flags long-lived and dynamic](</diagrams/feature-flags-deploy-release-2026/2-flag-taxonomy.png>)
+
+**Release flags** gate a new feature through its rollout and are removed once the feature reaches everyone. They are almost always boolean, temporary, and meant to die quickly. Fowler is blunt that a release toggle "should generally not stick around much longer than a week or two" [^5]. A release flag that is still in the codebase months after launch is debt by definition: an untracked permanent branch with no owner and no removal plan.
+
+**Experiment flags** split users into cohorts for A/B or multivariate tests. The toggling decision is dynamic, computed per request from the user's cohort, and the flag lives exactly as long as the test needs to reach statistical significance [^6]. Once the winning variation ships, the flag goes.
+
+**Ops flags, or kill switches,** disable a code path without a redeploy. Fowler describes the long-lived case: a manually managed circuit breaker that lets operators degrade non-essential features under load [^7]. LaunchDarkly treats the kill switch as an emergency shutoff flag that is usually permanent [^8]. These are the flags worth a bit of ceremony because they are the safety net for everything else.
+
+**Permission flags** gate access by role, plan, geography, or beta cohort. They are dynamic per request and semi-permanent, wired into the access-control model rather than a single rollout [^9]. An entitlement flag that is still there two years later is working as intended, not accumulating debt.
+
+The practical lesson is that lifespan is a property of the category, not a guess. A release flag has a removal date the day it is created. A permission flag does not. When a team cannot say which category a flag belongs to, that is the first sign the flag is about to outlive its usefulness.
+
+## Evaluating a flag without slowing the request
+
+A flag check on the hot path must be fast, because it runs on every request. The architecture that makes this safe is well established: the flag service is a control plane that publishes configuration, and the SDK evaluates locally [^10]. The SDK downloads the targeting rules and rollout percentages, caches them, and reads the answer from local memory on each check. There is no network call per evaluation. OpenFeature, the open standard for flag evaluation, formalizes this: your application calls a typed evaluation method with a flag key and a required default value, and a provider resolves it [^11]. The evaluation returns the value plus a reason, so you know whether it came back from a targeting match, a split, a cache, or the default [^12]. That reason is what makes a million-flag system debuggable: you can tell why a user saw what they saw.
+
+![A flag is evaluated at runtime: the flag service publishes ruleset, the SDK caches it and evaluates locally, and a flag check becomes a local function call with a return value and a reason](</diagrams/feature-flags-deploy-release-2026/3-runtime-evaluation.png>)
+
+The control-plane split also fixes the availability story. Because the SDK keeps a local cache, a total failure of the flag service does not fail the application. LaunchDarkly describes this as the SDK surviving an outage via "last-known-good" cached state, so the flag check keeps working even when the control plane cannot be reached [^13]. That is the acceptable failure mode. What you must not do is let the flag service sit on the request path, because then the flag service becomes the single point of failure for your whole application: if it is slow, every request is slow, and if it is down, the app is down. The control plane publishes; the SDK decides locally.
+
+Kill-switch propagation rides the same streaming channel that updates the local caches. Flip the switch, and the update streams to every SDK in seconds, so a bad release is stopped without a deploy. This is the property that makes a kill switch meaningful: it is only useful if the on state reaches everywhere fast. LaunchDarkly targets propagation within about 200 milliseconds so the window between detecting a bad release and stopping it is measured in seconds, not in the minutes a redeploy takes [^14].
+
+## When not to use a flag
+
+Feature flags solve the release-timing problem, and they are actively wrong for a few adjacent problems. The tell is when a value must be known before the code can even boot. Secrets, static service locations, and startup-blocking configuration all fail that test, and LaunchDarkly's guidance draws the same three lines: do not use a flag as a secrets store, as a config store for values that rarely change, or as the thing the app depends on just to start [^15]. A database hostname is the cleanest example. It is read once at boot, identical for every user, and decided at deploy time, so hiding it behind a flag buys nothing except a second, less-governed surface where a connection string can drift. Those are configuration values, not runtime behavior decisions, and they belong in config.
+
+The sharper rule is about what a flag is for. Configuration files change behavior at deploy time: you update the file, you redeploy, and the behavior changes for everyone [^16]. A flag evaluates at runtime: you flip the switch and the change is instant and targeted. If the intent is "always on for everyone," that is config, not a flag. If the intent is "turn this off instantly under load, or show it to 5% first," that is a flag. The two overlap less than teams expect, and pushing configuration into flags is what produces those ecosystems of six hundred toggles nobody can clean up.
+
+A concrete flag-versus-config misclassification makes it obvious. Say a team wants to tune the request timeout on one service from a control room dash, no redeploy. That reads like a flag, so they might wrap the timeout value in one. But a timeout is not a decision that varies per user or per request, it is not shown to one percent of traffic first, and there is no meaningful "release" of a number an operator tweaks once an incident. It fails the intent test: the value is the same for everyone until an operator changes it, and it is read at the moment the request starts, which is a static configuration value the team wants to edit without a deploy. The honest fix is a config value with a live-reload path from the same dash that reads a settings endpoint, not a targeting rule evaluated per flag check.
+
+There is also a flag-evaluation default worth setting explicitly. OpenFeature's evaluation API takes a required default value, and when no provider is configured it uses a no-op provider that just returns the default [^17]. Your default should be the safe one: the flag should fail toward keeping the service up rather than toward enabling the riskiest new behavior. If you are flipping something off and the default path is the legacy behavior, then a control-plane outage degrades you back to the version that already worked, which is the outcome an on-call engineer wants at 3am.
+
+## The flag lifecycle: removing it on purpose
+
+A flag is a small amount of debt the moment it is created. It is a conditional branch in the code, an entry in a management UI, and a coordination point. The discipline that keeps that debt small is deciding, up front, when the flag is removed. Fowler's own framing is that toggles "cause major problems" when they are left in place longer than their natural lifetime [^4]. Release flags need a removal date. Experiment flags get archived once the winning variation ships. The temporary ones are where the discipline pays off, because a release flag that survives to 100% is no longer doing anything except costing the team.
+
+![A feature flag lifecycle: name it for intent with a removal date, ramp it by evidence through internal then small percentages, and remove the flag and the old code path together once it reaches 100%](</diagrams/feature-flags-deploy-release-2026/4-flag-hygiene.png>)
+
+Two hygiene habits keep this from slipping. First, delete the flag and the dead code path together, in the same change. Removing only the flag leaves the old branch present but permanently off, which is the same debt with a new name. Second, keep kill switches few and deliberate. A small number of long-lived ops flags as genuine circuit breakers is correct; a large pile of flags where every one is treated as a permanent on-off switch is a different failure mode. The teams that keep this healthy are the ones that answer two questions about every new flag: which category is this, and when does it leave.
+
+Vendor lock-in deserves a mention because it is where the portable version of this discipline starts. OpenFeature exists because the flag-evaluation API, the part your application code touches, does not need to change when the flag backend changes [^18]. You write against one evaluation API, and a provider maps it to whatever management system you run, self-hosted or cloud. The flag backend becomes swappable instead of a permanent choice. That is the configuration-management lesson applied to feature flags themselves: keep the runtime decision surfaced through a stable API, and the underlying tool is an implementation detail you can change.
+
+The recurring theme across all of this is that a flag is a control point, which means it is also a responsibility. The same mechanism that lets you ship continuously, release to a segment, and pull a bad release in seconds will, if left uncared for, bury the codebase in conditional branches and coordination debt. Treat deploy and release as separate events. Reach for the right flag category. Evaluate locally so the control plane can never take down the request path. And decide when each flag leaves the moment it arrives. Do that, and the deploy cadence stays high while the risk stays contained, which is the whole deal.
+
+## Endnotes
+
+[^1]: Martin Fowler, "Feature Toggles (aka Feature Flags)". Describes feature toggling as the standard way to implement the continuous-delivery principle of separating feature release from code deployment. [martinfowler.com](https://martinfowler.com/articles/feature-toggles.html)
+[^2]: LaunchDarkly, "What Are Feature Flags?". States that feature flags "decouple deploy from release, letting new code exist in production without executing." [launchdarkly.com](https://launchdarkly.com/blog/what-are-feature-flags/)
+[^3]: Google Cloud DORA, "State of AI-assisted Software Development 2025" (DORA Research). Reports the deployment frequency distribution: 16.2% of organizations deploy on demand (multiple times per day) and 23.9% deploy less than once a month. [dora.dev](https://dora.dev/research/2025/dora-report/)
+[^4]: Martin Fowler, "Feature Toggles (aka Feature Flags)". Defines the four toggle categories across the longevity and dynamism dimensions, and that toggles left longer than their natural lifetime cause major problems. [martinfowler.com](https://martinfowler.com/articles/feature-toggles.html)
+[^5]: Martin Fowler, "Feature Toggles (aka Feature Flags)". Notes release toggles are transitionary and "should generally not stick around much longer than a week or two." [martinfowler.com](https://martinfowler.com/articles/feature-toggles.html)
+[^6]: Martin Fowler, "Feature Toggles (aka Feature Flags)". Describes experiment toggles as cohort-based, dynamic, and living long enough to reach statistical significance. [martinfowler.com](https://martinfowler.com/articles/feature-toggles.html)
+[^7]: Martin Fowler, "Feature Toggles (aka Feature Flags)". Describes long-lived ops toggles as manually managed circuit breakers that degrade non-essential features under load. [martinfowler.com](https://martinfowler.com/articles/feature-toggles.html)
+[^8]: LaunchDarkly, "Creating Flags" (docs). Defines kill-switch flags as emergency shutoff or circuit-breaker flags that are usually permanent. [docs.launchdarkly.com](https://docs.launchdarkly.com/guides/flags/creating-flags)
+[^9]: Martin Fowler, "Feature Toggles (aka Feature Flags)". Describes permissioning toggles as long-lived and tied to the access-control model. [martinfowler.com](https://martinfowler.com/articles/feature-toggles.html)
+[^10]: LaunchDarkly, "What Are Feature Flags?". Describes the control plane publishing configuration and the SDK evaluating flags locally from a cached copy. [launchdarkly.com](https://launchdarkly.com/blog/what-are-feature-flags/)
+[^11]: OpenFeature, "Flag Evaluation API" (specification). Defines typed evaluation methods with a flag key and required default value, resolved by a provider. [openfeature.dev](https://openfeature.dev/docs/specification/sections/flag-evaluation)
+[^12]: OpenFeature, "Types and Data Structures" (specification). Enumerates evaluation reasons including targeting match, split, cached, and default. [openfeature.dev](https://openfeature.dev/specification/types/)
+[^13]: LaunchDarkly, "What Are Feature Flags?". Describes SDK-side evaluation and the local cache that keeps flag checks available without a network round trip. [launchdarkly.com](https://launchdarkly.com/blog/what-are-feature-flags/)
+[^14]: LaunchDarkly, "What Are Feature Flags?". States that flag changes propagate within about 200ms, shrinking the detection-to-resolution window. [launchdarkly.com](https://launchdarkly.com/blog/what-are-feature-flags/)
+[^15]: LaunchDarkly, "Creating Flags" (docs). Lists scenarios where flags should not be used: secrets management, static configuration, and startup-blocking configuration. [docs.launchdarkly.com](https://docs.launchdarkly.com/guides/flags/creating-flags)
+[^16]: LaunchDarkly, "What Are Feature Flags?". Explains that config files change behavior at deploy time, while flags evaluate at runtime. [launchdarkly.com](https://launchdarkly.com/blog/what-are-feature-flags/)
+[^17]: OpenFeature, "Flag Evaluation API" (specification). Notes the evaluation API requires a default value and uses a no-op provider that returns the default when none is configured. [openfeature.dev](https://openfeature.dev/docs/specification/sections/flag-evaluation)
+[^18]: OpenFeature, introduction. Describes OpenFeature as a vendor-agnostic, community-driven API for feature flagging with pluggable providers. [openfeature.dev](https://openfeature.dev/docs/reference/intro/)
