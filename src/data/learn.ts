@@ -8,6 +8,803 @@ import { LearnLesson, LearningSeries } from "./types";
 /** All series, sorted by newest lesson date DESC (ties → slug asc). Empty dirs included with lessons: []. */
 export const learnSeries: LearningSeries[] = [
   {
+    "slug": "agentic-ai",
+    "name": "Agentic AI Implementation Path",
+    "description": "From single-agent prototypes to multi-agent orchestration, a practitioner's curriculum for shipping agentic systems.",
+    "gradient": "from-amber to-yellow-600",
+    "lessons": [
+      {
+        "slug": "what-is-an-agent",
+        "title": "Lesson 1: What an Agent Actually Is (LLMs vs Rules vs Workflows)",
+        "series": "agentic-ai",
+        "lesson": 1,
+        "excerpt": "The definitions that matter for the whole track: what separates a rules system, an LLM workflow, and a true agent, plus how to tell which one you're actually building.",
+        "date": "August 04, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Salesforce"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "how-llms-work-tokens-context-inference",
+        "title": "Lesson 2: How LLMs Work for Implementers: Tokens, Context, Inference, Temperature",
+        "series": "agentic-ai",
+        "lesson": 2,
+        "excerpt": "The four knobs that decide every LLM bill, latency budget, and reliability call: what tokens actually are, how the context window constrains agents, how inference really runs, and what temperature does and doesn't do.",
+        "date": "August 05, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Salesforce"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "the-agent-loop-perceive-reason-act-observe",
+        "title": "Lesson 3: The Agent Loop: Perceive, Reason, Act, Observe, and Where Your Code Lives",
+        "series": "agentic-ai",
+        "lesson": 3,
+        "excerpt": "The one while loop that turns a language model into an agent: the five stages of the loop, the pseudocode that runs underneath every framework, and exactly which parts of it are your code versus the runtime's.",
+        "date": "August 06, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Salesforce"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "prompting-for-agents-system-prompts-few-shot",
+        "title": "Lesson 4: Prompting for Agents: System Prompts, Few-Shot, and When Prompts Aren't Enough",
+        "series": "agentic-ai",
+        "lesson": 4,
+        "excerpt": "In an agent, the prompt isn't a single message; it's the constitution the loop obeys on every iteration. The anatomy of a production system prompt, how few-shot examples actually work, and the escalation ladder for when words stop being enough.",
+        "date": "August 07, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Prompt Engineering"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "tokens-context-cost-engineering-agents",
+        "title": "Lesson 5: Tokens, Context Windows, and Cost Engineering for Agent Workloads",
+        "series": "agentic-ai",
+        "lesson": 5,
+        "excerpt": "Agents don't just use tokens; they burn them: roughly 4x a chat conversation, 15x for multi-agent. The four levers that control the bill (budgeting, compression, caching, and model routing), with the math worked out on a real 10-agent pipeline.",
+        "date": "August 08, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Performance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "choosing-models-providers-routing-fallbacks",
+        "title": "Lesson 6: Choosing Models & Providers: Capability Tiers, Routing, and Fallbacks",
+        "series": "agentic-ai",
+        "lesson": 6,
+        "excerpt": "The biggest agent-ops mistake is picking one 'best' model and pointing everything at it. This lesson builds the three-tier capability model, the three jobs of a router, and the fallback chains that keep agents alive when providers fail.",
+        "date": "August 09, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "8 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "structured-output-json-mode-function-calling-tool-schemas",
+        "title": "Lesson 7: Structured Output: JSON Mode, Function Calling, and Tool Schemas Done Right",
+        "series": "agentic-ai",
+        "lesson": 7,
+        "excerpt": "An agent is only as reliable as its data contracts. This lesson builds the structured-output ladder (JSON mode, Structured Outputs, function calling) and the tool-schema practices that keep tool calls valid, parseable, and safe in production.",
+        "date": "August 10, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "8 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "tool-design-schemas-error-handling-retries",
+        "title": "Lesson 8: Designing Tools That Fail Well: Schemas, Error Handling, and Retries",
+        "series": "agentic-ai",
+        "lesson": 8,
+        "excerpt": "A tool is an operational contract, not an API wrapper. This lesson covers the five-part anatomy of a production tool, structured error schemas the model can act on, and retry discipline (backoff with jitter, idempotency keys, and retry budgets), so agents survive failures without corrupting state.",
+        "date": "August 11, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "function-calling-parity-across-providers",
+        "title": "Lesson 9: Function-Calling Parity Across OpenAI, Azure, Anthropic, Gemini, and Local Models",
+        "series": "agentic-ai",
+        "lesson": 9,
+        "excerpt": "Every frontier provider exposes function calling, but none uses the same wire format. This lesson maps the request and response shapes across OpenAI, Azure, Anthropic, and Gemini, then shows why local models (llama.cpp) are the parity wildcard and how one internal schema plus thin per-provider adapters keeps an agent portable.",
+        "date": "August 12, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "rag-fundamentals-chunking-embeddings-retrieval",
+        "title": "Lesson 10: RAG Fundamentals: Chunking, Embeddings, Retrieval, and Why RAG Is the First Enterprise Pattern",
+        "series": "agentic-ai",
+        "lesson": 10,
+        "excerpt": "The pattern that grounds LLMs in your own knowledge: what RAG is and where it came from, why you chunk documents instead of feeding them whole, what embeddings actually are, how retrieval ranks chunks, and why RAG became the first pattern enterprises shipped.",
+        "date": "August 13, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "RAG"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "embeddings-models-similarity-when-they-fail",
+        "title": "Lesson 11: Embeddings: Models, Similarity, and When They Fail",
+        "series": "agentic-ai",
+        "lesson": 11,
+        "excerpt": "What an embedding actually is, how the popular models differ, why cosine similarity works, and the failure modes that make pure vector search miss the answer: rare terms, domain jargon, short queries, and model mismatch.",
+        "date": "August 14, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "RAG"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "vector-databases-pinecone-pgvector-milvus-weaviate",
+        "title": "Lesson 12: Vector Databases: Pinecone, pgvector, Milvus, Weaviate, and Choosing for Your Workload",
+        "series": "agentic-ai",
+        "lesson": 12,
+        "excerpt": "What a vector database actually does, why you need one instead of scanning vectors in memory, the approximate nearest neighbor tradeoff you are making, and how to choose between Pinecone, pgvector, Milvus, and Weaviate for your workload and your team.",
+        "date": "August 15, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "RAG"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "rag-quality-reranking-hybrid-search-metadata-filtering-freshness",
+        "title": "Lesson 13: RAG Quality: Reranking, Hybrid Search, Metadata Filtering, and Freshness",
+        "series": "agentic-ai",
+        "lesson": 13,
+        "excerpt": "The four levers that turn a RAG demo into a system you can trust: reranking to fix top-k precision, hybrid search so exact terms still win, metadata filtering so access control and scope survive retrieval, and freshness so the answers do not go stale.",
+        "date": "August 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "RAG"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "agent-memory-short-term-long-term-episodic-semantic",
+        "title": "Lesson 14: Agent Memory: Short-Term vs Long-Term, Episodic vs Semantic",
+        "series": "agentic-ai",
+        "lesson": 14,
+        "excerpt": "An agent with no memory answers the same question the same way forever. This lesson maps the memory taxonomy production systems borrow from cognitive science: the context window as working memory, long-term stores for persistence, episodic memory for what happened, semantic memory for what you know, and the pipeline that turns raw interactions into retrievable knowledge.",
+        "date": "August 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "context-engineering-what-to-include-trimming-summarization-windowing",
+        "title": "Lesson 15: Context Engineering: What to Include, Trim, Summarize, and Window",
+        "series": "agentic-ai",
+        "lesson": 15,
+        "excerpt": "The context window is finite and filling it sloppily degrades your agent before it ever fails. This lesson covers the four ways to keep a long-running loop coherent: deciding what to include, trimming what stops earning its keep, summarizing what still matters, and windowing what you can drop. With real numbers from JetBrains on which approach actually pays.",
+        "date": "August 18, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Prompt Engineering"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "multi-turn-agents-sessions-state-resuming-conversations",
+        "title": "Lesson 16: Multi-Turn Agents: Sessions, State, and Resuming Conversations",
+        "series": "agentic-ai",
+        "lesson": 16,
+        "excerpt": "An LLM is stateless: every call forgets the one before it, so multi-turn behavior has to be built, not assumed. This lesson defines the session, the state it carries, and the checkpointing that lets an agent resume where it left off: the difference between a thread and a durable store, why the state schema is the real design, and how production systems survive restarts and long conversations.",
+        "date": "August 19, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Salesforce"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "guardrails-prompt-injection-system-boundaries-input-validation",
+        "title": "Lesson 17: Guardrails I: Prompt Injection Defense, System Boundaries, and Input Validation",
+        "series": "agentic-ai",
+        "lesson": 17,
+        "excerpt": "Prompt injection tops the OWASP list of LLM risks for a reason: an agent that can act turns a misled model into an unauthorized action. This lesson separates direct from indirect injection, explains why input filters and prompt hardening alone will not stop it, and argues that the durable defense lives at the system boundary: least-privilege tools, hard containment on what the agent can reach, and human approval for high-impact actions.",
+        "date": "August 20, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "guardrails-output-validation-allowlists-pii-redaction",
+        "title": "Lesson 18: Guardrails II, Output Validation, Allowlists, PII Redaction, and Refusal Paths",
+        "series": "agentic-ai",
+        "lesson": 18,
+        "excerpt": "Input guardrails keep an attacker from pushing the agent past its boundary. Output guardrails keep the agent from pushing bad output out the other side: validation, allowlists, PII redaction, and refusal paths.",
+        "date": "August 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "evaluation-evals-golden-datasets-llm-as-judge",
+        "title": "Lesson 19: Evaluation: Evals, Golden Datasets, LLM-as-Judge, and When It Lies",
+        "series": "agentic-ai",
+        "lesson": 19,
+        "excerpt": "An agent you cannot measure is an agent you cannot trust, and the moment a model changes you have no way to know what you traded away. This lesson walks the evaluation stack from the bottom up: the golden dataset that anchors everything, the classic metrics that break on open-ended output, the LLM-as-judge technique that replaces them, and the biases that make a judge lie, from position and verbosity preference to rating its own output too high and being misled by a confident wrong answer.",
+        "date": "August 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "observability-tracing-logging-langsmith-opentelemetry-replay",
+        "title": "Lesson 20: Observability, Tracing, Logging, and Replay for Agents",
+        "series": "agentic-ai",
+        "lesson": 20,
+        "excerpt": "An agent runs several model calls, tool invocations, and retrieval steps inside one request, and when it returns the wrong answer you have no idea which step caused it. This lesson builds observability from the bottom up: the trace that records every step as a span, the trace tree that shows how they connect, the OpenTelemetry gen_ai.* conventions that give the telemetry a standard shape, the structured logs that answer 'why' when a trace only shows 'what,' and the replay loop that turns a captured trace back into a repeatable bug you can fix and verify.",
+        "date": "August 23, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Observability"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "agent-frameworks-overview-langchain-langgraph-crewai-openai-claude",
+        "title": "Lesson 21: Frameworks overview - LangChain, LangGraph, CrewAI, OpenAI Agents SDK, Claude Agent SDK",
+        "series": "agentic-ai",
+        "lesson": 21,
+        "excerpt": "By now you can build a single agent: a model, a loop, some tools. The hard part is deciding what holds the pieces together when the work grows. This lesson surveys the five frameworks you will actually meet in the wild, and it is honest about what each one is for. LangChain is an integration ecosystem. LangGraph is a stateful graph runtime for workflows that branch and loop. CrewAI is a role-based layer for teams of agents with jobs and backstories. The OpenAI Agents SDK is a deliberately tiny set of primitives with clean handoffs and guardrails. The Claude Agent SDK gives the agent a computer with built-in file, shell, and edit tools. You will learn the mental model behind each one, see the same small task written in two of them so the difference is concrete, and finish with a decision path for choosing a framework instead of trusting star counts.",
+        "date": "August 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Architecture"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "agent-loop-by-hand-no-framework",
+        "title": "Lesson 22: Building Without a Framework: the Agent Loop by Hand in 100 Lines",
+        "series": "agentic-ai",
+        "lesson": 22,
+        "excerpt": "Lesson 21 ended on a quiet note: sometimes you don't need a framework at all. This lesson makes that concrete. You write the loop yourself, in roughly a hundred lines, with nothing but an LLM API and a while loop. You see the canonical agent loop in real code, you build a working agent with two tools, you learn the one ordering mistake that trips up every beginner, and you find out exactly where a hand-rolled loop runs out of room and a framework starts to earn its complexity.",
+        "date": "August 25, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Architecture"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "agent-patterns-react-plan-execute-reflection-tool-loops",
+        "title": "Lesson 23: Agent Patterns: ReAct, Plan-and-Execute, Reflection, and Tool Loops",
+        "series": "agentic-ai",
+        "lesson": 23,
+        "excerpt": "Lesson 22 built the loop by hand. This lesson gives that loop its names. You learn the four patterns that dominate real agent work: ReAct (reason and act interleaved), plan-and-execute (plan first, then execute), reflection (evaluate and revise), and the tool loop they all run on, plus when each one earns its complexity.",
+        "date": "August 26, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Architecture"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "multi-agent-systems-orchestrator-worker-supervisor-debate",
+        "title": "Lesson 24: Multi-Agent Systems: Orchestrator-Worker, Supervisor, and Debate",
+        "series": "agentic-ai",
+        "lesson": 24,
+        "excerpt": "Lesson 23 taught you the single-agent patterns. This lesson puts several agents in one system. You learn the three coordination shapes that dominate real multi-agent work: orchestrator-worker (a central agent splits and delegates), supervisor (a coordinator routes to specialized workers via handoffs), and debate (multiple instances argue toward a consensus), plus when each one earns its complexity and when one agent is still the right call.",
+        "date": "August 27, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "human-in-the-loop-approvals-interrupts-escalation-kill-switches",
+        "title": "Lesson 25: Human-in-the-Loop, Approvals, Interrupts, Escalation, and Kill Switches",
+        "series": "agentic-ai",
+        "lesson": 25,
+        "excerpt": "An agent that can act on its own against a system that matters needs a person in the loop. This lesson builds the control layer: approvals that gate a single risky action, interrupts that pause the whole run and resume it later, escalation that hands an unsafe decision to a human, and a kill switch that stops a runaway system before it does damage.",
+        "date": "August 28, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "enterprise-deployment-serving-api-design-rate-limits-quotas",
+        "title": "Lesson 26: Enterprise Deployment, Serving, API Design, Rate Limits, and Quotas",
+        "series": "agentic-ai",
+        "lesson": 26,
+        "excerpt": "A working agent is a different thing from an agent many people can use. This lesson puts the three boundaries around it that make the difference: the serving layer that decides how much concurrent work the model can do, the API boundary that gives every consumer one stable interface, and the policy layer of rate limits and quotas that stops a single tenant from overwhelming the hardware or blowing the budget. It works through the numbers you need to size a deployment, and it shows how those three layers meet at the same number.",
+        "date": "August 29, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Delivery"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "cost-control-caching-model-tiers-budget-caps-spend-dashboards",
+        "title": "Lesson 27: Cost Control, Caching, Model Tiers, Budget Caps, and Spend Dashboards",
+        "series": "agentic-ai",
+        "lesson": 27,
+        "excerpt": "A working agent is cheaper to build than to keep. Lesson 26 stopped a single tenant from blowing the monthly bill in an afternoon; this lesson turns the bill itself into a number you manage. It covers the three cost levers in order: caching so you never pay twice for the same answer, model tiers and routing so you only pay frontier prices when a task actually needs them, and budget caps with spend dashboards so a surprise bill becomes an early-warning system instead. A worked example runs the arithmetic on a real agent workload, and the Fortress angle shows a hybrid two-tier stack doing all three at once.",
+        "date": "August 30, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Performance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "security-auth-authorization-secrets-management-for-agents",
+        "title": "Lesson 28: Security: Authentication, Authorization, and Secrets Management for Agents",
+        "series": "agentic-ai",
+        "lesson": 28,
+        "excerpt": "An agent is not a user and not a plain service. It carries two identities at once, the person it acts for and the machine it runs as, and it reaches for credentials with every tool call it makes. This lesson separates the three systems that keep that under control: authentication proves who is acting, authorization decides what that actor may do, and secrets management keeps the credentials that prove identity short-lived, tightly scoped, and out of the model's context.",
+        "date": "August 31, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "compliance-data-residency-audit-logging-retention",
+        "title": "Lesson 29: Compliance: Data Residency, Audit Logging, and Retention for AI Systems",
+        "series": "agentic-ai",
+        "lesson": 29,
+        "excerpt": "Security controls who can act. Compliance is the record of what that actor did with other people's data, and it lives in three separate controls. Data residency decides where the data is stored and processed and how it may cross borders. Audit logging keeps an immutable record of what happened, per action, so a regulator or an investigator can reconstruct it later. Retention puts a clock on how long you keep any of it. This lesson reads the EU AI Act's record-keeping article and GDPR's storage-limitation principle, then shows how a real agent pipeline turns its own event stream into an auditable trail.",
+        "date": "September 1, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Security",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "mcp-model-context-protocol-intro-build-server",
+        "title": "Lesson 30: The Model Context Protocol (MCP): What It Is, Why It Matters, and How to Build a Server",
+        "series": "agentic-ai",
+        "lesson": 30,
+        "excerpt": "The Model Context Protocol (MCP) is an open standard that connects AI applications to the tools and data they act on. It attacks a problem every agent builder hits: bespoke integrations do not scale. Without a common protocol, each AI app wires itself to each tool with its own custom connector, and the number of connectors grows as the product of apps times tools. MCP breaks that pattern by defining one client-server protocol, so an AI application that speaks it can use any server that speaks it, and a server author writes the integration once for every compliant client. This lesson explains the three participants in that architecture (host, client, server), the three things a server can expose (tools, resources, prompts), the two transports that carry the messages, and walks through building a real server with the Python SDK.",
+        "date": "September 2, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "MCP",
+          "Tool Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "mcp-deep-dive-tools-resources-prompts-sampling-auth",
+        "title": "Lesson 31: MCP Deep Dive: Tools, Resources, Prompts, and Auth",
+        "series": "agentic-ai",
+        "lesson": 31,
+        "excerpt": "Lesson 30 built a hello-world MCP server and left the deeper protocol features for later. This lesson is that later. It goes past the weather server into the four parts you will actually tune in production: how to design each of the three server primitives (tools, resources, prompts) so a model uses them well, and how OAuth 2.1 secures a remote server. It also covers sampling, the legacy feature that once let a server borrow the client's model instead of holding its own API keys, which is deprecated as of the 2026-07-28 spec revision and replaced by direct LLM provider API integration. Each section pairs the protocol method with the design decision behind it, and a single worked example ties them together: a project-intel server that exposes a tool, a resource, a prompt, and a sampling call, then gets locked down with real authorization.",
+        "date": "September 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "MCP",
+          "Tool Integration",
+          "OAuth"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "first-enterprise-agent-project-setup",
+        "title": "Lesson 32: Building your first enterprise agent: project setup, end to end",
+        "series": "agentic-ai",
+        "lesson": 32,
+        "excerpt": "You have the pieces: the loop, tools, context, memory, evaluation. This lesson is the first time they stop being separate techniques and become one running system. It walks the full setup of an enterprise agent project, from picking a bounded problem and scaffolding the repository, through wiring the model, defining the agent, and registering tools, to running it end to end behind a small API. The point is not to write clever code. It is to make the boring decisions deliberately, the ones that decide whether your agent survives contact with a real codebase, a real API key, and a real deployment. A worked example ties it together: a ticket-triager agent you stand up from an empty folder to a running endpoint in one pass.",
+        "date": "September 4, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Architecture",
+          "Tool Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "hands-on-one-framework-real-agent-real-work",
+        "title": "Lesson 33: Hands on with one framework, a real agent that does real work",
+        "series": "agentic-ai",
+        "lesson": 33,
+        "excerpt": "Lesson 32 gave you a running skeleton: a bounded task, an isolated repository, wired tools, typed state, an API in front. This lesson is where that skeleton stops being a scaffold and starts doing a real job. It picks the OpenAI Agents SDK, the framework the series has already leaned on, and walks every primitive that turns a model into an agent that an actual team can hand real work to. You will meet the Runner loop that owns the reason-act-observe cycle, function tools that reach a real system, a structured output the rest of your stack can consume, an input guardrail that blocks out-of-scope requests before they waste tokens, a session that carries memory across turns, and the tracing that is on by default. The worked example is the ticket resolver you stood up last lesson, grown from a classifier into an agent that gathers account context, checks the refund policy, and drafts a reply an agentic contact center could actually send. Define the terms, build it in numbered steps, and finish with a try-it prompt that makes the framework primitives yours.",
+        "date": "September 5, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Architecture",
+          "Tool Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "agent-ux-streaming-progress-seeing-the-loop",
+        "title": "Lesson 34: Agent UX: streaming output, progress indicators, and when users need to see the loop",
+        "series": "agentic-ai",
+        "lesson": 34,
+        "excerpt": "A chat model answers once and stops. An agent answers by running a loop: call the model, read the result, call a tool, feed the output back, call the model again, sometimes several times. That loop takes tens of seconds, and a single spinner is not enough. This lesson gives your agent a face. It sets up streaming output that delivers the reply as it is generated, progress indicators that show which step the loop is on, and the judgment about when the loop must be visible at all. You will learn the response-time limits that decide the question for you, the difference between streaming the answer and reporting progress on the work, and how to surface tool calls and interim messages without dumping raw reasoning on a user. The worked example takes the ticket resolver from lesson 33 and turns it into a streamed, progress-aware runner your team could actually show a customer.",
+        "date": "September 6, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "UX",
+          "Streaming",
+          "Progress"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "rag-at-scale-ingestion-refresh-versioning-deletion",
+        "title": "Lesson 35: RAG at Scale: Ingestion Pipelines, Refresh, Versioning, and Deletion",
+        "series": "agentic-ai",
+        "lesson": 35,
+        "excerpt": "The difference between a RAG demo and a RAG system is the write side. A demo indexes a static folder once. A system keeps a live corpus in sync with its sources: an ingestion pipeline that parses and chunks on the way in, a refresh strategy that re-embeds only what changed instead of rebuilding everything, versioning so a document or an embedding-model change is traceable and reversible, and deletion so removed or sensitive content actually disappears from retrieval. This lesson turns the read-side tuning you learned in lessons 10 through 13 into a lifecycle you can run in production.",
+        "date": "September 7, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "RAG",
+          "Data Engineering"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "testing-agents-unit-integration-regression-evals",
+        "title": "Lesson 36: Testing Agents: Unit Tests for Tools, Integration Tests, and Regression Evals",
+        "series": "agentic-ai",
+        "lesson": 36,
+        "excerpt": "You would not ship an API endpoint that you tested by curling it five times and nodding. Most agent teams do exactly that with the whole system: a playground, a few prompt experiments, a deployment. This lesson builds the three layers that replace the vibe check: unit tests that treat the deterministic machinery around the model, the prompt strings, the tool dispatch, the schemas, as ordinary software, integration tests that exercise the full agent loop against controlled tool side effects, and regression evals that score real model output against a frozen golden set. Together they turn a system that never gives the same answer twice into one you can gate a release on.",
+        "date": "September 8, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Testing",
+          "CI/CD"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "ci-cd-for-agents-prompt-versioning-model-registry-canary-releases",
+        "title": "Lesson 37: CI/CD for Agents: Prompt Versioning, Model Registries, and Canary Releases",
+        "series": "agentic-ai",
+        "lesson": 37,
+        "excerpt": "Lesson 36 gave you tests. This lesson turns them into a pipeline. A test proves an agent is good once; CI/CD proves it is still good every time a prompt, a model, or a line of configuration changes, and then routes that change into production in slices you can measure and reverse. That means three tools the last lesson never needed: prompt versioning so a one-word edit is a traced, reversible change instead of a silent memory, a model registry so you can name the exact model and provider version behind any output you inspect, and canary releases so a new prompt or model lands on a sliver of traffic, gets scored against the evals you built, and only rolls out wide when the numbers hold.",
+        "date": "September 9, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "CI/CD",
+          "MLOps",
+          "Deployment"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "observability-at-scale-metrics-alerts-slos",
+        "title": "Lesson 38: Observability at Scale: Metrics, Alerts, Cost Dashboards, and SLOs",
+        "series": "agentic-ai",
+        "lesson": 38,
+        "excerpt": "Lesson 20 taught you to open one trace and read it end to end. At scale you cannot read every trace, and you should not want to. This lesson turns observability into a system that watches itself: the metrics that tell you something changed, the alert tiers that decide who gets paged and who gets a ticket, the cost dashboard that makes spend a number you can steer, and the service-level objectives that turn 'reliable enough' from a phrase into a measured target with an error budget. A worked example builds an SLI-to-SLO chain for a customer support agent, and a try-it prompt has you define your own.",
+        "date": "September 10, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Observability",
+          "SRE"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "production-troubleshooting-loops-bad-tools-context-bloat",
+        "title": "Lesson 39: Production Troubleshooting: Debugging Loops, Bad Tools, and Context Bloat",
+        "series": "agentic-ai",
+        "lesson": 39,
+        "excerpt": "Lesson 38 gave you the detection layer: metrics, alerts, SLOs, a dashboard that tells you something changed. This lesson is what you do in the twenty minutes after the alert. Three failure classes cover most production incidents that are not infrastructure outages, and they are loops, bad tools, and context bloat. You get a triage order that tells you which one you are looking at, the diagnostic signature that finds the exact turn where an agent started going in circles, the tool contract that turns an opaque failure into an actionable one, and the measurement that tells you whether your context is growing past what the model can use. A worked example walks a runaway refund agent from symptom to root cause to the three fixes that stop it recurring.",
+        "date": "September 11, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Debugging",
+          "Operations"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "customer-support-agent-case-study",
+        "title": "Lesson 40: Case Study: Customer Support Agent Architecture",
+        "series": "agentic-ai",
+        "lesson": 40,
+        "excerpt": "This lesson stops teaching patterns one at a time and puts the whole path together. It walks a customer support agent from scratch: when the routing layer is a workflow rather than an agent, how the retrieval step keeps answers grounded, where you draw the tool boundary so the agent can act without becoming dangerous, how escalation to a human stays clean, and what you instrument so you can tell the difference between resolution and hallucination. Everything previous lessons covered, meaning intent detection, RAG, tool schemas, testing, and observability lands in one architecture, with each choice argued and each dead end named.",
+        "date": "September 12, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Case Study"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "research-summarization-agents-case-study",
+        "title": "Lesson 41: Case Study: Research & Summarization Agents",
+        "series": "agentic-ai",
+        "lesson": 41,
+        "excerpt": "This lesson puts the case study format to work on a second, very different shape of agent: research and summarization. Where the customer support agent from Lesson 40 was bounded, request-and-response, and routed, a research agent is open-ended, long-horizon, and built to gather across many sources before it writes anything. You watch the same underlying patterns, the augmented LLM, tool loops, context management, and observability, rebalance for a job where the hard part is deciding what to look at next, not knowing what you already have. It argues the case for an orchestrator-worker architecture, walks a research brief end to end, and explains why the token bill for these systems is so high.",
+        "date": "September 13, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "18 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Case Study",
+          "Research"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "workflow-automation-agents-case-study",
+        "title": "Lesson 42: Case Study: Workflow Automation Agents (Browsers, Clicks, and Typing)",
+        "series": "agentic-ai",
+        "lesson": 42,
+        "excerpt": "Third case study, and the one where the agent touches a screen. Workflow automation agents drive interfaces that were built for people: they read a page, click buttons, fill forms, and type into fields inside systems that never offered an API. This lesson works a licensing verification workflow end to end, compares the three ways an agent can see a page (pixels, accessibility tree, script), digs into why clicks miss their targets and how to fix that, does the arithmetic on what a per-step reliability claim actually means across a multi-step job, and covers the two risks this class of agent carries that no other does: a page is hostile input, and every action lands in a production system.",
+        "date": "September 15, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "18 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Case Study",
+          "Browser Automation"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "coding-agents-case-study",
+        "title": "Lesson 43: Case Study: Coding Agents (Hermes, Claude Code, and Copilot Under the Hood)",
+        "series": "agentic-ai",
+        "lesson": 43,
+        "excerpt": "The case study run closes with the class of agent closest to where you are reading this: coding agents, and what happens under the hood in tools like Hermes, Claude Code, and Copilot. This lesson walks the spectrum from inline autocomplete to fully asynchronous cloud agents, breaks down the documented agentic loop (gather context, take action, verify results), and names the one thing a coding agent has that no browser agent does: a verifier that runs itself. Code either compiles, passes tests, or it does not, and that changes the reliability arithmetic from the last lesson. You will trace a failing-test fix through the loop, see why context is the resource to manage, understand how the harness (models that reason, tools that act) is assembled, and learn the build order for adopting a coding agent safely.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Case Study",
+          "Coding Agents",
+          "Developer Tools"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "enterprise-integration-salesforce-erp-crm-data-warehouse",
+        "title": "Lesson 44: Enterprise Integration: Connecting Agents to Salesforce, ERP, CRM, and Data Warehouses",
+        "series": "agentic-ai",
+        "lesson": 44,
+        "excerpt": "Lesson 43 ended the case study run with the agent that writes code, and this lesson turns outward to the systems a company actually runs on. Connecting an agent to Salesforce, an ERP, a CRM, or a data warehouse is rarely a networking problem. The hard part is governance: deciding who the agent is, what that identity may read and write, and how to make its effects in live business data reversible. This lesson separates the read path from the write path, walks the connection shapes from direct APIs through MCP servers to managed agent platforms, and shows why identity is the security boundary on every one of them. A worked example connects one support agent to a data warehouse for history and a CRM for case updates, with the permission and guardrail choices made explicit.",
+        "date": "September 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "19 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Enterprise Integration",
+          "CRM",
+          "ERP",
+          "Data Warehousing"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "vector-db-operations-scaling-backups-consistency-cost",
+        "title": "Lesson 45: Vector DB Operations: Scaling, Backups, Consistency, and Cost",
+        "series": "agentic-ai",
+        "lesson": 45,
+        "excerpt": "Lesson 12 taught you how to choose a vector database. This lesson is about what it takes to run one. A vector database is not a static pile of vectors; it is a live system with a memory budget, a backup story, a consistency model, and a bill. This lesson covers how a vector database scales and why memory is the variable that decides it, why backing one up is different from backing up a normal database, how consistency and freshness are maintained as documents change, and what all of that actually costs. A worked example sizes a pgvector deployment by hand and walks the backup and consistency decisions for a real RAG workload.",
+        "date": "September 18, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "RAG",
+          "Vector Databases",
+          "Data Engineering"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "rag-data-pipelines-etl-connectors-cdc-incremental-refresh",
+        "title": "Lesson 46: Data Pipelines for RAG: ETL, Connectors, CDC, and Incremental Refresh",
+        "series": "agentic-ai",
+        "lesson": 46,
+        "excerpt": "Lesson 35 taught you the write side of RAG: how to keep an index in sync once you have one. This lesson is about how the data gets to the pipeline in the first place, and how a pipeline stays cheap as sources change. A RAG pipeline is ETL wearing an AI costume: it extracts from connectors, transforms raw records into clean text, and loads chunks into a vector store. The three decisions that separate a demo from a system are the connector style (pull versus push), whether the transform actually normalizes the data before it hits the embedding model, and how change is detected. Change data capture is the mechanism that turns a polling job into a live one, and incremental refresh is what keeps that live pipeline from re-embedding everything on every run. A worked example builds a change-driven ETL pipeline in pure Python, with a watermark for idempotency and delete handling.",
+        "date": "September 19, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "RAG",
+          "Data Engineering"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "building-an-eval-program-harness-regression-suites-quality-gates",
+        "title": "Lesson 47: Building an Eval Program: Eval Harnesses, Regression Suites, and Quality Gates",
+        "series": "agentic-ai",
+        "lesson": 47,
+        "excerpt": "Lesson 36 taught you the individual tests: unit tests over the deterministic machinery, integration tests across the loop, and regression evals that score real output. Lesson 46 kept the data feeding a RAG pipeline fresh. Both assumed you could run a suite and read a number. This lesson builds the system that makes that number trustworthy and repeatable after the hundredth run. A single eval run is a point in time. An eval program is the process that keeps every run consistent, organizes suites so you know what each score means, and turns a score change into a stop, hold, or go decision at the gate. You build a harness whose consistency makes scores comparable, split suites into capability and regression buckets, and wire cheap code-based graders into every commit while reserving expensive judges for release. A worked example runs a minimal harness with pinned model, judge, and dataset versions, then the gate logic that blocks a drop.\\",
+        "date": "September 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Evaluation",
+          "CI/CD"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "ai-governance-policies-review-boards-model-risk-management",
+        "title": "Lesson 48: Governance: AI Policies, Review Boards, and Model Risk Management",
+        "series": "agentic-ai",
+        "lesson": 48,
+        "excerpt": "Lesson 47 gave you quality gates: repeatable measurements that tell you whether an agent still works. Governance is the layer that decides who is allowed to change what, who gets to accept the risk when you ship anyway, and how you prove it to an examiner or a board. It lives in three places. AI policies set the rules everyone works under. A review board is the human body that makes the hard calls the policy cannot resolve and writes down who decided and why. Model risk management is the discipline, borrowed from banks, of treating a model the way you treat a loan portfolio: inventory it, tier it by how much damage it can do, validate it independently, and watch it until it is retired. This lesson walks the NIST AI Risk Management Framework's Govern function and the EU AI Act's risk management system, then shows how a real agent operation turns its own pipeline into a governance record. The next lesson builds the security architecture that the governance you draft here will want to point at.",
+        "date": "September 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Governance",
+          "Model Risk"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 48,
+    "curriculumLessons": 90
+  },
+  {
     "slug": "ai-adoption",
     "name": "AI Adoption",
     "description": "The Level 3 capstone of the AI at Work arc, for the person who owns AI in an organization. Lead, govern, and scale a company's AI use: adoption metrics, change management, policy, data safety, vendor evaluation, security and privacy ownership, budgeting, ROI, and the ongoing program. Vendor-agnostic for a non-technical owner.",
@@ -32,6 +829,1508 @@ export const learnSeries: LearningSeries[] = [
     ],
     "totalLessons": 1,
     "curriculumLessons": 40
+  },
+  {
+    "slug": "hermes-consultant",
+    "name": "Hermes Agent Consultant",
+    "description": "A path to becoming an agent-implementation consultant: scoping, implementation craft, delivery practice, and the business of consulting. Platform-agnostic skills with Hermes Agent as the working example.",
+    "gradient": "from-teal to-emerald-600",
+    "lessons": [
+      {
+        "slug": "what-an-agent-implementation-consultant-does",
+        "title": "Lesson 1: What an Agent-Implementation Consultant Actually Does",
+        "series": "hermes-consultant",
+        "lesson": 1,
+        "excerpt": "The agent-implementation consultant arc in one lesson: what an engagement looks like, what you actually deliver, and why this is not the same job as building agents for yourself.",
+        "date": "August 26, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "the-consulting-engagement-lifecycle",
+        "title": "Lesson 2: The Consulting Engagement Lifecycle",
+        "series": "hermes-consultant",
+        "lesson": 2,
+        "excerpt": "The five-phase arc that every engagement runs: discover, design, implement, handover, support. What each phase produces, the exit test that lets you leave it, and where engagements quietly die.",
+        "date": "August 27, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "discovery-and-scoping",
+        "title": "Lesson 3: Discovery and Scoping: Listening Before Proposing",
+        "series": "hermes-consultant",
+        "lesson": 3,
+        "excerpt": "The craft of discovery: who to talk to, what to watch, which questions surface the real problem, and how to write a problem statement the client agrees with before you propose any solution.",
+        "date": "August 28, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "framing-value-and-roi",
+        "title": "Lesson 4: Framing Value and ROI: How to Talk to a Buyer, Not a Builder",
+        "series": "hermes-consultant",
+        "lesson": 4,
+        "excerpt": "The craft of turning what an agent does into a number a buyer can defend: how to measure value honestly, build ROI math that survives scrutiny, and talk outcomes instead of features to the person who signs the check.",
+        "date": "August 29, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "stakeholder-mapping",
+        "title": "Lesson 5: Stakeholder Mapping: Who Has to Say Yes, and Who Has to Live With It",
+        "series": "hermes-consultant",
+        "lesson": 5,
+        "excerpt": "The craft of mapping every stakeholder an agent implementation touches: users, owners, IT, and compliance. Who must approve the deployment, who has to work with it every day, and how to win both before you build.",
+        "date": "August 30, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "when-an-agent-is-the-right-tool",
+        "title": "Lesson 6: When an Agent Is the Right Tool, and When to Say No",
+        "series": "hermes-consultant",
+        "lesson": 6,
+        "excerpt": "The honest consultant's rule: an agent is not always the right answer, and the consultant who can say no protects both the client's money and their own reputation. How to tell the work an agent should do from the work it should never touch, and how to walk away cleanly.",
+        "date": "August 31, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "installing-and-deploying-hermes-agent",
+        "title": "Lesson 7: Installing and Deploying Hermes Agent: Local Setup, Profiles, Gateway, First Run",
+        "series": "hermes-consultant",
+        "lesson": 7,
+        "excerpt": "The consultant's deployment discipline: how to stand up an agent correctly once you have the go-ahead. Isolation per engagement, a verified first run before you layer on features, and a gateway that turns a laptop experiment into an always-on tool your client actually uses.",
+        "date": "September 1, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "configuration-models-providers-fallbacks",
+        "title": "Lesson 8: Configuration: Models, Providers, and Fallbacks: Why 'It Works on My Machine' Isn't Enough",
+        "series": "hermes-consultant",
+        "lesson": 8,
+        "excerpt": "The consultant's configuration discipline: the model, provider, and fallback choices that make an agent dependable are part of the deliverable, not an install detail. How to separate secrets from settings, verify what the running agent actually resolved, and build for the outage so the client's agent survives a provider that does not.",
+        "date": "September 2, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "tools-and-skills-what-is-real",
+        "title": "Lesson 9: Tools and Skills: What Ships with Hermes, How to Extend It, and How to Know What's Real",
+        "series": "hermes-consultant",
+        "lesson": 9,
+        "excerpt": "The consultant's capability discipline: what an agent can do comes from its tools, and how it does it well comes from its skills. How to tell a tool that is real in the running system from one that only exists in a catalog, how to extend an agent without writing code, and why you never present a client with a capability you have not watched succeed.",
+        "date": "September 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "mcp-servers-and-integrations",
+        "title": "Lesson 10: MCP Servers and Integrations: Wiring the Agent Into the Client's Stack",
+        "series": "hermes-consultant",
+        "lesson": 10,
+        "excerpt": "The client's value does not live in a chat window, it lives in their ticketing system, their CRM, their internal APIs. This lesson teaches how to connect an agent to that stack through MCP servers, how to decide what the agent gets to touch, and how to wire it in without breaking the systems the client depends on.",
+        "date": "September 4, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "automation-and-cron-jobs",
+        "title": "Lesson 11: Automation and Cron Jobs: Turning One-Off Wins Into Reliable Recurring Value",
+        "series": "hermes-consultant",
+        "lesson": 11,
+        "excerpt": "A working demo is a win. Recurring value is a service. This lesson teaches how to turn a one-off agent win into work that fires on a schedule without anyone asking for it, how to write prompts that survive a fresh session, and how to make unattended work loud when it goes wrong instead of failing silently.",
+        "date": "September 5, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "kanban-and-orchestration-patterns",
+        "title": "Lesson 12: Kanban and Orchestration Patterns: Scoping Work, Dispatching, and Finishing the Job",
+        "series": "hermes-consultant",
+        "lesson": 12,
+        "excerpt": "Once an engagement runs more than one recurring job, holding every thread yourself stops working. This lesson teaches the coordination craft: scoping work into cards that fit a real work window, dispatching each card to the worker best built to finish it, and defining done so a job is proven rather than merely started.",
+        "date": "September 6, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "security-and-credentials",
+        "title": "Lesson 13: Security and Credentials: Secrets, Least Privilege, and Keeping the Client Safe",
+        "series": "hermes-consultant",
+        "lesson": 13,
+        "excerpt": "Every engagement puts secrets in your hands. This lesson teaches how to handle credentials as a consultant: store them so they never leak, grant the agent only the access the work needs, and hand the client a system that stays safe after you leave.",
+        "date": "September 7, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "testing-and-verification",
+        "title": "Lesson 14: Testing and Verification: Proving It Works Before You Claim It Does",
+        "series": "hermes-consultant",
+        "lesson": 14,
+        "excerpt": "An agent's reply is a claim, not a result. This lesson teaches the transferable craft of proving agent work: watching tool calls actually fire, reading real output and exit codes instead of trusting prose, verifying the artifact changed on disk, and building a repeatable gate so the work stays proven after you leave.",
+        "date": "September 8, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "finishing-the-job-discipline",
+        "title": "Lesson 15: The Finishing-the-Job Discipline: Working Artifacts Over Plans, Honest Blockers Over Fabrication",
+        "series": "hermes-consultant",
+        "lesson": 15,
+        "excerpt": "Clients do not pay for descriptions of work. They pay for work. This lesson teaches the discipline that separates a consultant whose agent delivers working artifacts from one whose agent delivers convincing prose: prove every claim in the running system, report a blocked task honestly instead of inventing output to look busy, and save what you learn so the next engagement starts smarter.",
+        "date": "September 9, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "estimation-scoping-30-45-minute-tasks",
+        "title": "Lesson 16: Estimation: Scoping a 30-45 Minute Task, and Why Small Tasks Ship Reliably",
+        "series": "hermes-consultant",
+        "lesson": 16,
+        "excerpt": "Estimation is a sizing decision, not a prediction. How to carve work into 30 to 45 minute windows you can actually finish, why tasks that small ship reliably, and how to catch a task that has grown too big before it wastes your day.",
+        "date": "September 10, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "packaging-reusable-skills",
+        "title": "Lesson 17: Packaging Reusable Skills: Turning What You Build Once Into Assets You Reuse Everywhere",
+        "series": "hermes-consultant",
+        "lesson": 17,
+        "excerpt": "A deliverable you finished once is a job. The same work packaged is an asset. This lesson teaches the craft of turning a solved problem into a reusable skill: what deserves to be captured, how to write it as lessons instead of a log, how to strip the client out so it travels, and how to ship it so the next engagement starts from a proven path instead of a blank page.",
+        "date": "September 11, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "documentation-and-handover",
+        "title": "Lesson 18: Documentation and Handover: Making the Client Self-Sufficient After You Leave",
+        "series": "hermes-consultant",
+        "lesson": 18,
+        "excerpt": "You can deliver a flawless system and still fail the engagement if the client cannot run it after you are gone. This lesson teaches the craft of handover: naming the human owner, writing reproduce, operate, and evolve docs instead of one history note, testing them by watching the client run the system rather than narrating it, moving credentials into the client's name, and cutting the cord deliberately.",
+        "date": "September 12, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "change-management-and-adoption",
+        "title": "Lesson 19: Change Management and Adoption: Getting Real People to Actually Use the System",
+        "series": "hermes-consultant",
+        "lesson": 19,
+        "excerpt": "A system nobody uses is a failed engagement no matter how well it was built or handed over. This lesson teaches the craft of adoption: separating change from behavior change, treating resistance as information, designing the agent around the way people already work instead of forcing new habits, finding the person whose problem it actually is, and measuring success in usage, not in shipped features.",
+        "date": "September 14, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "governance-and-guardrails",
+        "title": "Lesson 20: Governance and Guardrails: Acceptable Use, PII, and Responsible Automation",
+        "series": "hermes-consultant",
+        "lesson": 20,
+        "excerpt": "An agent that can do anything is an agent your client should not trust. This lesson teaches the governance craft: writing a plain acceptable-use policy that says what the agent may and may not do, treating personal data as a bounded resource instead of something to hoard, and building guardrails that enforce the policy mechanically so automation stays inside the lines even when nobody is watching.",
+        "date": "September 15, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "monitoring-and-observability",
+        "title": "Lesson 21: Monitoring and Observability: Knowing When the Agent Is Quietly Failing",
+        "series": "hermes-consultant",
+        "lesson": 21,
+        "excerpt": "An agent can run perfectly and still be wrong. This lesson teaches the observability craft: how to know, from the outside, whether an agent is actually doing the job rather than just looking busy. It covers the difference between loud failures and quiet ones, how to watch a whole fleet instead of a single job, and how to make silent degradation surface before the client discovers it.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "cost-management-token-budgets-and-model-tiers",
+        "title": "Lesson 22: Cost Management: Token Budgets, Model Tiers, and Predictable Client Pricing",
+        "series": "hermes-consultant",
+        "lesson": 22,
+        "excerpt": "An agent that works is not yet an agent you can price. This lesson teaches the cost craft: how to measure what a single run costs, how to put reasoning and mechanical work on the right model tiers, how to keep a recurring workload inside a budget, and how to turn a measured unit cost into a client number that survives the month.",
+        "date": "September 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "quality-gates-and-review",
+        "title": "Lesson 23: Quality Gates and Review: Who Checks the Work, and What They Check For",
+        "series": "hermes-consultant",
+        "lesson": 23,
+        "excerpt": "A working agent is not a checked agent. This lesson covers the delivery craft of review: why the builder cannot be the checker, how to write acceptance criteria a reviewer can actually test, how a verdict routes work back to the implementer instead of parking it, and how to build gates that fail loudly on the work nobody is watching.",
+        "date": "September 18, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "troubleshooting-in-production",
+        "title": "Lesson 24: Troubleshooting in Production: Diagnosing a Broken Agent Without Breaking It More",
+        "series": "hermes-consultant",
+        "lesson": 24,
+        "excerpt": "An agent in production breaks, and the temptation is to start changing things until it heals. That instinct is exactly what makes incidents worse. This lesson teaches the diagnostic discipline: how to gather evidence before you touch anything, change one variable at a time, keep a safety net you can roll back to, and protect the very state you need to understand. It uses Hermes Agent's session logs, cron health checks, and checkpoint system as the concrete vehicle for a craft that transfers to any agent platform.",
+        "date": "September 19, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "engagement-models-and-pricing",
+        "title": "Lesson 25: Engagement Models and Pricing: Fixed-Fee vs Hourly vs Retainer, and When Each Fits",
+        "series": "hermes-consultant",
+        "lesson": 25,
+        "excerpt": "How to choose the engagement model that matches the risk and delivery style of a piece of work. What fixed-fee, hourly, and retainer actually price, when each fits, and why the model you pick changes the incentives for both you and the client.",
+        "date": "September 20, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "contracts-and-scoping-sow-boundaries-scope-creep",
+        "title": "Lesson 26: Contracts and Scoping: Statements of Work, Boundaries, and Avoiding Scope Creep",
+        "series": "hermes-consultant",
+        "lesson": 26,
+        "excerpt": "A contract is not paperwork. It is a written agreement about what done means, and it is the only defense you have when a well-meaning client's requests start to drift. This lesson teaches what a statement of work is for, how to draw a scope boundary that protects both sides, and how to keep an evolving engagement from silently becoming an unbounded one.",
+        "date": "September 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "building-a-repeatable-delivery-framework",
+        "title": "Lesson 27: Building a Repeatable Delivery Framework: Your Own Playbook That Ships Every Time",
+        "series": "hermes-consultant",
+        "lesson": 27,
+        "excerpt": "A consultant who delivers one great engagement by instinct is not yet a business. This lesson teaches the craft of turning that instinct into a repeatable delivery framework: a written playbook of phases, checkpoints, templates, and standards that ships the same quality to every client without reinventing the process each time. It covers what a delivery framework is, how to capture one from a finished engagement, how to make it actually run instead of living in a document nobody opens, and how to keep it sharp as you learn.",
+        "date": "September 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 27,
+    "curriculumLessons": 30
+  },
+  {
+    "slug": "hermes-consultant-intermediate",
+    "name": "Hermes Agent Consultant · Intermediate",
+    "description": "Level 2 of the Hermes Consultant track: Applied Delivery. For the working practitioner — running full engagements, complex client environments, multi-week estimation, team delivery, incident discipline, pricing, and case studies. Builds on Level 1.",
+    "gradient": "from-teal to-emerald-600",
+    "lessons": [
+      {
+        "slug": "running-a-full-engagement",
+        "title": "Lesson 1: Running a Full Engagement",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 1,
+        "excerpt": "Turning the five-phase lifecycle into a week-by-week plan: mapping discover, design, implement, handover, and support onto a real calendar, with gates, buffers, and the scheduling realities that kill engagements.",
+        "date": "August 27, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "requirement-capture-as-built-discipline",
+        "title": "Lesson 2: Requirement Capture as an As-Built Discipline",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 2,
+        "excerpt": "Moving from a problem statement you agree on to a requirement set that survives handover: capturing the enacted process, not the stated one, and writing requirements the next team can run and change without you.",
+        "date": "August 28, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "production-routing-evals-guardrails",
+        "title": "Lesson 3: Advanced Hermes Configuration: Model Routing, Evals, and Guardrails in Production",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 3,
+        "excerpt": "When the agent leaves the sandbox and runs at real volume in front of a client, three decisions decide whether it holds up: which model runs which task, how you prove the output is still correct, and how you keep the guardrails you documented actually enforced. This lesson teaches all three.",
+        "date": "August 29, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "reusable-delivery-toolkit-skill-packaging",
+        "title": "Lesson 4: Building a Reusable Delivery Toolkit: Skill Packaging Done Right",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 4,
+        "excerpt": "The difference between a consultant who solves one client's problem and one who compounds every engagement into the next: turning the working capture discipline, eval suite, and guardrail set from Lessons 2 and 3 into packaged, loadable skills another consultant can run without relearning them.",
+        "date": "August 30, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "complex-client-environments-existing-stacks-sandboxed-deploys",
+        "title": "Lesson 5: Complex Client Environments: Existing Stacks, Enterprise Constraints, and Sandboxed Deploys",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 5,
+        "excerpt": "The clean single-client world where you chose the stack is the exception, not the rule. This lesson teaches you to land a packaged agent delivery inside a company that already has infrastructure, security rules, and processes you did not choose, and to keep the toolkit working when the environment fights back.",
+        "date": "August 31, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "estimating-multi-week-engagements",
+        "title": "Lesson 6: Estimating Multi-Week Engagements: Beyond the 30-45 Minute Task",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 6,
+        "excerpt": "The 30-45 minute task is the unit of execution, not the unit of estimation. This lesson teaches you to size a real multi-week delivery: how to break a large engagement into estimable pieces, why you estimate the critical path and not the total, how to put the constraints and reviews from Lesson 5 into the number, and how to keep an estimate honest when the environment reveals surprises.",
+        "date": "September 1, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "team-delivery-splitting-work-across-consultants",
+        "title": "Lesson 7: Team Delivery: When It's More Than One Consultant, How the Work Splits",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 7,
+        "excerpt": "Single-consultant delivery has a ceiling. This lesson teaches the working practitioner when that ceiling hits, how to split work so more than one owner can hold it without the pieces drifting apart, and the seams, contracts, and dependency rules that hold a delivery team together. Hermes Agent's multi-agent board is the concrete example.",
+        "date": "September 2, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "internal-pilot-converting-to-paid-engagement",
+        "title": "Lesson 8: Running an Internal Pilot That Converts Into a Paid Engagement",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 8,
+        "excerpt": "The hardest sale in consulting is the one where the client has not yet decided you are worth paying. This lesson teaches the working practitioner to run an internal pilot that converts: how you scope a real slice of a prospect's problem, deliver it as a bounded proof, and turn the measured result into a signed engagement instead of a free spec.",
+        "date": "September 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "quality-at-scale-golden-sets-eval-gates-regression",
+        "title": "Lesson 9: Quality at Scale: Golden Sets, Eval Gates, and Regression Discipline",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 9,
+        "excerpt": "A single agent that works under review is not the hard problem. An estate that keeps producing correct output at volume, after the rules, the data, and the models keep changing, is. This lesson teaches the practitioner who runs real multi-week delivery how to keep quality true at scale: a golden set that lives and grows without rotting, eval gates that block the wrong change before it ships, and the regression discipline that triages a failing gate instead of burying it.",
+        "date": "September 4, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "cost-and-reliability-engineering-running-agent-estate",
+        "title": "Lesson 10: Cost and Reliability Engineering for a Running Agent Estate",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 10,
+        "excerpt": "The build is one project. The running estate is a subscription to a recurring bill and a standing reliability obligation, and a consultant who hands over a system without engineering both is handing over a liability. This lesson teaches the practitioner operating a real delivery how to model and contain the recurring spend of a fleet of scheduled agents, how to make that fleet dependable when models and providers and infrastructure keep changing underneath it, and how to engineer for the failure of any single part without taking the whole delivery down.",
+        "date": "September 5, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "incident-discipline-troubleshooting-broken-agent",
+        "title": "Lesson 11: Incident Discipline: Troubleshooting a Broken Agent Under Client Pressure",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 11,
+        "excerpt": "An agent that produces a wrong answer is a bug. An agent that stops while a client watches is an incident. This lesson teaches the discipline that separates a calm professional from a panicked one when delivery goes wrong live: why you diagnose before you patch, how to establish ground truth under pressure, what communication the client hears first, and the difference between a fix that works and a fix you only claim works.",
+        "date": "September 6, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "change-management-as-a-deliverable",
+        "title": "Lesson 12: Change Management as a Deliverable, Not an Afterthought",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 12,
+        "excerpt": "The agent you delivered is running, the client depends on it, and now it needs to change: a new model, a tightened rule, a reconfigured schedule. This lesson teaches the consultant to treat change as its own deliverable with scope, a plan, a test, a rollback, and a record, instead of as a drive-by edit that quietly erodes a working delivery.",
+        "date": "September 7, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "self-sufficient-handover-operating-docs-runbooks",
+        "title": "Lesson 13: Handover That Makes the Client Self-Sufficient: Operating Docs and Runbooks",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 13,
+        "excerpt": "The real test of a delivery is not whether it works while you are in the room. It is what happens the first time the client runs it without you and something goes wrong. This lesson teaches the handover that makes the client self-sufficient: the operating doc that captures how the agent is configured and the runbook that tells a calm stranger what to do when it breaks, finished with a dry run and a support taper that make your absence the point.",
+        "date": "September 8, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "21 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "managing-a-small-portfolio-of-clients",
+        "title": "Lesson 14: Managing a Small Portfolio of Clients: Scope, Expectations, and Time",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 14,
+        "excerpt": "The moment you hold more than one engagement, every lesson before this one stops being about a single client and starts being about the space between them. This lesson teaches the working practitioner how a small portfolio survives: how scope bleeds between engagements and how to stop it, how to set expectations you can actually hold when no client gets your full attention, and how to budget time across several active deliveries so that adding a client does not quietly sacrifice the ones you already have. Hermes Agent's isolation model is the concrete vehicle.",
+        "date": "September 9, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "21 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "vendor-agnostic-translation-adapting-the-playbook-to-other-agent-tools",
+        "title": "Lesson 15: Vendor-Agnostic Translation: Adapting the Playbook to Other Agent Tools",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 15,
+        "excerpt": "The Hermes playbook you have built is real value, and it is also tool-specific by default. This lesson is the discipline of separating the transferable layer from the mechanical one, so you can deliver the same consulting standard on whatever agent tool a client already runs, without rebuilding your approach from scratch and without forcing Hermes-shaped ideas onto tools that have no equivalent.",
+        "date": "September 10, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "security-review-threat-model-secrets-compliance",
+        "title": "Lesson 16: Security Review for a Client Engagement: Threat Model, Secrets, and Compliance",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 16,
+        "excerpt": "A security review is not a checklist you run at the end of an engagement; it is a discipline you practice from the first scoping call. This lesson teaches the intermediate consultant how to build a client-facing threat model, hunt down secrets before the client's security team does, and present compliance evidence instead of assurances. Hermes Agent's defense-in-depth model is the concrete example: user authorization, dangerous-command approval, file write safety, container isolation, MCP credential filtering, cross-session isolation.",
+        "date": "September 11, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "working-with-it-compliance-legal-on-agent-rollouts",
+        "title": "Lesson 17: Working with IT, Compliance, and Legal on Agent Rollouts",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 17,
+        "excerpt": "The last lesson taught you to survive a security review. This one teaches you to carry the rollout through the three teams that actually control momentum: IT, compliance, and legal. Each speaks a different language, each holds a different gate, and each will stall the engagement if you treat them like a single obstacle. This lesson teaches the intermediate consultant to triage these stakeholders in early, translate technical decisions into the language each one needs, and turn procurement, sign-off, and ongoing governance into parts of the delivery you plan for instead of surprises you absorb.",
+        "date": "September 12, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "pricing-engagements-fixed-fee-tm",
+        "title": "Lesson 18: Pricing Individual Engagements: Fixed-Fee vs Time-and-Materials in Practice",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 18,
+        "excerpt": "The price on an engagement is not a number you pick, it is a risk allocation you choose. This lesson teaches the working practitioner to decide between fixed-fee and time-and-materials, price the engagement from a real unit economy, and build change control that keeps either model honest when scope moves.",
+        "date": "September 13, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "writing-proposals-and-sows",
+        "title": "Lesson 19: Writing Proposals and Statements of Work That Protect Both Sides",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 19,
+        "excerpt": "You priced the engagement in Lesson 18, and now the price has to survive on paper. This lesson teaches the practitioner to write the proposal and statement of work as risk documents, not sales documents: a scope boundary specific enough to enforce, acceptance criteria the client can actually test against, assumptions and exclusions written down so neither side is surprised, and change control that keeps a signed SOW honest when the work shifts.",
+        "date": "September 14, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "managing-scope-creep-and-difficult-clients",
+        "title": "Lesson 20: Managing Scope Creep and Difficult Clients",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 20,
+        "excerpt": "Scope creep and difficult clients feel like two separate curses, but they are one problem wearing two costumes: the engagement drifting away from the baseline it was supposed to hold. This lesson teaches the intermediate consultant that both are settled by the same three artifacts, a written scope, a named acceptance bar, and a change process, and shows you how to use them to turn five repeatable 'difficult client' patterns into tractable negotiations instead of silent battles you lose one email at a time. The worked example is a Hermes Agent engagement, and the discipline transfers to any tool you run.",
+        "date": "September 15, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "18 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "Client Management"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "case-study-real-agent-engagement-end-to-end",
+        "title": "Lesson 21: Case Study: A Real Agent Engagement, End to End",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 21,
+        "excerpt": "Twenty lessons taught you the parts. This one runs them together. A single agent engagement from first call to handover, told in sequence with the mistakes left in: a scope scoped small on purpose, an estimate that survived because it priced the data instead of the code, an export that changed its schema on a Tuesday, an IT director who went quiet while holding the security gate, a catalog defect that was the client's to own, and a handover that made the client's own staff the operator. Read it for the sequencing, not the techniques, because the sequencing is the part you cannot practice alone.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "Case Study"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "repeatable-processes-checklists-templates-delivery-framework",
+        "title": "Lesson 22: Building Repeatable Processes: Checklists, Templates, and a Delivery Framework v1",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 22,
+        "excerpt": "By Lesson 21 you have run engagements end to end, each one an improvised performance that depended on your memory of the one before. This lesson breaks that dependence. You build the three assets a practice compounds on: checklists that catch the failures you have actually hit, templates that capture the reasoning behind past decisions instead of blank forms, and a delivery framework v1 that makes the next engagement run a known process rather than a new invention. The skill is the design discipline: extracting process from real work instead of designing it from a textbook, and versioning the framework so it keeps teaching.",
+        "date": "September 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "measuring-outcomes-and-reporting-value-to-the-buyer",
+        "title": "Lesson 23: Measuring Outcomes and Reporting Value to the Buyer",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 23,
+        "excerpt": "The agent works, the client depends on it, and the engagement is nearly done. The one thing you have not proven is the thing the buyer actually paid for: that the system produced value. This lesson teaches the consultant to measure outcomes instead of activity, and to report that value in the buyer's language, moving the relationship from a delivered system to a justified investment.",
+        "date": "September 18, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "training-the-client-team-to-own-the-system",
+        "title": "Lesson 24: Training the Client's Team to Own the System",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 24,
+        "excerpt": "A working system is not a delivery until the client's people can run it, change it, and keep it alive when you are gone. Lesson 13 gave you the handover: operating docs and runbooks that make the system operable without you. This lesson teaches the piece the docs cannot carry: training the people, building their judgment so they decide what is normal and when to escalate, and sustaining that capability through turnover so the knowledge outlives any single operator.",
+        "date": "September 19, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "19 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "LLMs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "capstone-plan-and-scope-a-complete-engagement",
+        "title": "Lesson 25: Capstone: Plan and Scope a Complete Intermediate Engagement",
+        "series": "hermes-consultant-intermediate",
+        "lesson": 25,
+        "excerpt": "The closing lesson of the intermediate course. You already know the moves: capture, estimation, pricing, teams, incidents, security, stakeholders, scope. This capstone asks you to run them together on one real engagement and produce the three artifacts that sell it, bound it, and schedule it: a scope statement, a plan, and the estimate that makes both defensible. You get a worked example end to end, then a clean canvas to run one yourself.",
+        "date": "September 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "22 min read",
+        "tags": [
+          "AI Agents",
+          "Consulting",
+          "Scoping",
+          "Capstone"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 25,
+    "curriculumLessons": 25
+  },
+  {
+    "slug": "omni-studio-cert",
+    "name": "OmniStudio Developer Certification",
+    "description": "A deep dive for the Salesforce Certified OmniStudio Developer exam. One official exam-guide requirement per day, with config walkthroughs, exam traps, and practice questions.",
+    "gradient": "from-red to-rose-600",
+    "lessons": [
+      {
+        "slug": "day-01-f1-omnistudio-solution-and-industry-use-cases",
+        "title": "OmniStudio F-1: OmniStudio Solution & Industry Use Cases",
+        "series": "omni-studio-cert",
+        "lesson": 1,
+        "excerpt": "Describe the OmniStudio solution as it applies to common customer use case scenarios in different industries (telco, energy, healthcare, public sector, etc.). Day 1 of the OmniStudio Developer exam prep.",
+        "date": "August 03, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-02-f2-project-needs-requirements-assumptions-risks-const",
+        "title": "OmniStudio F-2: Project Needs: Requirements, Assumptions, Risks, Constraints",
+        "series": "omni-studio-cert",
+        "lesson": 2,
+        "excerpt": "Determine a project's needs by evaluating a customer's requirements, assumptions, risks, and constraints. Day 2 of the OmniStudio Developer exam prep.",
+        "date": "August 04, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-03-f3-managed-package-vs-standard-runtime-upgrades",
+        "title": "OmniStudio F-3: Managed Package vs Standard Runtime; Upgrades",
+        "series": "omni-studio-cert",
+        "lesson": 3,
+        "excerpt": "Explain Managed Package Runtime vs. Standard Runtime, Automatic Upgrades, and Manual Intervention Upgrade. Day 3 of the OmniStudio Developer exam prep.",
+        "date": "August 05, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-04-f4-licensing-permission-set-licenses-permission-sets",
+        "title": "OmniStudio F-4: Licensing, Permission Set Licenses & Permission Sets",
+        "series": "omni-studio-cert",
+        "lesson": 4,
+        "excerpt": "Explain OmniStudio license requirements, Permission Set licenses and Permission Sets. Day 4 of the OmniStudio Developer exam prep.",
+        "date": "August 06, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-05-f5-implementation-toolchain-sfcli-vbt-migration",
+        "title": "OmniStudio F-5: Implementation Toolchain: SFCLI, VBT, Migration",
+        "series": "omni-studio-cert",
+        "lesson": 5,
+        "excerpt": "Describe the tools required to complete the end-to-end implementation process (SFCLI, VBT, Migration, etc.). Day 5 of the OmniStudio Developer exam prep.",
+        "date": "August 07, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-06-f-6-testing-versioning-cloning",
+        "title": "OmniStudio F-6: Testing, Versioning & Cloning Components",
+        "series": "omni-studio-cert",
+        "lesson": 6,
+        "excerpt": "Explain testing, versioning, and cloning through OmniStudio components. This covers save vs. publish, cloning workflows, and version snapshots for deployment.",
+        "date": "August 8, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-07-fc-1-flexcard-data-sources-testing-json",
+        "title": "OmniStudio FC-1: FlexCard Data Sources & Testing JSON",
+        "series": "omni-studio-cert",
+        "lesson": 7,
+        "excerpt": "Configure data sources such as SOQL, Data Mapper, Integration Procedure, Custom, etc. and test resulting JSON structure.",
+        "date": "August 9, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-08-fc-2-single-multi-level-cards-layouts-repeaters",
+        "title": "OmniStudio FC-2: Single/Multi-Level Cards, Layouts & Repeaters",
+        "series": "omni-studio-cert",
+        "lesson": 8,
+        "excerpt": "Construct single and multi-level FlexCards, organizing data using layouts, and repeaters.",
+        "date": "August 10, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-09-fc-3-binding-components-configuring-properties",
+        "title": "OmniStudio FC-3: Binding Components & Configuring Properties",
+        "series": "omni-studio-cert",
+        "lesson": 9,
+        "excerpt": "Bind essential components to construct FlexCards and configure their properties.",
+        "date": "August 11, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-10-fc-4-complex-card-actions-launch-fire-update",
+        "title": "OmniStudio FC-4: Complex Card Actions (Launch, Fire, Update)",
+        "series": "omni-studio-cert",
+        "lesson": 10,
+        "excerpt": "Define and implement complex card actions, including launching OmniScripts, firing events, and updating other components.",
+        "date": "August 12, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-11-fc-5-advanced-flexcard-properties",
+        "title": "OmniStudio FC-5: Advanced FlexCard Properties",
+        "series": "omni-studio-cert",
+        "lesson": 11,
+        "excerpt": "Configure advanced FlexCard properties: Event Listeners, Session Variables, Public Attributes, multi-language, child FlexCards, and custom LWC integration.",
+        "date": "August 13, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-12-fc-6-flexcard-styling-themes",
+        "title": "OmniStudio FC-6: FlexCard Styling & Themes",
+        "series": "omni-studio-cert",
+        "lesson": 12,
+        "excerpt": "Control FlexCard appearance two ways: element-level inline styling for one-off tweaks and shared themes for consistent branding.",
+        "date": "August 14, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-13-fc-7-conditional-rendering-with-states",
+        "title": "OmniStudio FC-7: Conditional Rendering with States",
+        "series": "omni-studio-cert",
+        "lesson": 13,
+        "excerpt": "Use FlexCard states and element-level conditions to show, hide, or restyle content when expressions against card data evaluate true.",
+        "date": "August 15, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-14-fc-8-embedding-flexcards-across-channels",
+        "title": "OmniStudio FC-8: Embedding FlexCards Across Channels",
+        "series": "omni-studio-cert",
+        "lesson": 14,
+        "excerpt": "Embed one FlexCard definition across Lightning pages, Experience Cloud sites, OmniScripts, and mobile, and design it for reuse with public attributes.",
+        "date": "August 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-15-fc-9-flexcard-best-practices",
+        "title": "OmniStudio FC-9: FlexCard Best Practices",
+        "series": "omni-studio-cert",
+        "lesson": 15,
+        "excerpt": "Validate your JSON, keep data sources lean, test every state and channel, and respect FLS. That combination is what separates a card that survives production from one that goes blank.",
+        "date": "August 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-16-os-1-omniscript-elements-dynamic-interactions",
+        "title": "OmniStudio OS-1: OmniScript Elements & Dynamic Interactions",
+        "series": "omni-studio-cert",
+        "lesson": 16,
+        "excerpt": "OmniScripts are guided journeys built from named elements that all land in one data JSON. If you understand that JSON contract, formulas, actions, and debugging all follow. If you don't, nothing else works.",
+        "date": "August 18, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-17-os-2-child-omniscripts-flexcards-custom-lwcs",
+        "title": "OmniStudio OS-2: Child OmniScripts, FlexCards & Custom LWCs",
+        "series": "omni-studio-cert",
+        "lesson": 17,
+        "excerpt": "Child OmniScripts handle reuse, FlexCards handle display, and custom LWCs handle custom UI. Pick the right embed for the job, wire its data back into the script JSON, and complex flows compose cleanly.",
+        "date": "August 19, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-18-os-3-omniscript-styling-themes",
+        "title": "OmniStudio OS-3: OmniScript Styling & Themes",
+        "series": "omni-studio-cert",
+        "lesson": 18,
+        "excerpt": "Themes define the design system across OmniScripts; element-level styling handles one-off exceptions. Use the theme as the source of truth, override sparingly, and verify responsive widths on desktop and mobile.",
+        "date": "August 20, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-19-os-4-advanced-omniscript-properties",
+        "title": "OmniStudio OS-4: Advanced OmniScript Properties",
+        "series": "omni-studio-cert",
+        "lesson": 19,
+        "excerpt": "Configure the advanced properties that carry an OmniScript beyond a bare flow: multi-language translations, Save Options for draft-and-resume, Knowledge Articles for in-flow help, and the Messaging Framework for SMS and email. Match the property to the scenario.",
+        "date": "August 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-20-os-5-embedding-omniscripts-across-channels",
+        "title": "OmniStudio OS-5: Embedding OmniScripts Across Channels",
+        "series": "omni-studio-cert",
+        "lesson": 20,
+        "excerpt": "One OmniScript definition embeds across Lightning pages, Experience Cloud, mobile, and web. Pass record context so it opens pre-populated, drop it in via the auto-generated LWC wrapper, and verify context per channel.",
+        "date": "August 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-21-os-6-omniscript-best-practices",
+        "title": "OmniStudio OS-6: OmniScript Best Practices",
+        "series": "omni-studio-cert",
+        "lesson": 21,
+        "excerpt": "Build OmniScripts that survive contact with users and production. Compose from child scripts instead of one giant flow, name elements as if they were JSON keys (because they are), test every branch in debug mode before publish, and push heavy orchestration into Integration Procedures.",
+        "date": "August 30, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-22-ip-1-ip-design-server-side-orchestration",
+        "title": "OmniStudio IP-1: IP Design, Server-Side Orchestration",
+        "series": "omni-studio-cert",
+        "lesson": 22,
+        "excerpt": "Learn what an Integration Procedure actually is: a declarative, server-side process that runs many actions in one server call. Design the input and output JSON contracts before you add a single action, order actions so output feeds input, and know why this one-call design is what makes IPs the right data source for FlexCards and OmniScripts.",
+        "date": "August 31, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-23-ip-2-ip-action-types-groups-data-mapper-http-remote-sub",
+        "title": "OmniStudio IP-2: IP Action Types: Groups, Data Mapper, HTTP, Remote, Sub-IP",
+        "series": "omni-studio-cert",
+        "lesson": 23,
+        "excerpt": "Learn the building blocks you place inside an Integration Procedure: Groups for structure and conditional execution, Data Mapper actions for the data layer, HTTP actions for REST callouts, Remote actions for Apex logic, and Sub-IPs for composition. Map each action to its job, wire outputs to inputs with JSON paths, and avoid the auth, reuse, and mapping traps the exam tests.",
+        "date": "September 1, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-24-ip-3-conditional-logic-loops-branching-in-ips",
+        "title": "OmniStudio IP-3: Conditional Logic, Loops, and Branching in Integration Procedures",
+        "series": "omni-studio-cert",
+        "lesson": 24,
+        "excerpt": "Control the execution path of an Integration Procedure. Use Execution Conditional Formulas to gate individual actions, Loop Blocks to iterate over arrays so per-item work repeats, and Conditional Blocks to route between distinct input states. Read the IP's data JSON, shape it so conditions stay simple, and test every branch with representative input. This is requirement IP-3, one of two pattern-heavy requirements in the Integration Procedures domain.",
+        "date": "September 2, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-25-ip-4-chainable-integration-procedures",
+        "title": "OmniStudio IP-4: Chainable Integration Procedures",
+        "series": "omni-studio-cert",
+        "lesson": 25,
+        "excerpt": "Split long-running Integration Procedures into multiple transactions with chaining. Learn why one synchronous transaction blows governor limits, how the Chainable, Queueable Chainable, and Chain On Step settings decide when a step continues in a fresh transaction, and why every link in a chain needs its own error handling because rollback does not carry across transactions. This is requirement IP-4 in the Integration Procedures domain.",
+        "date": "September 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-26-ip-5-caching-in-integration-procedures",
+        "title": "OmniStudio IP-5: Caching in Integration Procedures",
+        "series": "omni-studio-cert",
+        "lesson": 26,
+        "excerpt": "Determine and configure caching mechanisms within Integration Procedures to maximize performance. Learn what OmniStudio actually caches (metadata versus data), how Org Cache and Session Cache split shared versus per-user scope, how Time To Live controls freshness, and why cache keys decide whether a repeated request gets the right stored answer. This is requirement IP-5 in the Integration Procedures domain.",
+        "date": "September 4, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-27-ip-6-exception-handling-try-catch-rollback",
+        "title": "OmniStudio IP-6: Exception Handling: Try/Catch & Rollback",
+        "series": "omni-studio-cert",
+        "lesson": 27,
+        "excerpt": "Implement robust exception handling in Integration Procedures with Try/Catch blocks and proper rollback. Learn how a Try/Catch Block wraps risky work, what the Catch branch must do, why Load and write actions belong after risky calls, and how the Response Action returns a controlled error shape to callers. This is requirement IP-6 in the Integration Procedures domain.",
+        "date": "September 5, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-28-ip-7-response-action-the-ip-output-contract",
+        "title": "OmniStudio IP-7: Response Action: The IP Output Contract",
+        "series": "omni-studio-cert",
+        "lesson": 28,
+        "excerpt": "Configure the Response Action to return specific data and control every byte an Integration Procedure sends back. Learn why the Response Action is the contract every caller depends on, how to map success data, computed fields, and a consistent error branch, why only what you map gets returned, and how to test the response shape before any FlexCard or OmniScript is wired to it. This is requirement IP-7 in the Integration Procedures domain.",
+        "date": "September 6, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-29-ip-8-integration-procedure-best-practices",
+        "title": "OmniStudio IP-8: Integration Procedure Best Practices",
+        "series": "omni-studio-cert",
+        "lesson": 29,
+        "excerpt": "Describe the best practices that turn a working Integration Procedure into a reliable, maintainable one. Learn why focused, well-named IPs beat monolithic ones, how stable contracts with error branches make IPs dependable building blocks, where reusable data logic belongs, when chaining is the right call, and why testing each action before you promote it prevents the failures that slip into production. This is the final requirement in the Integration Procedures domain.",
+        "date": "September 7, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-30-dm-1-data-mapper-fundamentals-source-target-types",
+        "title": "OmniStudio DM-1: Data Mapper Fundamentals & Source/Target Types",
+        "series": "omni-studio-cert",
+        "lesson": 30,
+        "excerpt": "Define and configure the four Data Mapper types that extract, transform, load, and map data between Salesforce and outside systems. Learn what a Data Mapper is, why the four interfaces exist, which sources and targets a mapper can bridge, why field-level security makes mappers a safer data path than raw SOQL, and how to configure and test a mapper step by step. This lesson opens the Data Mappers domain and names the artifact that the whole exam keeps coming back to.",
+        "date": "September 8, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "OmniStudio",
+          "DataMappers"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-31-dm-2-extract-interface-multi-object-filters-parameters",
+        "title": "OmniStudio DM-2: Extract Interface: Multi-Object, Filters & Parameters",
+        "series": "omni-studio-cert",
+        "lesson": 31,
+        "excerpt": "Configure and retrieve data from multiple objects with various filter options using the Data Mapper Extract Interface. Learn how a single Extract pulls related records across objects in one definition, how WHERE clauses and input parameters make filters reusable, how the output mapping shapes the exact JSON callers receive, why filtering early and selecting only needed fields keeps queries fast, and how Extract respects field-level security. This lesson turns the full-featured reader you met in DM-1 into a real, parameterized query tool.",
+        "date": "September 9, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "OmniStudio",
+          "DataMappers"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-32-dm-3-turbo-extract-interface",
+        "title": "OmniStudio DM-3: Turbo Extract Interface",
+        "series": "omni-studio-cert",
+        "lesson": 32,
+        "excerpt": "Configure and retrieve data from a single object and its related fields using the Turbo Extract Interface. Learn why Turbo Extract is the performance-optimized reader for the common case, how related fields come back through an object's lookups and child relationships in one optimized pass, where the single-object ceiling sits, when to choose Turbo Extract over the full Extract, and how to build one for pre-filling an OmniScript, sourcing a FlexCard, or doing a quick lookup by Id.",
+        "date": "September 10, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "OmniStudio",
+          "DataMappers"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-33-dm-4-load-interface-multi-object-writes",
+        "title": "OmniStudio DM-4: Load Interface: Multi-Object Writes",
+        "series": "omni-studio-cert",
+        "lesson": 33,
+        "excerpt": "Configure and import data to multiple objects using the Load Interface. Learn how Load maps input JSON to Salesforce records for insert, update, and delete, how lookups by Id or external ID link child records to parents in a single multi-object write, how external-ID upserts make Load idempotent so repeated integration runs do not create duplicates, and how rollback-on-error keeps a failed write from leaving partial data.",
+        "date": "September 11, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "OmniStudio",
+          "DataMappers"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-34-dm-5-transform-interface-document-generation",
+        "title": "OmniStudio DM-5: Transform Interface & Document Generation",
+        "series": "omni-studio-cert",
+        "lesson": 34,
+        "excerpt": "Configure the Transform Data Mapper to prepare data for downstream use and document generation. Learn how Transform reshapes input into a required output structure without reading from or writing to the org, how the output JSON template drives the shape, how field mappings and formulas satisfy an API contract, and how the same output feeds PDF and DocuSign templates as the data model for the document.",
+        "date": "September 12, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "OmniStudio",
+          "DataMappers"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-35-dm-6-formulas-in-data-mappers",
+        "title": "OmniStudio DM-6: Formulas in Data Mappers",
+        "series": "omni-studio-cert",
+        "lesson": 35,
+        "excerpt": "Configure formulas to create or modify values within Data Mappers across the Transform, Extract, and Load interface types. Learn how formulas compute values at the data layer through string concatenation, arithmetic, and date formatting, walk through adding and mapping a formula step by step, handle the null cases and evaluation-order traps, and see why computing once in the mapper beats doing the same work in the UI or down the line in a consumer.",
+        "date": "September 13, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "OmniStudio",
+          "DataMappers"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-36-dm-7-mapping-source-target-structures",
+        "title": "OmniStudio DM-7: Mapping Source & Target Structures",
+        "series": "omni-studio-cert",
+        "lesson": 36,
+        "excerpt": "Map source fields, formulas, and constants to the exact JSON structure consumers receive in the Data Mapper output. Learn why the output mapping is the contract, how each output key resolves to a source path or a formula, how array and list maps produce repeatable structures for line items and related records, how name collisions and casing break downstream bindings, and how to design the output for the consumer instead of the source. Walk through defining a target template, mapping every output field, wiring list maps, and comparing actual output to the expected structure, then sidestep the exam traps where output is shaped like the source or array mappings go missing.",
+        "date": "September 14, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "OmniStudio",
+          "DataMappers"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-37-dm-8-data-mapper-best-practices",
+        "title": "OmniStudio DM-8: Data Mapper Best Practices",
+        "series": "omni-studio-cert",
+        "lesson": 37,
+        "excerpt": "Distill the Data Mapper domain into the five habits that separate a fragile mapper from a dependable one: secure it first (field-level security, required permission, and avoiding raw SOQL where FLS matters), parameterize inputs so a mapper becomes a reusable artifact, shape outputs deliberately so the output mapping is the contract, test with sample JSON before any consumer depends on it, and optimize for performance and reuse across OmniScripts, Integration Procedures, and FlexCards. Learn why a targeted, well-named, security-checked mapper beats a Swiss Army knife, work a full build of a reusable case lookup, and sidestep the exam traps where security is skipped, inputs are hardcoded, or sample-JSON testing never happens.",
+        "date": "September 15, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "OmniStudio",
+          "DataMappers"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-38-t-1-resolve-flexcard-display-state-issues",
+        "title": "OmniStudio T-1: Resolve FlexCard Display & State Issues",
+        "series": "omni-studio-cert",
+        "lesson": 38,
+        "excerpt": "Learn the disciplined order of diagnosis that turns a blank or misbehaving FlexCard into a known fix. Inspect the data JSON first, because wrong shape, missing fields, or an empty result set cause blanks before any layout problem. Then verify bindings against real JSON keys (path, case, nesting, repeater-relative paths), check state conditions against actual data values and types, and read the data source request and response in the Debug Console for auth, filter, or server errors. Work a full step-by-step diagnosis of a card that renders blank and a state that never triggers, and sidestep the exam traps: rebuilding instead of reading the payload, type mismatches in conditions, and testing only as an admin.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "OmniStudio",
+          "Troubleshooting"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-39-t-2-resolve-omniscript-errors-rendering",
+        "title": "OmniStudio T-2: Resolve OmniScript Errors & Rendering",
+        "series": "omni-studio-cert",
+        "lesson": 39,
+        "excerpt": "Learn the evidence-first way to fix an OmniScript that errors mid-flow or renders wrong. Debug in Preview and read the data JSON at each step to isolate the failing element. Understand that every element name becomes a JSON key, so duplicate names silently overwrite each other's data. Check visibility conditions and element properties before suspecting the platform, because a false condition hides an element by design. Read extract, load, and remote action failures in the Action Debugger for the exact payload, and inspect raw JSON in logs for path typos, malformed payloads, and unescaped characters. Work a full step-by-step diagnosis of a mid-flow failure and a missing field, and sidestep the exam traps: rebuilding instead of debugging the JSON, duplicate names that overwrite data, and assuming a hidden element is broken when a condition hides it.",
+        "date": "September 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "OmniStudio",
+          "Troubleshooting"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-40-t-3-resolve-data-mapper-output-mapping-issues",
+        "title": "OmniStudio T-3: Resolve Data Mapper Output & Mapping Issues",
+        "series": "omni-studio-cert",
+        "lesson": 40,
+        "excerpt": "Learn the evidence-first way to fix a Data Mapper that returns nothing or returns the wrong shape. Treat a Data Mapper as a four-stage pipeline (extract, formula, map, output) and read the Debug Console log, which records the request and the response for each mapper call so both sides of the equation are visible. Work the diagnosis order the exam grades: input JSON, then filters and parameters, then mappings and formulas, then output JSON. Trace an empty Extract to a null ContextId that silently filters every row out, and trace a missing output node to an un-mapped source path or a case mismatch between the Extract Object Path and the Mapping tab. Spot blank formulas caused by null inputs, type mismatches, and date-format differences, keep formulas in dependency order, and sidestep the exam traps: editing mappings before reading the payloads, trusting a null parameter, and testing only happy-path data.",
+        "date": "September 18, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "OmniStudio",
+          "Troubleshooting"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-41-t-4-resolve-integration-procedure-execution-errors",
+        "title": "OmniStudio T-4: Resolve Integration Procedure Execution Errors",
+        "series": "omni-studio-cert",
+        "lesson": 41,
+        "excerpt": "Learn the evidence-first way to fix an Integration Procedure that fails mid-run. Read the Debug Console the way the exam grades: line by line through the per-action log to find which action failed, then read that action's request and response. HTTP failures name themselves in the status code and response body, so check the Named Credential and the endpoint before you touch anything else. A Remote Action surfaces an Apex exception message, and a later action reading a JSON path that is absent points back at an upstream action that never produced the data. Callout and DML governor limits end the synchronous transaction, and the fix is chaining, which splits the work across transactions. In chainable procedures every link is its own transaction, so a mid-chain failure stops the pipeline and you check each link's logs. Miss the Try/Catch and one external failure kills the whole procedure, so this lesson covers exception handling too.",
+        "date": "September 19, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "21 min read",
+        "tags": [
+          "OmniStudio",
+          "Troubleshooting"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-42-t-5-resolve-caching-problems",
+        "title": "OmniStudio T-5: Resolve Caching Problems",
+        "series": "omni-studio-cert",
+        "lesson": 42,
+        "excerpt": "Diagnose and fix caching problems the way the exam grades: split the symptom first. Stale data, old values served after the source changed, points at a TTL that outlived the data's volatility or an invalidation that never ran. Wrong data, one user's values or one product's price shown to someone else, points at cache scope and cache keys. This lesson teaches the three checks that resolve almost every field report: confirm the symptom is staleness, review the TTL against how fast the data changes, review scope and keys, then implement invalidation on source change. The compact rule to remember: stale means TTL or invalidation, wrong means keys or scope.",
+        "date": "September 20, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "OmniStudio",
+          "Troubleshooting"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-43-t-6-resolve-permissions-access-issues",
+        "title": "OmniStudio T-6: Resolve Permissions & Access Issues",
+        "series": "omni-studio-cert",
+        "lesson": 43,
+        "excerpt": "Resolve permission and access issues the way the exam grades: reproduce as the user, then walk the access chain from the top down. 'Works for admin, not for users' almost always means a gap in a permission layer, not a broken component. The chain runs license, then Permission Set License, then permission set, then object CRUD, then field-level security, then sharing. A break at any layer blocks the component. This lesson teaches each layer's symptom, why SOQL data sources ignore field-level security and show restricted fields as blank, and how record-level visibility can hide records even when object access is fine.",
+        "date": "September 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "OmniStudio",
+          "Troubleshooting"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-44-t-7-resolve-missing-or-broken-json",
+        "title": "OmniStudio T-7: Resolve Missing or Broken JSON",
+        "series": "omni-studio-cert",
+        "lesson": 44,
+        "excerpt": "A binding points at account.Name and the value that should hold a customer name renders blank. An OmniScript action completes without an error and its field stays empty. A FlexCard loads clean and still shows nothing where data should be. These three reports share one root cause: the data the component expects is either malformed, so no parser can read it, or it is not where the component thinks it is. This lesson teaches you to distinguish broken JSON from missing JSON, read the raw payload the component actually received, validate it, and then trace each referenced path against the real keys before you ever touch the component.",
+        "date": "September 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "OmniStudio",
+          "Troubleshooting"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 44,
+    "curriculumLessons": 46
   },
   {
     "slug": "salesforce-architect",
@@ -863,1888 +3162,6 @@ export const learnSeries: LearningSeries[] = [
     "curriculumLessons": 90
   },
   {
-    "slug": "agentic-ai",
-    "name": "Agentic AI Implementation Path",
-    "description": "From single-agent prototypes to multi-agent orchestration, a practitioner's curriculum for shipping agentic systems.",
-    "gradient": "from-amber to-yellow-600",
-    "lessons": [
-      {
-        "slug": "what-is-an-agent",
-        "title": "Lesson 1: What an Agent Actually Is (LLMs vs Rules vs Workflows)",
-        "series": "agentic-ai",
-        "lesson": 1,
-        "excerpt": "The definitions that matter for the whole track: what separates a rules system, an LLM workflow, and a true agent, plus how to tell which one you're actually building.",
-        "date": "August 04, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Salesforce"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "how-llms-work-tokens-context-inference",
-        "title": "Lesson 2: How LLMs Work for Implementers: Tokens, Context, Inference, Temperature",
-        "series": "agentic-ai",
-        "lesson": 2,
-        "excerpt": "The four knobs that decide every LLM bill, latency budget, and reliability call: what tokens actually are, how the context window constrains agents, how inference really runs, and what temperature does and doesn't do.",
-        "date": "August 05, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Salesforce"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "the-agent-loop-perceive-reason-act-observe",
-        "title": "Lesson 3: The Agent Loop: Perceive, Reason, Act, Observe, and Where Your Code Lives",
-        "series": "agentic-ai",
-        "lesson": 3,
-        "excerpt": "The one while loop that turns a language model into an agent: the five stages of the loop, the pseudocode that runs underneath every framework, and exactly which parts of it are your code versus the runtime's.",
-        "date": "August 06, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Salesforce"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "prompting-for-agents-system-prompts-few-shot",
-        "title": "Lesson 4: Prompting for Agents: System Prompts, Few-Shot, and When Prompts Aren't Enough",
-        "series": "agentic-ai",
-        "lesson": 4,
-        "excerpt": "In an agent, the prompt isn't a single message; it's the constitution the loop obeys on every iteration. The anatomy of a production system prompt, how few-shot examples actually work, and the escalation ladder for when words stop being enough.",
-        "date": "August 07, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Prompt Engineering"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "tokens-context-cost-engineering-agents",
-        "title": "Lesson 5: Tokens, Context Windows, and Cost Engineering for Agent Workloads",
-        "series": "agentic-ai",
-        "lesson": 5,
-        "excerpt": "Agents don't just use tokens; they burn them: roughly 4x a chat conversation, 15x for multi-agent. The four levers that control the bill (budgeting, compression, caching, and model routing), with the math worked out on a real 10-agent pipeline.",
-        "date": "August 08, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Performance"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "choosing-models-providers-routing-fallbacks",
-        "title": "Lesson 6: Choosing Models & Providers: Capability Tiers, Routing, and Fallbacks",
-        "series": "agentic-ai",
-        "lesson": 6,
-        "excerpt": "The biggest agent-ops mistake is picking one 'best' model and pointing everything at it. This lesson builds the three-tier capability model, the three jobs of a router, and the fallback chains that keep agents alive when providers fail.",
-        "date": "August 09, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "8 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "structured-output-json-mode-function-calling-tool-schemas",
-        "title": "Lesson 7: Structured Output: JSON Mode, Function Calling, and Tool Schemas Done Right",
-        "series": "agentic-ai",
-        "lesson": 7,
-        "excerpt": "An agent is only as reliable as its data contracts. This lesson builds the structured-output ladder (JSON mode, Structured Outputs, function calling) and the tool-schema practices that keep tool calls valid, parseable, and safe in production.",
-        "date": "August 10, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "8 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "tool-design-schemas-error-handling-retries",
-        "title": "Lesson 8: Designing Tools That Fail Well: Schemas, Error Handling, and Retries",
-        "series": "agentic-ai",
-        "lesson": 8,
-        "excerpt": "A tool is an operational contract, not an API wrapper. This lesson covers the five-part anatomy of a production tool, structured error schemas the model can act on, and retry discipline (backoff with jitter, idempotency keys, and retry budgets), so agents survive failures without corrupting state.",
-        "date": "August 11, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "function-calling-parity-across-providers",
-        "title": "Lesson 9: Function-Calling Parity Across OpenAI, Azure, Anthropic, Gemini, and Local Models",
-        "series": "agentic-ai",
-        "lesson": 9,
-        "excerpt": "Every frontier provider exposes function calling, but none uses the same wire format. This lesson maps the request and response shapes across OpenAI, Azure, Anthropic, and Gemini, then shows why local models (llama.cpp) are the parity wildcard and how one internal schema plus thin per-provider adapters keeps an agent portable.",
-        "date": "August 12, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "rag-fundamentals-chunking-embeddings-retrieval",
-        "title": "Lesson 10: RAG Fundamentals: Chunking, Embeddings, Retrieval, and Why RAG Is the First Enterprise Pattern",
-        "series": "agentic-ai",
-        "lesson": 10,
-        "excerpt": "The pattern that grounds LLMs in your own knowledge: what RAG is and where it came from, why you chunk documents instead of feeding them whole, what embeddings actually are, how retrieval ranks chunks, and why RAG became the first pattern enterprises shipped.",
-        "date": "August 13, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "RAG"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "embeddings-models-similarity-when-they-fail",
-        "title": "Lesson 11: Embeddings: Models, Similarity, and When They Fail",
-        "series": "agentic-ai",
-        "lesson": 11,
-        "excerpt": "What an embedding actually is, how the popular models differ, why cosine similarity works, and the failure modes that make pure vector search miss the answer: rare terms, domain jargon, short queries, and model mismatch.",
-        "date": "August 14, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "RAG"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "vector-databases-pinecone-pgvector-milvus-weaviate",
-        "title": "Lesson 12: Vector Databases: Pinecone, pgvector, Milvus, Weaviate, and Choosing for Your Workload",
-        "series": "agentic-ai",
-        "lesson": 12,
-        "excerpt": "What a vector database actually does, why you need one instead of scanning vectors in memory, the approximate nearest neighbor tradeoff you are making, and how to choose between Pinecone, pgvector, Milvus, and Weaviate for your workload and your team.",
-        "date": "August 15, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "RAG"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "rag-quality-reranking-hybrid-search-metadata-filtering-freshness",
-        "title": "Lesson 13: RAG Quality: Reranking, Hybrid Search, Metadata Filtering, and Freshness",
-        "series": "agentic-ai",
-        "lesson": 13,
-        "excerpt": "The four levers that turn a RAG demo into a system you can trust: reranking to fix top-k precision, hybrid search so exact terms still win, metadata filtering so access control and scope survive retrieval, and freshness so the answers do not go stale.",
-        "date": "August 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "RAG"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "agent-memory-short-term-long-term-episodic-semantic",
-        "title": "Lesson 14: Agent Memory: Short-Term vs Long-Term, Episodic vs Semantic",
-        "series": "agentic-ai",
-        "lesson": 14,
-        "excerpt": "An agent with no memory answers the same question the same way forever. This lesson maps the memory taxonomy production systems borrow from cognitive science: the context window as working memory, long-term stores for persistence, episodic memory for what happened, semantic memory for what you know, and the pipeline that turns raw interactions into retrievable knowledge.",
-        "date": "August 17, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "context-engineering-what-to-include-trimming-summarization-windowing",
-        "title": "Lesson 15: Context Engineering: What to Include, Trim, Summarize, and Window",
-        "series": "agentic-ai",
-        "lesson": 15,
-        "excerpt": "The context window is finite and filling it sloppily degrades your agent before it ever fails. This lesson covers the four ways to keep a long-running loop coherent: deciding what to include, trimming what stops earning its keep, summarizing what still matters, and windowing what you can drop. With real numbers from JetBrains on which approach actually pays.",
-        "date": "August 18, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Prompt Engineering"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "multi-turn-agents-sessions-state-resuming-conversations",
-        "title": "Lesson 16: Multi-Turn Agents: Sessions, State, and Resuming Conversations",
-        "series": "agentic-ai",
-        "lesson": 16,
-        "excerpt": "An LLM is stateless: every call forgets the one before it, so multi-turn behavior has to be built, not assumed. This lesson defines the session, the state it carries, and the checkpointing that lets an agent resume where it left off: the difference between a thread and a durable store, why the state schema is the real design, and how production systems survive restarts and long conversations.",
-        "date": "August 19, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Salesforce"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "guardrails-prompt-injection-system-boundaries-input-validation",
-        "title": "Lesson 17: Guardrails I: Prompt Injection Defense, System Boundaries, and Input Validation",
-        "series": "agentic-ai",
-        "lesson": 17,
-        "excerpt": "Prompt injection tops the OWASP list of LLM risks for a reason: an agent that can act turns a misled model into an unauthorized action. This lesson separates direct from indirect injection, explains why input filters and prompt hardening alone will not stop it, and argues that the durable defense lives at the system boundary: least-privilege tools, hard containment on what the agent can reach, and human approval for high-impact actions.",
-        "date": "August 20, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Security"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "guardrails-output-validation-allowlists-pii-redaction",
-        "title": "Lesson 18: Guardrails II, Output Validation, Allowlists, PII Redaction, and Refusal Paths",
-        "series": "agentic-ai",
-        "lesson": 18,
-        "excerpt": "Input guardrails keep an attacker from pushing the agent past its boundary. Output guardrails keep the agent from pushing bad output out the other side: validation, allowlists, PII redaction, and refusal paths.",
-        "date": "August 21, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Security"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "evaluation-evals-golden-datasets-llm-as-judge",
-        "title": "Lesson 19: Evaluation: Evals, Golden Datasets, LLM-as-Judge, and When It Lies",
-        "series": "agentic-ai",
-        "lesson": 19,
-        "excerpt": "An agent you cannot measure is an agent you cannot trust, and the moment a model changes you have no way to know what you traded away. This lesson walks the evaluation stack from the bottom up: the golden dataset that anchors everything, the classic metrics that break on open-ended output, the LLM-as-judge technique that replaces them, and the biases that make a judge lie, from position and verbosity preference to rating its own output too high and being misled by a confident wrong answer.",
-        "date": "August 22, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "observability-tracing-logging-langsmith-opentelemetry-replay",
-        "title": "Lesson 20: Observability, Tracing, Logging, and Replay for Agents",
-        "series": "agentic-ai",
-        "lesson": 20,
-        "excerpt": "An agent runs several model calls, tool invocations, and retrieval steps inside one request, and when it returns the wrong answer you have no idea which step caused it. This lesson builds observability from the bottom up: the trace that records every step as a span, the trace tree that shows how they connect, the OpenTelemetry gen_ai.* conventions that give the telemetry a standard shape, the structured logs that answer 'why' when a trace only shows 'what,' and the replay loop that turns a captured trace back into a repeatable bug you can fix and verify.",
-        "date": "August 23, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Observability"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "agent-frameworks-overview-langchain-langgraph-crewai-openai-claude",
-        "title": "Lesson 21: Frameworks overview - LangChain, LangGraph, CrewAI, OpenAI Agents SDK, Claude Agent SDK",
-        "series": "agentic-ai",
-        "lesson": 21,
-        "excerpt": "By now you can build a single agent: a model, a loop, some tools. The hard part is deciding what holds the pieces together when the work grows. This lesson surveys the five frameworks you will actually meet in the wild, and it is honest about what each one is for. LangChain is an integration ecosystem. LangGraph is a stateful graph runtime for workflows that branch and loop. CrewAI is a role-based layer for teams of agents with jobs and backstories. The OpenAI Agents SDK is a deliberately tiny set of primitives with clean handoffs and guardrails. The Claude Agent SDK gives the agent a computer with built-in file, shell, and edit tools. You will learn the mental model behind each one, see the same small task written in two of them so the difference is concrete, and finish with a decision path for choosing a framework instead of trusting star counts.",
-        "date": "August 24, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Architecture"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "agent-loop-by-hand-no-framework",
-        "title": "Lesson 22: Building Without a Framework: the Agent Loop by Hand in 100 Lines",
-        "series": "agentic-ai",
-        "lesson": 22,
-        "excerpt": "Lesson 21 ended on a quiet note: sometimes you don't need a framework at all. This lesson makes that concrete. You write the loop yourself, in roughly a hundred lines, with nothing but an LLM API and a while loop. You see the canonical agent loop in real code, you build a working agent with two tools, you learn the one ordering mistake that trips up every beginner, and you find out exactly where a hand-rolled loop runs out of room and a framework starts to earn its complexity.",
-        "date": "August 25, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Architecture"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "agent-patterns-react-plan-execute-reflection-tool-loops",
-        "title": "Lesson 23: Agent Patterns: ReAct, Plan-and-Execute, Reflection, and Tool Loops",
-        "series": "agentic-ai",
-        "lesson": 23,
-        "excerpt": "Lesson 22 built the loop by hand. This lesson gives that loop its names. You learn the four patterns that dominate real agent work: ReAct (reason and act interleaved), plan-and-execute (plan first, then execute), reflection (evaluate and revise), and the tool loop they all run on, plus when each one earns its complexity.",
-        "date": "August 26, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Architecture"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "multi-agent-systems-orchestrator-worker-supervisor-debate",
-        "title": "Lesson 24: Multi-Agent Systems: Orchestrator-Worker, Supervisor, and Debate",
-        "series": "agentic-ai",
-        "lesson": 24,
-        "excerpt": "Lesson 23 taught you the single-agent patterns. This lesson puts several agents in one system. You learn the three coordination shapes that dominate real multi-agent work: orchestrator-worker (a central agent splits and delegates), supervisor (a coordinator routes to specialized workers via handoffs), and debate (multiple instances argue toward a consensus), plus when each one earns its complexity and when one agent is still the right call.",
-        "date": "August 27, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "human-in-the-loop-approvals-interrupts-escalation-kill-switches",
-        "title": "Lesson 25: Human-in-the-Loop, Approvals, Interrupts, Escalation, and Kill Switches",
-        "series": "agentic-ai",
-        "lesson": 25,
-        "excerpt": "An agent that can act on its own against a system that matters needs a person in the loop. This lesson builds the control layer: approvals that gate a single risky action, interrupts that pause the whole run and resume it later, escalation that hands an unsafe decision to a human, and a kill switch that stops a runaway system before it does damage.",
-        "date": "August 28, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Security"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "enterprise-deployment-serving-api-design-rate-limits-quotas",
-        "title": "Lesson 26: Enterprise Deployment, Serving, API Design, Rate Limits, and Quotas",
-        "series": "agentic-ai",
-        "lesson": 26,
-        "excerpt": "A working agent is a different thing from an agent many people can use. This lesson puts the three boundaries around it that make the difference: the serving layer that decides how much concurrent work the model can do, the API boundary that gives every consumer one stable interface, and the policy layer of rate limits and quotas that stops a single tenant from overwhelming the hardware or blowing the budget. It works through the numbers you need to size a deployment, and it shows how those three layers meet at the same number.",
-        "date": "August 29, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Delivery"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "cost-control-caching-model-tiers-budget-caps-spend-dashboards",
-        "title": "Lesson 27: Cost Control, Caching, Model Tiers, Budget Caps, and Spend Dashboards",
-        "series": "agentic-ai",
-        "lesson": 27,
-        "excerpt": "A working agent is cheaper to build than to keep. Lesson 26 stopped a single tenant from blowing the monthly bill in an afternoon; this lesson turns the bill itself into a number you manage. It covers the three cost levers in order: caching so you never pay twice for the same answer, model tiers and routing so you only pay frontier prices when a task actually needs them, and budget caps with spend dashboards so a surprise bill becomes an early-warning system instead. A worked example runs the arithmetic on a real agent workload, and the Fortress angle shows a hybrid two-tier stack doing all three at once.",
-        "date": "August 30, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Performance"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "security-auth-authorization-secrets-management-for-agents",
-        "title": "Lesson 28: Security: Authentication, Authorization, and Secrets Management for Agents",
-        "series": "agentic-ai",
-        "lesson": 28,
-        "excerpt": "An agent is not a user and not a plain service. It carries two identities at once, the person it acts for and the machine it runs as, and it reaches for credentials with every tool call it makes. This lesson separates the three systems that keep that under control: authentication proves who is acting, authorization decides what that actor may do, and secrets management keeps the credentials that prove identity short-lived, tightly scoped, and out of the model's context.",
-        "date": "August 31, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Security"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "compliance-data-residency-audit-logging-retention",
-        "title": "Lesson 29: Compliance: Data Residency, Audit Logging, and Retention for AI Systems",
-        "series": "agentic-ai",
-        "lesson": 29,
-        "excerpt": "Security controls who can act. Compliance is the record of what that actor did with other people's data, and it lives in three separate controls. Data residency decides where the data is stored and processed and how it may cross borders. Audit logging keeps an immutable record of what happened, per action, so a regulator or an investigator can reconstruct it later. Retention puts a clock on how long you keep any of it. This lesson reads the EU AI Act's record-keeping article and GDPR's storage-limitation principle, then shows how a real agent pipeline turns its own event stream into an auditable trail.",
-        "date": "September 1, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Security",
-          "Governance"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "mcp-model-context-protocol-intro-build-server",
-        "title": "Lesson 30: The Model Context Protocol (MCP): What It Is, Why It Matters, and How to Build a Server",
-        "series": "agentic-ai",
-        "lesson": 30,
-        "excerpt": "The Model Context Protocol (MCP) is an open standard that connects AI applications to the tools and data they act on. It attacks a problem every agent builder hits: bespoke integrations do not scale. Without a common protocol, each AI app wires itself to each tool with its own custom connector, and the number of connectors grows as the product of apps times tools. MCP breaks that pattern by defining one client-server protocol, so an AI application that speaks it can use any server that speaks it, and a server author writes the integration once for every compliant client. This lesson explains the three participants in that architecture (host, client, server), the three things a server can expose (tools, resources, prompts), the two transports that carry the messages, and walks through building a real server with the Python SDK.",
-        "date": "September 2, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "MCP",
-          "Tool Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "mcp-deep-dive-tools-resources-prompts-sampling-auth",
-        "title": "Lesson 31: MCP Deep Dive: Tools, Resources, Prompts, and Auth",
-        "series": "agentic-ai",
-        "lesson": 31,
-        "excerpt": "Lesson 30 built a hello-world MCP server and left the deeper protocol features for later. This lesson is that later. It goes past the weather server into the four parts you will actually tune in production: how to design each of the three server primitives (tools, resources, prompts) so a model uses them well, and how OAuth 2.1 secures a remote server. It also covers sampling, the legacy feature that once let a server borrow the client's model instead of holding its own API keys, which is deprecated as of the 2026-07-28 spec revision and replaced by direct LLM provider API integration. Each section pairs the protocol method with the design decision behind it, and a single worked example ties them together: a project-intel server that exposes a tool, a resource, a prompt, and a sampling call, then gets locked down with real authorization.",
-        "date": "September 3, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "MCP",
-          "Tool Integration",
-          "OAuth"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "first-enterprise-agent-project-setup",
-        "title": "Lesson 32: Building your first enterprise agent: project setup, end to end",
-        "series": "agentic-ai",
-        "lesson": 32,
-        "excerpt": "You have the pieces: the loop, tools, context, memory, evaluation. This lesson is the first time they stop being separate techniques and become one running system. It walks the full setup of an enterprise agent project, from picking a bounded problem and scaffolding the repository, through wiring the model, defining the agent, and registering tools, to running it end to end behind a small API. The point is not to write clever code. It is to make the boring decisions deliberately, the ones that decide whether your agent survives contact with a real codebase, a real API key, and a real deployment. A worked example ties it together: a ticket-triager agent you stand up from an empty folder to a running endpoint in one pass.",
-        "date": "September 4, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Architecture",
-          "Tool Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "hands-on-one-framework-real-agent-real-work",
-        "title": "Lesson 33: Hands on with one framework, a real agent that does real work",
-        "series": "agentic-ai",
-        "lesson": 33,
-        "excerpt": "Lesson 32 gave you a running skeleton: a bounded task, an isolated repository, wired tools, typed state, an API in front. This lesson is where that skeleton stops being a scaffold and starts doing a real job. It picks the OpenAI Agents SDK, the framework the series has already leaned on, and walks every primitive that turns a model into an agent that an actual team can hand real work to. You will meet the Runner loop that owns the reason-act-observe cycle, function tools that reach a real system, a structured output the rest of your stack can consume, an input guardrail that blocks out-of-scope requests before they waste tokens, a session that carries memory across turns, and the tracing that is on by default. The worked example is the ticket resolver you stood up last lesson, grown from a classifier into an agent that gathers account context, checks the refund policy, and drafts a reply an agentic contact center could actually send. Define the terms, build it in numbered steps, and finish with a try-it prompt that makes the framework primitives yours.",
-        "date": "September 5, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Architecture",
-          "Tool Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "agent-ux-streaming-progress-seeing-the-loop",
-        "title": "Lesson 34: Agent UX: streaming output, progress indicators, and when users need to see the loop",
-        "series": "agentic-ai",
-        "lesson": 34,
-        "excerpt": "A chat model answers once and stops. An agent answers by running a loop: call the model, read the result, call a tool, feed the output back, call the model again, sometimes several times. That loop takes tens of seconds, and a single spinner is not enough. This lesson gives your agent a face. It sets up streaming output that delivers the reply as it is generated, progress indicators that show which step the loop is on, and the judgment about when the loop must be visible at all. You will learn the response-time limits that decide the question for you, the difference between streaming the answer and reporting progress on the work, and how to surface tool calls and interim messages without dumping raw reasoning on a user. The worked example takes the ticket resolver from lesson 33 and turns it into a streamed, progress-aware runner your team could actually show a customer.",
-        "date": "September 6, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "UX",
-          "Streaming",
-          "Progress"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "rag-at-scale-ingestion-refresh-versioning-deletion",
-        "title": "Lesson 35: RAG at Scale: Ingestion Pipelines, Refresh, Versioning, and Deletion",
-        "series": "agentic-ai",
-        "lesson": 35,
-        "excerpt": "The difference between a RAG demo and a RAG system is the write side. A demo indexes a static folder once. A system keeps a live corpus in sync with its sources: an ingestion pipeline that parses and chunks on the way in, a refresh strategy that re-embeds only what changed instead of rebuilding everything, versioning so a document or an embedding-model change is traceable and reversible, and deletion so removed or sensitive content actually disappears from retrieval. This lesson turns the read-side tuning you learned in lessons 10 through 13 into a lifecycle you can run in production.",
-        "date": "September 7, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "RAG",
-          "Data Engineering"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "testing-agents-unit-integration-regression-evals",
-        "title": "Lesson 36: Testing Agents: Unit Tests for Tools, Integration Tests, and Regression Evals",
-        "series": "agentic-ai",
-        "lesson": 36,
-        "excerpt": "You would not ship an API endpoint that you tested by curling it five times and nodding. Most agent teams do exactly that with the whole system: a playground, a few prompt experiments, a deployment. This lesson builds the three layers that replace the vibe check: unit tests that treat the deterministic machinery around the model, the prompt strings, the tool dispatch, the schemas, as ordinary software, integration tests that exercise the full agent loop against controlled tool side effects, and regression evals that score real model output against a frozen golden set. Together they turn a system that never gives the same answer twice into one you can gate a release on.",
-        "date": "September 8, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Testing",
-          "CI/CD"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "ci-cd-for-agents-prompt-versioning-model-registry-canary-releases",
-        "title": "Lesson 37: CI/CD for Agents: Prompt Versioning, Model Registries, and Canary Releases",
-        "series": "agentic-ai",
-        "lesson": 37,
-        "excerpt": "Lesson 36 gave you tests. This lesson turns them into a pipeline. A test proves an agent is good once; CI/CD proves it is still good every time a prompt, a model, or a line of configuration changes, and then routes that change into production in slices you can measure and reverse. That means three tools the last lesson never needed: prompt versioning so a one-word edit is a traced, reversible change instead of a silent memory, a model registry so you can name the exact model and provider version behind any output you inspect, and canary releases so a new prompt or model lands on a sliver of traffic, gets scored against the evals you built, and only rolls out wide when the numbers hold.",
-        "date": "September 9, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "17 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "CI/CD",
-          "MLOps",
-          "Deployment"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "observability-at-scale-metrics-alerts-slos",
-        "title": "Lesson 38: Observability at Scale: Metrics, Alerts, Cost Dashboards, and SLOs",
-        "series": "agentic-ai",
-        "lesson": 38,
-        "excerpt": "Lesson 20 taught you to open one trace and read it end to end. At scale you cannot read every trace, and you should not want to. This lesson turns observability into a system that watches itself: the metrics that tell you something changed, the alert tiers that decide who gets paged and who gets a ticket, the cost dashboard that makes spend a number you can steer, and the service-level objectives that turn 'reliable enough' from a phrase into a measured target with an error budget. A worked example builds an SLI-to-SLO chain for a customer support agent, and a try-it prompt has you define your own.",
-        "date": "September 10, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Observability",
-          "SRE"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "production-troubleshooting-loops-bad-tools-context-bloat",
-        "title": "Lesson 39: Production Troubleshooting: Debugging Loops, Bad Tools, and Context Bloat",
-        "series": "agentic-ai",
-        "lesson": 39,
-        "excerpt": "Lesson 38 gave you the detection layer: metrics, alerts, SLOs, a dashboard that tells you something changed. This lesson is what you do in the twenty minutes after the alert. Three failure classes cover most production incidents that are not infrastructure outages, and they are loops, bad tools, and context bloat. You get a triage order that tells you which one you are looking at, the diagnostic signature that finds the exact turn where an agent started going in circles, the tool contract that turns an opaque failure into an actionable one, and the measurement that tells you whether your context is growing past what the model can use. A worked example walks a runaway refund agent from symptom to root cause to the three fixes that stop it recurring.",
-        "date": "September 11, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "17 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Debugging",
-          "Operations"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "customer-support-agent-case-study",
-        "title": "Lesson 40: Case Study: Customer Support Agent Architecture",
-        "series": "agentic-ai",
-        "lesson": 40,
-        "excerpt": "This lesson stops teaching patterns one at a time and puts the whole path together. It walks a customer support agent from scratch: when the routing layer is a workflow rather than an agent, how the retrieval step keeps answers grounded, where you draw the tool boundary so the agent can act without becoming dangerous, how escalation to a human stays clean, and what you instrument so you can tell the difference between resolution and hallucination. Everything previous lessons covered, meaning intent detection, RAG, tool schemas, testing, and observability lands in one architecture, with each choice argued and each dead end named.",
-        "date": "September 12, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "17 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Case Study"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "research-summarization-agents-case-study",
-        "title": "Lesson 41: Case Study: Research & Summarization Agents",
-        "series": "agentic-ai",
-        "lesson": 41,
-        "excerpt": "This lesson puts the case study format to work on a second, very different shape of agent: research and summarization. Where the customer support agent from Lesson 40 was bounded, request-and-response, and routed, a research agent is open-ended, long-horizon, and built to gather across many sources before it writes anything. You watch the same underlying patterns, the augmented LLM, tool loops, context management, and observability, rebalance for a job where the hard part is deciding what to look at next, not knowing what you already have. It argues the case for an orchestrator-worker architecture, walks a research brief end to end, and explains why the token bill for these systems is so high.",
-        "date": "September 13, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "18 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Case Study",
-          "Research"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "workflow-automation-agents-case-study",
-        "title": "Lesson 42: Case Study: Workflow Automation Agents (Browsers, Clicks, and Typing)",
-        "series": "agentic-ai",
-        "lesson": 42,
-        "excerpt": "Third case study, and the one where the agent touches a screen. Workflow automation agents drive interfaces that were built for people: they read a page, click buttons, fill forms, and type into fields inside systems that never offered an API. This lesson works a licensing verification workflow end to end, compares the three ways an agent can see a page (pixels, accessibility tree, script), digs into why clicks miss their targets and how to fix that, does the arithmetic on what a per-step reliability claim actually means across a multi-step job, and covers the two risks this class of agent carries that no other does: a page is hostile input, and every action lands in a production system.",
-        "date": "September 15, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "18 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Case Study",
-          "Browser Automation"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "coding-agents-case-study",
-        "title": "Lesson 43: Case Study: Coding Agents (Hermes, Claude Code, and Copilot Under the Hood)",
-        "series": "agentic-ai",
-        "lesson": 43,
-        "excerpt": "The case study run closes with the class of agent closest to where you are reading this: coding agents, and what happens under the hood in tools like Hermes, Claude Code, and Copilot. This lesson walks the spectrum from inline autocomplete to fully asynchronous cloud agents, breaks down the documented agentic loop (gather context, take action, verify results), and names the one thing a coding agent has that no browser agent does: a verifier that runs itself. Code either compiles, passes tests, or it does not, and that changes the reliability arithmetic from the last lesson. You will trace a failing-test fix through the loop, see why context is the resource to manage, understand how the harness (models that reason, tools that act) is assembled, and learn the build order for adopting a coding agent safely.",
-        "date": "September 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "17 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Case Study",
-          "Coding Agents",
-          "Developer Tools"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "enterprise-integration-salesforce-erp-crm-data-warehouse",
-        "title": "Lesson 44: Enterprise Integration: Connecting Agents to Salesforce, ERP, CRM, and Data Warehouses",
-        "series": "agentic-ai",
-        "lesson": 44,
-        "excerpt": "Lesson 43 ended the case study run with the agent that writes code, and this lesson turns outward to the systems a company actually runs on. Connecting an agent to Salesforce, an ERP, a CRM, or a data warehouse is rarely a networking problem. The hard part is governance: deciding who the agent is, what that identity may read and write, and how to make its effects in live business data reversible. This lesson separates the read path from the write path, walks the connection shapes from direct APIs through MCP servers to managed agent platforms, and shows why identity is the security boundary on every one of them. A worked example connects one support agent to a data warehouse for history and a CRM for case updates, with the permission and guardrail choices made explicit.",
-        "date": "September 17, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "19 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Enterprise Integration",
-          "CRM",
-          "ERP",
-          "Data Warehousing"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "vector-db-operations-scaling-backups-consistency-cost",
-        "title": "Lesson 45: Vector DB Operations: Scaling, Backups, Consistency, and Cost",
-        "series": "agentic-ai",
-        "lesson": 45,
-        "excerpt": "Lesson 12 taught you how to choose a vector database. This lesson is about what it takes to run one. A vector database is not a static pile of vectors; it is a live system with a memory budget, a backup story, a consistency model, and a bill. This lesson covers how a vector database scales and why memory is the variable that decides it, why backing one up is different from backing up a normal database, how consistency and freshness are maintained as documents change, and what all of that actually costs. A worked example sizes a pgvector deployment by hand and walks the backup and consistency decisions for a real RAG workload.",
-        "date": "September 18, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "RAG",
-          "Vector Databases",
-          "Data Engineering"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "rag-data-pipelines-etl-connectors-cdc-incremental-refresh",
-        "title": "Lesson 46: Data Pipelines for RAG: ETL, Connectors, CDC, and Incremental Refresh",
-        "series": "agentic-ai",
-        "lesson": 46,
-        "excerpt": "Lesson 35 taught you the write side of RAG: how to keep an index in sync once you have one. This lesson is about how the data gets to the pipeline in the first place, and how a pipeline stays cheap as sources change. A RAG pipeline is ETL wearing an AI costume: it extracts from connectors, transforms raw records into clean text, and loads chunks into a vector store. The three decisions that separate a demo from a system are the connector style (pull versus push), whether the transform actually normalizes the data before it hits the embedding model, and how change is detected. Change data capture is the mechanism that turns a polling job into a live one, and incremental refresh is what keeps that live pipeline from re-embedding everything on every run. A worked example builds a change-driven ETL pipeline in pure Python, with a watermark for idempotency and delete handling.",
-        "date": "September 19, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "RAG",
-          "Data Engineering"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "building-an-eval-program-harness-regression-suites-quality-gates",
-        "title": "Lesson 47: Building an Eval Program: Eval Harnesses, Regression Suites, and Quality Gates",
-        "series": "agentic-ai",
-        "lesson": 47,
-        "excerpt": "Lesson 36 taught you the individual tests: unit tests over the deterministic machinery, integration tests across the loop, and regression evals that score real output. Lesson 46 kept the data feeding a RAG pipeline fresh. Both assumed you could run a suite and read a number. This lesson builds the system that makes that number trustworthy and repeatable after the hundredth run. A single eval run is a point in time. An eval program is the process that keeps every run consistent, organizes suites so you know what each score means, and turns a score change into a stop, hold, or go decision at the gate. You build a harness whose consistency makes scores comparable, split suites into capability and regression buckets, and wire cheap code-based graders into every commit while reserving expensive judges for release. A worked example runs a minimal harness with pinned model, judge, and dataset versions, then the gate logic that blocks a drop.\\",
-        "date": "September 21, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "LLMs",
-          "AI Agents",
-          "Evaluation",
-          "CI/CD"
-        ],
-        "status": "published"
-      }
-    ],
-    "totalLessons": 47,
-    "curriculumLessons": 90
-  },
-  {
-    "slug": "ai-power-user",
-    "name": "AI Power User",
-    "description": "The Level 2 follow-on to AI at Work for professionals who use AI daily and want to build and own their own automations: designing repeatable workflows, making them reliable, and sustaining them. Vendor-agnostic and buildable without code.",
-    "gradient": "from-cyan-500 to-purple-600",
-    "lessons": [
-      {
-        "slug": "from-user-to-power-user-owning-your-workflow",
-        "title": "Lesson 1: From User to Power User: What Owning Your Workflow Means",
-        "series": "ai-power-user",
-        "lesson": 1,
-        "excerpt": "You already use AI every day. This lesson is about the step between using a tool and owning a workflow: what separates a user from a power user, what it actually means to own the way you work, and why the payoff lives in a small slice of your recurring tasks. It defines the terms, walks through one person making the shift, and ends with a try-it prompt that starts the audit you will run in Lesson 2.",
-        "date": "September 21, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "auditing-how-you-actually-work-finding-the-repetitive-20-percent",
-        "title": "Lesson 2: Auditing How You Actually Work: Finding the Repetitive 20 Percent",
-        "series": "ai-power-user",
-        "lesson": 2,
-        "excerpt": "Lesson 1 told you the payoff lives in the repetitive slice of your work. This lesson gives you the method to find that slice honestly: a time audit that measures where your week actually goes, a way to separate the tasks worth automating from the ones that are not, and a concrete worked example of one person running the audit. It ends with a try-it prompt that produces your own list of the repetitive 20 percent, ready for Lesson 3.",
-        "date": "September 21, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow"
-        ],
-        "status": "published"
-      }
-    ],
-    "totalLessons": 2,
-    "curriculumLessons": 30
-  },
-  {
-    "slug": "hermes-consultant",
-    "name": "Hermes Agent Consultant",
-    "description": "A path to becoming an agent-implementation consultant: scoping, implementation craft, delivery practice, and the business of consulting. Platform-agnostic skills with Hermes Agent as the working example.",
-    "gradient": "from-teal to-emerald-600",
-    "lessons": [
-      {
-        "slug": "what-an-agent-implementation-consultant-does",
-        "title": "Lesson 1: What an Agent-Implementation Consultant Actually Does",
-        "series": "hermes-consultant",
-        "lesson": 1,
-        "excerpt": "The agent-implementation consultant arc in one lesson: what an engagement looks like, what you actually deliver, and why this is not the same job as building agents for yourself.",
-        "date": "August 26, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "the-consulting-engagement-lifecycle",
-        "title": "Lesson 2: The Consulting Engagement Lifecycle",
-        "series": "hermes-consultant",
-        "lesson": 2,
-        "excerpt": "The five-phase arc that every engagement runs: discover, design, implement, handover, support. What each phase produces, the exit test that lets you leave it, and where engagements quietly die.",
-        "date": "August 27, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "discovery-and-scoping",
-        "title": "Lesson 3: Discovery and Scoping: Listening Before Proposing",
-        "series": "hermes-consultant",
-        "lesson": 3,
-        "excerpt": "The craft of discovery: who to talk to, what to watch, which questions surface the real problem, and how to write a problem statement the client agrees with before you propose any solution.",
-        "date": "August 28, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "framing-value-and-roi",
-        "title": "Lesson 4: Framing Value and ROI: How to Talk to a Buyer, Not a Builder",
-        "series": "hermes-consultant",
-        "lesson": 4,
-        "excerpt": "The craft of turning what an agent does into a number a buyer can defend: how to measure value honestly, build ROI math that survives scrutiny, and talk outcomes instead of features to the person who signs the check.",
-        "date": "August 29, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "stakeholder-mapping",
-        "title": "Lesson 5: Stakeholder Mapping: Who Has to Say Yes, and Who Has to Live With It",
-        "series": "hermes-consultant",
-        "lesson": 5,
-        "excerpt": "The craft of mapping every stakeholder an agent implementation touches: users, owners, IT, and compliance. Who must approve the deployment, who has to work with it every day, and how to win both before you build.",
-        "date": "August 30, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "when-an-agent-is-the-right-tool",
-        "title": "Lesson 6: When an Agent Is the Right Tool, and When to Say No",
-        "series": "hermes-consultant",
-        "lesson": 6,
-        "excerpt": "The honest consultant's rule: an agent is not always the right answer, and the consultant who can say no protects both the client's money and their own reputation. How to tell the work an agent should do from the work it should never touch, and how to walk away cleanly.",
-        "date": "August 31, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "installing-and-deploying-hermes-agent",
-        "title": "Lesson 7: Installing and Deploying Hermes Agent: Local Setup, Profiles, Gateway, First Run",
-        "series": "hermes-consultant",
-        "lesson": 7,
-        "excerpt": "The consultant's deployment discipline: how to stand up an agent correctly once you have the go-ahead. Isolation per engagement, a verified first run before you layer on features, and a gateway that turns a laptop experiment into an always-on tool your client actually uses.",
-        "date": "September 1, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "configuration-models-providers-fallbacks",
-        "title": "Lesson 8: Configuration: Models, Providers, and Fallbacks: Why 'It Works on My Machine' Isn't Enough",
-        "series": "hermes-consultant",
-        "lesson": 8,
-        "excerpt": "The consultant's configuration discipline: the model, provider, and fallback choices that make an agent dependable are part of the deliverable, not an install detail. How to separate secrets from settings, verify what the running agent actually resolved, and build for the outage so the client's agent survives a provider that does not.",
-        "date": "September 2, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "tools-and-skills-what-is-real",
-        "title": "Lesson 9: Tools and Skills: What Ships with Hermes, How to Extend It, and How to Know What's Real",
-        "series": "hermes-consultant",
-        "lesson": 9,
-        "excerpt": "The consultant's capability discipline: what an agent can do comes from its tools, and how it does it well comes from its skills. How to tell a tool that is real in the running system from one that only exists in a catalog, how to extend an agent without writing code, and why you never present a client with a capability you have not watched succeed.",
-        "date": "September 3, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "mcp-servers-and-integrations",
-        "title": "Lesson 10: MCP Servers and Integrations: Wiring the Agent Into the Client's Stack",
-        "series": "hermes-consultant",
-        "lesson": 10,
-        "excerpt": "The client's value does not live in a chat window, it lives in their ticketing system, their CRM, their internal APIs. This lesson teaches how to connect an agent to that stack through MCP servers, how to decide what the agent gets to touch, and how to wire it in without breaking the systems the client depends on.",
-        "date": "September 4, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "automation-and-cron-jobs",
-        "title": "Lesson 11: Automation and Cron Jobs: Turning One-Off Wins Into Reliable Recurring Value",
-        "series": "hermes-consultant",
-        "lesson": 11,
-        "excerpt": "A working demo is a win. Recurring value is a service. This lesson teaches how to turn a one-off agent win into work that fires on a schedule without anyone asking for it, how to write prompts that survive a fresh session, and how to make unattended work loud when it goes wrong instead of failing silently.",
-        "date": "September 5, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "kanban-and-orchestration-patterns",
-        "title": "Lesson 12: Kanban and Orchestration Patterns: Scoping Work, Dispatching, and Finishing the Job",
-        "series": "hermes-consultant",
-        "lesson": 12,
-        "excerpt": "Once an engagement runs more than one recurring job, holding every thread yourself stops working. This lesson teaches the coordination craft: scoping work into cards that fit a real work window, dispatching each card to the worker best built to finish it, and defining done so a job is proven rather than merely started.",
-        "date": "September 6, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "security-and-credentials",
-        "title": "Lesson 13: Security and Credentials: Secrets, Least Privilege, and Keeping the Client Safe",
-        "series": "hermes-consultant",
-        "lesson": 13,
-        "excerpt": "Every engagement puts secrets in your hands. This lesson teaches how to handle credentials as a consultant: store them so they never leak, grant the agent only the access the work needs, and hand the client a system that stays safe after you leave.",
-        "date": "September 7, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "testing-and-verification",
-        "title": "Lesson 14: Testing and Verification: Proving It Works Before You Claim It Does",
-        "series": "hermes-consultant",
-        "lesson": 14,
-        "excerpt": "An agent's reply is a claim, not a result. This lesson teaches the transferable craft of proving agent work: watching tool calls actually fire, reading real output and exit codes instead of trusting prose, verifying the artifact changed on disk, and building a repeatable gate so the work stays proven after you leave.",
-        "date": "September 8, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "finishing-the-job-discipline",
-        "title": "Lesson 15: The Finishing-the-Job Discipline: Working Artifacts Over Plans, Honest Blockers Over Fabrication",
-        "series": "hermes-consultant",
-        "lesson": 15,
-        "excerpt": "Clients do not pay for descriptions of work. They pay for work. This lesson teaches the discipline that separates a consultant whose agent delivers working artifacts from one whose agent delivers convincing prose: prove every claim in the running system, report a blocked task honestly instead of inventing output to look busy, and save what you learn so the next engagement starts smarter.",
-        "date": "September 9, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "estimation-scoping-30-45-minute-tasks",
-        "title": "Lesson 16: Estimation: Scoping a 30-45 Minute Task, and Why Small Tasks Ship Reliably",
-        "series": "hermes-consultant",
-        "lesson": 16,
-        "excerpt": "Estimation is a sizing decision, not a prediction. How to carve work into 30 to 45 minute windows you can actually finish, why tasks that small ship reliably, and how to catch a task that has grown too big before it wastes your day.",
-        "date": "September 10, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "packaging-reusable-skills",
-        "title": "Lesson 17: Packaging Reusable Skills: Turning What You Build Once Into Assets You Reuse Everywhere",
-        "series": "hermes-consultant",
-        "lesson": 17,
-        "excerpt": "A deliverable you finished once is a job. The same work packaged is an asset. This lesson teaches the craft of turning a solved problem into a reusable skill: what deserves to be captured, how to write it as lessons instead of a log, how to strip the client out so it travels, and how to ship it so the next engagement starts from a proven path instead of a blank page.",
-        "date": "September 11, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "documentation-and-handover",
-        "title": "Lesson 18: Documentation and Handover: Making the Client Self-Sufficient After You Leave",
-        "series": "hermes-consultant",
-        "lesson": 18,
-        "excerpt": "You can deliver a flawless system and still fail the engagement if the client cannot run it after you are gone. This lesson teaches the craft of handover: naming the human owner, writing reproduce, operate, and evolve docs instead of one history note, testing them by watching the client run the system rather than narrating it, moving credentials into the client's name, and cutting the cord deliberately.",
-        "date": "September 12, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "change-management-and-adoption",
-        "title": "Lesson 19: Change Management and Adoption: Getting Real People to Actually Use the System",
-        "series": "hermes-consultant",
-        "lesson": 19,
-        "excerpt": "A system nobody uses is a failed engagement no matter how well it was built or handed over. This lesson teaches the craft of adoption: separating change from behavior change, treating resistance as information, designing the agent around the way people already work instead of forcing new habits, finding the person whose problem it actually is, and measuring success in usage, not in shipped features.",
-        "date": "September 14, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "governance-and-guardrails",
-        "title": "Lesson 20: Governance and Guardrails: Acceptable Use, PII, and Responsible Automation",
-        "series": "hermes-consultant",
-        "lesson": 20,
-        "excerpt": "An agent that can do anything is an agent your client should not trust. This lesson teaches the governance craft: writing a plain acceptable-use policy that says what the agent may and may not do, treating personal data as a bounded resource instead of something to hoard, and building guardrails that enforce the policy mechanically so automation stays inside the lines even when nobody is watching.",
-        "date": "September 15, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "monitoring-and-observability",
-        "title": "Lesson 21: Monitoring and Observability: Knowing When the Agent Is Quietly Failing",
-        "series": "hermes-consultant",
-        "lesson": 21,
-        "excerpt": "An agent can run perfectly and still be wrong. This lesson teaches the observability craft: how to know, from the outside, whether an agent is actually doing the job rather than just looking busy. It covers the difference between loud failures and quiet ones, how to watch a whole fleet instead of a single job, and how to make silent degradation surface before the client discovers it.",
-        "date": "September 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "cost-management-token-budgets-and-model-tiers",
-        "title": "Lesson 22: Cost Management: Token Budgets, Model Tiers, and Predictable Client Pricing",
-        "series": "hermes-consultant",
-        "lesson": 22,
-        "excerpt": "An agent that works is not yet an agent you can price. This lesson teaches the cost craft: how to measure what a single run costs, how to put reasoning and mechanical work on the right model tiers, how to keep a recurring workload inside a budget, and how to turn a measured unit cost into a client number that survives the month.",
-        "date": "September 17, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "quality-gates-and-review",
-        "title": "Lesson 23: Quality Gates and Review: Who Checks the Work, and What They Check For",
-        "series": "hermes-consultant",
-        "lesson": 23,
-        "excerpt": "A working agent is not a checked agent. This lesson covers the delivery craft of review: why the builder cannot be the checker, how to write acceptance criteria a reviewer can actually test, how a verdict routes work back to the implementer instead of parking it, and how to build gates that fail loudly on the work nobody is watching.",
-        "date": "September 18, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "troubleshooting-in-production",
-        "title": "Lesson 24: Troubleshooting in Production: Diagnosing a Broken Agent Without Breaking It More",
-        "series": "hermes-consultant",
-        "lesson": 24,
-        "excerpt": "An agent in production breaks, and the temptation is to start changing things until it heals. That instinct is exactly what makes incidents worse. This lesson teaches the diagnostic discipline: how to gather evidence before you touch anything, change one variable at a time, keep a safety net you can roll back to, and protect the very state you need to understand. It uses Hermes Agent's session logs, cron health checks, and checkpoint system as the concrete vehicle for a craft that transfers to any agent platform.",
-        "date": "September 19, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "engagement-models-and-pricing",
-        "title": "Lesson 25: Engagement Models and Pricing: Fixed-Fee vs Hourly vs Retainer, and When Each Fits",
-        "series": "hermes-consultant",
-        "lesson": 25,
-        "excerpt": "How to choose the engagement model that matches the risk and delivery style of a piece of work. What fixed-fee, hourly, and retainer actually price, when each fits, and why the model you pick changes the incentives for both you and the client.",
-        "date": "September 20, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "contracts-and-scoping-sow-boundaries-scope-creep",
-        "title": "Lesson 26: Contracts and Scoping: Statements of Work, Boundaries, and Avoiding Scope Creep",
-        "series": "hermes-consultant",
-        "lesson": 26,
-        "excerpt": "A contract is not paperwork. It is a written agreement about what done means, and it is the only defense you have when a well-meaning client's requests start to drift. This lesson teaches what a statement of work is for, how to draw a scope boundary that protects both sides, and how to keep an evolving engagement from silently becoming an unbounded one.",
-        "date": "September 21, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      }
-    ],
-    "totalLessons": 26,
-    "curriculumLessons": 30
-  },
-  {
-    "slug": "omni-studio-cert",
-    "name": "OmniStudio Developer Certification",
-    "description": "A deep dive for the Salesforce Certified OmniStudio Developer exam. One official exam-guide requirement per day, with config walkthroughs, exam traps, and practice questions.",
-    "gradient": "from-red to-rose-600",
-    "lessons": [
-      {
-        "slug": "day-01-f1-omnistudio-solution-and-industry-use-cases",
-        "title": "OmniStudio F-1: OmniStudio Solution & Industry Use Cases",
-        "series": "omni-studio-cert",
-        "lesson": 1,
-        "excerpt": "Describe the OmniStudio solution as it applies to common customer use case scenarios in different industries (telco, energy, healthcare, public sector, etc.). Day 1 of the OmniStudio Developer exam prep.",
-        "date": "August 03, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-02-f2-project-needs-requirements-assumptions-risks-const",
-        "title": "OmniStudio F-2: Project Needs: Requirements, Assumptions, Risks, Constraints",
-        "series": "omni-studio-cert",
-        "lesson": 2,
-        "excerpt": "Determine a project's needs by evaluating a customer's requirements, assumptions, risks, and constraints. Day 2 of the OmniStudio Developer exam prep.",
-        "date": "August 04, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-03-f3-managed-package-vs-standard-runtime-upgrades",
-        "title": "OmniStudio F-3: Managed Package vs Standard Runtime; Upgrades",
-        "series": "omni-studio-cert",
-        "lesson": 3,
-        "excerpt": "Explain Managed Package Runtime vs. Standard Runtime, Automatic Upgrades, and Manual Intervention Upgrade. Day 3 of the OmniStudio Developer exam prep.",
-        "date": "August 05, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-04-f4-licensing-permission-set-licenses-permission-sets",
-        "title": "OmniStudio F-4: Licensing, Permission Set Licenses & Permission Sets",
-        "series": "omni-studio-cert",
-        "lesson": 4,
-        "excerpt": "Explain OmniStudio license requirements, Permission Set licenses and Permission Sets. Day 4 of the OmniStudio Developer exam prep.",
-        "date": "August 06, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-05-f5-implementation-toolchain-sfcli-vbt-migration",
-        "title": "OmniStudio F-5: Implementation Toolchain: SFCLI, VBT, Migration",
-        "series": "omni-studio-cert",
-        "lesson": 5,
-        "excerpt": "Describe the tools required to complete the end-to-end implementation process (SFCLI, VBT, Migration, etc.). Day 5 of the OmniStudio Developer exam prep.",
-        "date": "August 07, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-06-f-6-testing-versioning-cloning",
-        "title": "OmniStudio F-6: Testing, Versioning & Cloning Components",
-        "series": "omni-studio-cert",
-        "lesson": 6,
-        "excerpt": "Explain testing, versioning, and cloning through OmniStudio components. This covers save vs. publish, cloning workflows, and version snapshots for deployment.",
-        "date": "August 8, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-07-fc-1-flexcard-data-sources-testing-json",
-        "title": "OmniStudio FC-1: FlexCard Data Sources & Testing JSON",
-        "series": "omni-studio-cert",
-        "lesson": 7,
-        "excerpt": "Configure data sources such as SOQL, Data Mapper, Integration Procedure, Custom, etc. and test resulting JSON structure.",
-        "date": "August 9, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-08-fc-2-single-multi-level-cards-layouts-repeaters",
-        "title": "OmniStudio FC-2: Single/Multi-Level Cards, Layouts & Repeaters",
-        "series": "omni-studio-cert",
-        "lesson": 8,
-        "excerpt": "Construct single and multi-level FlexCards, organizing data using layouts, and repeaters.",
-        "date": "August 10, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-09-fc-3-binding-components-configuring-properties",
-        "title": "OmniStudio FC-3: Binding Components & Configuring Properties",
-        "series": "omni-studio-cert",
-        "lesson": 9,
-        "excerpt": "Bind essential components to construct FlexCards and configure their properties.",
-        "date": "August 11, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-10-fc-4-complex-card-actions-launch-fire-update",
-        "title": "OmniStudio FC-4: Complex Card Actions (Launch, Fire, Update)",
-        "series": "omni-studio-cert",
-        "lesson": 10,
-        "excerpt": "Define and implement complex card actions, including launching OmniScripts, firing events, and updating other components.",
-        "date": "August 12, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-11-fc-5-advanced-flexcard-properties",
-        "title": "OmniStudio FC-5: Advanced FlexCard Properties",
-        "series": "omni-studio-cert",
-        "lesson": 11,
-        "excerpt": "Configure advanced FlexCard properties: Event Listeners, Session Variables, Public Attributes, multi-language, child FlexCards, and custom LWC integration.",
-        "date": "August 13, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-12-fc-6-flexcard-styling-themes",
-        "title": "OmniStudio FC-6: FlexCard Styling & Themes",
-        "series": "omni-studio-cert",
-        "lesson": 12,
-        "excerpt": "Control FlexCard appearance two ways: element-level inline styling for one-off tweaks and shared themes for consistent branding.",
-        "date": "August 14, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-13-fc-7-conditional-rendering-with-states",
-        "title": "OmniStudio FC-7: Conditional Rendering with States",
-        "series": "omni-studio-cert",
-        "lesson": 13,
-        "excerpt": "Use FlexCard states and element-level conditions to show, hide, or restyle content when expressions against card data evaluate true.",
-        "date": "August 15, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-14-fc-8-embedding-flexcards-across-channels",
-        "title": "OmniStudio FC-8: Embedding FlexCards Across Channels",
-        "series": "omni-studio-cert",
-        "lesson": 14,
-        "excerpt": "Embed one FlexCard definition across Lightning pages, Experience Cloud sites, OmniScripts, and mobile, and design it for reuse with public attributes.",
-        "date": "August 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-15-fc-9-flexcard-best-practices",
-        "title": "OmniStudio FC-9: FlexCard Best Practices",
-        "series": "omni-studio-cert",
-        "lesson": 15,
-        "excerpt": "Validate your JSON, keep data sources lean, test every state and channel, and respect FLS. That combination is what separates a card that survives production from one that goes blank.",
-        "date": "August 17, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-16-os-1-omniscript-elements-dynamic-interactions",
-        "title": "OmniStudio OS-1: OmniScript Elements & Dynamic Interactions",
-        "series": "omni-studio-cert",
-        "lesson": 16,
-        "excerpt": "OmniScripts are guided journeys built from named elements that all land in one data JSON. If you understand that JSON contract, formulas, actions, and debugging all follow. If you don't, nothing else works.",
-        "date": "August 18, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-17-os-2-child-omniscripts-flexcards-custom-lwcs",
-        "title": "OmniStudio OS-2: Child OmniScripts, FlexCards & Custom LWCs",
-        "series": "omni-studio-cert",
-        "lesson": 17,
-        "excerpt": "Child OmniScripts handle reuse, FlexCards handle display, and custom LWCs handle custom UI. Pick the right embed for the job, wire its data back into the script JSON, and complex flows compose cleanly.",
-        "date": "August 19, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-18-os-3-omniscript-styling-themes",
-        "title": "OmniStudio OS-3: OmniScript Styling & Themes",
-        "series": "omni-studio-cert",
-        "lesson": 18,
-        "excerpt": "Themes define the design system across OmniScripts; element-level styling handles one-off exceptions. Use the theme as the source of truth, override sparingly, and verify responsive widths on desktop and mobile.",
-        "date": "August 20, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-19-os-4-advanced-omniscript-properties",
-        "title": "OmniStudio OS-4: Advanced OmniScript Properties",
-        "series": "omni-studio-cert",
-        "lesson": 19,
-        "excerpt": "Configure the advanced properties that carry an OmniScript beyond a bare flow: multi-language translations, Save Options for draft-and-resume, Knowledge Articles for in-flow help, and the Messaging Framework for SMS and email. Match the property to the scenario.",
-        "date": "August 21, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-20-os-5-embedding-omniscripts-across-channels",
-        "title": "OmniStudio OS-5: Embedding OmniScripts Across Channels",
-        "series": "omni-studio-cert",
-        "lesson": 20,
-        "excerpt": "One OmniScript definition embeds across Lightning pages, Experience Cloud, mobile, and web. Pass record context so it opens pre-populated, drop it in via the auto-generated LWC wrapper, and verify context per channel.",
-        "date": "August 22, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-21-os-6-omniscript-best-practices",
-        "title": "OmniStudio OS-6: OmniScript Best Practices",
-        "series": "omni-studio-cert",
-        "lesson": 21,
-        "excerpt": "Build OmniScripts that survive contact with users and production. Compose from child scripts instead of one giant flow, name elements as if they were JSON keys (because they are), test every branch in debug mode before publish, and push heavy orchestration into Integration Procedures.",
-        "date": "August 30, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-22-ip-1-ip-design-server-side-orchestration",
-        "title": "OmniStudio IP-1: IP Design, Server-Side Orchestration",
-        "series": "omni-studio-cert",
-        "lesson": 22,
-        "excerpt": "Learn what an Integration Procedure actually is: a declarative, server-side process that runs many actions in one server call. Design the input and output JSON contracts before you add a single action, order actions so output feeds input, and know why this one-call design is what makes IPs the right data source for FlexCards and OmniScripts.",
-        "date": "August 31, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "OmniStudio",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-23-ip-2-ip-action-types-groups-data-mapper-http-remote-sub",
-        "title": "OmniStudio IP-2: IP Action Types: Groups, Data Mapper, HTTP, Remote, Sub-IP",
-        "series": "omni-studio-cert",
-        "lesson": 23,
-        "excerpt": "Learn the building blocks you place inside an Integration Procedure: Groups for structure and conditional execution, Data Mapper actions for the data layer, HTTP actions for REST callouts, Remote actions for Apex logic, and Sub-IPs for composition. Map each action to its job, wire outputs to inputs with JSON paths, and avoid the auth, reuse, and mapping traps the exam tests.",
-        "date": "September 1, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "OmniStudio",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-24-ip-3-conditional-logic-loops-branching-in-ips",
-        "title": "OmniStudio IP-3: Conditional Logic, Loops, and Branching in Integration Procedures",
-        "series": "omni-studio-cert",
-        "lesson": 24,
-        "excerpt": "Control the execution path of an Integration Procedure. Use Execution Conditional Formulas to gate individual actions, Loop Blocks to iterate over arrays so per-item work repeats, and Conditional Blocks to route between distinct input states. Read the IP's data JSON, shape it so conditions stay simple, and test every branch with representative input. This is requirement IP-3, one of two pattern-heavy requirements in the Integration Procedures domain.",
-        "date": "September 2, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "OmniStudio",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-25-ip-4-chainable-integration-procedures",
-        "title": "OmniStudio IP-4: Chainable Integration Procedures",
-        "series": "omni-studio-cert",
-        "lesson": 25,
-        "excerpt": "Split long-running Integration Procedures into multiple transactions with chaining. Learn why one synchronous transaction blows governor limits, how the Chainable, Queueable Chainable, and Chain On Step settings decide when a step continues in a fresh transaction, and why every link in a chain needs its own error handling because rollback does not carry across transactions. This is requirement IP-4 in the Integration Procedures domain.",
-        "date": "September 3, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "OmniStudio",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-26-ip-5-caching-in-integration-procedures",
-        "title": "OmniStudio IP-5: Caching in Integration Procedures",
-        "series": "omni-studio-cert",
-        "lesson": 26,
-        "excerpt": "Determine and configure caching mechanisms within Integration Procedures to maximize performance. Learn what OmniStudio actually caches (metadata versus data), how Org Cache and Session Cache split shared versus per-user scope, how Time To Live controls freshness, and why cache keys decide whether a repeated request gets the right stored answer. This is requirement IP-5 in the Integration Procedures domain.",
-        "date": "September 4, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "OmniStudio",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-27-ip-6-exception-handling-try-catch-rollback",
-        "title": "OmniStudio IP-6: Exception Handling: Try/Catch & Rollback",
-        "series": "omni-studio-cert",
-        "lesson": 27,
-        "excerpt": "Implement robust exception handling in Integration Procedures with Try/Catch blocks and proper rollback. Learn how a Try/Catch Block wraps risky work, what the Catch branch must do, why Load and write actions belong after risky calls, and how the Response Action returns a controlled error shape to callers. This is requirement IP-6 in the Integration Procedures domain.",
-        "date": "September 5, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "OmniStudio",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-28-ip-7-response-action-the-ip-output-contract",
-        "title": "OmniStudio IP-7: Response Action: The IP Output Contract",
-        "series": "omni-studio-cert",
-        "lesson": 28,
-        "excerpt": "Configure the Response Action to return specific data and control every byte an Integration Procedure sends back. Learn why the Response Action is the contract every caller depends on, how to map success data, computed fields, and a consistent error branch, why only what you map gets returned, and how to test the response shape before any FlexCard or OmniScript is wired to it. This is requirement IP-7 in the Integration Procedures domain.",
-        "date": "September 6, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "OmniStudio",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-29-ip-8-integration-procedure-best-practices",
-        "title": "OmniStudio IP-8: Integration Procedure Best Practices",
-        "series": "omni-studio-cert",
-        "lesson": 29,
-        "excerpt": "Describe the best practices that turn a working Integration Procedure into a reliable, maintainable one. Learn why focused, well-named IPs beat monolithic ones, how stable contracts with error branches make IPs dependable building blocks, where reusable data logic belongs, when chaining is the right call, and why testing each action before you promote it prevents the failures that slip into production. This is the final requirement in the Integration Procedures domain.",
-        "date": "September 7, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "OmniStudio",
-          "Integration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-30-dm-1-data-mapper-fundamentals-source-target-types",
-        "title": "OmniStudio DM-1: Data Mapper Fundamentals & Source/Target Types",
-        "series": "omni-studio-cert",
-        "lesson": 30,
-        "excerpt": "Define and configure the four Data Mapper types that extract, transform, load, and map data between Salesforce and outside systems. Learn what a Data Mapper is, why the four interfaces exist, which sources and targets a mapper can bridge, why field-level security makes mappers a safer data path than raw SOQL, and how to configure and test a mapper step by step. This lesson opens the Data Mappers domain and names the artifact that the whole exam keeps coming back to.",
-        "date": "September 8, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "OmniStudio",
-          "DataMappers"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-31-dm-2-extract-interface-multi-object-filters-parameters",
-        "title": "OmniStudio DM-2: Extract Interface: Multi-Object, Filters & Parameters",
-        "series": "omni-studio-cert",
-        "lesson": 31,
-        "excerpt": "Configure and retrieve data from multiple objects with various filter options using the Data Mapper Extract Interface. Learn how a single Extract pulls related records across objects in one definition, how WHERE clauses and input parameters make filters reusable, how the output mapping shapes the exact JSON callers receive, why filtering early and selecting only needed fields keeps queries fast, and how Extract respects field-level security. This lesson turns the full-featured reader you met in DM-1 into a real, parameterized query tool.",
-        "date": "September 9, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "OmniStudio",
-          "DataMappers"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-32-dm-3-turbo-extract-interface",
-        "title": "OmniStudio DM-3: Turbo Extract Interface",
-        "series": "omni-studio-cert",
-        "lesson": 32,
-        "excerpt": "Configure and retrieve data from a single object and its related fields using the Turbo Extract Interface. Learn why Turbo Extract is the performance-optimized reader for the common case, how related fields come back through an object's lookups and child relationships in one optimized pass, where the single-object ceiling sits, when to choose Turbo Extract over the full Extract, and how to build one for pre-filling an OmniScript, sourcing a FlexCard, or doing a quick lookup by Id.",
-        "date": "September 10, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "OmniStudio",
-          "DataMappers"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-33-dm-4-load-interface-multi-object-writes",
-        "title": "OmniStudio DM-4: Load Interface: Multi-Object Writes",
-        "series": "omni-studio-cert",
-        "lesson": 33,
-        "excerpt": "Configure and import data to multiple objects using the Load Interface. Learn how Load maps input JSON to Salesforce records for insert, update, and delete, how lookups by Id or external ID link child records to parents in a single multi-object write, how external-ID upserts make Load idempotent so repeated integration runs do not create duplicates, and how rollback-on-error keeps a failed write from leaving partial data.",
-        "date": "September 11, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "OmniStudio",
-          "DataMappers"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-34-dm-5-transform-interface-document-generation",
-        "title": "OmniStudio DM-5: Transform Interface & Document Generation",
-        "series": "omni-studio-cert",
-        "lesson": 34,
-        "excerpt": "Configure the Transform Data Mapper to prepare data for downstream use and document generation. Learn how Transform reshapes input into a required output structure without reading from or writing to the org, how the output JSON template drives the shape, how field mappings and formulas satisfy an API contract, and how the same output feeds PDF and DocuSign templates as the data model for the document.",
-        "date": "September 12, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "OmniStudio",
-          "DataMappers"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-35-dm-6-formulas-in-data-mappers",
-        "title": "OmniStudio DM-6: Formulas in Data Mappers",
-        "series": "omni-studio-cert",
-        "lesson": 35,
-        "excerpt": "Configure formulas to create or modify values within Data Mappers across the Transform, Extract, and Load interface types. Learn how formulas compute values at the data layer through string concatenation, arithmetic, and date formatting, walk through adding and mapping a formula step by step, handle the null cases and evaluation-order traps, and see why computing once in the mapper beats doing the same work in the UI or down the line in a consumer.",
-        "date": "September 13, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "OmniStudio",
-          "DataMappers"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-36-dm-7-mapping-source-target-structures",
-        "title": "OmniStudio DM-7: Mapping Source & Target Structures",
-        "series": "omni-studio-cert",
-        "lesson": 36,
-        "excerpt": "Map source fields, formulas, and constants to the exact JSON structure consumers receive in the Data Mapper output. Learn why the output mapping is the contract, how each output key resolves to a source path or a formula, how array and list maps produce repeatable structures for line items and related records, how name collisions and casing break downstream bindings, and how to design the output for the consumer instead of the source. Walk through defining a target template, mapping every output field, wiring list maps, and comparing actual output to the expected structure, then sidestep the exam traps where output is shaped like the source or array mappings go missing.",
-        "date": "September 14, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "OmniStudio",
-          "DataMappers"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-37-dm-8-data-mapper-best-practices",
-        "title": "OmniStudio DM-8: Data Mapper Best Practices",
-        "series": "omni-studio-cert",
-        "lesson": 37,
-        "excerpt": "Distill the Data Mapper domain into the five habits that separate a fragile mapper from a dependable one: secure it first (field-level security, required permission, and avoiding raw SOQL where FLS matters), parameterize inputs so a mapper becomes a reusable artifact, shape outputs deliberately so the output mapping is the contract, test with sample JSON before any consumer depends on it, and optimize for performance and reuse across OmniScripts, Integration Procedures, and FlexCards. Learn why a targeted, well-named, security-checked mapper beats a Swiss Army knife, work a full build of a reusable case lookup, and sidestep the exam traps where security is skipped, inputs are hardcoded, or sample-JSON testing never happens.",
-        "date": "September 15, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "17 min read",
-        "tags": [
-          "OmniStudio",
-          "DataMappers"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-38-t-1-resolve-flexcard-display-state-issues",
-        "title": "OmniStudio T-1: Resolve FlexCard Display & State Issues",
-        "series": "omni-studio-cert",
-        "lesson": 38,
-        "excerpt": "Learn the disciplined order of diagnosis that turns a blank or misbehaving FlexCard into a known fix. Inspect the data JSON first, because wrong shape, missing fields, or an empty result set cause blanks before any layout problem. Then verify bindings against real JSON keys (path, case, nesting, repeater-relative paths), check state conditions against actual data values and types, and read the data source request and response in the Debug Console for auth, filter, or server errors. Work a full step-by-step diagnosis of a card that renders blank and a state that never triggers, and sidestep the exam traps: rebuilding instead of reading the payload, type mismatches in conditions, and testing only as an admin.",
-        "date": "September 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "OmniStudio",
-          "Troubleshooting"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-39-t-2-resolve-omniscript-errors-rendering",
-        "title": "OmniStudio T-2: Resolve OmniScript Errors & Rendering",
-        "series": "omni-studio-cert",
-        "lesson": 39,
-        "excerpt": "Learn the evidence-first way to fix an OmniScript that errors mid-flow or renders wrong. Debug in Preview and read the data JSON at each step to isolate the failing element. Understand that every element name becomes a JSON key, so duplicate names silently overwrite each other's data. Check visibility conditions and element properties before suspecting the platform, because a false condition hides an element by design. Read extract, load, and remote action failures in the Action Debugger for the exact payload, and inspect raw JSON in logs for path typos, malformed payloads, and unescaped characters. Work a full step-by-step diagnosis of a mid-flow failure and a missing field, and sidestep the exam traps: rebuilding instead of debugging the JSON, duplicate names that overwrite data, and assuming a hidden element is broken when a condition hides it.",
-        "date": "September 17, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "OmniStudio",
-          "Troubleshooting"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-40-t-3-resolve-data-mapper-output-mapping-issues",
-        "title": "OmniStudio T-3: Resolve Data Mapper Output & Mapping Issues",
-        "series": "omni-studio-cert",
-        "lesson": 40,
-        "excerpt": "Learn the evidence-first way to fix a Data Mapper that returns nothing or returns the wrong shape. Treat a Data Mapper as a four-stage pipeline (extract, formula, map, output) and read the Debug Console log, which records the request and the response for each mapper call so both sides of the equation are visible. Work the diagnosis order the exam grades: input JSON, then filters and parameters, then mappings and formulas, then output JSON. Trace an empty Extract to a null ContextId that silently filters every row out, and trace a missing output node to an un-mapped source path or a case mismatch between the Extract Object Path and the Mapping tab. Spot blank formulas caused by null inputs, type mismatches, and date-format differences, keep formulas in dependency order, and sidestep the exam traps: editing mappings before reading the payloads, trusting a null parameter, and testing only happy-path data.",
-        "date": "September 18, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "20 min read",
-        "tags": [
-          "OmniStudio",
-          "Troubleshooting"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-41-t-4-resolve-integration-procedure-execution-errors",
-        "title": "OmniStudio T-4: Resolve Integration Procedure Execution Errors",
-        "series": "omni-studio-cert",
-        "lesson": 41,
-        "excerpt": "Learn the evidence-first way to fix an Integration Procedure that fails mid-run. Read the Debug Console the way the exam grades: line by line through the per-action log to find which action failed, then read that action's request and response. HTTP failures name themselves in the status code and response body, so check the Named Credential and the endpoint before you touch anything else. A Remote Action surfaces an Apex exception message, and a later action reading a JSON path that is absent points back at an upstream action that never produced the data. Callout and DML governor limits end the synchronous transaction, and the fix is chaining, which splits the work across transactions. In chainable procedures every link is its own transaction, so a mid-chain failure stops the pipeline and you check each link's logs. Miss the Try/Catch and one external failure kills the whole procedure, so this lesson covers exception handling too.",
-        "date": "September 19, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "21 min read",
-        "tags": [
-          "OmniStudio",
-          "Troubleshooting"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-42-t-5-resolve-caching-problems",
-        "title": "OmniStudio T-5: Resolve Caching Problems",
-        "series": "omni-studio-cert",
-        "lesson": 42,
-        "excerpt": "Diagnose and fix caching problems the way the exam grades: split the symptom first. Stale data, old values served after the source changed, points at a TTL that outlived the data's volatility or an invalidation that never ran. Wrong data, one user's values or one product's price shown to someone else, points at cache scope and cache keys. This lesson teaches the three checks that resolve almost every field report: confirm the symptom is staleness, review the TTL against how fast the data changes, review scope and keys, then implement invalidation on source change. The compact rule to remember: stale means TTL or invalidation, wrong means keys or scope.",
-        "date": "September 20, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "20 min read",
-        "tags": [
-          "OmniStudio",
-          "Troubleshooting"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-43-t-6-resolve-permissions-access-issues",
-        "title": "OmniStudio T-6: Resolve Permissions & Access Issues",
-        "series": "omni-studio-cert",
-        "lesson": 43,
-        "excerpt": "Resolve permission and access issues the way the exam grades: reproduce as the user, then walk the access chain from the top down. 'Works for admin, not for users' almost always means a gap in a permission layer, not a broken component. The chain runs license, then Permission Set License, then permission set, then object CRUD, then field-level security, then sharing. A break at any layer blocks the component. This lesson teaches each layer's symptom, why SOQL data sources ignore field-level security and show restricted fields as blank, and how record-level visibility can hide records even when object access is fine.",
-        "date": "September 21, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "OmniStudio",
-          "Troubleshooting"
-        ],
-        "status": "published"
-      }
-    ],
-    "totalLessons": 43,
-    "curriculumLessons": 46
-  },
-  {
     "slug": "salesforce-data-architect",
     "name": "Platform Data Architect Certification",
     "description": "A one-stop prep course for the Salesforce Certified Platform Data Architect exam. All 21 official objectives split into 42 focused lessons, with data-modeling design patterns, LDV and MDM trade-offs, exam traps, and practice questions.",
@@ -2919,9 +3336,26 @@ export const learnSeries: LearningSeries[] = [
           "Certification"
         ],
         "status": "published"
+      },
+      {
+        "slug": "day-11-md-1a-mdm-styles-registry-consolidation-co-existence-cen",
+        "title": "Data Architect MD-1A: MDM Implementation Styles: Registry, Consolidation, Co-existence, and Centralized",
+        "series": "salesforce-data-architect",
+        "lesson": 11,
+        "excerpt": "Master data management is the discipline of keeping one authoritative version of the customer, product, and supplier records that every system in an enterprise references. The exam asks you to compare and contrast the four ways to deliver that single version of truth: registry, consolidation, co-existence, and centralized. This lesson trains each style as a decision staged on a centralization spectrum. Registry is the lightest touch, the hub stores only the map between a master record and the source-system records plus a global identifier, and source systems keep owning the attributes. Consolidation pulls source data into a read-mostly hub for analytics and reporting without pushing corrections back. Co-existence makes the hub and the sources both hold data, consolidating here and publishing values back there, and it is the most common enterprise pattern because it keeps sources operating. Centralized hands authorship to the hub and makes source systems consume from it, which gives the strongest single truth but demands the most application change. The lesson covers the considerations for choosing among them latency, whether sources can accept hub updates, governance maturity, source data quality, and integration cost and how each style maps onto Salesforce, which can be the hub or a participant. A five-step configuration walkthrough, three exam traps, and a try-it exercise round out requirement md-1a. Day 11 of the Platform Data Architect exam prep.",
+        "date": "September 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Master Data Management",
+          "Certification"
+        ],
+        "status": "published"
       }
     ],
-    "totalLessons": 10,
+    "totalLessons": 11,
     "curriculumLessons": 42
   },
   {
@@ -3101,404 +3535,70 @@ export const learnSeries: LearningSeries[] = [
           "Apex"
         ],
         "status": "published"
+      },
+      {
+        "slug": "day-11-r-1a-organization-wide-defaults-fundamentals-the-matrix",
+        "title": "Sharing & Visibility Architect R-1a: Organization-Wide Defaults Fundamentals, the Matrix, Per-Object Defaults, and Public/Private/Controlled by Parent",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 11,
+        "excerpt": "Why requirement r-1a exists: organization-wide defaults are the floor of the entire record-sharing model, the single most restrictive baseline every other sharing mechanism can only open wider. This lesson teaches the OWD matrix in Sharing Settings, what each of Private, Public Read Only, Public Read/Write, and Controlled by Parent actually means at runtime, why lookup children cannot be Controlled by Parent while master-detail children must be, how standard objects ship with defaults that you should deliberately revisit, and why you cannot set different OWDs per group. Includes a worked requirement-to-default selection, a numbered configuration walkthrough, exam traps, and a try-it exercise. Day 11 of the Platform Sharing and Visibility Architect exam prep.",
+        "date": "September 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "21 min read",
+        "tags": [
+          "Salesforce",
+          "Security",
+          "Sharing",
+          "Certification",
+          "OWD"
+        ],
+        "status": "published"
       }
     ],
-    "totalLessons": 10,
+    "totalLessons": 11,
     "curriculumLessons": 36
   },
   {
-    "slug": "hermes-consultant-intermediate",
-    "name": "Hermes Agent Consultant · Intermediate",
-    "description": "Level 2 of the Hermes Consultant track: Applied Delivery. For the working practitioner — running full engagements, complex client environments, multi-week estimation, team delivery, incident discipline, pricing, and case studies. Builds on Level 1.",
-    "gradient": "from-teal to-emerald-600",
+    "slug": "ai-power-user",
+    "name": "AI Power User",
+    "description": "The Level 2 follow-on to AI at Work for professionals who use AI daily and want to build and own their own automations: designing repeatable workflows, making them reliable, and sustaining them. Vendor-agnostic and buildable without code.",
+    "gradient": "from-cyan-500 to-purple-600",
     "lessons": [
       {
-        "slug": "running-a-full-engagement",
-        "title": "Lesson 1: Running a Full Engagement",
-        "series": "hermes-consultant-intermediate",
+        "slug": "from-user-to-power-user-owning-your-workflow",
+        "title": "Lesson 1: From User to Power User: What Owning Your Workflow Means",
+        "series": "ai-power-user",
         "lesson": 1,
-        "excerpt": "Turning the five-phase lifecycle into a week-by-week plan: mapping discover, design, implement, handover, and support onto a real calendar, with gates, buffers, and the scheduling realities that kill engagements.",
-        "date": "August 27, 2026",
+        "excerpt": "You already use AI every day. This lesson is about the step between using a tool and owning a workflow: what separates a user from a power user, what it actually means to own the way you work, and why the payoff lives in a small slice of your recurring tasks. It defines the terms, walks through one person making the shift, and ends with a try-it prompt that starts the audit you will run in Lesson 2.",
+        "date": "September 21, 2026",
         "author": "Adroit Consulting",
-        "readTime": "11 min read",
+        "readTime": "9 min read",
         "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
+          "LLMs",
+          "AI Power User",
+          "Workflow"
         ],
         "status": "published"
       },
       {
-        "slug": "requirement-capture-as-built-discipline",
-        "title": "Lesson 2: Requirement Capture as an As-Built Discipline",
-        "series": "hermes-consultant-intermediate",
+        "slug": "auditing-how-you-actually-work-finding-the-repetitive-20-percent",
+        "title": "Lesson 2: Auditing How You Actually Work: Finding the Repetitive 20 Percent",
+        "series": "ai-power-user",
         "lesson": 2,
-        "excerpt": "Moving from a problem statement you agree on to a requirement set that survives handover: capturing the enacted process, not the stated one, and writing requirements the next team can run and change without you.",
-        "date": "August 28, 2026",
+        "excerpt": "Lesson 1 told you the payoff lives in the repetitive slice of your work. This lesson gives you the method to find that slice honestly: a time audit that measures where your week actually goes, a way to separate the tasks worth automating from the ones that are not, and a concrete worked example of one person running the audit. It ends with a try-it prompt that produces your own list of the repetitive 20 percent, ready for Lesson 3.",
+        "date": "September 21, 2026",
         "author": "Adroit Consulting",
-        "readTime": "12 min read",
+        "readTime": "10 min read",
         "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "production-routing-evals-guardrails",
-        "title": "Lesson 3: Advanced Hermes Configuration: Model Routing, Evals, and Guardrails in Production",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 3,
-        "excerpt": "When the agent leaves the sandbox and runs at real volume in front of a client, three decisions decide whether it holds up: which model runs which task, how you prove the output is still correct, and how you keep the guardrails you documented actually enforced. This lesson teaches all three.",
-        "date": "August 29, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "reusable-delivery-toolkit-skill-packaging",
-        "title": "Lesson 4: Building a Reusable Delivery Toolkit: Skill Packaging Done Right",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 4,
-        "excerpt": "The difference between a consultant who solves one client's problem and one who compounds every engagement into the next: turning the working capture discipline, eval suite, and guardrail set from Lessons 2 and 3 into packaged, loadable skills another consultant can run without relearning them.",
-        "date": "August 30, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "complex-client-environments-existing-stacks-sandboxed-deploys",
-        "title": "Lesson 5: Complex Client Environments: Existing Stacks, Enterprise Constraints, and Sandboxed Deploys",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 5,
-        "excerpt": "The clean single-client world where you chose the stack is the exception, not the rule. This lesson teaches you to land a packaged agent delivery inside a company that already has infrastructure, security rules, and processes you did not choose, and to keep the toolkit working when the environment fights back.",
-        "date": "August 31, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "estimating-multi-week-engagements",
-        "title": "Lesson 6: Estimating Multi-Week Engagements: Beyond the 30-45 Minute Task",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 6,
-        "excerpt": "The 30-45 minute task is the unit of execution, not the unit of estimation. This lesson teaches you to size a real multi-week delivery: how to break a large engagement into estimable pieces, why you estimate the critical path and not the total, how to put the constraints and reviews from Lesson 5 into the number, and how to keep an estimate honest when the environment reveals surprises.",
-        "date": "September 1, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "team-delivery-splitting-work-across-consultants",
-        "title": "Lesson 7: Team Delivery: When It's More Than One Consultant, How the Work Splits",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 7,
-        "excerpt": "Single-consultant delivery has a ceiling. This lesson teaches the working practitioner when that ceiling hits, how to split work so more than one owner can hold it without the pieces drifting apart, and the seams, contracts, and dependency rules that hold a delivery team together. Hermes Agent's multi-agent board is the concrete example.",
-        "date": "September 2, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "internal-pilot-converting-to-paid-engagement",
-        "title": "Lesson 8: Running an Internal Pilot That Converts Into a Paid Engagement",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 8,
-        "excerpt": "The hardest sale in consulting is the one where the client has not yet decided you are worth paying. This lesson teaches the working practitioner to run an internal pilot that converts: how you scope a real slice of a prospect's problem, deliver it as a bounded proof, and turn the measured result into a signed engagement instead of a free spec.",
-        "date": "September 3, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "quality-at-scale-golden-sets-eval-gates-regression",
-        "title": "Lesson 9: Quality at Scale: Golden Sets, Eval Gates, and Regression Discipline",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 9,
-        "excerpt": "A single agent that works under review is not the hard problem. An estate that keeps producing correct output at volume, after the rules, the data, and the models keep changing, is. This lesson teaches the practitioner who runs real multi-week delivery how to keep quality true at scale: a golden set that lives and grows without rotting, eval gates that block the wrong change before it ships, and the regression discipline that triages a failing gate instead of burying it.",
-        "date": "September 4, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "cost-and-reliability-engineering-running-agent-estate",
-        "title": "Lesson 10: Cost and Reliability Engineering for a Running Agent Estate",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 10,
-        "excerpt": "The build is one project. The running estate is a subscription to a recurring bill and a standing reliability obligation, and a consultant who hands over a system without engineering both is handing over a liability. This lesson teaches the practitioner operating a real delivery how to model and contain the recurring spend of a fleet of scheduled agents, how to make that fleet dependable when models and providers and infrastructure keep changing underneath it, and how to engineer for the failure of any single part without taking the whole delivery down.",
-        "date": "September 5, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "incident-discipline-troubleshooting-broken-agent",
-        "title": "Lesson 11: Incident Discipline: Troubleshooting a Broken Agent Under Client Pressure",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 11,
-        "excerpt": "An agent that produces a wrong answer is a bug. An agent that stops while a client watches is an incident. This lesson teaches the discipline that separates a calm professional from a panicked one when delivery goes wrong live: why you diagnose before you patch, how to establish ground truth under pressure, what communication the client hears first, and the difference between a fix that works and a fix you only claim works.",
-        "date": "September 6, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "change-management-as-a-deliverable",
-        "title": "Lesson 12: Change Management as a Deliverable, Not an Afterthought",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 12,
-        "excerpt": "The agent you delivered is running, the client depends on it, and now it needs to change: a new model, a tightened rule, a reconfigured schedule. This lesson teaches the consultant to treat change as its own deliverable with scope, a plan, a test, a rollback, and a record, instead of as a drive-by edit that quietly erodes a working delivery.",
-        "date": "September 7, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "self-sufficient-handover-operating-docs-runbooks",
-        "title": "Lesson 13: Handover That Makes the Client Self-Sufficient: Operating Docs and Runbooks",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 13,
-        "excerpt": "The real test of a delivery is not whether it works while you are in the room. It is what happens the first time the client runs it without you and something goes wrong. This lesson teaches the handover that makes the client self-sufficient: the operating doc that captures how the agent is configured and the runbook that tells a calm stranger what to do when it breaks, finished with a dry run and a support taper that make your absence the point.",
-        "date": "September 8, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "21 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "managing-a-small-portfolio-of-clients",
-        "title": "Lesson 14: Managing a Small Portfolio of Clients: Scope, Expectations, and Time",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 14,
-        "excerpt": "The moment you hold more than one engagement, every lesson before this one stops being about a single client and starts being about the space between them. This lesson teaches the working practitioner how a small portfolio survives: how scope bleeds between engagements and how to stop it, how to set expectations you can actually hold when no client gets your full attention, and how to budget time across several active deliveries so that adding a client does not quietly sacrifice the ones you already have. Hermes Agent's isolation model is the concrete vehicle.",
-        "date": "September 9, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "21 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "vendor-agnostic-translation-adapting-the-playbook-to-other-agent-tools",
-        "title": "Lesson 15: Vendor-Agnostic Translation: Adapting the Playbook to Other Agent Tools",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 15,
-        "excerpt": "The Hermes playbook you have built is real value, and it is also tool-specific by default. This lesson is the discipline of separating the transferable layer from the mechanical one, so you can deliver the same consulting standard on whatever agent tool a client already runs, without rebuilding your approach from scratch and without forcing Hermes-shaped ideas onto tools that have no equivalent.",
-        "date": "September 10, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "security-review-threat-model-secrets-compliance",
-        "title": "Lesson 16: Security Review for a Client Engagement: Threat Model, Secrets, and Compliance",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 16,
-        "excerpt": "A security review is not a checklist you run at the end of an engagement; it is a discipline you practice from the first scoping call. This lesson teaches the intermediate consultant how to build a client-facing threat model, hunt down secrets before the client's security team does, and present compliance evidence instead of assurances. Hermes Agent's defense-in-depth model is the concrete example: user authorization, dangerous-command approval, file write safety, container isolation, MCP credential filtering, cross-session isolation.",
-        "date": "September 11, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "17 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "Security"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "working-with-it-compliance-legal-on-agent-rollouts",
-        "title": "Lesson 17: Working with IT, Compliance, and Legal on Agent Rollouts",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 17,
-        "excerpt": "The last lesson taught you to survive a security review. This one teaches you to carry the rollout through the three teams that actually control momentum: IT, compliance, and legal. Each speaks a different language, each holds a different gate, and each will stall the engagement if you treat them like a single obstacle. This lesson teaches the intermediate consultant to triage these stakeholders in early, translate technical decisions into the language each one needs, and turn procurement, sign-off, and ongoing governance into parts of the delivery you plan for instead of surprises you absorb.",
-        "date": "September 12, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "17 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "Security"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "pricing-engagements-fixed-fee-tm",
-        "title": "Lesson 18: Pricing Individual Engagements: Fixed-Fee vs Time-and-Materials in Practice",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 18,
-        "excerpt": "The price on an engagement is not a number you pick, it is a risk allocation you choose. This lesson teaches the working practitioner to decide between fixed-fee and time-and-materials, price the engagement from a real unit economy, and build change control that keeps either model honest when scope moves.",
-        "date": "September 13, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "writing-proposals-and-sows",
-        "title": "Lesson 19: Writing Proposals and Statements of Work That Protect Both Sides",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 19,
-        "excerpt": "You priced the engagement in Lesson 18, and now the price has to survive on paper. This lesson teaches the practitioner to write the proposal and statement of work as risk documents, not sales documents: a scope boundary specific enough to enforce, acceptance criteria the client can actually test against, assumptions and exclusions written down so neither side is surprised, and change control that keeps a signed SOW honest when the work shifts.",
-        "date": "September 14, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "managing-scope-creep-and-difficult-clients",
-        "title": "Lesson 20: Managing Scope Creep and Difficult Clients",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 20,
-        "excerpt": "Scope creep and difficult clients feel like two separate curses, but they are one problem wearing two costumes: the engagement drifting away from the baseline it was supposed to hold. This lesson teaches the intermediate consultant that both are settled by the same three artifacts, a written scope, a named acceptance bar, and a change process, and shows you how to use them to turn five repeatable 'difficult client' patterns into tractable negotiations instead of silent battles you lose one email at a time. The worked example is a Hermes Agent engagement, and the discipline transfers to any tool you run.",
-        "date": "September 15, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "18 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "Client Management"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "case-study-real-agent-engagement-end-to-end",
-        "title": "Lesson 21: Case Study: A Real Agent Engagement, End to End",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 21,
-        "excerpt": "Twenty lessons taught you the parts. This one runs them together. A single agent engagement from first call to handover, told in sequence with the mistakes left in: a scope scoped small on purpose, an estimate that survived because it priced the data instead of the code, an export that changed its schema on a Tuesday, an IT director who went quiet while holding the security gate, a catalog defect that was the client's to own, and a handover that made the client's own staff the operator. Read it for the sequencing, not the techniques, because the sequencing is the part you cannot practice alone.",
-        "date": "September 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "20 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "Case Study"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "repeatable-processes-checklists-templates-delivery-framework",
-        "title": "Lesson 22: Building Repeatable Processes: Checklists, Templates, and a Delivery Framework v1",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 22,
-        "excerpt": "By Lesson 21 you have run engagements end to end, each one an improvised performance that depended on your memory of the one before. This lesson breaks that dependence. You build the three assets a practice compounds on: checklists that catch the failures you have actually hit, templates that capture the reasoning behind past decisions instead of blank forms, and a delivery framework v1 that makes the next engagement run a known process rather than a new invention. The skill is the design discipline: extracting process from real work instead of designing it from a textbook, and versioning the framework so it keeps teaching.",
-        "date": "September 17, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "measuring-outcomes-and-reporting-value-to-the-buyer",
-        "title": "Lesson 23: Measuring Outcomes and Reporting Value to the Buyer",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 23,
-        "excerpt": "The agent works, the client depends on it, and the engagement is nearly done. The one thing you have not proven is the thing the buyer actually paid for: that the system produced value. This lesson teaches the consultant to measure outcomes instead of activity, and to report that value in the buyer's language, moving the relationship from a delivered system to a justified investment.",
-        "date": "September 18, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "training-the-client-team-to-own-the-system",
-        "title": "Lesson 24: Training the Client's Team to Own the System",
-        "series": "hermes-consultant-intermediate",
-        "lesson": 24,
-        "excerpt": "A working system is not a delivery until the client's people can run it, change it, and keep it alive when you are gone. Lesson 13 gave you the handover: operating docs and runbooks that make the system operable without you. This lesson teaches the piece the docs cannot carry: training the people, building their judgment so they decide what is normal and when to escalate, and sustaining that capability through turnover so the knowledge outlives any single operator.",
-        "date": "September 19, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "19 min read",
-        "tags": [
-          "AI Agents",
-          "Consulting",
-          "LLMs"
+          "LLMs",
+          "AI Power User",
+          "Workflow"
         ],
         "status": "published"
       }
     ],
-    "totalLessons": 24,
-    "curriculumLessons": 25
+    "totalLessons": 2,
+    "curriculumLessons": 30
   },
   {
     "slug": "ai-at-work",
@@ -4329,6 +4429,23 @@ export const learnSeries: LearningSeries[] = [
 /** Flat list of every lesson, NEWEST FIRST (for sitemap, nav, flat lookups). */
 export const learnLessons: LearnLesson[] = [
   {
+    "slug": "ai-governance-policies-review-boards-model-risk-management",
+    "title": "Lesson 48: Governance: AI Policies, Review Boards, and Model Risk Management",
+    "series": "agentic-ai",
+    "lesson": 48,
+    "excerpt": "Lesson 47 gave you quality gates: repeatable measurements that tell you whether an agent still works. Governance is the layer that decides who is allowed to change what, who gets to accept the risk when you ship anyway, and how you prove it to an examiner or a board. It lives in three places. AI policies set the rules everyone works under. A review board is the human body that makes the hard calls the policy cannot resolve and writes down who decided and why. Model risk management is the discipline, borrowed from banks, of treating a model the way you treat a loan portfolio: inventory it, tier it by how much damage it can do, validate it independently, and watch it until it is retired. This lesson walks the NIST AI Risk Management Framework's Govern function and the EU AI Act's risk management system, then shows how a real agent operation turns its own pipeline into a governance record. The next lesson builds the security architecture that the governance you draft here will want to point at.",
+    "date": "September 22, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "11 min read",
+    "tags": [
+      "LLMs",
+      "AI Agents",
+      "Governance",
+      "Model Risk"
+    ],
+    "status": "published"
+  },
+  {
     "slug": "the-adoption-owners-job-from-rollout-to-running-program",
     "title": "Lesson 1: The Adoption Owner's Job: From Rollout to Running Program",
     "series": "ai-adoption",
@@ -4341,6 +4458,54 @@ export const learnLessons: LearnLesson[] = [
       "LLMs",
       "AI Adoption",
       "Leadership"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "building-a-repeatable-delivery-framework",
+    "title": "Lesson 27: Building a Repeatable Delivery Framework: Your Own Playbook That Ships Every Time",
+    "series": "hermes-consultant",
+    "lesson": 27,
+    "excerpt": "A consultant who delivers one great engagement by instinct is not yet a business. This lesson teaches the craft of turning that instinct into a repeatable delivery framework: a written playbook of phases, checkpoints, templates, and standards that ships the same quality to every client without reinventing the process each time. It covers what a delivery framework is, how to capture one from a finished engagement, how to make it actually run instead of living in a document nobody opens, and how to keep it sharp as you learn.",
+    "date": "September 22, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "13 min read",
+    "tags": [
+      "AI Agents",
+      "Consulting",
+      "LLMs"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "capstone-plan-and-scope-a-complete-engagement",
+    "title": "Lesson 25: Capstone: Plan and Scope a Complete Intermediate Engagement",
+    "series": "hermes-consultant-intermediate",
+    "lesson": 25,
+    "excerpt": "The closing lesson of the intermediate course. You already know the moves: capture, estimation, pricing, teams, incidents, security, stakeholders, scope. This capstone asks you to run them together on one real engagement and produce the three artifacts that sell it, bound it, and schedule it: a scope statement, a plan, and the estimate that makes both defensible. You get a worked example end to end, then a clean canvas to run one yourself.",
+    "date": "September 22, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "22 min read",
+    "tags": [
+      "AI Agents",
+      "Consulting",
+      "Scoping",
+      "Capstone"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-44-t-7-resolve-missing-or-broken-json",
+    "title": "OmniStudio T-7: Resolve Missing or Broken JSON",
+    "series": "omni-studio-cert",
+    "lesson": 44,
+    "excerpt": "A binding points at account.Name and the value that should hold a customer name renders blank. An OmniScript action completes without an error and its field stays empty. A FlexCard loads clean and still shows nothing where data should be. These three reports share one root cause: the data the component expects is either malformed, so no parser can read it, or it is not where the component thinks it is. This lesson teaches you to distinguish broken JSON from missing JSON, read the raw payload the component actually received, validate it, and then trace each referenced path against the real keys before you ever touch the component.",
+    "date": "September 22, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "16 min read",
+    "tags": [
+      "OmniStudio",
+      "Troubleshooting"
     ],
     "status": "published"
   },
@@ -4363,6 +4528,41 @@ export const learnLessons: LearnLesson[] = [
       "2GP",
       "Release Cadence",
       "Architecture"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-11-md-1a-mdm-styles-registry-consolidation-co-existence-cen",
+    "title": "Data Architect MD-1A: MDM Implementation Styles: Registry, Consolidation, Co-existence, and Centralized",
+    "series": "salesforce-data-architect",
+    "lesson": 11,
+    "excerpt": "Master data management is the discipline of keeping one authoritative version of the customer, product, and supplier records that every system in an enterprise references. The exam asks you to compare and contrast the four ways to deliver that single version of truth: registry, consolidation, co-existence, and centralized. This lesson trains each style as a decision staged on a centralization spectrum. Registry is the lightest touch, the hub stores only the map between a master record and the source-system records plus a global identifier, and source systems keep owning the attributes. Consolidation pulls source data into a read-mostly hub for analytics and reporting without pushing corrections back. Co-existence makes the hub and the sources both hold data, consolidating here and publishing values back there, and it is the most common enterprise pattern because it keeps sources operating. Centralized hands authorship to the hub and makes source systems consume from it, which gives the strongest single truth but demands the most application change. The lesson covers the considerations for choosing among them latency, whether sources can accept hub updates, governance maturity, source data quality, and integration cost and how each style maps onto Salesforce, which can be the hub or a participant. A five-step configuration walkthrough, three exam traps, and a try-it exercise round out requirement md-1a. Day 11 of the Platform Data Architect exam prep.",
+    "date": "September 22, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "15 min read",
+    "tags": [
+      "Salesforce",
+      "Data Architecture",
+      "Master Data Management",
+      "Certification"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-11-r-1a-organization-wide-defaults-fundamentals-the-matrix",
+    "title": "Sharing & Visibility Architect R-1a: Organization-Wide Defaults Fundamentals, the Matrix, Per-Object Defaults, and Public/Private/Controlled by Parent",
+    "series": "salesforce-sharing-visibility-architect",
+    "lesson": 11,
+    "excerpt": "Why requirement r-1a exists: organization-wide defaults are the floor of the entire record-sharing model, the single most restrictive baseline every other sharing mechanism can only open wider. This lesson teaches the OWD matrix in Sharing Settings, what each of Private, Public Read Only, Public Read/Write, and Controlled by Parent actually means at runtime, why lookup children cannot be Controlled by Parent while master-detail children must be, how standard objects ship with defaults that you should deliberately revisit, and why you cannot set different OWDs per group. Includes a worked requirement-to-default selection, a numbered configuration walkthrough, exam traps, and a try-it exercise. Day 11 of the Platform Sharing and Visibility Architect exam prep.",
+    "date": "September 22, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "21 min read",
+    "tags": [
+      "Salesforce",
+      "Security",
+      "Sharing",
+      "Certification",
+      "OWD"
     ],
     "status": "published"
   },

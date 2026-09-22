@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "realtime-voice-agents-latency-2026",
+    "title": "Voice Agents Are a Latency Problem Disguised as AI",
+    "excerpt": "A voice agent is a latency system wrapped around an LLM. Every stage owns a slice of the 300-800ms turn, and turn-taking decides who stays on the line.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "September 22, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "AI Agents",
+      "Voice Agents",
+      "Realtime API",
+      "AI Infrastructure",
+      "Speech-to-Speech",
+      "Latency Engineering"
+    ],
+    "bannerImage": "/banners/realtime-voice-agents-latency-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "nextjs-16-cache-lifecycle-2026",
     "title": "Next.js 16 Caching: Three Numbers, stale, revalidate, expire",
     "excerpt": "Next.js 16's Cache Components replaced the implicit fetch/revalidate era with three explicit timing values on every cached unit.",
