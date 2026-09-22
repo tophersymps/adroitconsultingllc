@@ -10,6 +10,8 @@ export function seriesShortLabel(slug: string): string {
     "agentic-ai": "Agentic AI",
     "omni-studio-cert": "OmniStudio",
     "ai-at-work": "AI at Work",
+    "ai-power-user": "AI Power User",
+    "ai-adoption": "AI Adoption",
     "salesforce-sharing-visibility-architect": "Sharing & Visibility",
     "salesforce-data-architect": "Data Architect",
   };

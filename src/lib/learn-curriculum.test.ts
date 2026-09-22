@@ -62,6 +62,7 @@ const SCHEDULER_FINAL_COUNTS: Record<string, number> = {
   "agentic-ai": 90,
   "ai-at-work": 30,
   "ai-power-user": 30,
+  "ai-adoption": 40,
   "hermes-consultant": 30,
   "hermes-consultant-advanced": 20,
   "hermes-consultant-intermediate": 25,
@@ -73,7 +74,7 @@ const SCHEDULER_FINAL_COUNTS: Record<string, number> = {
 
 describe("series.json curriculumLessons declarations", () => {
   const dirs = seriesDirs();
-  expect(dirs.length, "expected the ten learning tracks").toBe(10);
+  expect(dirs.length, "expected the eleven learning tracks").toBe(11);
 
   for (const dir of dirs) {
     const cfg = readSeriesJson(dir);

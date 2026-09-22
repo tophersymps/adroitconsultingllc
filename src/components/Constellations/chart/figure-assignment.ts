@@ -46,6 +46,8 @@ export const FIGURE_PINS: Readonly<Record<string, string>> = {
   "agentic-ai": "Cetus",
   "omni-studio-cert": "Hydra",
   "ai-at-work": "Virgo",
+  "ai-power-user": "Taurus",
+  "ai-adoption": "Auriga",
   "hermes-consultant": "Hercules",
   "hermes-consultant-intermediate": "Draco",
   "hermes-consultant-advanced": "Eridanus",
