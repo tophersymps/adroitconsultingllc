@@ -1,0 +1,145 @@
+---
+title: "Sharing & Visibility Architect R-1a: Organization-Wide Defaults Fundamentals, the Matrix, Per-Object Defaults, and Public/Private/Controlled by Parent"
+slug: day-11-r-1a-organization-wide-defaults-fundamentals-the-matrix
+series: salesforce-sharing-visibility-architect
+lesson: 11
+excerpt: "Why requirement r-1a exists: organization-wide defaults are the floor of the entire record-sharing model, the single most restrictive baseline every other sharing mechanism can only open wider. This lesson teaches the OWD matrix in Sharing Settings, what each of Private, Public Read Only, Public Read/Write, and Controlled by Parent actually means at runtime, why lookup children cannot be Controlled by Parent while master-detail children must be, how standard objects ship with defaults that you should deliberately revisit, and why you cannot set different OWDs per group. Includes a worked requirement-to-default selection, a numbered configuration walkthrough, exam traps, and a try-it exercise. Day 11 of the Platform Sharing and Visibility Architect exam prep."
+date: "September 22, 2026"
+author: "Adroit Consulting"
+readTime: "21 min read"
+tags: [Salesforce, Security, Sharing, Certification, OWD]
+---
+
+Requirement r-1a is short in the exam guide and long in practice: given a set of conditions, recommend the appropriate organization-wide defaults to restrict access to records. The phrase "recommend" matters. The exam is not testing whether you can click Private in Sharing Settings. It is testing whether you can look at a scenario, decide which of four OWD values is the right foundation, and explain why the other three are wrong. That judgment, once you have it, underpins every other sharing mechanism you will layer on top for the rest of this course. [^1]
+
+Lessons 1 through 10 gave you the object-and-field machinery: profiles, permission sets, field-level security, CRUD, FLS, and how code runs with or without sharing. That was all about whether a user can touch an object and which fields they can see. Requirement r-1a starts the record-sharing half, and it begins at the beginning: organization-wide defaults. Everything after this lesson, the role hierarchy, sharing rules, teams, Apex sharing, manual sharing, builds on top of the OWD you choose here. Get this foundation wrong and the most elegant sharing rule in the world cannot un-wrong it. [^1][^2]
+
+The core idea, stated once and then used everywhere: organization-wide defaults establish the baseline access every user has to records they do not own. They are the most restrictive floor. You can open access from that floor with role hierarchies, sharing rules, manual sharing, and Apex sharing, but you can never close access below it with those same tools. Sharing rules only grant additional access; they never restrict beyond the OWD. That single constraint is why architects treat OWD as the security decision that matters most, and why the whole sharing model sits on top of it. [^2][^3]
+
+There is one more correction to internalize before the mechanics, because it trips candidates repeatedly. OWD applies to the records of an object for ALL users evenly. You cannot set one OWD for the sales team and a tighter one for the finance team on the same object. The OWD is a single per-object baseline. Group-level differences come from the layer above: the role hierarchy, sharing rules, public groups, teams, or programmatic sharing. The exam hands you a scenario where two groups need different levels of access and expects you to build the difference in the sharing layer, not by splitting the OWD. [^1][^3]
+
+## Deep Dive
+
+### The OWD matrix and the per-object default
+
+When you open Setup and search for Sharing Settings, the Organization-Wide Defaults section is a table with one row per object. Each row shows two columns of access, Default Internal Access and Default External Access, plus a check box for Grant Access Using Hierarchies. The matrix lists every standard and custom object in the org, which is why it can be long in a mature org, and each object carries its own independent default. This is the first mental model to hold: every object makes its own OWD decision, and you review them one by one rather than as a blanket setting. [^1][^4]
+
+The Default Internal Access column is the access level for your licensed internal users, the people sitting inside Salesforce. The Default External Access column is the baseline for external users in Experience Cloud sites and portals, such as customer community and partner community users. The two are set independently, but with a hard rule: the external default can never be more permissive than the internal default. You can have internal Public Read Only and external Private, but never the reverse. That rule exists because external users are almost always the population you want most locked down, and the platform enforces it so you cannot accidentally open partner data wider than your own staff. [^1][^2][^4]
+
+The values available in the matrix vary slightly by object. Custom objects typically offer Private, Public Read Only, and Public Read/Write. Standard objects add variants, including Public Read/Write/Transfer on some, and Public Full Access on campaigns. Master-detail detail objects are locked to Controlled by Parent. The exact list matters less than the four that the exam keeps coming back to, which this lesson teaches in order: Private, Public Read Only, Public Read/Write, and Controlled by Parent. [^1][^5]
+
+### Private: closed by default, ownership and hierarchy only
+
+Private is the most restrictive OWD, and it is the value the exam treats as the default starting point whenever a scenario calls for restriction. With Private OWD, a user can see and edit only the records they own, plus records owned by users below them in the role hierarchy if the hierarchy is enabled for that object. Nobody else gets access by default. The record owner and the people above them in the hierarchy are the only users who can view, edit, and report on the records. [^2][^3]
+
+The exam trap hiding inside that last sentence is the "if the hierarchy is enabled" clause. Setting OWD to Private does not automatically give every manager in the role hierarchy access. It enables ownership to be the only path, and then the role hierarchy, where it applies, opens the records to users above the owner. For standard objects like Account, Opportunity, and Case, Grant Access Using Hierarchies is always on and cannot be turned off. For custom objects you can uncheck it, which removes the automatic hierarchy access entirely, leaving only the record owner and whatever the OWD itself grants. A Private custom object with the hierarchy disabled is visible only to the owner, period. [^2][^3][^6]
+
+Why does this matter for a scenario? Requirement r-1a hands you a situation like "reps see only their own opportunities and managers see their team's." The instant you read ownership-based visibility plus a manager relationship, your mind should go to Private. Private makes ownership the only path, so a rep sees their own records. The manager sits above the rep in the hierarchy, so the manager sees the subordinate's records through the hierarchy once the opportunity OWD is Private. That is the exact baseline for the "my records plus my team" requirement, and it is the foundation behind the first quiz question in this lesson. [^2][^3]
+
+### Public Read Only: everyone reads, owners edit
+
+Public Read Only is the middle value, and it answers a different kind of requirement. With Public Read Only OWD, all users can view and report on the records, but only the record owner, and users above them in the hierarchy, can edit them. Read access is universal across every internal user with the object Read permission; edit is restricted to ownership and hierarchy. [^2][^5]
+
+This is the value you reach for when a requirement says "readable by everyone, editable only by owners." A reference object, a product catalog, a shared knowledge base: these are the natural Public Read Only candidates. Every user needs to look at them, almost nobody should be changing them, and ownership decides who the editors are. The exam loves this distinction because it separates a scenario from the two extremes: Public Read/Write would let everyone edit, which is too open, and Private would hide the records from everyone who is not an owner, which is too closed. Public Read Only is the deliberately balanced middle. [^1][^5]
+
+The third quiz question in this lesson tests exactly that reading. A new custom object should be readable by everyone but editable only by owners. Private would hide records from non-owners, which fails the "readable by everyone" half. Public Read/Write would let everyone edit, which fails the "editable only by owners" half. Public Read Only gives universal read with owner-only edit, so it is the correct setting. [^2][^5]
+
+### Public Read/Write: everyone reads and edits
+
+Public Read/Write is the most permissive common OWD, and it is rarely the right foundation for a restrictive scenario. With Public Read/Write, every user with the object's Read/Write permission can read and edit every record, regardless of ownership. Access to a record no longer depends on who owns it, because ownership-based granularity is dropped for the whole object. Some standard objects also offer Public Read/Write/Transfer, which adds the ability to transfer record ownership, but the core Public Read/Write is the value that appears in exam scenarios. [^1][^2][^5]
+
+When would you legitimately use it? A small, highly collaborative team where every member must maintain every record, an internal wiki, a shared list that the whole org co-edits. The moment the scenario introduces sensitive data, restricted populations, or a need to limit who changes what, Public Read/Write becomes the wrong answer. The exam uses it as the "too open" option and expects you to recognize it as such. A requirement that says "readable by everyone but editable only by owners" is Public Read Only, not Public Read/Write, and confusing the two is a whole class of wrong answer. [^2][^5]
+
+### Controlled by Parent: the child inherits everything
+
+Controlled by Parent is the odd one out, because it is not an access level of its own. It appears on the object that sits on the detail side of a master-detail relationship, and it means the child object has no independent record-access setting at all. The child's access is inherited entirely from the parent record's sharing. A user who can read the parent can read every child record under it; a user with read/write on the parent gets read/write on the children; a user who cannot see the parent cannot see any of its children. You do not configure the child's sharing; you configure the parent's, and the child follows. [^1][^5][^7]
+
+Because a master-detail child inherits its sharing from the master, Salesforce locks the child's OWD to Controlled by Parent. It is not a choice you pick on a master-detail detail object; it is the only value available, and it is not editable. The child performs no independent sharing calculation. You cannot create sharing rules, manual shares, or Apex shares directly on a detail object in a master-detail relationship, because there is no sharing model of its own to extend. All access flows through the parent. [^5][^7]
+
+This is the fact behind the second quiz question in this lesson. Why does changing the OWD of a detail object in a master-detail relationship have no effect on record access? Because the detail object is Controlled by Parent, so its OWD is ignored and it inherits the master's sharing. Editing a child's OWD when it is already locked to Controlled by Parent does nothing, because there is no independent setting to change. The confusion is common: an architect sets up a master-detail, wants to tighten the child, and reaches for the child's OWD. The correct move is to configure the parent's sharing instead, because the child's visibility is the parent's visibility, no more and no less. [^1][^5][^7]
+
+The architectural consequence is important to hold onto. In a master-detail model, giving someone access to the parent gives them access to every child under it, and you cannot make the child more restrictive than the parent or more open than the parent. The child's owner field is effectively not a sharing factor, because the child has no independent owner for the purpose of the sharing model. That coupling is often a feature, a whole invoice with its line items moves together, but it is a constraint when you want a child to have a different owner or a different audience than its parent. When you need children with independent owners and sharing, you reach for a lookup instead, which leads to the next distinction. [^5][^7]
+
+### Lookup children: no Controlled by Parent
+
+The most common misconception after master-detail is to assume lookup relationships get the same treatment. They do not. A lookup child object does not have Controlled by Parent. Each object in a lookup relationship has its own OWD and its own sharing, because the child can have a different owner from the parent and a different audience. Access to a lookup child does not grant access to the parent, and access to the parent does not grant access to the child, with a narrow exception for implicit sharing on certain relationships. [^1][^5][^8]
+
+This independence is the reason architects pick lookup over master-detail when they need per-object sharing. A master-detail forces shared access and cascade ownership; a lookup keeps each object's sharing separate, so you can set a tight OWD on the parent and a different, possibly more open, OWD on the child, or the reverse. The trade-off is that you lose the automatic cascade features of master-detail, the roll-up summaries and the cascade delete, and you must manage the two objects' sharing as two separate decisions. The exam expects you to connect the data-model relationship type you built to the OWD you can or cannot set. [^5][^7][^8]
+
+### Standard objects ship with defaults you should revisit
+
+A subtle exam point is that standard objects arrive with default OWDs that are not necessarily what your requirement wants, and they vary by object. Opportunity and Case default to Private in many orgs, which is sensible for sensitive pipeline and support data, but the defaults are only a starting point. Account often ships as Public Read/Write or Public Read Only in classic orgs, which can be far more open than a sensitive-data requirement allows. The architect's job under r-1a is not to accept the shipped defaults; it is to set each object's default deliberately to the most restrictive value the scenario allows, before building any other sharing. [^1][^3][^5]
+
+Deliberately lowering a default matters as much as the OWD choice itself. If Account defaulted to Public Read/Write in a scratch org and your requirement says accounts must be restricted, the correct foundation is to lower Account to Private (or Public Read Only, depending on the read requirement) before you add sharing rules. Leaving the open default and relying on nothing is a data-exposure failure; leaving it and trying to fix it with sharing rules is also wrong, because sharing rules can only add access, never take it away. Only OWD can establish the closed baseline. [^1][^3]
+
+## Worked example: turning a requirement into OWD values
+
+Walk a concrete scenario through the selection so the judgment is not abstract. Adroit lands a client with a medical-device sales org. The requirement set: (a) reps can see only their own opportunities and their team leads see their team's; (b) the product catalog is visible to everyone across the org but only the product team can change it; (c) each quote is an Order Line Item that must move with its Order, with no independent audience; (d) an audit note object is for a specific reviewer population created surgically.
+
+Start with the opportunities, requirement (a). Own record plus a manager seeing the team's records: that is Private OWD on Opportunity. Reps see their own; the team lead above them in the hierarchy sees the team's through the hierarchy. No sharing rule yet, because the hierachy delivers the manager view. This matches the first quiz question's setup exactly. [^2][^3]
+
+Requirement (b), the catalog. Everyone reads, only the product team edits. That is Public Read Only OWD. Universal read arrives from the OWD itself; the product team's edit is ownership plus whatever additional access the role hierarchy grants above the owners. If the requirement wanted a named product team editing records anyone owns, you would add an ownership-based sharing rule on top, but the OWD floor is Public Read Only. [^2][^5]
+
+Requirement (c), the order line item. It must inherit the Order's access with no independent audience, that is a master-detail relationship, so its OWD is Controlled by Parent. You set the OWD on Order to the right baseline, Private or Public Read Only per the requirement, and the line items inherit it automatically. You never touch the line item's OWD, because it is locked, and editing it has no effect. [^1][^7]
+
+Requirement (d), the audit note. It is a small, sensitive, reviewer-only object. The natural foundation is Private OWD, and then you open the reviewer population with a sharing rule or Apex sharing later. You do not set the OWD to Public Read/Write and hope a restriction rule filters it, because OWD is the floor and Public Read/Write is far more open than a restricted audit population needs. [^1][^2]
+
+Now reverse the discipline. For every one of these, the wrong instinct is to set OWD to Public and try to close individual records with sharing rules or restriction rules later. Restriction rules exist, but they are an advanced tool with object and edition limits, and they are not a substitute for setting the correct restrictive OWD first. The architect's default posture is: start from Private, then open access explicitly through the hierarchy and sharing rules. [^3][^6]
+
+## Configuration Walkthrough
+
+The numbered steps to set OWD correctly in a real org, which is what the "recommend" verb in r-1a ultimately becomes:
+
+1. In Setup, use the Quick Find box to search for Sharing Settings and open it. This is the home of the entire sharing model, and the Organization-Wide Defaults matrix is the first thing you review. [^1][^4]
+2. Review the matrix row by row, every object and its current Default Internal Access and Default External Access. Do not trust the shipped defaults; read them against the requirement. This is the audit step that most admins skip and the one that prevents silent exposure. [^1][^4]
+3. Set each object's default to the most restrictive value the scenario allows. When in doubt, that is Private, unless the requirement genuinely says everyone must read or edit. If everyone reads, Public Read Only; if everyone edits, Public Read/Write, and only then. [^2][^3]
+4. For every master-detail child, confirm Controlled by Parent is in effect. You do not set it, you verify it is there and locked, which confirms the child's access follows the parent and your sharing work happens on the parent. [^1][^7]
+5. Decide the Default External Access for each object separately, remembering the external default can never be more permissive than the internal one, and default external to Private for most objects, opening access only as partner and customer communities require. [^1][^4]
+6. Document that OWD is the baseline. Plan to open access via role hierarchy and sharing rules, never by relaxing OWD to Public unless the requirement is genuinely org-wide. Write this decision down so the next architect does not silently widen the floor. [^1][^3]
+
+Remember that updating OWD triggers a sharing recalculation. When you reduce access, say from Public Read/Write to Private, Salesforce recalculates sharing in the background to apply the change to every existing record. On large or high-volume orgs this recalc can take a long time and can surface as sharing recalc emails. That is not a reason to skip the change, but it is a reason to schedule OWD tightening deliberately and to test on representative data volumes before rolling out to a production-sized org. [^3][^9]
+
+## Exam Traps
+
+Three mistakes dominate this requirement, and the exam builds its wrong answers around them.
+
+First, OWD cannot be more open for one group and more closed for another. It is a single per-object baseline that applies to all users evenly. A requirement that wants the sales team at one level and finance at another is not solved by two OWDs on the same object; the difference belongs in the sharing layer above, the role hierarchy, sharing rules, groups, teams, or programmatic sharing, all layered on the single OWD floor. [^1][^3]
+
+Second, Controlled by Parent means the child's OWD is ignored. In a master-detail relationship the detail child inherits fully from the parent, so editing the child's OWD has no effect, because there is no independent setting. The fix for a child whose access is too open or too closed is to configure the parent's sharing, not the child's. Reaching for the child's OWD in a master-detail design is one of the most common and most costly mistakes in sharing design. [^1][^5][^7]
+
+Third, setting OWD to Private automatically applies to all users, including the record owner's managers, only if the hierarchy is enabled for the object. For standard objects the hierarchy cannot be turned off, so managers do see subordinates' Private records. For custom objects, Grant Access Using Hierarchies can be unchecked, which removes that automatic manager access and leaves only the owner and what OWD grants. A Private custom object with the hierarchy disabled is visible only to its owner, and confusing "Private" with "Private plus hierarchy" changes the answer to a scenario. [^2][^3][^6]
+
+A fourth, subtler trap: relying on the shipped standard-object defaults. Opportunity ships Private in many orgs, but Account can ship Public Read/Write or Public Read Only. Recommending OWD means actually reading the matrix and setting each object deliberately, not assuming the default matches the requirement. [^1][^5]
+
+## Try It
+
+Pull up a sandbox and make the model tangible. First, open Sharing Settings and photograph the matrix in your memory: read the Default Internal Access for Account, Opportunity, Case, and a couple of custom objects. Note which are Private, which are Public Read Only or Public Read/Write, and which detail objects are locked to Controlled by Parent. That read-through is the full r-1a audit skill in miniature. [^1][^4]
+
+Second, create a master-detail relationship between a parent Order and a child Order Line Item, then try to change the child's OWD. Confirm it is locked to Controlled by Parent and that editing it has no effect. Then change the parent's OWD and confirm the child's access follows. That direct experiment is the fastest way to internalize why the second quiz question's answer is "the child inherits the master's sharing." [^1][^7]
+
+Third, build the Private-then-open pattern. Set a custom object's OWD to Private with the hierarchy enabled, create two users at different roles, and confirm the manager sees the subordinate's records while an unrelated user does not. Then uncheck Grant Access Using Hierarchies on a second custom object, recreate the scenario, and confirm the manager no longer sees the subordinate's records. Feeling the hierarchy checkbox flip the outcome is the whole difference between the two Private readings. [^2][^3][^6]
+
+Finally, test Public Read Only against the quiz scenario. Set a custom object to Public Read Only, confirm every user can read every record, and confirm only the owner can edit another user's record. Then set it to Public Read/Write and confirm everyone can edit everything. The contrast between those two is the difference the third quiz question scores on. [^2][^5]
+
+## What's Next
+
+You can now read the OWD matrix, explain what Private, Public Read Only, Public Read/Write, and Controlled by Parent mean at runtime, separate master-detail inheritance from lookup independence, and turn a requirement into a per-object default. Lesson 12, OWD Scenarios and Interplay with Role Hierarchy and Sharing Rules, plus Recalculation Triggers (r-1b), takes the foundation you just built and exercises it. It teaches the scenarios where the role hierarchy and criteria-based and ownership-based sharing rules open access on top of a Private or Public Read Only baseline, and how sharing recalculation behaves when those rules and hierarchical grants change. Where this lesson gave you the floor, lesson 12 shows you how the mechanisms above it actually combine, which is the next decision class the r-1b requirement scores.
+
+## Related Requirements
+
+- Lesson 10 of 36 (p-5b): Programmatic with/without sharing, runAs, user vs system mode
+- Lesson 12 of 36 (r-1b): OWD scenarios, role hierarchy and sharing rules, recalculation triggers
+- Lesson 13 of 36 (r-2a): Role hierarchy fundamentals
+- Lesson 15 of 36 (r-3a): Sharing rules criteria and ownership
+
+## References
+
+[^1]: Salesforce Certified Platform Sharing and Visibility Architect Exam Guide. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.security_org_wide_defaults.htm&type=5)
+[^2]: Setting and Reviewing Organization-Wide Defaults. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.security_org_wide_defaults.htm&type=5)
+[^3]: Understanding the Salesforce Sharing Model. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.securityImplGuide.meta/securityImplGuide/security_sharing_overview.htm)
+[^4]: Control Access to Records (Trailhead). [trailhead.salesforce.com](https://trailhead.salesforce.com/content/learn/modules/data_security/data_security_records)
+[^5]: Organization-Wide Sharing Settings and the Sharing Model. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.securityImplGuide.meta/securityImplGuide/security_owd_default_settings.htm)
+[^6]: Role Hierarchy. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.securityImplGuide.meta/securityImplGuide/security_roles_understanding.htm)
+[^7]: Define Master-Detail Relationships. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.masterdetailrelationships_defined.htm&type=5)
+[^8]: Account Contact Relationships. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.accountcontact_relationships.htm&type=5)
+[^9]: About Sharing Recalculation. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.security_recalc_considerations.htm&type=5)
