@@ -1,0 +1,116 @@
+---
+title: "OmniStudio T-8: Resolve Publishing & Deployment Issues"
+slug: day-45-t-8-resolve-publishing-deployment-issues
+series: omni-studio-cert
+lesson: 45
+excerpt: "The deploy logged a success and the users still see the old OmniScript. The component renders perfectly in the sandbox and throws in production. A deploy fails outright because a referenced Data Mapper was never included in the package. These three reports are the whole of requirement T-8: publishing and deployment issues. Each one traces to a different failure, but they share one root cause in the developer's model of what a deploy actually does. This lesson separates deployment from publishing, teaches you the dependency and version checks that prevent a broken target org, and gives you the exact diagnostic sequence for reproducing and fixing a component that made it into the wrong org in the wrong state."
+date: "September 23, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [OmniStudio, Troubleshooting]
+---
+
+A deploy logs success, and the users who open the app still land on the old version of the OmniScript. [^2] The component you just moved into production renders perfectly in the sandbox, and the moment a real user runs it, it fails. A different deploy does not even start: the log says a referenced field or Data Mapper is missing, and you cannot tell whether it was never included or just not deployed yet. [^2] These three reports are requirement T-8: resolve publishing and deployment issues. It is the eighth requirement in the Troubleshooting and Debugging domain, and it is the closest thing the OmniStudio Developer exam has to a release-management question. [^1]
+
+The root misunderstanding behind all three symptoms is one wrong idea about what a deploy does. Developers treat "the deploy succeeded" as "the component works for the user." It does not. Deployment moves component definitions into an org. Publication, which in OmniStudio is expressed as activation, makes the current version the one the runtime hands to end users. [^2][^3] The two are separate states, and they can disagree. That gap, a component that is in the org but not active, is the single most common publishing issue in the domain. [^3]
+
+This lesson gives you the diagnostic sequence that keeps the two states from colliding. You will learn to confirm the component is actually active in the target org, to read a deployment log for missing or out-of-order dependencies, to verify that versions line up across environments, and to deploy base components before the components that depend on them. [^2][^4] The exam tests exactly these checks, and each one maps to a failure you can name from the first symptom.
+
+## Deep Dive
+
+### Deployed is a different state from published
+
+The word "deploy" covers two different facts in OmniStudio, and collapsing them is where publishing bugs are born. [^2] A deployment is the act of moving a component definition from a source org, a data pack, or a set of source files into a target org. The component now exists there. [^2][^3] Published, in the OmniStudio sense, means the component version has been activated so the runtime, the OmniScript engine, the FlexCard service, the Integration Procedure runner, treats it as the live definition that users actually hit. [^3]
+
+The clearest proof that the two states are independent comes from how the Salesforce CLI deploys OmniStudio metadata. When you deploy an OmniScript or FlexCard with the CLI, the component is created or updated in the target org, but it is not automatically activated. [^3] The deployment succeeds, the log is green, and the users see the old behavior, because the previous version is still the active one. [^2][^3] The fix is a manual step in the target org: open the component in the OmniStudio Designer, deactivate the current version, then activate the new one. [^3] That reactivation is what regenerates the Lightning Web Component the runtime serves. Skip it and the deploy counts as done while the component stays invisible to the user. [^3]
+
+The managed-package Build Tool behaves differently, and the difference is worth knowing for the exam. [^2] The Build Tool (formerly the Vlocity Build Tool, or VBT) packages OmniStudio components as data packs in JSON form and, when it deploys them, it activates the deployed version by default. [^2] Deploying version 5 of an Integration Procedure with the Build Tool marks that version active and the previously active version inactive. [^2] So the same conceptual gap, deployed versus published, exists in both runtimes, but the activation is automatic in one and manual in the other. [^2][^3]
+
+For the exam, hold onto the distinction as a hard rule: a deploy that lands a component in the org does not prove the user can see it. [^2][^3] Before you spend any time debugging logic, confirm the publish state. The most efficient first check for a "users see the old version" report is: is the new version the active version in the target org? [^3] That one question, answered by opening the component and reading its version and status, resolves a majority of T-8 reports before any deeper investigation starts. [^2]
+
+### Missing metadata and dependency order
+
+The second common deployment failure is a component that references something that was not included in, or not deployed before, the deployment. [^2] An OmniScript that calls a Data Mapper, a FlexCard that reads an Integration Procedure, a Data Mapper that maps an object your package never brought along: every one of these is a dependency edge, and every one of them can break the deploy or break the component at runtime. [^2]
+
+The Salesforce CLI makes this easy to get wrong, because the CLI deliberately treats each OmniStudio component as a standalone metadata file. [^2] When you deploy an OmniScript that has a child FlexCard, the CLI deploys only the OmniScript. It does not look at the definition and decide to bring the FlexCard with it. [^2] The flexibility is real: you can incrementally deploy only the files you changed. [^2] The cost is that you, not the tool, are responsible for assembling the complete set of dependencies and for getting their order right. [^2]
+
+The Build Tool takes the opposite approach. [^2] A data pack is a collection of components and related functionality packaged for deployment, and the Build Tool deploys an OmniStudio component along with its associated dependencies when you deploy the data pack. [^2] You can still choose the depth of dependency to bring along, or deploy a standalone component with none, but the tooling validates and includes dependencies in a way the CLI does not. [^2]
+
+The failure mode you need to diagnose is identifiable from the deployment log. [^2] A component named in the log as missing or unresolved is usually one of two things: metadata that was never included in the deploy, or metadata that was included but deployed in the wrong order. [^2] The missing case is a completeness problem: the referenced component lives in a data pack, a set of source files, or a deployment you did not run. [^2] The ordering case is a sequence problem: the consumer arrived before the base component it depends on, so at the moment the consumer was validated, its dependency was not yet in the org. [^2] Both read the same way in the log, and both are fixed by deploying the dependency first, or by redeploying with the dependency included. [^4]
+
+### Version and API alignment across environments
+
+The third failure is environment drift. [^4] A component works in the sandbox and fails in production, or works in a dev org and fails in the next one up the chain, and the most common explanations have nothing to do with the component's logic. [^3][^4] They are version and publish-state differences between the two orgs.
+
+OmniStudio components are versioned. An OmniScript and an Integration Procedure carry a version number, and the org keeps multiple versions so the active one can be changed without losing history. [^4] The same-named component in a sandbox and in production can be at different versions, and only the versions that exist in the target org can be the active one there. [^4] If a newer version was built and tested in the sandbox but the deploy only carried the older version into production, production users never see the tested behavior. [^2][^4] The sandbox report and the production report differ not because the component is broken but because the environments hold different versions. [^4]
+
+The second difference is publish state. [^3] A component that is active in the sandbox can arrive in production inactive, either because the deployment tool did not activate it, as with the CLI, or because no one ran the activation step. [^3] The component then behaves, from the user's side, as if the update never happened, even though the definition is present. [^3] So the correct first move for a sandbox-works, production-fails report is to compare two facts between the environments: which version each org holds, and which version is active in each. [^3][^4]
+
+There is also an API and runtime dimension. Components built on a newer OmniStudio runtime can reference capabilities an older runtime in the target org does not have. [^1] The exam guide ties this to the Runtime requirement, and the practical check is to confirm that the target org is running a version of OmniStudio, and the relevant runtime, that is at least as recent as the version the component was built against. [^1] When a component deploys cleanly and still fails only in the older environment, version compatibility of the platform is a real suspect alongside version of the component itself.
+
+A useful tool for the version side is the Version Compare dashboard, available for the managed-package runtime. [^4] It lets you pick a source, a component type, a component, and a base and target version, then find the differences between them. [^4] That turns the "which version is in each org" question into a concrete diff you can read, which is exactly the evidence you want before changing anything. [^4]
+
+### Source versus package deployment
+
+The phrase "deploying OmniStudio" hides two entirely different mechanisms, and choosing the wrong one for your org produces a class of T-8 failures that looks like a component problem. [^2][^3]
+
+Source deployment uses the Salesforce CLI against the Metadata API. [^3] It treats each OmniStudio component as source metadata, and it works on the standard runtime with the OmniStudio Metadata API enabled. [^3] The UI name and the Metadata API type name differ, which trips up almost everyone the first time: an OmniScript is `OmniScript`, a Data Raptor is `OmniDataTransform`, a FlexCard is `OmniUiCard`, and an Integration Procedure is `OmniIntegrationProcedure`. [^3] OmniStudio source types do not support source tracking, so you must request them explicitly with `--metadata` or a manifest rather than relying on a pull. [^3] And, repeating the load-bearing point, a CLI deploy does not activate. [^3]
+
+Package deployment uses data packs, either through the Build Tool or through IDX Workbench on the managed-package runtime, where OmniStudio configuration lives as data rather than metadata and the CLI is not appropriate. [^2] The help notes explicitly that you should not use the Salesforce CLI when operating on a managed-package runtime environment. [^2] The Build Tool produces a YAML manifest that describes the deployment project, packages components as JSON data packs, brings dependencies along, and activates on deploy. [^2][^3]
+
+The ordering and dependency rules differ between the two, which is the exam-relevant point. [^2] With the CLI, you own the dependency set and the order, and each component is standalone. [^2] With the Build Tool, the data pack resolves and includes dependencies, and activation is default. [^2] Getting the tool wrong for the runtime is its own failure: running a source-style CLI deploy against a managed-package org yields nothing for the OmniStudio types, because the data is not metadata in that org. [^3] Match the deployment method to the runtime before you diagnose anything else.
+
+### The diagnostic sequence
+
+When a component makes it to the wrong org or the wrong state, work the checks in a fixed order so you do not hunt in the wrong place. [^2][^3][^4] The order matches the frequency of the cause.
+
+First, reproduce in the target org. Confirm the version that is active there and confirm the component is actually activated, not just present. [^2][^3] Second, read the deployment log for missing or unresolved dependencies. [^2] A name in the log that was not in the deploy is the answer. [^2] Third, verify the component versions line up between source and target. [^4] Fourth, confirm the publish state: deployed is not activated, and deactivated is not published. [^2][^3] Work these four before you touch the component's logic, because each of them is cheaper to check than a wrong debugging session and each explains a class of reports the component itself is not causing.
+
+## Config Walkthrough
+
+Walk a failed deployment to a clean resolution with these steps, in order.
+
+1. Confirm the component is published and activated in the target org. Open the OmniStudio Designer in the target org, locate the component, and read its version and status. [^3] If the version you expected is present but not active, deactivate the current active version and activate the new one, which regenerates the Lightning Web Component the runtime serves. [^3] For a CLI-style deploy, expect to do this manually every time. [^3]
+
+2. Check the deployment logs for missing or dependency failures. Open the deployment or deploy status from your tool of choice, and look for a referenced component reported as missing, failed, or unresolved. [^2] Determine whether that component was never included in the deploy or was deployed in the wrong order. [^2]
+
+3. Verify version compatibility across environments. In the target org, confirm which version of the component is present, which is active, and that the target runs an OmniStudio runtime at least as recent as the version the component was built against. [^1][^4] Where the managed-package Version Compare dashboard is available, use it to diff the base and target versions directly. [^4]
+
+4. Deploy dependencies first, then consumers. When you redeploy, include every referenced component, and land the base components (objects, Data Mappers, Integration Procedures, child FlexCards) before the OmniScripts and Flow-like components that call them. [^2][^4] After the redeploy, return to step one and confirm the active version in the target org is the one you intend users to see. [^3]
+
+## Exam Traps
+
+Three traps on this requirement, and how to avoid each.
+
+Treating "deployed" as "published." [^3] A successful deploy is not proof the user sees the change. Activation is the publish step, and with a CLI deploy it is manual. [^2][^3] Whenever a question describes a component that deployed but users still see old behavior, the publish state is the first suspect, not the component logic.
+
+Deploying consumers before their dependencies. [^2] The Salesforce CLI deploys each component standalone and does not bring dependencies along. [^2] If a question shows a deploy failing because a referenced component is missing, the answer is completeness or ordering of metadata, not a license, browser, or unrelated setting. [^2]
+
+Assuming environments are version-identical. [^4] Sandboxes and production rarely hold the same component versions, the same active versions, or the same OmniStudio runtime. [^3][^4] A sandbox-works, production-fails question is answered by checking version and API compatibility plus publish state in production, not by blaming the sandbox's configuration. [^3][^4]
+
+## Try It
+
+Use a real org you can deploy into. In a sandbox, make a small change to an OmniScript, save it, and verify it updates behavior. Then deploy it to a second sandbox by copying the source and deploying with the Salesforce CLI, and do not run any activation step. Open the OmniScript in the target org: it is present, its new version is there, and users would still see the old behavior, because it is not active. [^3] Now activate it and confirm the Lightning Web Component regenerates and the new behavior appears. [^3] That one exercise makes deployed-versus-published concrete, and it is the same reproduction you will run first on any real T-8 report.
+
+For the dependency half, deploy an OmniScript that calls a Data Mapper, but leave the Data Mapper out of the deploy. Read the log: the missing dependency is named there. [^2] Add it, deploy the Data Mapper first, then the OmniScript, and confirm the log is clean and the component activates. [^2][^4]
+
+## What's Next
+
+You can now separate deployment from publishing, confirm a component is actually active in the target org, read a deployment log for missing or out-of-order dependencies, and verify version and API alignment across environments before you blame a component's logic. [^1][^2][^3][^4] Lesson 46, Using the Debug Console (T-9), is the final requirement in the course. It pulls the diagnostic habits from this lesson and the rest of the Troubleshooting and Debugging domain into one place: the Debug Console is the tool that shows you the raw requests, responses, and payloads behind the symptoms you have spent the last several lessons learning to trace. [^1] Once it publishes, this OmniStudio Developer track wraps and restarts at lesson 1 as a deeper pass.
+
+## Related Requirements
+
+- Resolve OmniScript Errors and Rendering, Lesson 39 of 46 (T-2)
+- Resolve Data Mapper Output and Mapping Issues, Lesson 40 of 46 (T-3)
+- Resolve Caching Problems, Lesson 42 of 46 (T-5)
+- Resolve Permissions and Access Issues, Lesson 43 of 46 (T-6)
+- Resolve Missing or Broken JSON, Lesson 44 of 46 (T-7)
+- Using the Debug Console, Lesson 46 of 46 (T-9)
+- Runtime and Upgrades, Lesson 3 of 46 (F-3)
+
+## References
+
+[^1]: [OmniStudio Developer Certification Exam Guide, Salesforce Help](https://help.salesforce.com/s/articleView?id=005298971&language=en_US&type=1)
+[^2]: [Deployment of OmniStudio for Managed Packages Components Between Orgs, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_deploy.htm&type=5)
+[^3]: [Fetching OmniStudio Metadata with sf CLI, Software Insights](https://www.softwareinsights.dev/posts/salesforce-admin-fetch-omnistudio-metadata/)
+[^4]: [Compare OmniScript and Integration Procedure Versions, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_compare_omniscript_and_integration_procedure_versions.htm&type=5)
