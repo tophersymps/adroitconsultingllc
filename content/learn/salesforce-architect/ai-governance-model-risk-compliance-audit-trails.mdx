@@ -1,0 +1,123 @@
+---
+title: "Lesson 50: General Systems Architecture: AI Governance, Model Risk, Compliance, and Audit Trails"
+slug: ai-governance-model-risk-compliance-audit-trails
+series: "salesforce-architect"
+lesson: 50
+excerpt: "The last lesson of the general systems architecture run: how an organization governs the AI systems it builds and buys. Not the plumbing of a single model, but the discipline around it. Model risk is the chance that a model produces a wrong, unsafe, or unfairly biased outcome because it was misbuilt, misused, or ran outside the context it was trained for. Governance is the structure that decides who is accountable, what gets approved before a model ships, and how a failure gets caught and traced. This lesson builds a defensible control stack: tier models by risk, make the vendor contract and the internal review mirror each other, and make the audit trail the thing that turns a model from a black box into a documented decision you can reconstruct and defend. The lesson maps the NIST AI Risk Management Framework's Govern, Map, Measure, Manage functions onto a worked example, connects compliance with real regulation, and shows you the platform controls, Einstein Trust Layer and Shield, that give a Salesforce architect an audit trail on the platform itself."
+date: "September 23, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [Architecture, AI at Work, Governance, Model Risk, Compliance, Audit, Salesforce Shield, Einstein Trust Layer, Risk Management]
+---
+
+# Lesson 50: General Systems Architecture: AI Governance, Model Risk, Compliance, and Audit Trails
+
+Every lesson in this track has built a system, an integration, a security boundary, a piece of packaging. This one is different. It is not about building. It is about governing what you have built, and it is the architectural layer that most teams reach for last, sometimes not at all.
+
+Here is the problem in one line. **AI systems fail in ways that are harder to see, are triggered by words not code, and drift without anyone touching them, so you cannot govern them the way you govern a normal application.** A database query either returns the right rows or it does not. A model returns an answer that looks confident in every case, and it is often wrong in cases you did not test, and its behavior changes the moment your data or the vendor's weights change. Governance is the structure that makes that invisible risk visible and controllable. Without it, you have a system that makes or influences decisions, that touches customer data, that may be subject to regulation, and that no one can explain, defend, or trace after the fact.
+
+The thesis to hold through the whole lesson: **governance is an architecture decision, not an admin chore.** You decide, up front, how models get classified, who approves them, what evidence is required, and what gets recorded. Those decisions become control points the way a governor or a firewall becomes one. Get them right and you can run models with confidence. Get them wrong and you discover the gap only when a regulator, a client, or a lawsuit asks the question you cannot answer.
+
+## Define the terms first
+
+The vocabulary of AI governance is newer than the disciplines it borrows from, and precision matters because auditors and regulators use these exact words.
+
+- **AI governance**: the set of processes, roles, controls, and documentation that decide which AI systems an organization builds or adopts, who is accountable for them, and how their risk is reviewed across the whole lifecycle, from design to retirement. [^1]
+- **Model risk**: the potential for an AI or machine learning model to produce adverse outcomes due to errors, misuse, or the model operating outside the context it was built for. It is the same concept banking has managed for years under supervisory guidance on model risk management. [^1] [^2]
+- **NIST AI RMF**: the US National Institute of Standards and Technology's voluntary framework for managing AI risk. It organizes everything into four functions, **Govern, Map, Measure, and Manage**, and it is the closest thing the field has to a common vocabulary for this work. [^1] [^2] [^3]
+- **Lifecycle**: the arc an AI system travels, from design and data collection, through development and testing, to deployment, operation, monitoring, and finally retirement. Governance applies at every stage, not just at the launch gate. [^2]
+- **Risk tier**: a classification that sorts AI systems by the severity of the harm they could cause, so that the controls match the stakes. The EU AI Act uses a four-tier pyramid, from unacceptable risk (banned) through high risk (heavy obligations) and limited risk down to minimal or no risk. [^4] [^5]
+- **Model card**: a structured document that records what a model was built to do, the data it was trained and evaluated on, its known limitations, and its measured performance. It is the model's public explanation, the artifact that turns a black box into something an auditor can read. [^2] [^3]
+- **Compliance**: conforming to the laws, regulations, and contractual obligations that apply to a system. For AI this is now a live field, with regional regulation such as the EU AI Act imposing graduated obligations by risk tier. [^4] [^5]
+- **Audit trail**: a chronological, tamper-evident record of events, showing who did what, when, and with what inputs and outputs. For AI it must capture the model's calls, the prompts, the retrieved context, the generation, and the human actions around it, so a past behavior can be reconstructed. [^6] [^7]
+- **Monitoring and drift**: the practice of watching a deployed model's behavior for change over time, because data distribution shifts and the model's answers degrade without any code changing. [^2] [^3]
+- **Incident and root cause**: the process of recording an AI failure as an event, working back to what caused it, and feeding the lesson back into the next build. NIST treats this as part of the Manage function, because a governance loop that does not close is just paperwork. [^2] [^3]
+
+## Why AI governance cannot be a checklist bolted on at the end
+
+A skeptical architect might think: we already have security reviews, we have change management, we have auditors, why does AI deserve its own governance layer? The honest answer is that the properties above, the invisibility, the trigger-by-words, the drift, defeat the assumptions those existing processes rely on.
+
+Take the classic launch process. You design, you test against a defined set of requirements, you get sign-off, you ship. That works because behavior is stable after ship. An AI model is not stable. Its output distribution shifts when the data feeding it changes, when the vendor releases a new version, when a prompt template is edited. It can be correct in training and wrong in production because the production inputs never appeared in testing. So a pre-launch review is necessary but nowhere near sufficient. You need **ongoing monitoring** that is itself part of the governance structure. [^2] [^3]
+
+Now take accountability. In a normal system you know who wrote the code and who approved the change. A model may have been fine-tuned by a vendor you never meet, evaluated on data you never saw, and deployed by a prompt an analyst wrote in a flow builder. The NIST RMF's Govern function exists specifically to force the question: who is accountable for this model's decisions, who has the authority to approve it, and who answers when it goes wrong? If you cannot name that person, you do not yet have governance, you have an accident waiting to be discovered. [^1] [^2]
+
+And take the audit question. A regulator, a client, or a plaintiff's lawyer does not ask "is your AI generally good?" They ask "what did this system do on three specific dates, for these specific customers, and why?" Answering that requires an audit trail that captures not just the output, but the input, the retrieved context, the model version, and the human review. That is an architectural requirement, because if you did not design the system to record it, you cannot produce it later no matter how confident you are. [^6] [^7]
+
+## The NIST AI RMF: a map for the whole discipline
+
+Before any specific control, get the organizing frame. NIST's AI Risk Management Framework is voluntary guidance, but it has become the de facto shared language, and it maps cleanly onto anything you build on Salesforce or anywhere else. Its four functions are meant to run as a continuous loop, not a one-time exercise. [^1] [^2] [^3]
+
+- **Govern**: the culture and structure. Who is accountable, what policies exist, how AI proposals get reviewed, what training people receive. This is the function most orgs skip, and it is the one that makes everything else hold. [^1]
+- **Map**: understand the context. What is the AI system for, who does it affect, where does its data come from, and what could go wrong, including the risks it introduces to third parties and society. You cannot manage a risk you have not named. [^2]
+- **Measure**: evaluate the risk. Testing, evaluation, monitoring for drift, measuring the trustworthiness characteristics such as validity, reliability, and fairness. This is where technical work meets governance evidence. [^3]
+- **Manage**: act on what you measured. Prioritize risks, apply mitigations, decide whether to deploy, and feed lessons learned back into the system and the next cycle. [^3]
+
+The loop closes because Manage produces lessons that reshape Govern's policies on the next pass. If you only ever do one pass of Map, Measure, and Manage, then deploy and walk away, you have ignored the RMF's core demand that this be **continuous**. AI risk changes as the model, the data, and the context change. [^2] [^3]
+
+## Risk tiers: matching control to stakes
+
+The single most useful governance decision you can make is to stop treating all AI the same and instead **tier it by the harm it could cause**. The EU AI Act gives you a worked model of exactly this thinking, and even where you are not legally bound by it, the logic transfers. [^4] [^5]
+
+The EU AI Act classifies systems into risk tiers. At the top, **unacceptable risk**, are uses the regulation bans outright, such as social scoring systems. Below that, **high risk**, are uses that materially affect individuals, things like assessing creditworthiness, making employment decisions, or evaluating an applicant's eligibility for benefits. High risk carries the heaviest obligations: the provider must maintain detailed documentation, implement risk management and data governance, enable human oversight, and keep records for traceability. There is a **limited risk** tier with transparency obligations, for example telling a person they are interacting with AI, and a **minimal or no risk** tier that is largely unregulated. The regulation's obligations phase in on a timeline, with enforcement powers exercising from August 2026. [^4] [^5]
+
+You do not need to be in the EU for this to matter. If you sell to EU customers, or host EU data, or work for a multinational, the Act's reach can pull your system into scope. But the larger point is architectural and jurisdiction-free: **a system that decides who gets a loan, a job, or access to a service needs a different weight of controls than a suggested-response helper in a contact center.** The framework survives even where the specific law does not.
+
+## The vendor contract and the internal review must mirror each other
+
+Here is the trap that catches most teams adopting AI through platforms like Salesforce. They buy into the platform's built-in AI features, or a vendor's managed model, and assume the vendor's promises substitute for their own governance. They do not. NIST's Map function explicitly flags third-party and pre-trained models as a risk area, because you are inheriting behavior you did not build and cannot fully inspect. [^3]
+
+The discipline that works is to treat the vendor contract as the outer ring of your own review. When you buy an embedded model, you do not get to redo its training data, so your control is the **contract and the configuration**: what data leaves your boundary, how the vendor uses or retains it, what new versions get pushed to you, and whether you can turn the feed on and off. The generation of an embedded agent is your audit trail even when the model is the vendor's. Your internal risk review should ask the same questions of the vendor that you would ask of your own build, and it should document the answers.
+
+Salesforce's own positioning is instructive. The Einstein Trust Layer is built around trust boundaries on a shared platform: it applies secure data retrieval and dynamic grounding so that the model uses validated org data rather than a prompt carrying arbitrary content, and it is part of a documented trust architecture that gives you a place to have this conversation. [^6] The point for governance is not the specific feature set, which changes, but the posture: you make your AI footprint auditable and data-protecting by design, and you record enough that a reviewer can reconstruct what happened.
+
+## A worked example: standing up governance for an embedded agent
+
+Let me make the whole thing concrete. Take a mid-size company that runs a Salesforce org and wants to roll out an assistant that drafts replies to customer support cases, grounded in the org's knowledge articles and the case data. This is a realistic, high-value, and genuinely risky use, because the assistant will touch customer data and generate text that goes back to customers.
+
+**Govern: name accountability up front.** Before anyone builds anything, the company assigns a product owner for the assistant and a risk owner, a person who signs that the deployment is acceptable. It writes a one-page policy for the AI use case: what the assistant may and may not do, who approves changes, and what triggers a re-review. This is the Govern function, and it is the difference between a controlled rollout and ten people each quietly enabling AI in their own flows. [^1]
+
+**Map: understand the system and its failure modes.** The team writes down what the assistant is for, which data it reads, who is affected (the customers whose cases get drafted, the agents who review), and what could go wrong: a draft that misstates a policy, leaked case data from an over-broad grounding scope, or a draft that sounds authoritative and is wrong. They classify it. It does not deny credit or hire anyone, so it is not the EU Act's highest-risk class, but it touches customer data and generates content, so it is not minimal risk either. They treat it as a mid tier that needs review, monitoring, and human oversight on every outgoing draft. [^2] [^5]
+
+**Measure: test and keep testing.** The team builds an evaluation set of representative cases with known-good replies, measures the assistant's drafts against them before launch, and crucially, does not stop at launch. Because the model can drift, they schedule a recurring evaluation and watch the distribution of drafts over time, checking for a rise in edits, a change in tone, or cases where agents redo the draft entirely. NIST's Measure function is explicit that you monitor in production, not just in the test lab. [^3]
+
+**Manage: respond and close the loop.** When the recurring evaluation catches a drift, for a shift in the knowledge base or a vendor model update, the team pauses, investigates, fixes the grounding or the prompt, and re-runs the evaluation. They log the incident, record the root cause, and the lesson feeds back into the next policy iteration. If a single draft does reach a customer with an error, the audit trail is what lets them find which prompt, which context, and which model version produced it. [^2] [^3]
+
+The assistant is now not a black box. It is a documented, tiered, monitored, re-reviewable decision, and every step produced evidence. That is governance, and it is indistinguishable, from the outside, from an architecture decision made deliberately.
+
+## Audit trails: the platform controls that make it possible
+
+By now the refrain should be clear: AI governance funnels down to evidence, and evidence funnels down to the **audit trail**. For a Salesforce architect this is an area where the platform gives you real controls, and you should know what they are and how to use them.
+
+On the Salesforce platform, two capability sets matter most. The first is the **Einstein Trust Layer**, the collection of guardrails that surround the models Salesforce provides, built around trust boundaries: secure data retrieval, dynamic grounding so the model uses validated org data, and transaction processing that keeps trust decisions auditable. [^6] The design principle is that your AI footprint should be data-protecting and auditable on the platform rather than a series of prompts flying out to a black box with no record.
+
+The second is **Salesforce Shield**, the paid add-on bundle, and within it the controls that produce the record you need. **Field Audit Trail** retains field-level change history for years, so you can answer "what changed and when" on the data your AI reads and updates. **Event Monitoring** tracks a large catalog of event types, including logins, API calls, report exports, and the actions an agent takes, with the detail needed to reconstruct user and system behavior. These are the raw material of an audit trail, the events you stitch together to answer the regulator's or client's question about what happened on a given set of dates. [^7] Combined with the Trust Layer's record of AI interactions, they give you the platform-side half of the audit story.
+
+Here is the architectural discipline that ties it together. Your **platform audit trail captures the system's actions**, your **AI audit trail captures the model's reasoning**, and your **decision record captures the human's approval**. A complete governance evidence set needs all three. Design your flows so that an agent action that changes state is surrounded by captured context: which user, which case, which model version, which human approved it. When the incident happens, that is the trail that lets you reconstruct it, and the difference between a solvable regulatory question and a professional crisis is whether that trail exists. [^6] [^7]
+
+## The pitfall to avoid
+
+**Treating data protection and system logging as if they were AI governance.** Encryption and event logging are necessary, and they are not sufficient. Encrypting your data does not tell you whether a model is drifting or whether a draft was wrong, and standard event monitoring does not capture the model's reasoning, the retrieved context, or the ground truth of a generation. Governance needs the layer above the platform controls: the risk classification, the accountability assignment, the evaluation cadence, and the decision record. Platform controls are the machinery. Governance is the discipline that decides what to record, why, and who reviews it. Use Shield and the Trust Layer, and build the governance on top of them.
+
+## Try it
+
+A client tells you they want to enable a generative assistant that will auto-draft outbound emails to customers based on their account data and recent cases, and they want to know "what do we need to do to be compliant and safe?" Answer before reading on.
+
+1. What is the first governance function you establish, and what does it produce? *(The Govern function: a named product and risk owner, a policy for the use case stating what the assistant may and may not do, and a defined review and approval process before any build. Without accountability, the other functions float.)* [^1]
+2. How do you classify this assistant under a risk-tier framework, and what does that classification buy you? *(It touches customer data and generates outbound content, so it is not minimal risk; because it does not deny credit or hire, it is below the EU Act's high-risk apex, but heavy enough to require review, monitoring, and human approval on every draft. The tier tells you how much control the design needs.)* [^4] [^5]
+3. Why is a pre-launch evaluation not enough for this assistant? *(Because models drift: the data, the knowledge base, or a vendor version change can shift its behavior after launch. NIST's Measure function requires ongoing production monitoring, not just lab testing.)* [^3]
+4. A customer complains that your assistant sent them an incorrect policy statement last month. What do you need to be able to reconstruct? *(The audit trail connecting the specific case and prompt, the retrieved context and model version, the generation, and the human review, which means the platform event log, the Trust Layer's AI interaction record, and your decision record aligned on the same event.)* [^6] [^7]
+5. You buy an embedded agent rather than building your own model. Where does your control actually live? *(In the contract and the configuration: what data leaves your boundary, how the vendor uses or retains it, and whether you can shut off or harden the feed; plus your own monitoring and the audit record of the agent's actions, because the vendor's model does not erase your accountability.)* [^3]
+
+## What's next
+
+You have now worked through the last of the general systems architecture lessons. You can take a non-obvious, cross-cutting concern, try AI governance, and turn it into a concrete set of decisions: who is accountable, how risk gets classified, what gets measured, and what gets recorded. The discipline of making an invisible failure visible and traceable is one you will carry forward everywhere.
+
+The next lesson switches context completely, down from the abstract layers to the device in your customer's hand. **Lesson 51 is on mobile architecture: offline support, sync strategy, and mobile security.** If AI governance was about deciding and recording, mobile architecture is about the opposite constraint, dealing with a user who is not connected, a device that cannot hold your whole data store, and data that has to reconcile when the phone comes back online. The two lessons fit together because both are about what you do when the tidy assumptions of a always-on, always-connected server stop holding.
+
+[^1]: nist.gov. [AI Risk Management Framework | NIST](https://www.nist.gov/itl/ai-risk-management-framework). The AI RMF's home page, describing it as voluntary guidance built around the Govern, Map, Measure, and Manage functions for managing AI risk across the lifecycle.
+[^2]: nist.gov. [Artificial Intelligence Risk Management Framework (NIST AI 100-1)](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf). The full AI RMF 1.0 document, defining the four functions, the lifecycle, trustworthy AI characteristics, and the governance and accountability structure.
+[^3]: airc.nist.gov. [AI RMF Core | NIST AI Resource Center](https://airc.nist.gov/airmf-resources/airmf/5-sec-core/). The RMF Core detailing the Govern, Map, Measure, and Manage functions and their categories and subcategories, including accountability, evaluation, monitoring, and third-party and pre-trained model risk.
+[^4]: digital-strategy.ec.europa.eu. [AI Act | Shaping Europe's Digital Future](https://digital-strategy.ec.europa.eu/en/policies/regulatory-framework-ai). The European Commission's description of the AI Act's risk-based approach, with the four-tier pyramid from unacceptable risk through high, limited, and minimal or no risk.
+[^5]: artificialintelligenceact.eu. [High-level summary of the AI Act](https://artificialintelligenceact.eu/high-level-summary/). A summary of the AI Act's risk classifications for high-risk systems and the enforcement timeline, including supervisory and enforcement powers from August 2026.
+[^6]: help.salesforce.com. [Einstein Trust Layer: Designed for Trust](https://help.salesforce.com/s/articleView?id=ai.generative_ai_trust_arch.htm&type=5). Salesforce's documentation of the Einstein Trust Layer and its trust architecture, including secure data retrieval and dynamic grounding that keep AI interactions running on validated org data.
+[^7]: salesforce.com. [Salesforce Shield | Salesforce](https://www.salesforce.com/platform/shield/). Salesforce's description of the Shield bundle, including Field Audit Trail for long-term field-level change history and Event Monitoring for tracking event types such as logins, API calls, and agent actions.
