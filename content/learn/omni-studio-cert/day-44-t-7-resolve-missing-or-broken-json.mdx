@@ -16,6 +16,8 @@ Requirement T-7 is about resolving missing or broken JSON. It sits in the Troubl
 
 The two words in the title are not the same problem, and naming them correctly is half the fix. Broken JSON is a malformed payload: syntax errors, unescaped characters, truncated responses. Missing JSON is an empty or absent value inside a payload that may otherwise be perfectly formed. Both strip data off a page, and both get filed as "the component is broken." Neither usually is. [^1] This lesson gives you the diagnostic sequence that tells them apart, starting with the raw JSON and ending with the path that is actually wrong.
 
+![Broken JSON is a malformed payload that fails to parse, while missing JSON is a valid payload whose expected value is absent; the defining tell is whether the raw JSON parses](</diagrams/day-44-t-7-resolve-missing-or-broken-json/1-broken-vs-missing.png>)
+
 ## Deep Dive
 
 ### Broken JSON is a malformed payload
@@ -46,6 +48,8 @@ Of the three missing-value causes, the wrong path is the one people hit most and
 
 Three kinds of mismatch cover most of it. Case is the first, `name` versus `Name`. Nesting is the second, a path that skips a level or adds one the payload does not have. Repeater context is the third, and it is the tricky one. When data comes back as an array, each element is a particular item, and a path has to point at the array and then at the element the field lives on, not at a field that only exists on individual items as if it were a top-level key. [^4][^7]
 
+![Path typos are the number one cause of a missing value; the three kinds of mismatch are case, nesting, and repeater context, and each must match the JSON key exactly](</diagrams/day-44-t-7-resolve-missing-or-broken-json/3-path-mismatch-types.png>)
+
 The exam distinguishes a path mismatch from a broken data source cleanly: one element references `account.Name`, the JSON key is `Account_Name`, and the question asks what is wrong. The data source is fine. The key is simply a different string. [^1] The disciplined habit is to read the keys as they really are, not as you think they are, and to copy them rather than retype them. The Data Mapper type-ahead guidance gives the exact technique: take the key from the Response node in the Action Debugger so you can never type it wrong. [^7]
 
 ### Duplicate keys overwrite values silently
@@ -53,6 +57,8 @@ The exam distinguishes a path mismatch from a broken data source cleanly: one el
 Some levels only allow you to have a bit of text in your output. When two elements in an OmniScript produce the same JSON node, or a Data Mapper writes the same output key twice, the JSON object cannot hold both. [^1] JSON objects are key to value maps, and a map can only store one value per key. The standard parser behavior is to keep the last value it saw for a duplicate key and let the earlier one go, with no error and no warning. [^1]
 
 This is the quietest destroyer of data in the whole requirement, because nothing prints an error. A mapper that writes `CustomerId` in one step and then writes `CustomerId` again later with a value you did not want simply replaces the first. An element named the same as an output key from an earlier action does the same thing. The component reads the surviving value, which is the one from lower in the order, and the data you expected to win has been silently dropped. [^1][^4]
+
+![Duplicate keys overwrite values silently: a JSON object stores one value per key, so the last value written wins and the earlier one is dropped with no error](</diagrams/day-44-t-7-resolve-missing-or-broken-json/4-duplicate-key-overwrite.png>)
 
 The diagnosis is to look for the duplicate, not to hunt for an error. When a field is blank or holds the wrong value and the source data is fine and the path is exact, ask whether another key with the same name is overwriting it. The Action Debugger shows the request and response for each action, and scanning the emitted keys for repeats is faster than any other check. [^2][^7]
 
@@ -67,6 +73,8 @@ The check is to follow how the value flows rather than to fix what you can see o
 ### The diagnostic habit: capture, validate, then trace
 
 Everything above collapses into one sequence, and it is the sequence the config walkthrough runs step by step. [^2][^3] Open the Debug Console, or its FlexCard and OmniScript equivalents, the Data JSON panel and the Action Debugger, and copy the raw JSON payload exactly as it arrived. Then validate it, which means actually parsing it, so that syntax errors and escaping failures surface immediately. Only after the payload parses do you trace each referenced path against the real keys, one at a time, checking case, nesting, and repeater context. [^7] Then you look for duplicates and escaping issues in the values you are about to trust. That order separates "the data is broken" from "the data is fine, the path is wrong," and it is the whole of T-7 in four moves.
+
+![The T-7 diagnostic sequence runs capture the raw payload, validate it by parsing, trace each referenced path against the real keys, then check for duplicates and escaping issues](</diagrams/day-44-t-7-resolve-missing-or-broken-json/2-diagnostic-sequence.png>)
 
 ## Configuration Walkthrough
 
