@@ -2,6 +2,28 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "project-risk-register-2026",
+    "title": "The Risk Register Is Not Paperwork",
+    "excerpt": "Only 31 percent of projects deliver on time, on budget, and in scope. The gap is not luck. It is whether you run risk as a weekly habit or file it at kickoff.",
+    "category": "Project Management",
+    "categoryColor": "pm",
+    "categoryGradient": "from-teal to-teal-dark",
+    "date": "September 23, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "10 min read",
+    "featured": false,
+    "tags": [
+      "Project Management",
+      "Delivery",
+      "Risk Management",
+      "Agile",
+      "Consulting"
+    ],
+    "bannerImage": "/banners/project-risk-register-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "feature-flags-deploy-release-2026",
     "title": "Feature Flags: Deploy the Code, Release It Separately",
     "excerpt": "Deploy and release are separate events. A feature flag puts the switch between them in your hands, so a bad release is a seconds-long rollback, not a redeploy.",
