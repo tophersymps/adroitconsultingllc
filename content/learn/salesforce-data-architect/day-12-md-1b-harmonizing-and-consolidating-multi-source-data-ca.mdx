@@ -1,0 +1,130 @@
+---
+title: "Data Architect MD-1B: Harmonizing and Consolidating Multi-Source Data, Canonical Modeling, and Hierarchy Management"
+slug: day-12-md-1b-harmonizing-and-consolidating-multi-source-data-ca
+series: salesforce-data-architect
+lesson: 12
+excerpt: "When four systems each hold a version of the same customer, the exam wants you to know the order of operations that turns those disagreeing records into one master representation. Harmonization comes first: you reconcile code sets, date and address formats, units, and value domains so the values are comparable. Then a canonical model gives you a neutral, business-level object and attribute model that every source maps into exactly once, which decouples N sources from M targets into a hub-and-spoke mapping instead of an N-times-M explosion. Only then do you consolidate, merging the harmonized records into a golden representation using identity resolution and attribute-level survivorship. This lesson walks the full flow, standardizes reference data, and covers hierarchy management: a single self-lookup parent field supports one hierarchy, while multiple simultaneous hierarchies such as a legal hierarchy and a reporting hierarchy need a separate hierarchy or junction object. A five-step configuration walkthrough, three exam traps, and a try-it exercise round out requirement md-1b. Day 12 of the Platform Data Architect exam prep."
+date: "September 23, 2026"
+author: "Adroit Consulting"
+readTime: "15 min read"
+tags: [Salesforce, Data Architecture, Master Data Management, Certification]
+---
+
+Before you read this lesson, sit with the problem the exam keeps returning to. An enterprise carries the same customer as an Account in Salesforce, as a business partner in SAP, and as a party in a billing system. Each record disagrees on the address, the phone number, and the industry code. Requirement md-1b asks you to compare and contrast approaches for harmonizing and consolidating data from multiple sources, including canonical modeling techniques and hierarchy management, so you can establish a consistent master representation across systems. [^1] The trap is that most people reach for the merge first. The exam wants you to know that merging is the last step, not the first, and that the work before the merge decides whether the merge produces a clean golden record or a pile of duplicates with the wrong winners.
+
+This lesson gives you the full data flow in the order the exam tests it: harmonize, then model canonically, then consolidate. You will learn what each step does, why the order matters, how to model hierarchies when sources disagree on structure, and how to keep the whole thing honest with stewardship and governance.
+
+## Harmonization: making values comparable before you merge
+
+Harmonization is the process of reconciling different representations of the same concept across sources. [^2] The same customer appears in one system as "John A. Smith, 123 Main St., NY" and in another as "J. Smith, 123 Main Street, New York." [^2] Those are the same person, but the systems treat them as separate entries because the values are not comparable yet. [^2] Harmonization is the act of making them comparable: reconciling different code sets, normalizing date and address formats, converting units, and aligning value domains. [^2]
+
+The exam draws a hard line between harmonization and consolidation. Harmonization happens before consolidation. You must make values comparable before you merge them, because merging values that still disagree on format or code produces duplicates and wrong winners. [^2] If one source stores dates as MM/DD/YYYY and another stores them as YYYY-MM-DD, and you merge without normalizing, the same event looks like two different dates. If one source codes the United States as "US" and another codes it as "USA," a merge that does not reconcile the code set creates two country values for one country. Harmonization is the step that removes those collisions so consolidation can do its job.
+
+Concretely, harmonization covers four kinds of reconciliation:
+
+- **Code sets.** One source uses "US," another uses "USA," a third uses "840" (the ISO numeric code). Harmonization maps all of them to a single canonical code.
+- **Formats.** Dates, addresses, phone numbers, and currency amounts arrive in different shapes. Harmonization normalizes them to one agreed format.
+- **Units.** One source records weight in kilograms, another in pounds. Harmonization converts to a single unit of measure.
+- **Value domains.** One source allows "Active," "Inactive," and "Pending"; another uses "A," "I," and "P." Harmonization aligns the allowed values to one domain.
+
+A useful way to separate harmonization from the steps around it: harmonization makes values comparable, consolidation merges comparable values into a master record, and write-back publishes the master back to source systems. [^2] Survivorship, which picks the winning attribute value, belongs to consolidation, not harmonization. [^3] If a quiz question asks which tasks belong to harmonization, look for the ones about reconciling code sets, normalizing formats, and standardizing units and value domains. Those are harmonization. Applying survivorship rules and writing the golden record back to sources are not; they come later in the flow.
+
+## Canonical modeling: the neutral layer that stops the mapping explosion
+
+Once values are comparable, you need a place to put them that no single source owns. That place is the canonical model.
+
+A canonical data model is a standardized, application-independent representation of data that serves as a common language between diverse systems. [^4] Instead of building point-to-point mappings between every pair of systems, you define one neutral, business-level object and attribute model, and every source maps into it. [^4] The canonical model then maps to the target, which in this course is Salesforce. [^4]
+
+The payoff is arithmetic. With point-to-point mapping, N sources feeding M targets requires N times M mappings. [^4] Four sources feeding two targets is eight mappings. Add a fifth source and you add five more. Add a third target and you add fifteen. The count grows multiplicatively and every change ripples across every pair. [^4]
+
+A canonical model collapses that to N plus M. [^4] Each source maps into the canonical model exactly once, and each target maps from the canonical model exactly once. [^4] Four sources and two targets is six mappings. Add a fifth source and you add one mapping. Add a third target and you add one. Change a source and you touch only that source's mapping to the canonical model, not every pair it talks to. [^4] This is the hub-and-spoke pattern: the canonical model is the hub, and each system is a spoke. [^5]
+
+The exam tests this as a direct question. Four source systems must feed two target systems. Which approach minimizes effort and future change? The answer is the canonical model that each source maps into and each target maps from. [^4] Point-to-point mapping scales poorly, a flat mapping spreadsheet per source does not give you a shared neutral layer, and direct database replication bypasses harmonization entirely. The canonical model is the only option that reduces N times M to N plus M and isolates change. [^4]
+
+A canonical model is not just a schema. It carries agreed definitions. The entity Customer is defined once, with standardized attributes, agreed formats, and data types. [^4] The attribute CustomerID is always an integer, and Email follows a strict pattern. [^4] Relationships between entities are defined and enforced. [^4] Standardization rules say how values are represented, such as date formats and units of measure. [^4] Validation logic checks incoming data against the canonical definitions. [^4] When you build this model, you are writing the contract between systems, and that contract is what makes consolidation trustworthy.
+
+## Consolidation: merging harmonized records into the master
+
+Consolidation is the act of merging harmonized records into the master, or golden, representation. [^3] It uses two mechanisms: identity resolution and survivorship.
+
+Identity resolution, also called matching, decides which records from different sources represent the same real-world entity. [^3] The harmonized values make matching reliable, because you are comparing apples to apples. Matching clusters records that refer to the same customer, supplier, or product. [^3]
+
+Survivorship then decides which attribute value wins for the golden record. [^3] Instead of picking one record wholesale, survivorship looks at each attribute within the matching records and chooses the best value for that attribute. [^3] Common survivorship rules include source system priority, which declares one system the most trustworthy for a given attribute; most recent update, which selects the most recently modified value; and most complete record, which favors the record with the fewest empty attributes. [^3] A tax system might be the sole source for tax ID, while the CRM supplies the contact name. [^3]
+
+The full MDM data flow is harmonization, then the canonical model, then consolidation. [^2] Harmonization makes values comparable, the canonical model gives you a neutral structure to hold them, and consolidation merges the harmonized records into the golden representation using matching and survivorship. [^2] [^3] The exam tip to remember: harmonize, then canonical model, then consolidate. [^2]
+
+## Reference data: standardize it as part of harmonization
+
+Reference data is the set of code lists and standard values that other data references: countries, states, currencies, industry codes, and product categories. [^2] Reference data should be standardized as part of harmonization, because it is the most common source of the code-set collisions described above. [^2]
+
+The approach is to load a canonical set of codes and map each source's codes to it. [^2] You define one canonical list of countries, one canonical list of currencies, one canonical list of industry codes, and you map every source's values into that list. [^2] A source that uses "US" and a source that uses "USA" both map to the canonical "United States" code. [^2]
+
+External reference sources can enrich and validate values. [^2] A postal or address validation service can confirm that an address is real and complete, and can normalize it to a standard form. [^2] A firmographic data provider can supply industry classification codes. [^2] These external sources do not replace your canonical reference data; they feed it, validating and enriching the values before they enter the canonical model. [^2]
+
+## Hierarchy management: one parent field, one hierarchy
+
+Sources often represent hierarchies differently. One system stores a flat parent field on each record. Another stores nested levels. A third stores a path string. [^6] The canonical model must define one or more hierarchy types and the rules for maintaining them. [^6]
+
+In Salesforce, a hierarchy is modeled as a self-lookup. [^6] The Account object has a Parent Account field, which is a lookup to another Account. [^6] Populate it and Salesforce creates the hierarchy link between two records; stack enough links and you have a corporate family tree. [^6] This is the native pattern for a single hierarchy. [^6]
+
+The exam trap is assuming one parent lookup supports multiple hierarchies. It does not. A single parent field supports only one parent, and therefore only one hierarchy. [^6] If a company needs both a legal entity hierarchy and a management or reporting hierarchy, and those hierarchies differ, a single self-lookup parent field cannot represent both. [^6]
+
+The correct model for multiple simultaneous hierarchies is a separate hierarchy object, sometimes called a junction object. [^6] The hierarchy object holds the relationship between a child and a parent for a specific hierarchy type. [^6] One record in the hierarchy object says "this account reports to that account in the legal hierarchy," and another record says "this account reports to that account in the reporting hierarchy." [^6] Because each hierarchy type has its own records, the two hierarchies can diverge without conflict. [^6]
+
+The exam tests this directly. A company needs both a legal entity hierarchy and a management or reporting hierarchy that differ. How should this be modeled? The answer is a separate hierarchy object, or junction, supporting multiple hierarchy types. [^6] A single self-lookup parent field supports only one hierarchy. Two parent fields on the same record is not a native pattern. A text field holding the hierarchy path is unmanageable, because you cannot query or maintain a hierarchy stored as a delimited string. [^6]
+
+Salesforce offers a few ways to model hierarchy beyond the standard self-lookup. You can use a custom hierarchy field, which is a self-relationship on a custom object. [^7] You can use a separate hierarchy object for multiple hierarchy types. [^6] The choice depends on how many hierarchies you need and how they are maintained. One hierarchy, use the self-lookup. Multiple hierarchies, use a hierarchy object. [^6]
+
+Hierarchy management also means handling reparenting. When a subsidiary is acquired or a division is reorganized, the parent changes. [^6] The rules for maintaining the hierarchy must cover reparenting: who is allowed to change a parent, what happens to the children, and how the change propagates. [^6] M&A activity is the most common cause of stale hierarchies, because subsidiaries get acquired or rebranded faster than anyone updates the parent fields manually. [^6]
+
+## Data stewardship and governance: keeping the model honest
+
+A canonical model and a consolidation process do not run themselves. Data stewardship is required to keep the canonical model honest. [^2] Stewards own the definitions in the model and resolve conflicts that matching and survivorship cannot decide automatically. [^2] When two records match but the survivorship rules cannot pick a winner, or when a value falls outside every known domain, a steward decides. [^2]
+
+Three considerations shape the design of the whole flow:
+
+- **Latency.** Consolidation can run in batch or near-real-time. [^2] Batch is simpler and cheaper but the golden record lags the sources. Near-real-time keeps the master current but demands more integration infrastructure. [^2]
+- **Volume.** Large data volumes affect matching. [^2] Matching millions of records is slower and more error-prone than matching thousands, and the matching strategy must scale. [^2]
+- **Governance.** Someone must own the canonical model. [^2] Without clear ownership and change control, the model drifts out of date and fragments, undermining its purpose as a unifying standard. [^4]
+
+Document the canonical model as the contract between systems. [^2] The data dictionary should hold the source-to-canonical mappings and the transformation rules, so that anyone can see how a value in SAP becomes a value in Salesforce. [^2] When the model changes, the change is versioned and communicated, so downstream systems are not surprised. [^4]
+
+## Configuration walkthrough: five steps
+
+Here is the concrete sequence for standing up this flow on Salesforce.
+
+1. **Build the canonical data model.** For each business entity, define canonical attributes and data types independent of any source. [^4] Do not copy SAP's field names or Salesforce's field names. Define the business-level model: Customer has a canonical name, a canonical address, a canonical industry code. [^4]
+2. **Create a source-to-canonical mapping for each system.** For SAP, map SAP's fields to the canonical model, then map the canonical model to Salesforce. [^2] Store these mappings in the data dictionary with the transformation rules, so the translation is documented and auditable. [^2]
+3. **Standardize reference data.** Load a canonical set of codes for countries, currencies, and industry codes, and map each source's codes to it. [^2] Use an external address validation service to enrich and validate address values. [^2]
+4. **Model the canonical hierarchy on Salesforce.** Use a self-lookup for a single hierarchy. [^6] Use a separate hierarchy object for multiple hierarchy types, such as a legal hierarchy and a reporting hierarchy. [^6]
+5. **Define matching and survivorship rules as part of consolidation, and assign stewards for unresolved conflicts.** [^3] Decide which source is authoritative for each attribute, and route records that matching cannot resolve to a steward. [^3]
+
+## Exam traps
+
+- **Consolidating before harmonizing.** Merging values with different formats or codes produces duplicates and wrong winners. [^2] Harmonize first, then consolidate. [^2]
+- **Assuming one parent lookup supports multiple hierarchies.** A single parent field supports only one hierarchy. [^6] Multiple simultaneous hierarchies require a hierarchy or junction object. [^6]
+- **Point-to-point mapping instead of a canonical model.** N sources to M targets explodes into N times M mappings without a neutral layer. [^4] A canonical model reduces it to N plus M and isolates change. [^4]
+
+## Try it
+
+Pick a real entity your organization tracks in at least two systems, such as a customer or a product. List the attributes each system stores for it. Identify at least three collisions: a code set that differs, a format that differs, and a unit or value domain that differs. Write the harmonization rules that would make the values comparable. Then sketch a canonical model with the entity's canonical attributes, and write the source-to-canonical mapping for one source. Finally, decide whether the entity needs one hierarchy or several, and say which Salesforce modeling pattern you would use.
+
+## What's next
+
+Lesson 13 turns from building the master representation to making it the system of truth. It covers the golden record and system of truth in a single org: identity resolution, dedup, and match rules. You will take the matching and survivorship concepts introduced here and make them concrete as the rules that keep one org's records clean and authoritative.
+
+## Related Requirements
+
+- Lesson 11 of 42 (md-1a): MDM styles: registry, consolidation, co-existence, centralized
+- Lesson 12 of 42 (md-1b): Harmonizing and consolidating multi-source data, canonical modeling, hierarchy management
+- Lesson 13 of 42 (md-2a): Golden record and system of truth in a single org
+
+## References
+
+[^1]: Salesforce Certified Platform Data Architect Exam Guide, Master Data Management domain, requirement md-1b: compare and contrast approaches for harmonizing and consolidating data from multiple sources, including canonical modeling techniques and hierarchy management, so you can establish a consistent master representation across systems. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005298972&language=en_US&type=1)
+[^2]: Verdantis, Understanding Master Data Harmonization (harmonization reconciles code sets, formats, units, and value domains so values are comparable; it happens before consolidation; harmonization makes values comparable, consolidation merges them, write-back publishes the master to sources; reference data such as countries, currencies, and industry codes is standardized as part of harmonization; external sources enrich and validate values; data stewardship keeps the model honest; latency, volume, and governance shape the design). [verdantis.com](https://www.verdantis.com/master-data-harmonization/)
+[^3]: Profisee, MDM Survivorship: How to Choose the Right Record (survivorship rules decide which attribute value wins for the golden record; they run after matching and before the golden record is published; common rules include source system priority, most recent update, and most complete record; survivorship is part of consolidation, not harmonization). [profisee.com](https://profisee.com/blog/mdm-survivorship/)
+[^4]: Alation, Canonical Data Models: A Comprehensive Guide (a canonical data model is a standardized, application-independent representation of data; point-to-point mapping scales at N squared while a canonical model reduces mappings to 2N; the model defines entities, attributes, relationships, standardization rules, and validation logic; governance and change control keep it current). [alation.com](https://www.alation.com/blog/canonical-data-models-explained-benefits-tools-getting-started/)
+[^5]: ScienceDirect, Canonical Model overview (canonical modeling is the basis of a spoke-and-hub approach to data mapping; the alternative is point-to-point, which is far more time-consuming). [sciencedirect.com](https://www.sciencedirect.com/topics/computer-science/canonical-model)
+[^6]: Traction Complete, Salesforce Account Hierarchies: Definition, Benefits, and Setup (an account hierarchy is a parent-child structure built through the Parent Account field, a self-lookup; a single parent field supports one hierarchy; multiple parallel hierarchies such as legal, territory, and reporting require a separate Account-related object; M&A is the most common cause of stale hierarchies). [tractioncomplete.com](https://tractioncomplete.com/articles/what-is-a-salesforce-account-hierarchy/)
+[^7]: Salesforce Help, How to Create a Parent-Child Hierarchy in the Same Salesforce Object (a self-relationship field on a custom object simulates a parent-child hierarchy within the same object). [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000385441&language=en_US&type=1)
