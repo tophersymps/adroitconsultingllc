@@ -30,6 +30,8 @@ The output is also user-visible data. A model that has been jailbroken can leak 
 
 None of this is solved by one tool. It is solved by defense in depth: several control points, each tuned to a different layer, arranged so that what slips past one gets caught by the next.
 
+![The request path through four control layers: network edge, API gateway, WAF, and semantic guardrail, with DLP watching data movement and an audit trail logging every decision](</diagrams/security-architecture-network-api-gateways-waf-dlp-for-ai/1-defense-in-depth-stack.png>)
+
 ## The network layer: shape traffic before it reaches the model
 
 The first control point is the network edge, where requests enter. Its job is to reduce the noise before anything hits the expensive parts of the pipeline. Cloud providers place this in front of an API gateway, a load balancer, or a content delivery network, using their web application firewall and rate-limiting primitives. [^2]
@@ -59,6 +61,8 @@ That works for a real class of attacker: scripts and botnets sending exact-match
 The limit is not subtle. A WAF reads text, not meaning. An attacker can bypass a phrase match simply by rephrasing: "disregard the commands you were given earlier" defeats a rule built on "ignore previous instructions." [^2] Encoding the prompt, asking the model to translate a payload, or using indirect injection where the malicious text arrives inside retrieved content of documents rather than in the user prompt all slip past string matching. [^3] The WAF is a first line of defense that filters a large share of automated, low-effort attacks, and it is not a semantic safety layer. [^2] Treating it as one produces a false sense of security.
 
 This is why the architecture keeps the semantic layer. OWASP's LLM06, excessive agency, and the deeper injection variants are semantic, they exploit meaning and context rather than syntax. [^1] Catching those requires a control that interprets the prompt, a dedicated guardrail or a smaller classifier model, running at the application layer where the gateway already sits. The clean mental model is two trust boundaries. The WAF filters bytes before any model invocation. The guardrail filters meaning inside the inference path. Configure both, and do not expect either to do the other's job. [^3]
+
+![The WAF filters bytes with regex and string rules, catching exact-match jailbreaks cheaply; the semantic guardrail reads meaning and catches the rephrased injection the WAF misses](</diagrams/security-architecture-network-api-gateways-waf-dlp-for-ai/2-waf-vs-guardrail.png>)
 
 ## Data loss prevention for AI: watching what moves
 
@@ -93,6 +97,8 @@ The DLP on output. Before the model's answer is returned, a classifier scans the
 The audit trail. Every decision that blocked traffic, throttled a caller, or redacted a response lands in a structured log that records which rule fired and on what. [^5] That log is the security counterpart to the governance decision record from Lesson 48: it is how you prove a control behaved as designed when an examiner or a board asks.
 
 That is the whole pattern in miniature. Drop what you can cheaply at the edge. Resolve identity and policy at the gateway. Read meaning at the guardrail. Filter data at the source and at the output. And keep a record of every decision.
+
+![A support agent prompt traced through six steps: the edge, the gateway, the guardrail, the retrieval boundary, the DLP on output, and the audit trail](</diagrams/security-architecture-network-api-gateways-waf-dlp-for-ai/3-support-agent-request-path.png>)
 
 ## The pitfalls to avoid
 
