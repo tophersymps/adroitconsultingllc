@@ -1,0 +1,137 @@
+---
+title: "Sharing & Visibility Architect R-1b: OWD Scenarios and Interplay with Role Hierarchy and Sharing Rules, Recalculation Triggers"
+slug: day-12-r-1b-owd-scenarios-and-interplay-with-role-hierarchy-sh
+series: salesforce-sharing-visibility-architect
+lesson: 12
+excerpt: "Why requirement r-1b exists: organization-wide defaults are only the floor, and the exam wants you to prove you can sequence the layers above it. This lesson teaches the full sharing stack, how OWD, the role hierarchy, and sharing rules compose additively, when and why sharing recalculation fires, and how to sequence an OWD change so no required access is lost. Includes a worked requirement-to-stack example, a numbered configuration walkthrough, exam traps, and a try-it exercise. Day 12 of the Platform Sharing and Visibility Architect exam prep."
+date: "September 23, 2026"
+author: "Adroit Consulting"
+readTime: "22 min read"
+tags: [Salesforce, Security, Sharing, Certification, OWD, Sharing Rules, Recalculation]
+---
+
+Requirement r-1b asks you to do something harder than r-1a did. In r-1a you picked a single organization-wide default for an object. In r-1b you are handed a set of conditions and told to recommend and sequence OWD changes together with the role hierarchy and sharing rules, and to understand recalculation triggers. The word "sequence" is the whole exam. It is not enough to know that Private is restrictive and Public Read Only is open. You have to know which layer to change first, what breaks when you change it, and when the platform recomputes sharing on its own versus when you must trigger it by hand. [^1]
+
+Lesson 11 gave you the floor: the OWD matrix, what Private, Public Read Only, Public Read/Write, and Controlled by Parent mean at runtime, and why OWD is the single most restrictive baseline. This lesson builds the rest of the stack on top of that floor. The mental model you carry out of here is the additive sharing stack, and it is the single most reused idea in the entire exam. Hold it tightly, because every wrong answer in this requirement comes from forgetting one of its two rules: layers only add access above OWD, and recalculation is triggered by the data and conditions those layers depend on, not by cosmetic UI changes. [^2][^3]
+
+## Deep Dive
+
+### The full sharing stack composes additively
+
+When an architect says "the sharing model," they mean a stack of mechanisms that all work on the same records at the same time. From the bottom up: the organization-wide default is the baseline. Above it sits the role hierarchy, which grants implicit access to users above a record owner. Above that sit sharing rules, which grant explicit access to groups, roles, or territories. Above those sit manual shares, account teams, and Apex Managed Sharing, which grant access to named users or groups programmatically. And woven through all of it is implicit sharing, the automatic grants the platform makes for parent-child relationships and related records. [^2][^3]
+
+The rule that governs the whole stack is that every layer above OWD can only add access. None of them can remove access that the OWD already grants. If the OWD is Public Read Only, every user already reads every record, and no sharing rule, role hierarchy, or manual share can take that read away. If the OWD is Private, the layers above decide who, beyond the owner, gets in. This is why architects treat OWD as the security decision that matters most: it is the only layer that can close access, and everything above it can only open. [^2][^3]
+
+The exam tests this rule constantly, and it tests it in the negative. A wrong answer will say something like "create a sharing rule to restrict access to a public record." That is impossible. A sharing rule grants access to a target group; it never revokes access from anyone else. If a record is already public through OWD, a sharing rule cannot make it less public. The only way to reduce access is to lower the OWD itself, and then to reassess whether the layers above still cover everyone who needs in. [^2][^4]
+
+### Role hierarchy: the implicit layer
+
+The role hierarchy is the first layer above OWD, and it is implicit because you do not create explicit grants for it. When a user owns a record, every user above them in the role hierarchy automatically gets access to that record, provided the object has Grant Access Using Hierarchies enabled. For standard objects like Account, Opportunity, and Case, that checkbox is always on. For custom objects you can turn it off. The hierarchy grants access upward, never downward and never sideways. A manager sees their subordinate's records; the subordinate does not see the manager's. [^3][^5]
+
+The role hierarchy is the layer that answers the "my records plus my team" requirement. Set the OWD to Private, put the team lead above the reps in the hierarchy, and the lead sees the team's records through the hierarchy with no sharing rule at all. This is the cheapest way to deliver manager visibility, and it is the first thing you reach for before you build a sharing rule. The exam expects you to recognize when the hierarchy already solves the problem, so you do not over-engineer a sharing rule for access the hierarchy already grants. [^3][^5]
+
+The trap is assuming the hierarchy covers everyone. It covers users above the owner in the same hierarchy branch. A user in a different branch, a user with no role, a user below the owner, none of them get hierarchy access. When a requirement names a group that is not simply "managers above the owner," the hierarchy is not enough and you move up to a sharing rule. [^3][^5]
+
+### Sharing rules: the explicit grant layer
+
+Sharing rules are the layer you build when the hierarchy does not cover a group. A sharing rule grants access to a target, which can be a public group, a role, a role and subordinates, or a territory, based on a source. The source is either ownership-based or criteria-based. An ownership-based rule shares records owned by a set of users, roles, or territories to a target group. A criteria-based rule shares records that match field criteria, such as all accounts where the Region field equals "West," to a target group. [^4][^6]
+
+The critical fact about sharing rules, and the one the exam builds wrong answers around, is that they are purely additive grants. A criteria-based rule that shares "all records where Owner is in the West sales group" grants access to the targets listed in the rule. It does nothing to the access anyone else already has. It never removes access a user already holds through OWD or the hierarchy. If a user already reads a record through Public Read Only OWD, a sharing rule cannot take that read away, and it does not need to, because the OWD already grants it. [^4][^6]
+
+This is the answer to the first quiz question in this lesson. After adding a criteria-based sharing rule on Account, some records still do not share as expected. The most likely cause is not that OWD is Private, and it is not that sharing rules remove access, and it is not that the profile lacks View All. It is that the rule was not recalculated after the underlying criteria data changed, or the records simply do not meet the criteria. A criteria rule evaluates against current field values and existing sharing rows. If the field the rule filters on was edited after the rule ran, or the rule was never recalculated, the grants are stale. OWD Private does not block an added rule, and sharing rules never remove access, so those two options are structurally impossible. [^4][^6]
+
+### Recalculation: when the platform recomputes sharing
+
+Sharing is not a live calculation that runs on every record read. It is a stored table of sharing rows, and that table must be rebuilt when the conditions the sharing depends on change. Recalculation is the process of rebuilding the sharing table for a rule, an object, or the whole org. The exam wants you to know when it happens automatically and when you must trigger it yourself. [^7][^8]
+
+Recalculation is needed whenever the data that sharing rules depend on changes. The triggers cluster into four families. First, criteria-based rules depend on field values, so when a field a rule filters on is created or changed, the rule's grants can go stale and need recalculation. Second, ownership changes, because ownership-based rules and the role hierarchy both key off the owner field, so transferring ownership of a record can change who the hierarchy and ownership rules grant access to. Third, group membership changes, because a sharing rule that targets a public group must be recomputed when members join or leave that group. Fourth, role moves, because moving a user in the role hierarchy changes what the hierarchy grants them and what ownership-based rules that reference roles deliver. [^7][^8]
+
+The second quiz question in this lesson tests exactly this list. Which change to the sharing model requires recalculating sharing for the affected records? Editing a criteria-based sharing rule or bulk transferring record ownership. Both change the data and conditions that sharing depends on, so the affected records need recalculation. Changing a user's timezone, adding a tab to an app, and changing a page layout have nothing to do with record sharing, so they never trigger recalculation. The exam loves this contrast because it separates the changes that touch the sharing model from the cosmetic changes that do not. [^7][^8]
+
+### The Recalculate button and automatic recalculation
+
+Salesforce recalculates sharing automatically in many cases. When you add or modify a sharing rule, the platform recomputes the affected sharing in the background. When you change OWD, the platform recalculates sharing for the object to apply the new baseline to every existing record. When you edit the role hierarchy structure, the platform recomputes the implicit grants. When you bulk transfer ownership, the platform recomputes the ownership-based grants. In all of these cases the recalculation is automatic, and you see it as a background job rather than a button you press. [^7][^8]
+
+But automatic recalculation does not cover every case, and this is where the manual Recalculate button comes in. For criteria-based and ownership-based sharing rules, you can open the rule in Sharing Settings and click Recalculate to rebuild the sharing table for that rule on demand. You reach for it when the automatic recalculation has not fired, or when you have edited the underlying data and want to force the grants to refresh immediately rather than wait. The button is per-rule, and it rebuilds the sharing rows for that rule against the current data. [^7][^8]
+
+The exam trap is assuming recalculation is instant and free. On large data volumes, recalculation can be slow and lock-heavy. Rebuilding the sharing table for a rule that matches millions of records can take a long time, can hold locks that block other operations, and can time out. A well-designed sharing model avoids depending on frequent recalculation. If your design requires you to hit Recalculate every day because the criteria data churns constantly, that is a design smell, not a routine. The architect's job is to pick sharing mechanisms whose grants stay valid without constant manual recomputation. [^7][^8]
+
+### Sequencing an OWD change
+
+The "sequence" verb in r-1b is about the order of operations when you change the sharing model, and the order matters because of the additive rule. When you raise OWD, say from Private to Public Read Only, access broadens. Every user who had object Read permission now reads every record, so the change is safe in the sense that nobody loses access. When you lower OWD, say from Public Read Only to Private, access narrows. Records that were visible to everyone become visible only to owners and the layers above. The role hierarchy and sharing rules may not cover everyone who previously relied on the public baseline, so you must reassess after the change. [^2][^7]
+
+The correct sequence is to model the requirement first, then change OWD, then verify the new baseline, then adjust the layers above. You do not build sharing rules on top of an OWD you have not yet set, because the rules are grants above a floor that may still be moving. Set the floor, confirm the baseline, then add or adjust the hierarchy and sharing rules so no required access is lost. And after any OWD change, validate effective access by logging in as a representative user of each group and opening records at each sharing layer, not just the happy path. [^2][^7]
+
+The third quiz question in this lesson is a pure sequencing test. An org sets Account OWD to Private, then realizes a team needs read access to all accounts. The correct approach is to keep the restrictive Private baseline and open access selectively with a criteria or ownership-based sharing rule that grants that team's group read access. Lowering OWD to Public Read/Write would open access to everyone, which over-grants. Giving the team Modify All over-grants even further. Changing record types does nothing to sharing. The additive model is the answer: keep the floor tight, open exactly the group that needs in, and leave everyone else at the Private baseline. [^2][^4]
+
+## Worked example: sequencing a sharing model for a regional sales org
+
+Walk a concrete scenario through the full stack so the sequencing is not abstract. Adroit lands a client, a national sales org, with a requirement set that exercises every layer. The objects are Account, Opportunity, and a custom object, Deal Review. The conditions: (a) reps see only their own opportunities, and their regional managers see their team's; (b) the finance team must read every opportunity in the org regardless of owner; (c) Deal Review records are visible only to the deal team named on each record; (d) the org is about to tighten Account from Public Read Only to Private, and the change must not strand any group that currently relies on the public baseline.
+
+Start with the opportunities, requirement (a). Own record plus a manager seeing the team's records: that is Private OWD on Opportunity, with the regional manager above the reps in the role hierarchy. The hierarchy delivers the manager view with no sharing rule. This is the cheapest layer and the first one you reach for. [^3][^5]
+
+Requirement (b), finance reads every opportunity. The hierarchy does not cover this, because finance is not above every owner in the hierarchy. This is a sharing rule. Create an ownership-based or criteria-based rule that grants the Finance public group read access to all opportunities. The rule is additive: it opens finance, and it does not touch the access reps and managers already have through OWD and the hierarchy. [^4][^6]
+
+Requirement (c), Deal Review visible only to the named deal team. This is a manual share or Apex Managed Sharing case, because the audience is per-record and named on the record, not a fixed group. The OWD is Private, and the deal team gets access through a manual share or a programmatic grant keyed to the team field. This is the layer above sharing rules, and it is the right tool when the audience varies record by record. [^2][^9]
+
+Requirement (d) is the sequencing test. Account is currently Public Read Only, and the org wants Private. Before you change it, model who currently relies on the public baseline. Every user with Account Read permission currently reads every account. After the change, only owners and the layers above read them. So you must identify the groups that need continued access and build the grants before or immediately after the change. The sequence is: model the requirement, lower Account to Private, verify the new baseline, then add the sharing rules and confirm the hierarchy covers the managers, so no group that previously read accounts is stranded. [^2][^7]
+
+Now reverse the discipline. The wrong instinct in every one of these is to relax OWD to solve a group's access problem. Finance needs to read all opportunities, so someone reaches for Public Read Only on Opportunity. That opens the records to every user, not just finance, which over-grants. The correct move is to keep Opportunity Private and add a sharing rule to the Finance group. The same logic applies to Account: the team that needs all accounts gets a sharing rule, not a Public baseline. The additive model is the whole point of r-1b. [^2][^4]
+
+## Configuration Walkthrough
+
+The numbered steps to sequence an OWD change with the layers above it, which is what the "recommend and sequence" verb in r-1b becomes in a real org:
+
+1. Model the requirement as a stack. Write down the OWD baseline for each object, then the role hierarchy grants, then the sharing rules, then any manual or programmatic shares. Assign each user group its layer. This model is the plan, and it prevents you from changing OWD and discovering later that a group lost access. [^2][^3]
+2. Make the OWD change first. Set each object's default to the most restrictive value the scenario allows, and confirm the new baseline before touching the layers above. Changing OWD triggers an automatic recalculation, so the platform applies the new floor to every existing record in the background. [^2][^7]
+3. Verify the new baseline. Log in as a representative user of each group and confirm the OWD change did what you expected, that the groups that should lose access lost it and the groups that should keep it still have it. Do not assume the recalculation landed correctly on a large org. [^2][^7]
+4. Add or adjust the role hierarchy and sharing rules so no required access is lost. Build the hierarchy grants first, because they are implicit and free, then add sharing rules for the groups the hierarchy does not cover. Each rule is an additive grant to a target group. [^3][^4]
+5. After creating or editing a criteria or ownership sharing rule, use the Recalculate button, or wait for the automatic recalculation, and monitor the job. On large data volumes, watch the job status and be ready for it to take time or to surface as a sharing recalc notification. [^7][^8]
+6. Validate effective access end to end. Log in as a representative user of each group and open records at each sharing layer, the OWD baseline, the hierarchy grant, and the sharing rule grant. Test the edge cases, not just the happy path, because the exam and production both punish the untested path. [^2][^7]
+
+Remember that recalculation on large data volumes can be slow and lock-heavy. Schedule OWD changes and rule recalculation deliberately, on a maintenance window, and test on representative data volumes before rolling out to a production-sized org. A sharing model that depends on frequent manual recalculation is a design you should revisit, not a routine you should accept. [^7][^8]
+
+## Exam Traps
+
+Three mistakes dominate this requirement, and the exam builds its wrong answers around them.
+
+First, sharing rules only add access. An answer that implies a sharing rule can remove a user's access over an already-public record is wrong. Sharing rules grant access to a target group; they never revoke access from anyone else. If a record is public through OWD, no sharing rule makes it less public. The only way to reduce access is to lower the OWD, and then to reassess the layers above. [^2][^4]
+
+Second, criteria-based sharing rules depend on field values, and stale grants are the failure mode. If a field a rule filters on is edited, sharing must be recalculated or the grants can go stale. A criteria rule evaluates against current field values and existing sharing rows, so a rule that was never recalculated after the criteria data changed will not grant access to records that now meet the criteria. This is the answer to the first quiz question, and it is the most common real-world sharing bug. [^4][^7]
+
+Third, recalculation on large data volumes can time out or lock. A well-designed sharing model avoids depending on frequent recalculation. If your design requires daily manual recalculation because the criteria data churns constantly, that is a design smell. The architect's job is to pick sharing mechanisms whose grants stay valid without constant manual recomputation, and to schedule the recalculation you do need on a maintenance window. [^7][^8]
+
+A fourth, subtler trap: confusing the changes that trigger recalculation with the changes that do not. Editing a criteria-based sharing rule and bulk transferring record ownership both require recalculation, because they change the data and conditions sharing depends on. Changing a user's timezone, adding a tab to an app, and changing a page layout never trigger recalculation, because they do not touch record sharing. The exam tests this contrast directly in the second quiz question. [^7][^8]
+
+## Try It
+
+Pull up a sandbox and make the model tangible. First, create a custom object with OWD Private and the hierarchy enabled, create two users at different roles, and confirm the manager sees the subordinate's records through the hierarchy while an unrelated user does not. That is the implicit layer in action. [^3][^5]
+
+Second, add a criteria-based sharing rule that shares records where a custom field equals a value to a public group. Confirm the group sees the matching records. Then edit the field on a record so it no longer matches, and confirm the grant goes stale until you click Recalculate on the rule. Feeling the staleness appear and disappear is the whole recalculation lesson. [^4][^7]
+
+Third, build the sequencing test from the third quiz question. Set Account OWD to Private, then create a sharing rule that grants a team group read access to all accounts. Confirm the team reads every account while an unrelated user sees none. Then try the wrong approach in a scratch org: lower Account to Public Read/Write and confirm every user reads every account, which is the over-grant the exam wants you to avoid. [^2][^4]
+
+Finally, test the recalculation triggers. Bulk transfer ownership of a batch of records and confirm the ownership-based grants and hierarchy access recompute. Then change a user's timezone and confirm nothing about record sharing changes. The contrast between the two is the difference the second quiz question scores on. [^7][^8]
+
+## What's Next
+
+You can now read the sharing stack as a set of additive layers, sequence an OWD change so no required access is lost, explain when recalculation fires automatically versus when you must trigger it, and recognize the stale-grant failure mode of criteria-based rules. Lesson 13, Role Hierarchy: How It Grants Record Access, Role vs Territory, Implicit Access (r-2a), takes the implicit layer you used here and makes it the subject. It teaches how the role hierarchy actually grants record access, the difference between a role and a territory, and the implicit access the hierarchy delivers beyond the explicit grants you build. Where this lesson treated the hierarchy as one layer in the stack, lesson 13 shows you how that layer works on its own, which is the next decision class the r-2a requirement scores.
+
+## Related Requirements
+
+- Lesson 11 of 36 (r-1a): OWD fundamentals, the matrix, per-object defaults
+- Lesson 13 of 36 (r-2a): Role hierarchy, role vs territory, implicit access
+- Lesson 15 of 36 (r-3a): Sharing rules criteria and ownership
+- Lesson 17 of 36 (r-4a): Public groups, queues, group membership
+
+## References
+
+[^1]: Salesforce Certified Platform Sharing and Visibility Architect Exam Guide. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.security_org_wide_defaults.htm&type=5)
+[^2]: Understanding the Salesforce Sharing Model. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.securityImplGuide.meta/securityImplGuide/security_sharing_overview.htm)
+[^3]: Role Hierarchy. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.securityImplGuide.meta/securityImplGuide/security_roles_understanding.htm)
+[^4]: Sharing Rules. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.securityImplGuide.meta/securityImplGuide/security_sharing_rules.htm)
+[^5]: Setting and Reviewing Organization-Wide Defaults. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.security_org_wide_defaults.htm&type=5)
+[^6]: Define Sharing Rules. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.security_sharing_rules.htm&type=5)
+[^7]: About Sharing Recalculation. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.security_recalc_considerations.htm&type=5)
+[^8]: Recalculate Sharing. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.security_recalc_considerations.htm&type=5)
+[^9]: Apex Managed Sharing. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_bulk_sharing_understanding.htm)
