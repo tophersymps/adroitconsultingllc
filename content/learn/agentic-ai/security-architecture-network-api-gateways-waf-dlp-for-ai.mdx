@@ -1,0 +1,124 @@
+---
+title: "Lesson 49: Security Architecture: Network, API Gateways, WAF, and Data Loss Prevention for AI"
+slug: security-architecture-network-api-gateways-waf-dlp-for-ai
+series: "agentic-ai"
+lesson: 49
+excerpt: "Lesson 48 handed you governance: the rules, the board that decides, and the discipline that proves decisions were deliberate. Security architecture is the enforcement layer that makes those commitments real. An agent is an application on a network, and that means it has a perimeter, a request path, and data flows. Each one is a place you can block, filter, or inspect before something reaches the model or after something tried to leave. This lesson walks the four layers that carry most of the work. The network layer shapes inbound traffic and stops volumetric abuse before you spend compute on it. The API gateway is the single choke point where authentication, authorization, and rate limits get enforced. The web application firewall catches the cheap, known attacks at the edge, and semantic guardrails catch what the firewall cannot see. Data loss prevention watches what actually moves, in prompts, retrieved context, tool calls, and outputs. The next lesson turns to the privacy layer that decides which of those data flows are even allowed to happen: PII, data minimization, retention, and consent for AI."
+date: "September 23, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [LLMs, AI Agents, Security, API, WAF, DLP]
+---
+
+# Lesson 49: Security Architecture: Network, API Gateways, WAF, and Data Loss Prevention for AI
+
+Lesson 48 gave you the governance: the rules, the body that decides, and the discipline that proves the decisions were deliberate. Governance produces commitments. Security architecture is what turns those commitments into controls that run whether or not anyone is watching.
+
+The one idea to carry out of this lesson: **an LLM-based agent is still an application on a network, and that means it has a perimeter, a request path, and data flows, each of which is a place you can block, filter, or inspect.** The specific twist is that the backend is a model steered by natural language and each request costs real money to evaluate. That changes how you deploy the pieces you already know. You drop cheap attacks before they reach the expensive compute. You watch the output as carefully as the input. And you govern what moves out, not just what comes in.
+
+## What security architecture means for an agent
+
+Start from a fact most teams already know but underuse: an AI application is a web application. It sits behind an HTTP endpoint, accepts user text, and returns text. The OWASP Top 10 for LLM Applications (2025) frames the consequences plainly. Prompt injection tops the list: a user prompt alters the model's behavior or exfiltrates instructions. [^1] Sensitive information disclosure sits second: the model can be steered to reveal data it should not have, or it can echo context it was given. [^1] Both of these are application-layer problems that look like ordinary HTTP traffic in transit. That is why the perimeter you already have is useful but insufficient, and why you stack layers that each catch a different class of attack.
+
+Three properties of the workloads make the architecture different from a normal web app.
+
+The input is a program. Adversarial text can override system prompts, leak context, or instruct tools, and none of that looks like SQL injection to a classic filter. [^3] A firewall rule that catches known injection strings is useful, but the model interprets meaning, so the filter that only reads surface text will miss the attacks that live in paraphrase.
+
+Each request is expensive. A single long prompt at premium model pricing costs orders of magnitude more than a normal HTTP request. [^3] This inverts the cost logic you are used to. In a normal web app you want to reject bad requests early to save database work. Here you want to reject bad requests early to save GPU and inference spend, because a bot that floods your chat endpoint with maximum-length prompts can burn your budget in hours. [^3]
+
+The output is also user-visible data. A model that has been jailbroken can leak PII, secrets, or upstream system prompts through the response body. [^3] Defenses that only guard the request side of the conversation are leaving the other half open. Data loss prevention must inspect what the model produces, not just what a user types in.
+
+None of this is solved by one tool. It is solved by defense in depth: several control points, each tuned to a different layer, arranged so that what slips past one gets caught by the next.
+
+## The network layer: shape traffic before it reaches the model
+
+The first control point is the network edge, where requests enter. Its job is to reduce the noise before anything hits the expensive parts of the pipeline. Cloud providers place this in front of an API gateway, a load balancer, or a content delivery network, using their web application firewall and rate-limiting primitives. [^2]
+
+The core moves are volume and origin controls. Rate limiting caps how many requests a client can send per window, which blunt-force flood attacks and the AI-specific version: denial of wallet, where a script sends thousands of high-complexity prompts to run up the inference bill. Request size limits cap how big a single prompt can be before tokenization, which stops a pathological user from maximizing compute per call. IP and bot controls shunt known-bad sources and automated scanners before they ever authorize.
+
+The reason to push this to the edge is cost. Blocking at the network layer costs fractions of a cent and takes milliseconds. [^2] Evaluating the same request with a model costs real money and real latency. When an attacker sends ten thousand bad prompts, the difference between dropping them at the edge and letting each one burn a model call is the difference between a blip and a bill. The edge is where you spend the least to say no to the most.
+
+Network control has a hard limit. It reads the shape of requests, not their meaning. A rate limit cannot tell a sophisticated jailbreak from a normal question, because both are well-formed HTTP. That limit is why the network layer is tier one in a stack, not the whole stack.
+
+## The API gateway: the single choke point
+
+The API gateway sits behind the edge and in front of the model backend. It is the one place every request passes through, which is exactly what you want for the controls that need to inspect identity and intent rather than volume.
+
+The gateway owns authentication, the proof that the caller is who they claim to be, and authorization, the decision about what that caller may do. It also applies per-tenant and per-user rate limits that the edge cannot distinguish. When the OWASP API Security Top 10 (2023) lists broken object level authorization as the number one API risk, it is naming what happens when a gateway or handler trusts an object identifier without checking that the caller is allowed to see that specific resource. [^4] For an agent that pulls records by ID or acts on a user's behalf, that exact gap means one caller reading another customer's data through a prompt that references an identifier they should not own.
+
+Two other entries in the same list matter specifically for AI. Unrestricted resource consumption, API4, is the API-side name for the denial-of-wallet and denial-of-service pattern from the network layer, and the gateway is where you enforce quotas per identity instead of per IP. [^4] Improper inventory management, API9, covers the shadow-API problem: endpoints and model versions deployed without being tracked, which then escape oversight. [^4] A gateway that routes explicit versions and keeps a documented inventory of what it exposes is the technical version of the governance inventory you built in Lesson 48.
+
+The gateway is also where you attach the semantic controls that the network edge cannot run. Cloud guardrail products that evaluate prompts and outputs for attacks, denied topics, and sensitive information attach at this layer, on the application side of the trust boundary. [^3] The pattern is consistent: cheap coarse filtering at the edge, identity and policy at the gateway, semantic judgment just before and just after the model.
+
+## The web application firewall: catching what it can, admitting what it cannot
+
+A web application firewall, usually called a WAF, sits at the edge and inspects application-layer traffic. For AI workloads its practical role is to match known jailbreak and injection signatures in the request body, using regular expressions and string rules, and to return a block before the request ever reaches the model. [^2]
+
+That works for a real class of attacker: scripts and botnets sending exact-match jailbreaks, system-prompt extraction attempts, and obfuscation-free payloads. A rule set can catch phrases like "ignore all previous instructions" and "output your system prompt." [^2] When they hit, the request dies at the edge with a 403 and the model never sees it. [^2] This is genuine value, and it is the cheapest mitigation in the stack.
+
+The limit is not subtle. A WAF reads text, not meaning. An attacker can bypass a phrase match simply by rephrasing: "disregard the commands you were given earlier" defeats a rule built on "ignore previous instructions." [^2] Encoding the prompt, asking the model to translate a payload, or using indirect injection where the malicious text arrives inside retrieved content of documents rather than in the user prompt all slip past string matching. [^3] The WAF is a first line of defense that filters a large share of automated, low-effort attacks, and it is not a semantic safety layer. [^2] Treating it as one produces a false sense of security.
+
+This is why the architecture keeps the semantic layer. OWASP's LLM06, excessive agency, and the deeper injection variants are semantic, they exploit meaning and context rather than syntax. [^1] Catching those requires a control that interprets the prompt, a dedicated guardrail or a smaller classifier model, running at the application layer where the gateway already sits. The clean mental model is two trust boundaries. The WAF filters bytes before any model invocation. The guardrail filters meaning inside the inference path. Configure both, and do not expect either to do the other's job. [^3]
+
+## Data loss prevention for AI: watching what moves
+
+The fourth layer is about data movement rather than request handling. Data loss prevention, DLP, is the set of controls that detect, block, and report sensitive data moving in ways the organization does not allow. [^5] Classic DLP was built for email, file shares, and endpoint traffic. AI introduces a new and awkward path: the sensitive content is not a file on the move, it is embedded in prompts, retrieved context, embeddings, tool calls, and model outputs. [^5]
+
+The practical result is that perimeter filtering alone fails. A policy can be enforced perfectly at the email gateway and still let the same data walk out through a chat prompt. [^5] For AI, DLP has to inspect the interaction, classifying what a user types before it is submitted, what the model returns, and what a tool call is about to send onward.
+
+Three controls carry most of the work.
+
+Data classification before submission. Define what must never enter a prompt, what may enter only after redaction, and what requires approval. [^5] Policy terms like PII, protected health information, source code, and credentials get matched against inbound text, and high-risk fields get redacted or tokenized where legitimate use needs them. [^5]
+
+Context-aware decisions, not regex alone. The same string can be blocked in one workspace and permitted in another, depending on role, model destination, and business purpose. [^5] A policy that decides based on who is asking and where the data is headed survives the cases where a static label pattern does not.
+
+Inspection of tool calls and outputs, not just the prompt. The risky transfer in an agent is often between the agent and a tool, the function call that forwards a customer record, or the retrieved document that a prompt pulled into context. [^5] DLP for agents has to govern the full data path, including service accounts, API keys, and tool calls, because the identity that can move data is often a machine, not a person. [^5]
+
+Data minimization is the DLP you get for free at design time. If only the fields a task actually needs ever enter the prompt, there is less sensitive data in the model's context to leak. [^6] The fewer bytes of real customer data a system holds, the less its DLP has to catch. This connects directly to the privacy lesson coming next, where minimization becomes the governing principle.
+
+## Worked example: a customer support agent behind a gateway
+
+Put the layers together on one concrete system: a support agent that answers questions from a retrieval store of internal documentation and writes a ticket when it cannot answer.
+
+The edge. A WAF in front of the API gateway matches known jailbreak and injection patterns in the request body and rate-limits by client. [^2] A bot that floods the chat endpoint with "ignore all previous instructions" prompts gets dropped here for pennies before a single token is spent. [^2]
+
+The gateway. It authenticates every caller, resolves the user's role, and enforces a per-user quota so no identity can burn an unbounded budget. [^4] It routes to a fixed model version, which keeps the inventory true and prevents a caller from steering traffic to an unadopted endpoint. [^4]
+
+The guardrail. After the gateway and before the model, a semantic filter evaluates the prompt for attacks, denied topics, and requests for data outside the caller's scope. [^3] This catches the rephrased injection that the WAF's string rules missed, because it reads meaning rather than text.
+
+The retrieval boundary. The agent only retrieves documents that the caller's role may see. Row- and field-level access rules run before context is pulled, so the model never receives records the caller could not otherwise reach. This is broken object level authorization applied in reverse: instead of trusting an object ID, the system filters at the data source. [^4]
+
+The DLP on output. Before the model's answer is returned, a classifier scans the response for secrets, PII, or data that should not leave the boundary, and blocks or redacts it. [^5] The jailbreak scenario that leaks a customer record through the response body is stopped at the last trust boundary, not after the fact in a log.
+
+The audit trail. Every decision that blocked traffic, throttled a caller, or redacted a response lands in a structured log that records which rule fired and on what. [^5] That log is the security counterpart to the governance decision record from Lesson 48: it is how you prove a control behaved as designed when an examiner or a board asks.
+
+That is the whole pattern in miniature. Drop what you can cheaply at the edge. Resolve identity and policy at the gateway. Read meaning at the guardrail. Filter data at the source and at the output. And keep a record of every decision.
+
+## The pitfalls to avoid
+
+The first is one-layer thinking. A WAF alone, a guardrail alone, or a gateway alone each leave a specific class of attack uncaught. [^2] The WAF misses semantics, the guardrail cannot stop a bot from burning budget before it filters, and the gateway assumes the data behind it is safe. [^3] The system is as strong as the weakest of its stacked layers, and skipping any one of them is how a specific failure becomes a breach.
+
+The second is guarding the input but not the output. A model that has been jailbroken leaks through the response body, and a defense that only inspects what a user types never sees it. [^3] Sensitive information disclosure lives on the output side, so DLP and response filtering belong there too. [^1] [^5]
+
+The third is treating DLP as a firewall for files. AI leaks often happen inside the application layer, not at a file transfer, so a policy enforced only at email and storage gateways lets the same data move through a prompt, a tool call, or a model output. [^5] The control belongs where the interaction happens, not just where files are transmitted.
+
+The fourth is skipping the cost protections. Unbounded consumption, a caller or bot that drives unbounded inference spend, is a live and expensive failure mode. [^4] Rate limits by identity, request size caps, and per-tenant quotas are security controls, not just billing hygiene. [^2]
+
+## Try it
+
+1. **Draw the request path for one of your agents.** Trace a single prompt from the moment it enters your network to the moment a response leaves. Write down which of the four layers, network, gateway, WAF-level, and DLP, currently inspect that traffic, and which ones the prompt passes through untouched. The untouched ones are your gaps. [^3]
+
+2. **Write one WAF rule and one guardrail rule.** Pick a jailbreak phrase your product is likely to see and write a regular expression for it, then write the semantic policy the next layer should enforce for the same scenario, for example "reject requests asking the model to reveal its system prompt." Notice how different the two rules are, and that both are needed. [^2] [^3]
+
+3. **Look at one tool call for data movement.** Take the most sensitive tool your agent calls and ask what data leaves in the arguments, who the calling identity is, and whether that transfer is authorized for that identity and session. If you cannot answer, you have found the DLP gap. [^5]
+
+## What's next
+
+Security architecture answers who can reach the system and which bytes cross its boundary. It decides what may move, but it does not yet decide whether the data being moved should exist in the system at all. Lesson 50 turns to that question. It covers privacy for AI: personal data (PII), data minimization, retention, and consent. Where this lesson filtered and blocked the flow, the next lesson asks whether you should have collected the data in the first place, how long you are allowed to keep it, and what legal basis lets you use it. Build the security stack now, so the privacy controls coming next have a pipeline they can sit inside.[^1]
+
+[^1]: OWASP Gen AI Security Project. [Top 10 for LLMs and Gen AI Apps, 2025](https://genai.owasp.org/llm-top-10/)
+[^2]: Dhananjay Lakkawar (dev.to). [Dropping Prompt Injections at the Network Edge with AWS WAF](https://dev.to/dhananjay_lakkawar/dropping-prompt-injections-at-the-network-edge-with-aws-waf-35nb)
+[^3]: AWS WAF for generative AI prompt injection patterns (Hidekazu Konishi). [AWS WAF for Generative AI](https://hidekazu-konishi.com/entry/aws_waf_generative_ai_prompt_injection_patterns.html)
+[^4]: OWASP API Security Project. [Top 10 API Security Risks, 2023](https://owasp.org/API-Security/editions/2023/en/0x11-t10/)
+[^5]: NHI Management Group. [NIST CSF data loss prevention for SaaS, cloud, and MCP](https://nhimg.org/articles/nist-csf-data-loss-prevention-for-saas-cloud-and-mcp)
+[^6]: Advantage Technologies. [Data Loss Prevention Rules for LLM Workflows](https://www.advantage.tech/data-loss-prevention-rules-for-llm-workflows/)
