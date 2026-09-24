@@ -1,0 +1,155 @@
+---
+title: "Data Architect MD-2A: Golden Record and System of Truth in a Single Org, Identity Resolution, Dedup, and Matching Rules"
+slug: day-13-md-2a-golden-record-system-of-truth-in-a-single-org-iden
+series: salesforce-data-architect
+lesson: 13
+excerpt: "Requirement md-2a gives you a customer scenario and asks you to recommend and use techniques for establishing a golden record and system of truth for the customer domain in a single Salesforce org. This lesson makes that concrete: a golden record is the single, authoritative, best-quality representation of an entity, and in a single org the Salesforce Account (or Person Account) usually plays that role for the customer domain. The challenge is keeping it clean as records arrive from a portal, manual entry, imports, and API loads. In this lesson you learn identity resolution, which decides when two records are the same real-world entity, and the two ways it is done: deterministic matching on a stable external ID where one exists, and fuzzy matching on normalized fields where it does not. You learn how native Matching Rules and Duplicate Rules implement this declaratively, how those rules are configured in Setup, and how deduplication as an operational process uses duplicate reports and merges to drive cleanup. Then you learn the subtle exam point: system of truth is often attribute-level, not just record-level, so the golden record is a composite with a source of truth per attribute. A worked scenario, a five-step configuration walkthrough, three exam traps, and a try-it exercise close out requirement md-2a. Day 13 of the Platform Data Architect exam prep."
+date: "September 24, 2026"
+author: "Adroit Consulting"
+readTime: "15 min read"
+tags: [Salesforce, Data Architecture, Master Data Management, Certification]
+---
+
+Before you read this lesson, sit with the problem requirement md-2a expects you to solve. A single Salesforce org receives customer records from a self-service portal that stamps a stable portal ID on every record, from manual entry by sales reps who type names and emails freehand, and from a marketing integration that loads lists in bulk through the API. All three channels are creating records for the same people. The portal knows exactly who the record is: it carries a key the portal system owns. The manual records carry no reliable key at all, just whatever the rep typed. By the end of a quarter you have one customer as three Accounts, each holding a partial slice of the truth, and nobody can tell which one is real.
+
+Requirement md-2a asks you, given a customer scenario, to recommend and use techniques for establishing a golden record or system of truth for the customer domain in a single Salesforce org, including identity resolution, deduplication, and matching rules. [^1] This is the "make it the system of truth" lesson that follows the harmonization and consolidation theory from md-1a and md-1b. The exam wants you to translate those concepts into the concrete declarative tooling a Salesforce org actually ships with: Matching Rules, Duplicate Rules, External ID fields, and merge. You need to know not just that these tools exist, but when to reach for each one and how an architect decides between deterministic matching and fuzzy matching for a given source.
+
+## The golden record: what it is and where it lives in a single org
+
+A golden record is the single, authoritative, best-quality representation of an entity such as a customer, product, or location. [^2] It is the version of the record that the rest of the organization treats as the truth, consolidating the best attributes and relationships from the records that preceded it. The golden record wins the deduplication battle, keeps its own identifier, and carries forward the values that survivorship rules selected from the losing records.
+
+In a single org, the Salesforce Account, or the Person Account when the org is configured for it, is usually the golden record for the customer domain. [^3] Account is the standard object built around a business relationship, it can hold a parent hierarchy for house accounts, it owns the contacts, opportunities, cases, and activities that reference the customer, and it is what integrations and reporting point at. When a customer exists once, cleanly, as one Account, that Account is the system of truth for the customer within the org. [^3]
+
+The challenge is not choosing the golden record object. It is keeping that object clean as records arrive from multiple channels. [^3] Every channel has its own conventions. The portal brands records with a stable external key. Manual entry produces freehand names, missing emails, and variations in address formatting. API loads can inject thousands of records in a single payload without checking whether they already exist. The golden record, and the matching and deduplication infrastructure around it, exists to absorb all of that and keep one authoritative Account per real-world customer. [^3]
+
+## Identity resolution: deciding when two records are the same entity
+
+Identity resolution is the process of deciding when two records refer to the same real-world entity. [^2] It is the matching half of the MDM flow introduced in md-1b. Before you can consolidate a customer, you have to decide that the portal record, the manual record, and the imported record are all the same person. That decision, done well, is what produces a golden record instead of a duplicate cluster. Done poorly, it does either of two bad things: it merges two distinct customers into one (a false positive), or it leaves two records for one customer because it never matched them (a false negative). [^4]
+
+Identity resolution techniques sit on a spectrum from exact matching to fuzzy matching. [^2]
+
+Exact matching compares fields for an exact, deterministic equality. [^2] Email equals email. External ID equals external ID. When the comparison succeeds, you have a match with no guesswork, because the values either are identical or they are not. Exact matching is cheap, unambiguous, and reliable whenever you have a field that genuinely identifies the entity.
+
+Fuzzy matching compares fields for similarity rather than equality, using normalization and tolerance. [^2] First name "Bob" matches first name "Robert" as a fuzzy first-name match. Company name "Acme Corp" matches "Acme Corporation" as a fuzzy company-name match. Fuzzy matching tolerates typos, abbreviations, word order, and format differences, which makes it the right tool when no reliable key exists. The tradeoff is confidence. Fuzzy matching produces candidates, not certainties, and it needs thresholds and blank-field handling to keep false positives under control. [^4]
+
+The exam draws a sharp line between the two and expects you to apply it like an architect. [^4] Where a stable key exists, match deterministically: it is cheaper and more accurate. Use fuzzy matching only where no reliable key exists. [^4]
+
+## Deterministic matching: the external ID pattern
+
+The single most reliable identity-resolution technique in a single org is deterministic matching on an external ID. [^3] An external ID is a custom field marked as holding a record's identifier from an outside system: an ERP customer number, a billing account code, a portal user ID. [^5] When you flag a custom field as an external ID, Salesforce automatically indexes it, which keeps lookups and filters fast even at large data volumes, and it becomes a valid match key for upsert operations. [^5]
+
+An external ID works by giving a known source a stable, deterministic key. [^5] If the portal always stamps a portal user ID on every record it creates, you store that value in a Portal_ID__c external ID field on Account. When the portal sends an update, Salesforce matches on Portal_ID__c. Exactly one record matches, so it updates that record. Zero records match, so it inserts a new one. More than one matches, which a Unique constraint prevents, so the operation errors out instead of guessing. [^5] The decision is not fuzzy and not based on a name; it is deterministic on a key the source system owns and never changes.
+
+The exam trap here is reaching for fuzzy matching when a stable external ID already exists. [^4] Matching all records with fuzzy rules because some records lack a key is a weaker strategy. The architect's move is to treat sources by what they supply: deterministic external-ID matching where a stable key exists, fuzzy matching only where it does not. [^4] This is exactly the decision the quiz-adjacent scenario tests: a portal record carries a stable portal ID and a manual record carries none, so the portal records match on the external ID and the manual records fall back to fuzzy matching on name, email, phone, and address. Matching everything fuzzily (option A) is weaker, and blocking manual entry or merging on a similar name alone is wrong. [^4]
+
+Two external ID behaviors matter for the exam. First, mark the field Unique as well as External ID. [^5] External ID makes the field an upsert key; Unique guarantees a single match so an upsert never fails on ambiguity, and it prevents two records from ever sharing the same source key at the database level. [^5] Second, keep each external ID field to one source system. [^5] Do not reuse a single field to hold the portal ID, the ERP ID, and the marketing ID, because those systems produce different key domains and reuse invites collisions. Give each source its own external ID field: Portal_ID__c, ERP_Customer_ID__c, Marketing_Contact_Key__c. [^5]
+
+## Fuzzy matching and standard matching rules
+
+When no reliable key exists, on-platform identity resolution falls back to matching rules that compare normalized fields with exact and fuzzy methods. [^4]
+
+A matching rule defines how Salesforce compares records to determine whether they are potential duplicates. [^4] It specifies which fields to compare, what matching method each field uses, and how the field-level comparisons combine. [^4] Salesforce ships standard matching rules for Account, Contact, and Lead out of the box. [^6] The standard rules cover the common cases: Account matches on Account Name and Billing Address, Contact matches on First Name, Last Name, and Email, and Lead matches on Company, First Name, Last Name, and Email. [^6]
+
+Standard rules are a starting point, not the finish line. [^6] They compare a fixed set of fields with sensible defaults, but a real org usually needs custom rules tuned to its channels. [^6] Custom matching rules let you choose the fields and the match method per field. [^6] Supported methods include exact matching and fuzzy matching on fields such as first name, last name, and company name. [^6] The blank-field handling options also matter: you decide whether a field left blank on one record should count as a match or should disqualify the pair, and you can enable the option to match blank fields explicitly when your data calls for it. [^6]
+
+The design principle for a fuzzy rule is field weighting. [^6] Email is the strongest signal for a person: two records with the same email are almost certainly the same person. [^6] Last name rarely has legitimate variation, so it can be exact while first name tolerates "Robert"/"Bob" fuzziness. Company name on a Contact matches the customer org and tolerates "Acme Corp"/"Acme Corporation." [^6] Build the fuzzy rule so the strongest identifying fields carry the most weight and the fuzzier ones contribute context rather than deciding on their own. [^6]
+
+## Duplicate rules: matching plus action
+
+A matching rule on its own only finds candidates. A duplicate rule is what acts on them. [^6]
+
+A duplicate rule combines a matching rule with an action. [^6] When Salesforce detects a possible duplicate during a create or edit, the duplicate rule decides what happens. There are three actions: [^6]
+
+- **Alert.** The user sees a warning that a potential duplicate exists but can still save the record. This is the default for most orgs because it warns without blocking legitimate exceptions.
+- **Block.** The user cannot save the record if a match is found. Block is strict and prevents duplicates most effectively, which makes it the right action for high-confidence matches, such as an exact email or external ID match where there is almost no legitimate reason for a second record.
+- **Allow with report.** Salesforce saves the record and logs the potential duplicate into a Duplicate Record Set for later review, with no user-facing alert. This is useful for fuzzier matches where the system should not interrupt the user but you still want a queue to review and clean.
+
+Duplicate rules can run at the user interface, via the API, or both. [^4] This channel choice is a real trap on the exam and in production. A lot of duplicates enter through integrations and imports that bypass the UI entirely. If you enable a duplicate rule for the UI but not for API-record creation, every bulk load and integration can inject duplicates unchecked. [^6] Enable API-level behavior with Report or Block for data loads so the prevention path covers the channels that actually create the flat of your duplicates. [^6]
+
+The exam tests two specific facts about duplicate rules. [^4] First, a duplicate rule can block a save both at the UI and via the API, and it combines a matching rule with an action (Alert, Block, or Allow). [^4] Second, duplicate rules never merge records permanently on their own. [^4] They detect and act at save time; the actual consolidation happens separately in the merge step. A rule is not warn-only, because the Block action prevents a save, and it does not auto-merge, because no rule performs a merge. [^4]
+
+## Deduplication: the operational process
+
+Deduplication is the operational process that turns detection into a clean data set. [^6] It has two halves: clean up the duplicates that already exist, and prevent new ones from forming going forward. [^6]
+
+The prevention half is the matching and duplicate rules from the previous sections. [^6] Run them at the UI and the API so new records get flagged or blocked at the point of entry. The cleanup half is where the org takes the records already sitting in duplicate record sets and consolidates them. [^6]
+
+The native cleanup flow starts with a report. [^6] Standard Reports contain duplicate record set reporting, and you can build reports on Duplicate Record Sets to see the potential duplicates your rules have flagged. [^6] Run these reports, review the sets, and decide which records are real duplicates.
+
+Then merge. Salesforce's merge operation consolidates duplicate Account, Contact, or Lead records into a single surviving master. [^7] You select a master record, pick which field values to keep from each record for every field where they differ, and confirm. [^7] The losing records are deleted and their related records, including contacts, opportunities, cases, and activities, are reparented to the master. [^7]
+
+The exam trap is treating merge as reversible. It is not. [^7] Merging deletes the losing record and reparents its children to the master; the values you did not choose are gone. The deleted record goes to the Recycle Bin (recoverable for a window), but restoring it does not reverse the merge, because the related records and the field choices have already been applied to the master. [^7] The architect's discipline is to merge deliberately: review the field comparison, choose the master carefully, back up or export the records before a large cleanup, and test merging in a sandbox before running it against production data. [^7]
+
+## System of truth: attribute-level, not just record-level
+
+The deepest exam point in md-2a is that system of truth is usually attribute-level, not just record-level. [^8]
+
+It is tempting to think of the golden record as a single winning record that holds all the truth. That is only half right. [^8] The record can be mastered in Salesforce while individual attributes are sourced elsewhere. Phone numbers might be mastered in a telephony system, so the golden Account holds a phone value, but the authoritative source for phone is the telephony system, not Salesforce. [^8] Account is still the golden record. It does not mean Account is not the golden record, and it does not mean phone must be removed from Salesforce or that a second Account is needed. [^8] It means the golden record is a composite: the record lives in Salesforce, but source-of-truth responsibilities are assigned per attribute. [^8]
+
+This attribution is what the survivorship rules from md-1b implement. [^2] Source system priority declares one system the most trustworthy for a given attribute: telephony for phone, the billing system for tax ID, the portal for the customer's self-reported contact details. [^2] Most recent update selects the value with the newest modified timestamp. [^2] Most complete record favors the record with the fewest blank attributes. [^2] Because these rules apply per attribute, the golden record can be a blend, taking its phone from one source and its name from another, which is exactly what an attribute-level system of truth produces. [^2]
+
+The architect sees this as a governance decision, not a feature decision. [^8] For each attribute on the customer entity you should know which system is authoritative and which survival rule applies when records merge. A matrix of attribute to authoritative source to survivorship rule documents that in one place. It is the difference between an org that cleans up every quarter and an org that knows, every time a merge happens, exactly which value should win and why. [^8]
+
+## Considerations an architect weighs
+
+Three considerations shape the design beyond the mechanics.
+
+**Matching performance at scale, LDV.** [^4] Fuzzy matching on millions of records is slower and more error-prone than matching thousands, and the matching strategy must scale with the data volume. [^4] Large data volumes (the exam's LDV shorthand) argue for deterministic keys wherever possible, because exact matching on an indexed external ID is cheap, while fuzzy scans over huge fields are not. [^4]
+
+**The cost of false positives and negatives.** [^4] A false match merges two distinct customers into one, which can corrupt relationships and reporting. A false non-match leaves duplicates that keep fragmenting the customer. [^4] The tolerance you set on a fuzzy rule trades these two errors against each other: a loose threshold reduces false negatives (missed duplicates) but raises false positives (wrong merges); a strict threshold does the opposite. [^4] The right setting depends on which error hurts your business more.
+
+**Governance to maintain rules as data evolves.** [^8] Matching rules and survivorship priorities are not set once. As channels change, as new sources feed the org, and as the data itself changes shape, the rules need review and versioning. [^8] Someone must own the golden-record definitions and reconcile conflicts the rules cannot decide. Without that stewardship, the system of truth drifts and rule drift quietly re-creates the duplicate problem it was built to solve. [^8]
+
+## Worked scenario: the portal and the manual rep
+
+Put it together with the scenario from the opening. A single org gets customer records from a portal (stable Portal_ID__c), from manual entry (no key), and from a marketing bulk load (Marketing_Contact_Key__c). [^4]
+
+1. **Create two external ID fields on Account**, Portal_ID__c and Marketing_Contact_Key__c, each marked External ID and Unique. [^5]
+2. **Match the portal records deterministically.** The integration upserts on Portal_ID__c. The portal key decides identity, exactly and cheaply. [^5]
+3. **Match the marketing records deterministically** on Marketing_Contact_Key__c, since the marketing platform owns a stable contact key. [^5]
+4. **Match the manual records fuzzily.** Palp a custom matching rule on Contact that uses exact First and Last Name when present, Email exact, and Phone, with sensible blank-field handling, so a rep's freehand entry is caught as a potential duplicate of an existing customer. [^6]
+5. **Put actions on the rules.** Block on the exact external-ID rules so no source system ever injects a true duplicate. For the fuzzy manual rule, Alert with a report so a rep is warned but a genuine new customer is not blocked, and the flagged duplicates land in a Duplicate Record Set for review. [^6]
+6. **Run a duplicate-records report** quarterly, review the sets, merge the confirmed duplicates into a master Account, and pick field values per the attribute-level survivorship matrix (phone from telephony, tax ID from billing, name from Salesforce). [^7]
+
+The result: every portal and marketing record that already exists gets an exact, deterministic update, new manual entries get caught fuzzily before they multiply, and the documented survivorship matrix decides the winner when reconciliation merges happen. That is a single-org system of truth built from the native tooling. [^4]
+
+## Configuration walkthrough: five steps
+
+Here is the concrete Setup sequence to stand this up.
+
+1. **Define or customize your Matching Rules.** In Setup, search for Matching Rules under Duplicate Management. [^6] Edit the standard Account, Contact, and Lead rules or create custom rules, choosing the fields and the match method for each, and set blank-field handling. [^6] Configure fuzzy methods where you need tolerance on first name and company name. [^6]
+2. **Define your Duplicate Rules.** In Setup, search for Duplicate Rules under Duplicate Management. [^6] Create rules that pair a matching rule with an action, Alert, Block, or Allow with report, and enable each rule for the UI and for API-record creation so data loads are covered. [^6]
+3. **Create External ID fields for deterministic matching.** In Object Manager, create a custom field on Account (and on Contact and any other customer entity) for each known source system, mark it External ID and Unique, and size it to hold the longest source key. [^5]
+4. **Run and schedule duplicate reporting, then merge.** Use Standard Reports to run duplicate-records reports, or build a report on Duplicate Record Sets. [^6] Review the sets and use Merge Accounts or Merge Contacts to consolidate confirmed duplicates, selecting the master and the field values to keep. [^7] Merge deliberately and back up before a large cleanup. [^7]
+5. **Document the attribute-level system of truth.** Write a matrix of attribute to authoritative source to survivorship rule, and assign a steward to own it and review it as data and channels evolve. [^8]
+
+## Exam traps
+
+- **Matching only on fuzzy fields when a stable external ID exists.** Deterministic matching on the external ID is cheaper and more accurate. [^4] Use fuzzy matching only where no reliable key exists. [^4]
+- **Assuming merge is reversible.** Merging deletes the losing record and reparents its children, so it must be done with care and a backup. [^7] Restoring the deleted record from the Recycle Bin does not reverse the merge. [^7]
+- **Treating the golden record as record-level when truth is often per-attribute.** A single winning record is not enough. [^8] System of truth is attribute-level: Account may master the record while telephony masters phone. [^8]
+
+## Try it
+
+Model the identity-resolution decision for a single org you know. Pick one customer entity and its inbound sources. For each source, say whether it supplies a stable key, and if it does, name the external ID field you would create and mark Unique. Where no key exists, describe the fuzzy matching rule you would build: which fields, which match methods, and how you would set blank-field handling. Then specify duplicate-rule actions per channel, UI and API. Finally write a five-row attribute-level system-of-truth matrix for the customer entity: attribute, authoritative source, and survivorship rule. Review it as if a merge happened on the Phone attribute, and say which value wins and why.
+
+## What's next
+
+Lesson 14 turns the golden-record concepts you just built into the operational scenarios behind them. It covers golden-record scenarios: survivorship rules, thresholds and weights, reference-data enrichment. You will take the attribute-level survivorship matrix from this lesson and get concrete about thresholds, field weights, and how reference-data enrichment feeds the matching decision, so the system of truth holds up under real reconciliation work.
+
+## Related Requirements
+
+- Lesson 11 of 42 (md-1a): MDM styles: registry, consolidation, co-existence, centralized
+- Lesson 12 of 42 (md-1b): Harmonizing and consolidating multi-source data, canonical modeling, hierarchy management
+- Lesson 13 of 42 (md-2a): Golden record and system of truth in a single org, identity resolution, dedup, matching rules
+
+## References
+
+[^1]: Salesforce Certified Platform Data Architect Exam Guide, Master Data Management domain, requirement md-2a: given a customer scenario, recommend and use techniques for establishing a golden record or system of truth for the customer domain in a single Salesforce org, including identity resolution, deduplication, and matching rules. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005298972&language=en_US&type=1)
+[^2]: Profisee, MDM What Is a Golden Record (a golden record is the single, most accurate representation of a business entity; identity resolution and matching decide when records refer to the same entity, and matching ranges from exact to fuzzy; attribute-level survivorship rules such as source-system priority, most recent update, and most complete record choose which value wins per attribute). [profisee.com](https://www.profisee.com/what-is-mdm/what-is-a-golden-record/)
+[^3]: Salesforce Help, Duplicate Management (in a single org the Account or Person Account is usually the golden record for the customer domain, and the challenge is keeping it clean as records arrive from UI entry, imports, and API loads; external IDs give deterministic identity resolution for known sources). [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.duplicate_management.htm&type=5)
+[^4]: Salesforce Help, Matching Rules Overview (identity resolution ranges from exact matching to fuzzy matching with normalization and tolerance; where a stable external ID exists, deterministic matching is cheaper and more accurate, and fuzzy matching is the fallback for records without a reliable key; matching performance scales with data volume and the tolerance setting trades false positives against false negatives). [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.matching_rules_overview.htm&type=5)
+[^5]: Salesforce Help, External IDs and Data Loader (an external ID is a custom field flagged to hold a record's identifier from an outside system; flagging it indexes the field and makes it a valid upsert key; upsert updates exactly one matching record, inserts when none match, and errors on multiple matches; mark the field Unique to guarantee a single match and prevent duplicate keys). [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.data_loader_external_ids.htm&type=5)
+[^6]: Salesforce Help, Custom Matching Rules and Duplicate Rules (matching rules define which fields to compare and with what method, exact or fuzzy, and Salesforce ships standard rules for Account, Contact, and Lead; duplicate rules combine a matching rule with an action, Alert, Block, or Allow with report, and can run at the UI and via the API; duplicate record sets log reported duplicates for review). [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.custom_matching_rules.htm&type=5)
+[^7]: Salesforce Help, Merge Accounts and Contacts (the merge operation consolidates duplicate records into a master, reparents related records to the master, and deletes the losing records; the merge is not reversible, so review field values and back up before a large cleanup). [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.merge_accounts.htm&type=5)
+[^8]: Salesforce Help, System of Truth and Data Ownership (system of truth is often attribute-level rather than record-level: a record can be mastered in Salesforce while individual attributes are sourced from, and owned by, another system; governance and stewardship maintain rules as data and channels evolve). [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.data_modeling_system_of_truth.htm&type=5)
