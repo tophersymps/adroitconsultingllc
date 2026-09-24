@@ -1,0 +1,137 @@
+---
+title: "Sharing & Visibility Architect R-2a: Role Hierarchy, How It Grants Record Access, Role vs Territory, Implicit Access"
+slug: day-13-r-2a-role-hierarchy-how-it-grants-record-access-role-vs
+series: salesforce-sharing-visibility-architect
+lesson: 13
+excerpt: "Requirement r-2a is where the exam asks you to design with the role hierarchy, not just name it. This lesson teaches exactly how the hierarchy grants record access: upward-only implicit access, gated per object by Grant Access Using Hierarchies, distinct from territory and from relationship-based implicit access. Includes a worked scenario, a numbered configuration walkthrough, exam traps, and a try-it exercise. Day 13 of the Platform Sharing and Visibility Architect exam prep."
+date: "September 24, 2026"
+author: "Adroit Consulting"
+readTime: "21 min read"
+tags: [Salesforce, Security, Sharing, Certification, Role Hierarchy, Implicit Access]
+---
+
+Requirement r-2a gives you a scenario and asks you to recommend a solution that leverages the role hierarchy. Lesson 12 used the hierarchy as one layer in the additive sharing stack. This lesson makes the hierarchy the subject. You need to know not just that managers see their team's records, but how that access happens, when it is blocked, what it costs, and where it stops working. The exam bends wrong answers around four facts, and if you hold them you can rule out most of the field: hierarchy access flows upward only, it is object-gated by the Grant Access Using Hierarchies setting, it is a distinct feature from territory, and it is only one kind of implicit access. [^1][^2]
+
+This lesson builds from a definition, to the mechanics of how a hierarchy share row appears, to the role-versus-territory distinction, to the other forms of implicit access. Each layer is a fact the quiz and the exam test, so the body teaches each one completely. By the end you should be able to look at a manager-visibility requirement and know within seconds whether the hierarchy solves it, which is the r-2a skill.
+
+## Deep Dive
+
+### The hierarchy grants upward implicit access, and nothing else
+
+The role hierarchy is a tree of roles, and each user in Salesforce is assigned to one role in that tree. The reporting line runs from the top of the tree down to the leaf roles at the bottom. When a user who sits in a higher role owns a record, no manager above them needs to do anything to see it, because the owner already sees it. The interesting direction is the reverse: when a user in a lower role owns a record, every user above them in the same branch of the tree sees that record automatically, through the hierarchy. This is upward access, and it is implicit because you never build an explicit grant for it. [^3][^4]
+
+Upward is the only direction. A user sees the records owned by people below them. They do not see the records of their peers in the same role, and they do not see the records owned by people above them. A rep does not see their manager's records through the hierarchy, and two reps in the same role do not see each other's records. The hierarchy does not reach sideways and it does not reach up. This single direction is the most tested fact in the entire requirement, and the first quiz question in this lesson leans on it. [^3][^4]
+
+Why does upward-only make sense as a design? Because the org gives the hierarchy to the people who are accountable for the work below them. A manager is accountable for their team's accounts and opportunities, so the manager sees what the team owns. Peers are not accountable for each other, so a peer has no hierarchy claim. Someone above you owns the records you are accountable for through your own ownership, but their records are their accountability, not yours, so you get no claim on them. The hierarchy encodes accountability, and accountability always points upward. [^3][^4]
+
+### The hierarchy is object-gated: Grant Access Using Hierarchies
+
+Here is where candidates lose the question. The hierarchy does not apply to every object automatically. It is gated per object by a setting called Grant Access Using Hierarchies, and that setting is what decides whether the upward grant happens at all. For most standard objects, including Account, Contact, Opportunity, Case, and Lead, the setting is on by default, so the hierarchy works out of the box. For custom objects you choose, and you can turn it off. [^5][^6]
+
+The second quiz question in this lesson is built on this object gate. A general statement about the role hierarchy that ignores the object gate is incomplete at best and wrong at worst. The true statement is that the hierarchy grants users access to records owned by roles below them, when the hierarchy is enabled for the object. The condition matters. If Grant Access Using Hierarchies is disabled for an object, the hierarchy provides no access for that object at all, no matter where a user sits in the tree. [^5][^6]
+
+The object gate is the answer to the easiest wrong answer on the exam. Someone will present the hierarchy as a universal grant, as if turning on a role and dropping a manager above a rep makes every manager see every record. It does not. It works only on objects where the checkbox is on. When a scenario says a manager needs to see subordinate cases, the correct move is to confirm Grant Access Using Hierarchies is enabled for Case, then place the VP above the reps. That is the whole mechanism, and it uses the hierarchy with least effort because you add no sharing rule at all. [^5][^6]
+
+### How a hierarchy share row actually appears
+
+The hierarchy is a hidden feature, and understanding what it does to the sharing table separates a superficial understanding from the one the exam rewards. For the record owner, their own access is not a share row. The owner sees the record because they own it, not because any sharing row grants it. The hierarchy does not add a share row for the owner's own access. [^3][^7]
+
+But every user who gains access solely through the hierarchy does get a materialized share row in the sharing table. Salesforce writes a sharing row for each user who receives access because they sit above the owner in the hierarchy. These rows are what the platform checks when a user opens a record, and they are what make the user's effective access real at runtime. So when you ask "does the manager actually see this record," the answer is yes, and the reason is a stored share row the hierarchy created for them. [^3][^7]
+
+This distinction matters for data volumes. A hierarchy share row is a row in a database table like any other sharing row, and it consumes storage and participates in sharing recalculation. In an org where many users sit high in the tree and an object has millions of records owned broadly, the hierarchy can generate a very large number of share rows, because each record owned by a low user produces a row for every user above them in the chain. This is the architect's caution: the hierarchy is free to configure but not free to run, and on large data volumes its share rows can grow quickly. It is usually still the simplest choice for a narrow manager chain, but you budget for the rows. [^3][^7]
+
+### Role versus territory: they are not the same feature
+
+The exam loves to hand you a scenario that names geography and see if you reach for the role hierarchy. You should not. Roles and territories are distinct features with different enablement, different purposes, and different effects. [^8][^9]
+
+A role defines a reporting and access hierarchy. It is the tree we have been describing. Roles exist for every user type and control record access up the chain. A user has exactly one role, and the role's job is to answer "who is above this person and what are they accountable for." [^3][^8]
+
+A territory, delivered by Territory Management (and its successor, Enterprise Territory Management), groups accounts and opportunities by geography or sales segment, and it grants access based on that grouping rather than on a reporting line. A territory is not about who manages whom in a reporting sense. It is about who owns the accounts and opportunities in a given region or segment, and it grants those owners access to the records assigned to their territory. Territory access can also override certain hierarchy behavior, because a record in a territory can be visible to territory team members even when the record owner is not below them in the role hierarchy. [^8][^9]
+
+The third quiz question in this lesson is a pure placement test. The correct approach for a territory-driven access requirement is a territory and Territory Management would need to be enabled and set up; you do not interchange roles and territories on the exam. If a scenario asks for manager visibility over their reporting subordinates' records, the role hierarchy is the mechanism. If a scenario asks for access by geography, segment, or account assignment, that is a territory concern, not a role concern. Confusing them is one of the most common wrong answers, because a careless candidate sees "group of people seeing records" and reaches for whichever feature they remember first. [^8][^9]
+
+### Hierarchy implicit access versus relationship implicit access
+
+Implicit access is a broader category than the hierarchy, and you need to separate the two. The role hierarchy is one source of implicit access: it grants you records owned below you. But implicit access also arises from relationships between records, and this is a different mechanism with a different trigger. [^2][^10]
+
+Relationship-based implicit access comes from parent-child relationships. In some sharing models, sharing a parent record also grants access to its children. The canonical example is sharing a parent Account: a user with access to the Account record gains access to the Contact records and other related records under it, through the parent-child relationship, without an explicit share on each child. This grant flows from the relationship, not from any role. [^2][^10]
+
+Why does the distinction matter for the exam? Because a wrong answer will fold both into the role hierarchy and claim the hierarchy is what grants the parent-child visibility. It is not. The hierarchy grants upward visibility based on roles. The relationship grant gives visibility based on record relationships. They are independent. An architect who inherits an org with a "Controlled by Parent" OWD on a child object is working with relationship-based implicit access, and the role hierarchy has nothing to do with that grant. If you understand which mechanism produces which type of access, you can respond to a scenario with the correct tool instead of reaching for the nearest one. [^2][^10]
+
+### The hierarchy cannot reach up, and you must not try to make it
+
+The last hard fact is the ceiling of the hierarchy. You cannot give a user access to records owned above them in the hierarchy through the hierarchy itself. The hierarchy only flows upward. If a requirement says a junior user must see a senior user's records, the hierarchy will never deliver that, because the junior sits below the senior and the upward grant moves the other way. [^3][^4]
+
+When a scenario asks for this inverted visibility, you move to a different mechanism. The options are sharing rules, which grant a group explicit access to records based on ownership or criteria, or account teams and other team-based grants, or a higher placement in the hierarchy, meaning you move the person up so the records they must see are owned at or below their level. The worst answer on the exam is the one that claims the hierarchy can grant upward-ish access by configuration alone. It cannot. Recognize the ceiling, and reach for a sharing rule or a repositioned role instead. [^3][^4][^11]
+
+## Worked example: a manager-visibility requirement for a services org
+
+Put the facts together in a scenario the exam might actually use. Adroit's client is a professional services firm. The structure is account executives, and each executive reports to a regional director, and the regional directors report to a VP of Sales. The requirement set: (a) a regional director must see every Opportunity owned by the executives in their region; (b) the VP must see every Case owned by any executive, two levels down the chain, and must not see the Cases owned by other VPs; (c) a project manager who owns no records must still see the Opportunities for the accounts they manage across two regions; (d) the org has an Enterprise Territory Management setup keyed to geography. [^3][^5]
+
+Requirement (a) is a textbook hierarchy case. The regional director sits above the account executives in the role hierarchy, and Opportunity has Grant Access Using Hierarchies enabled by default. No sharing rule is needed. The director sees every Opportunity owned by the executives below them through implicit upward hierarchy access. This is the least-effort answer, and it is what the first quiz question in this lesson rewards: with the manager placed above the reps and the object's hierarchy on, the visibility is complete with no additional rule. [^3][^5]
+
+Requirement (b) is the same mechanism across two levels. The VP must see Cases owned by executives two levels below. The hierarchy clears it: the VP sits above the regional directors who sit above the executives, so the VP sees records owned anywhere in that branch, including two levels down. Grant Access Using Hierarchies must be enabled for Case, and it is by default. Notably, the requirement that the VP must not see other VPs' Cases is also satisfied by the hierarchy, because the hierarchy reaches upward along a branch, and a peer VP in a different branch is not above or below the executive. Peer access does not exist in the hierarchy. Setting up a sharing rule per rep would be manual and unnecessary, and a territory would be the wrong tool for a reporting-based need. [^3][^5]
+
+Requirement (c) is where the hierarchy proves insufficient. The project manager owns no records and must see Opportunities for accounts across two regions. The hierarchy cannot help, because the project manager has no position that places them above those record owners, and the requirement crosses geography, not a single reporting branch. This is a sharing rule case. Build a criteria-based or ownership-based sharing rule that grants the project manager read access to the Opportunities they manage. You do not force the hierarchy to do what it cannot. [^3][^11]
+
+Requirement (d) is the role-versus-territory lesson. The org uses Enterprise Territory Management keyed to geography, so access by region may already flow from territory membership rather than from the role hierarchy. Territory access groups accounts and opportunities by segment and can override certain hierarchy behavior. A correct design here reconciles the two: confirm whether the geographic access the VP needs is already delivered by the territory, and use the role hierarchy for the reporting-based visibility that the territory does not cover. Do not treat the territory as a role, and do not treat the role as a territory. They solve different problems. [^8][^9]
+
+Now reverse the discipline. The wrong instinct in every one of these is to over-engineer. Someone reaches for a sharing rule where the hierarchy already works, or reaches for the role hierarchy where a cross-geography sharing rule is required, or swaps in a territory for a reporting need. The r-2a skill is reading the scenario's direction of access. Upward within a reporting branch, with the object gate on: the hierarchy. Cross-branch, cross-geography, or inverted: a sharing rule or a repositioned role. That reading is what the exam scores. [^3][^9]
+
+## Configuration Walkthrough
+
+The numbered steps to leverage the role hierarchy for a manager-visibility requirement, which is what the "recommend a solution" verb in r-2a becomes in a real org:
+
+1. Confirm Grant Access Using Hierarchies is enabled for the object. In Setup, open Sharing Settings and check the Grant Access Using Hierarchies checkbox for each object that must cascade access upward. Most standard objects, including Account, Contact, Opportunity, Case, and Lead, default to on, but check the ones in the scenario so you do not assume. [^5][^6]
+2. Build the role hierarchy so the managers who must see the records sit above the roles of the users who own them. Assign each owner a role, and place the manager in a role above those roles in the same branch. The relative placement is the entire mechanism, because upward access follows the branch. [^3][^4]
+3. Verify by logging in as a manager. Open a record owned by a subordinate and confirm it is visible, then confirm the manager cannot see a peer's records or the records owned above them. This positive-and-negative check proves the hierarchy grants up and only up, which is exactly the direction the requirement needs. [^3][^4]
+4. Where managers must also see records not owned by their direct team, add a sharing rule or use a group, rather than forcing the hierarchy. If the requirement crosses branches, geography, or team boundaries, the hierarchy cannot reach it, and a criteria-based or ownership-based sharing rule to the appropriate group is the correct layer. [^11]
+
+Remember that the hierarchy's share rows are real rows in the sharing table. On large data volumes, confirm the hierarchy does not balloon sharing, and prefer the narrowest manager chain that satisfies the requirement. The hierarchy is a first choice for a clean upward reporting need, but it is one tool among several, and r-2a wants you to pick the one that fits the scenario without over- or under-delivering access. [^3][^7]
+
+## Exam Traps
+
+Four mistakes dominate this requirement, and the exam builds its wrong answers around them.
+
+First, the hierarchy grants upward only. An answer that implies a user below a record owner sees the owner's records through the hierarchy is wrong. A role below never sees records owned by roles above it via the hierarchy alone. Peers never see each other's records. Only users above the owner in the same branch get the implicit grant. [^3][^4]
+
+Second, the object gate is real. If Grant Access Using Hierarchies is disabled for an object, the hierarchy provides no access at all for that object, no matter how the roles are arranged. Most standard objects default the setting on, but a custom object may have it off, and a scenario that names a case where it is off neutralizes the hierarchy entirely. [^5][^6]
+
+Third, role and territory are different features. Do not interchange them on the exam. A role is a reporting and access hierarchy. A territory, from Territory Management, groups accounts and opportunities by geography or segment for access and routing, and territory access can override certain hierarchy behavior. A geography or segment access question is a territory problem; an upward reporting-visibility question is a role problem. [^8][^9]
+
+Fourth, the hierarchy cannot reach up, and it is not the cause of relationship-based access. You cannot give a user access to records above them via the hierarchy; use a sharing rule, a team, or higher placement. And parent-child visibility from sharing a parent record is relationship-based implicit access, not hierarchy access. Keep the two mechanisms separate when you diagnose a scenario. [^2][^4][^10]
+
+## Try It
+
+Pull up a sandbox and make the hierarchy tangible. First, create a custom object with OWD Private and Grant Access Using Hierarchies enabled. Create two users and assign them to roles, one above the other. Log in as the higher user and confirm you see a record owned by the lower user, then confirm an unrelated user outside that branch sees nothing. That is upward implicit hierarchy access in action. [^3][^5]
+
+Second, turn Grant Access Using Hierarchies off for the same custom object and repeat the check. The manager no longer sees the subordinate's record, which is the object gate made visible. Flip the setting back on and confirm the access returns. Feeling the gate turn access on and off is the whole object-gate lesson. [^5][^6]
+
+Third, test the direction ceiling. Log in as the lower user and try to open a record owned by the higher user. It is not visible through the hierarchy. Then build the fix used in the exam: create a sharing rule that grants the lower user the record, and confirm the explicit grant works where the hierarchy could not. That contrast is the answer to the inverted-access question. [^3][^11]
+
+Finally, if your sandbox has Territory Management, set up a simple territory and confirm that territory access behaves differently from role access, because membership in a territory grants access by group and geography rather than by upward reporting line. Seeing the two features side by side is the distinction the third quiz question scores on. [^8][^9]
+
+## What's Next
+
+You can now read a role hierarchy as an upward-only, object-gated implicit access mechanism, distinguish it from territory and from relationship-based sharing, and explain where its share rows come from and what they cost. Lesson 14, Role-Hierarchy Scenarios and When NOT to Use It (LDV, Complexity), Opportunity Access (r-2b), is next. It takes the ceiling and the object gate you met here and turns them into the design discipline: the scenarios where the hierarchy is the right answer, the large-data-volume cases where its share rows become a liability, and the opportunity-access decisions where a different mechanism wins. Where this lesson showed you how the hierarchy works, lesson 14 shows you when to set it aside.
+
+## Related Requirements
+
+- Lesson 12 of 36 (r-1b): OWD scenarios, the additive stack, recalculation, where hierarchy sits as one layer
+- Lesson 13 of 36 (r-2a): Role hierarchy, role vs territory, implicit access
+- Lesson 14 of 36 (r-2b): Role-hierarchy scenarios and when not to use it, opportunity access
+- Lesson 15 of 36 (r-3a): Sharing rules criteria and ownership
+
+## References
+
+[^1]: Salesforce Certified Platform Sharing and Visibility Architect Exam Guide, Access to Records domain. [trailhead.salesforce.com](https://trailhead.salesforce.com/credentials/platformsharingandvisibilityarchitect)
+[^2]: Understanding the Salesforce Sharing Model. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.securityImplGuide.meta/securityImplGuide/security_sharing_overview.htm)
+[^3]: Role Hierarchy. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.securityImplGuide.meta/securityImplGuide/security_roles_understanding.htm)
+[^4]: Role Hierarchy: How It Grants Access. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.security_roles_understanding.htm&type=5)
+[^5]: Setting and Reviewing Organization-Wide Defaults. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.security_org_wide_defaults.htm&type=5)
+[^6]: About Sharing Settings, Grant Access Using Hierarchies. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.security_about_sharing_settings.htm&type=5)
+[^7]: About Sharing Recalculation and Sharing Rows. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.security_recalc_considerations.htm&type=5)
+[^8]: About Territory Management. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.admin_territories_intro.htm&type=5)
+[^9]: Enterprise Territory Management. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.admin_enttl_intro.htm&type=5)
+[^10]: Implicit Sharing and Controlled by Parent. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.securityImplGuide.meta/securityImplGuide/security_implicit_sharing.htm)
+[^11]: Sharing Rules. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.securityImplGuide.meta/securityImplGuide/security_sharing_rules.htm)
