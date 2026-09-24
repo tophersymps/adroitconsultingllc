@@ -1,0 +1,83 @@
+---
+title: "The Apex Trigger Framework: one handler per object keeps automation from collapsing at scale"
+slug: salesforce-apex-trigger-framework
+excerpt: "The Flow vs Apex decision guide tells you to reach for an Apex trigger framework past 30 automations. It never shows you how to build one. This is that blueprint."
+category: "Salesforce"
+categoryColor: sf
+categoryGradient: "from-sky to-sky-dark"
+date: "September 24, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "11 min read"
+tags: [Salesforce, Apex, Triggers, Automation, Bulkification]
+bannerImage: /banners/salesforce-apex-trigger-framework.png
+---
+
+## The Framework the Decision Guide Names but Never Shows
+
+Run a Salesforce org long enough and you will read the same line in the Salesforce automation guidance: past a certain automation density, the standard answer is an Apex trigger framework. Our [Flow vs Apex deep-dive](/field-notes/salesforce-flow-vs-apex-when-to-use-which) covers the moment you cross that line: more than 30 automations on an object, bulk API loads of 2,000 to 10,000 records per transaction, five or more cascading DML operations on a single save [^1]. At that point the guide tells you to move to an Apex trigger framework. It does not tell you what that framework is. This article is the missing blueprint.
+
+The name hides the scope. A trigger framework is not a library you install or a tool you flip on. It is a discipline applied to the files that fire on every record save: one trigger per object, a handler class that owns every execution path, bulk-safe queries and DML, and a guard that stops the same trigger from re-entering itself. When it is missing, small orgs survive. When it is missing at scale, the first 2,000-record data load takes the org down.
+
+## Why One Trigger per Object, and Why the Mess Comes Back
+
+The most common failure is not code quality. It is multiplication. Teams let each feature carry its own trigger on the same object, and within a few releases an object has five or six triggers, each doing a narrow thing, none coordinated. Salesforce does not guarantee execution order when multiple triggers exist on one object, and you cannot make reliable assumptions about whether one trigger has already run its work before yours reads the record [^1]. That unpredictability is the seed of most "it works in scratch, breaks in production" trigger bugs.
+
+The disciplined shape is a thin trigger delegating to a handler class. The trigger itself holds almost no logic, only the decision about which execution path to run. Salesforce wraps all seven execution contexts into an enum, Trigger.operationType, so a single handler method can dispatch cleanly on the operation that fired: before insert, after update, before delete, and the rest [^2]. A before-insert event sets field defaults, an after-update event creates related records, an after-delete event guards a compliance check against removing sensitive data. Each feature is a method, not a new trigger file.
+
+![One trigger per object dispatches every execution event to a single handler class, which routes before and after work to focused methods](</diagrams/salesforce-apex-trigger-framework/1-single-trigger-handler.png>)
+
+This is the difference between ownership and drift. When logic lives in a handler, a new feature is a new method in a file with one obvious home. Reviewers see the whole surface of the object's automation in one place. When logic lives in scattered triggers, no one can see the surface until it is too late.
+
+## Bulkification Is a Contract, Not a Style Choice
+
+The second failure is the loop. A trigger fires with up to 200 records in a single batch, and for a large load it fires repeatedly until every record is processed [^3]. Code written for a one-record save breaks the instant that batch gets big. The canonical anti-pattern is a SOQL query inside a for loop, and Salesforce documents why it is a hard failure: each iteration issues a query, and the transaction dies with an uncatchable LimitException when it crosses the 100-query governor [^1].
+
+The fix is a collect-then-act shape. Gather the identifiers you need into a collection first, run one query with an IN clause that returns every needed parent or detail record into a map, then iterate the map [^3]. Do the same for DML: collect every row that changes, then issue one update call outside the loop. The pattern never looks clever. It looks like two clear steps, collect then act, and that is the entire point. Salesforce calls this the fundamental principle of Apex, and it applies to every query and write you make, whether the record count is one or ten thousand [^3].
+
+![Bulkification contrast: a query inside a loop fires once per record and hits the 100-query governor limit, while a collect-then-act shape runs one query for the whole batch](</diagrams/salesforce-apex-trigger-framework/2-bulkify-collect-then-act.png>)
+
+Test for this on purpose. The moment your org ships a trigger, add a test that fires it on a batch of 200 records and asserts the query and DML counts stay flat. A test that only ever saves single records will pass while code is broken for the actual data loads that hit the org monthly.
+
+## Recursion: the Trigger That Fires Itself
+
+The third failure is the quietest and the most damaging. A trigger that calls DML on the same object fires itself again. Consider a before-update trigger on Account that sets a flag when a field changes. The record is updated, the trigger fires again, and if the field still reads as changed, the logic runs again. The result is infinite recursion that burns governor limits and rolls back the whole save.
+
+The recursion does not come only from your own Apex. Salesforce execution order is explicit: after before-triggers and validation run, workflow field updates and record-triggered flows can change fields, and each of those changes re-invokes the before and after triggers [^4]. So a harmless-looking workflow field update can re-enter your trigger in the middle of a transaction. The 2026 Agentforce tooling that analyzes trigger health now flags this exact class as an automation re-entry risk, checking for flows and workflow field updates that commit DML mid-transaction and re-fire Apex [^8].
+
+The standard defense is a guard that records what has already been processed. A static Boolean flag tells the trigger whether this execution pass has already run one logical job, and because static variables live for the length of a single transaction, the guard resets naturally between transactions [^5]. For finer control, track the specific record IDs you have already touched in a static set, and skip any record already in it on the re-entry pass.
+
+![A workflow field update re-fires a trigger mid-transaction; a static processed-IDs guard lets the re-entrant call pass without rerunning the finished work](</diagrams/salesforce-apex-trigger-framework/3-recursion-guard.png>)
+
+When you review a trigger, ask one question before anything else: does this trigger write to the same object it fires on, and if so, what stops it from firing itself? The 2026 trigger-health tooling treats a missing guard alongside DML as a critical finding for exactly this reason [^8]. No guard means the org is one field update away from a self-inflicted outage.
+
+## Security Is the Fourth Pillar, Not an Afterthought
+
+A trigger runs with the sharing rules of the user who started the transaction unless you opt out, and that default is both a feature and a trap [^6]. The safe posture is explicit: declare with sharing on the handler class, and make every read inside the trigger enforce the caller's record-level access. The modern way is WITH SECURITY_ENFORCED on the query, which applies field and object permissions at the database and throws an exception if the running user lacks access to a referenced field [^7]. A trigger that queries records the invoker cannot see and then uses them is a leaking data path that a security review will find eventually. It is cheaper to close it at authoring time.
+
+This matters more as the automation surface grows. Agentforce and Invocable Apex actions invoke Apex from contexts the user never directly triggered, and each of those paths inherits the same sharing and field-level security responsibilities [^8]. Consolidating logic into one handler makes the security story tractable, because there is one place to confirm the sharing declaration and the query guards, not five.
+
+## The Framework in a Production Org
+
+Put the four pillars together and a production trigger framework reads predictably. One trigger per object, thin, delegating to a with-sharing handler. The handler switches on Trigger.operationType and routes each event to a bulk-safe method. Bulk methods queried once and acted on once. Recursion guarded by a static flag or a processed-ID set. Every read security-enforced.
+
+This is why the Salesforce tooling moving toward consolidation has a reason to exist. The 2026 Agentforce workflow that audits and consolidates triggers runs a structured sequence, audit first, then refactor, then generate the consolidated trigger, handler, and tests, and it flags execution-order assumptions, recursion traps, and automation re-entry risk at each step [^8]. The tool codifies the same discipline this article describes because the discipline is what the production platform has demanded for years.
+
+## Where the Framework Earns Its Keep
+
+The framework is not the fastest way to write five one-off triggers. It is the way to keep an org standing past the point where five one-off triggers would have killed it. Teams that adopt it report a specific shift: automation reviews stop being archaeology, because every behavior on an object lives in one readable file with one obvious home.
+
+Start small. Pick the hottest object, move its triggers into a single handler, add a 200-record batch test, and add one recursion guard. The density matrix points at a framework for a reason, and the reason shows up on the first big data load.
+
+## What to Read Next
+
+Read the [Flow vs Apex decision guide](/field-notes/salesforce-flow-vs-apex-when-to-use-which) for when to cross into Apex in the first place, and our [Salesforce error-recovery patterns](/field-notes/salesforce-error-recovery-2026) for what to do when a transaction still throws. This article covers the shape; those cover the call and the fallback.
+
+[^1]: Apex Best Practices: The 15 Apex Commandments. [developer.salesforce.com](https://developer.salesforce.com/blogs/developer-relations/2015/01/apex-best-practices-15-apex-commandments.html)
+[^2]: Summer '18: Rethink Trigger Logic with Apex Switch. [developer.salesforce.com](https://developer.salesforce.com/blogs/2018/05/summer18-rethink-trigger-logic-with-apex-switch.html)
+[^3]: Platform Events and the Never-Ending Saga of Bulkification. [developer.salesforce.com](https://developer.salesforce.com/blogs/2018/12/platform-events-eventbus-a-new-chapter-in-the-never-ending-saga-of-bulkification)
+[^4]: Order of Execution for Triggers and Validation Rules. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_triggers_order_of_execution.htm)
+[^5]: Static Variables. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_static_variables.htm)
+[^6]: Using the with sharing and without sharing Keywords. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_classes_sharing.htm)
+[^7]: Enforcing Object and Field Permissions with the WITH SECURITY_ENFORCED Clause. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_classes_with_security_enforced.htm)
+[^8]: Analyze and Consolidate Apex Triggers via Agentforce Vibes. [developer.salesforce.com](https://developer.salesforce.com/blogs/2026/06/analyze-and-consolidate-apex-triggers-via-agentforce-vibes)

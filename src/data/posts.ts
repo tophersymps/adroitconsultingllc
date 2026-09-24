@@ -2,6 +2,28 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "salesforce-apex-trigger-framework",
+    "title": "The Apex Trigger Framework: one handler per object keeps automation from collapsing at scale",
+    "excerpt": "The Flow vs Apex decision guide tells you to reach for an Apex trigger framework past 30 automations. It never shows you how to build one. This is that blueprint.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "September 24, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "11 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "Apex",
+      "Triggers",
+      "Automation",
+      "Bulkification"
+    ],
+    "bannerImage": "/banners/salesforce-apex-trigger-framework.png",
+    "status": "published"
+  },
+  {
     "slug": "project-risk-register-2026",
     "title": "The Risk Register Is Not Paperwork",
     "excerpt": "Only 31 percent of projects deliver on time, on budget, and in scope. The gap is not luck. It is whether you run risk as a weekly habit or file it at kickoff.",
