@@ -1,0 +1,124 @@
+---
+title: "Lesson 51: Mobile Architecture: Offline Support, Sync Strategy, and Mobile Security"
+slug: mobile-architecture-offline-sync-security
+series: "salesforce-architect"
+lesson: 51
+excerpt: "The device in your customer's hand is the least reliable computer in your architecture. It loses connection in elevators, parking garages, and hospital wings. It holds a fraction of your data store. And when it comes back online, its local edits have to reconcile with the server without losing anyone's work. This lesson is about designing for that reality. It defines the vocabulary of mobile architecture, offline support, sync strategy, and mobile security, then walks a worked example of a field service technician who needs to keep working with no signal. You will learn the two ways Salesforce delivers offline capability, the declarative Briefcase model in the standard mobile app and the SmartStore and Mobile Sync libraries in the Mobile SDK, and the sync decisions that determine whether your offline app loses data or survives a conflict. The lesson closes with the mobile security controls that protect data on a device you do not control."
+date: "September 24, 2026"
+author: "Adroit Consulting"
+readTime: "15 min read"
+tags: [Architecture, Mobile, Offline, Sync, SmartStore, Mobile Sync, Briefcase, Mobile Security, Salesforce Mobile SDK]
+---
+
+# Lesson 51: Mobile Architecture: Offline Support, Sync Strategy, and Mobile Security
+
+Every lesson so far has assumed a server that is always reachable. This one drops that assumption, because the device in your customer's hand is the least reliable computer in your architecture. It loses signal in an elevator, a parking garage, a hospital wing, a factory floor. It holds a fraction of your data store. And when it comes back online, the edits a user made while disconnected have to reconcile with the server without anyone losing work.
+
+Here is the problem in one line. **A mobile user does not care that the network is down; they care that the job still gets done, and the moment your app stops working because of a dead zone, you have failed them.** The architect's job is to decide, up front, what the app can do offline, how local changes get back to the server, and how the data on a device you do not control stays safe. Those three decisions, offline support, sync strategy, and mobile security, are the whole of mobile architecture.
+
+The thesis to hold through the lesson: **offline is not a feature you bolt on, it is a constraint you design for from the first screen.** If you decide what data the device needs before the user goes offline, how conflicts resolve when they come back, and what happens if the device is lost, you get a mobile app that feels reliable. If you skip those decisions, you get an app that works in the demo and fails in the field.
+
+## Define the terms first
+
+Mobile architecture has its own vocabulary, and the words matter because they name the decisions you have to make.
+
+- **Offline support**: the ability of an app to keep working when the device has no network connection, by reading and writing data stored locally on the device. [^1]
+- **Priming**: the process of downloading selected records to the device while it is online, so they are available later when the connection drops. [^1]
+- **Briefcase**: the declarative configuration in the standard Salesforce mobile app that defines which records get primed to a device for offline use. An admin builds briefcases with the Briefcase Builder, and the app handles the download and sync. [^1]
+- **SmartStore**: the Mobile SDK's offline storage engine. It is an encrypted SQLite database on the device that stores Salesforce data, and it uses SqlCipher to encrypt customer data. [^2] [^3]
+- **Soup**: a logical collection inside SmartStore, roughly a table in the underlying database, that typically maps to a standard or custom Salesforce object. Each soup element is a JSON object mirroring a database row. [^3]
+- **Mobile Sync**: the Mobile SDK library that synchronizes Salesforce records in the cloud with local records in SmartStore. It calls the Salesforce API on your behalf to retrieve or upsert data. [^2]
+- **Sync down**: the operation that downloads records from Salesforce into a local store, so the device has data to work with offline. [^4]
+- **Sync up**: the operation that uploads local changes, records created, updated, or deleted while offline, back to Salesforce. [^4]
+- **Conflict resolution**: the policy that decides what happens when a local edit and a server-side change touch the same record. The default is often last write wins, and the choice of policy is an architecture decision. [^1]
+- **Mobile security**: the controls that protect data on a device you do not control, covering encryption at rest, authentication, and the management of the device and the app. [^5]
+
+## The two ways Salesforce delivers offline capability
+
+Salesforce gives you two distinct paths to offline, and the first decision in any mobile architecture is which one you are on. They are not interchangeable, and choosing wrong means either paying for development you did not need or hitting a wall the declarative model cannot climb.
+
+The first path is the **standard Salesforce mobile app with Briefcase**. This is the declarative route. An admin defines priming rules, for example "accounts owned by the current user, modified in the last 30 days," and the app pre-downloads those records to the device. When the connection drops, users can view and edit the primed records, and when it returns, the changes sync back. The offline data is stored encrypted on the device and managed entirely by the app. Users do not configure what is available offline; admins define the priming rules centrally. [^1]
+
+The second path is the **Mobile SDK with SmartStore and Mobile Sync**. This is the build route. You write a native, hybrid, or React Native app, and you use SmartStore for encrypted local storage and Mobile Sync to keep that local store consistent with Salesforce. This path exists because some requirements exceed what Briefcase can do: complex offline workflows that go beyond record-level sync, deep device hardware integration, or a branded consumer-grade experience. [^2] [^3]
+
+The decision framework is straightforward. If your users are internal, follow standard CRM workflows, and need basic offline record viewing and simple data entry, the standard app with Briefcase covers the majority of enterprise mobile cases with no development. If you need multi-record transactions while offline, hardware integration, or a custom consumer app, you need the Mobile SDK. [^1]
+
+## SmartStore: the encrypted local database
+
+When you are on the SDK path, SmartStore is the foundation. It is worth understanding how it works, because the design choices you make here determine whether your offline app is fast and safe or slow and leaky.
+
+SmartStore stores data as JSON documents in a single-table SQLite database, and it encrypts customer data with SqlCipher. [^2] [^3] You organize data into soups, and each soup typically maps to a Salesforce object. You define indexes on the fields you will query, and you retrieve data either with helper methods or with Smart SQL, a query language that combines standard SQL SELECT grammar with special syntax for referencing soups and their fields. [^3]
+
+The key architectural idea is that a soup is not a static snapshot. It is a live, queryable, indexed local store that Mobile Sync keeps consistent with the server. When you register a soup, you declare what data you want locally, how it is indexed for fast retrieval, and which fields matter for queries. The indexes are what make offline lookups fast, and the encryption is what makes the data safe if the device is lost. [^3]
+
+## Mobile Sync: the sync strategy
+
+Local storage is only half the story. The other half is getting changes back to the server, and that is where sync strategy lives. Mobile Sync gives you two operations, sync down and sync up, and the way you configure them determines how your app behaves under conflict.
+
+**Sync down** downloads records from Salesforce into a soup. You define a target, which describes the scope of data you need, for example a SOQL query that selects the accounts and fields you want on the device. The app sends the request, receives the response, and populates the soup. [^4]
+
+**Sync up** uploads local changes back to Salesforce. Mobile Sync looks for records in the soup that were created, updated, or deleted locally, and replicates those changes on the server. You control which fields get uploaded, and you can separate a create field list from an update field list so you do not try to write read-only fields on existing records. [^4]
+
+The decision that matters most is the **merge mode**, the policy for how a sync operation merges data. The two common modes are overwrite and leave-if-changed. Overwrite replaces local data with server data, which is fine for a sync down where the server is the source of truth. Leave-if-changed preserves records that have been modified, which is what you want for a sync up so you do not clobber a server-side change with a stale local edit. [^4]
+
+Here is the architectural discipline. **You choose opposing merge modes for the two directions to guarantee a single source of truth.** A common pattern is overwrite for sync down, so server data replaces local data, and leave-if-changed for sync up, so local edits do not overwrite a server change that happened while the device was offline. That pairing means the server stays authoritative, and a local edit that conflicts with a newer server change is preserved rather than silently destroyed. [^4]
+
+## Conflict resolution: the decision that loses or saves data
+
+The hardest part of mobile architecture is not building the offline store. It is deciding what happens when two people edit the same record and the device comes back online. This is the conflict problem, and your policy for it is an architecture decision, not an implementation detail.
+
+The simplest policy is **last write wins**. The most recent change, by timestamp, wins, and the other is discarded. This is simple and it is what many declarative offline models use, but it can silently destroy work. If a field worker edits an account's phone number offline and a colleague updates the same account's address online, last write wins keeps one change and drops the other, and the user may not even know. [^1]
+
+The more careful approach is to **detect the conflict and let a human or a rule resolve it**. Mobile Sync tracks local changes with metadata, and when a sync up finds that a record changed on the server since it was synced down, it can flag the conflict. The app then decides, by policy or by asking the user, which version wins. This is more work, but it is the difference between an app that loses data quietly and one that surfaces the problem. [^4]
+
+The lesson to carry forward: **evaluate conflict probability before you commit to an offline model.** If your users rarely edit the same records, last write wins is fine and simple. If they do, you need conflict detection and a resolution path, and you need to design it before you ship, because you cannot add it after users start losing work.
+
+## Mobile security: protecting data on a device you do not control
+
+The third pillar is security, and it is the one architects most often underweight, because the threat model is unfamiliar. You are not protecting a server in a locked data center. You are protecting data on a device that can be lost, stolen, or used by someone who is not the intended user.
+
+The first control is **encryption at rest**. SmartStore encrypts customer data on the device, so if the device is lost, the data is not readable without the key. [^2] [^3] This is the baseline, and it is non-negotiable for any app that stores customer data offline.
+
+The second control is **authentication and session management**. Mobile SDK apps authenticate through a connected app using OAuth, and the SDK manages the token lifecycle, storing the refresh token securely in the device keychain on iOS or keystore on Android and refreshing the access token when it expires. [^5] The point is that the app does not store a plaintext password, and it does not force the user to re-authenticate on every launch.
+
+The third control is **device and app management**. For regulated industries, you layer mobile device management and mobile app management on top, so you can enforce a device passcode, wipe the app's data remotely if the device is lost, and control which apps can run. The standard mobile app's offline model and the SDK's local store both benefit from these controls, because a passcode requirement is what keeps the encryption key from being trivially accessible. [^1] [^5]
+
+The architectural discipline is to **assume the device is lost and design so that losing it costs nothing**. Encrypt the data, require a passcode, and make sure a remote wipe can clear the app's local store. If you have done that, a stolen phone is an inconvenience, not a breach.
+
+## A worked example: the field service technician
+
+Let me make all of this concrete. Take a field service company that sends technicians to repair equipment in factories, warehouses, and remote sites. The technicians work in buildings with poor or no cellular signal, and they need to see their assigned work orders, record the parts they used, and capture a photo of the completed repair, all without a reliable connection.
+
+**Decide the offline model.** The technicians are internal users doing standard field work, so the company starts with the standard mobile app and Briefcase. An admin builds a briefcase that primes each technician's assigned work orders, the related assets, and the parts catalog, so the data is on the device before the technician leaves the truck. [^1]
+
+**Design the sync strategy.** The briefcase syncs down the assigned work while the technician is online, and when they are in the field, they edit work orders and create parts-used records offline. When the device reconnects, the changes sync up. The company evaluates the conflict risk: two technicians rarely edit the same work order, so last write wins is acceptable, but they still configure the sync so a local edit that conflicts with a server change is preserved rather than silently dropped. [^1] [^4]
+
+**Secure the device.** The company enforces a device passcode, encrypts the offline data, and uses mobile device management so a lost or stolen device can be remotely wiped. A technician's phone that holds a week of work orders is now a liability the company can neutralize in minutes. [^1] [^5]
+
+The result is a mobile app that works in a dead zone, gets the work back to the server without losing it, and does not turn a lost phone into a data breach. That is mobile architecture done right, and every decision in it was made before the first screen was built.
+
+## The pitfall to avoid
+
+**Treating offline as a caching problem instead of a data-integrity problem.** The instinct is to download some records, let the user edit, and sync when possible, and to assume the details will work out. They will not. The details are the whole job: which records get primed, what happens when two edits conflict, whether a failed sync retries or loses the change, and what happens to the data if the device is lost. An offline app that loses a technician's work order because the sync silently failed is worse than no offline app, because the user trusted it. Design the sync and the security with the same rigor you would give a server-side transaction, because the data is the same data.
+
+## Try it
+
+A client runs a delivery fleet. Drivers use a mobile app to see their routes, mark deliveries complete, and capture a signature, and they work in areas with patchy signal. The client asks you to design the mobile architecture. Answer before reading on.
+
+1. What is the first decision you make, and why? *(The offline model: whether to use the standard app with Briefcase or the Mobile SDK. For internal drivers doing standard delivery work, Briefcase covers the need with no development; you only move to the SDK if you need complex offline workflows or hardware integration.)* [^1]
+2. What data gets primed to the device, and when? *(The driver's assigned routes, stops, and delivery details, downloaded while the device is online, so the driver can work through the route with no signal. Priming is the step that makes offline work possible.)* [^1]
+3. A driver marks a delivery complete offline, and a dispatcher updates the same stop online. What happens when the device syncs? *(The conflict policy decides. With last write wins, one change is kept and the other dropped. With conflict detection, the app flags the conflict and a rule or a human resolves it. You choose the policy before you ship.)* [^1] [^4]
+4. A driver loses their phone. What protects the delivery data on it? *(Encryption at rest keeps the data unreadable without the key, a device passcode keeps the key from being trivially accessible, and mobile device management lets the company remotely wipe the app's data.)* [^1] [^5]
+5. Why is a sync that silently fails worse than no offline at all? *(Because the user trusted the app to record the delivery, and a silent failure loses the work order without warning. The sync must retry, surface failures, and preserve conflicting edits, or the offline promise is broken.)* [^4]
+
+## What's next
+
+You have now worked through the device layer of the architecture, the least reliable computer in the system, and you know how to keep it working offline, get its changes back safely, and protect its data. The discipline of designing for an unreliable component, deciding what happens when things disagree, and making sure nothing is lost is one you will use everywhere.
+
+The next lesson moves from the device back to the server, and it is about a different kind of ordering problem. **Lesson 52 is on event-driven architecture: event ordering, replay, and duplicate handling.** Where mobile sync is about reconciling a disconnected device, event-driven architecture is about the order in which events arrive, what you do when you need to replay them, and how you keep a duplicate event from double-counting. The two lessons fit together because both are about what you do when the tidy assumption of a single, ordered, always-available source of truth stops holding.
+
+[^1]: salesforce.com. [Mobile and Offline Developer Guide](https://resources.docs.salesforce.com/latest/latest/en-us/sfdc/pdf/mobile_offline.pdf). Salesforce's guide to offline capability in the standard mobile app, covering Briefcase priming, draft records, sync, conflict resolution, and the LWC offline model.
+[^2]: developer.salesforce.com. [Offline Management | Salesforce Mobile SDK](https://developer.salesforce.com/docs/platform/mobile-sdk/guide/offline-management.html). The Mobile SDK's documentation of SmartStore as an encrypted SQLite-based offline store and Mobile Sync as the mechanism for synchronizing local records with the cloud.
+[^3]: trailhead.salesforce.com. [Implement Secure Offline Storage with SmartStore](https://trailhead.salesforce.com/content/learn/modules/mobile_sdk_offline/mobilesdk_offline_smartstore). Trailhead's unit on SmartStore, covering soups, indexes, Smart SQL, and the encrypted local storage model.
+[^4]: trailhead.salesforce.com. [Offline Changes for Mobile Sync](https://trailhead.salesforce.com/content/learn/modules/mobile_sdk_offline/mobilesdk_offline_mobilesync). Trailhead's unit on Mobile Sync, covering sync down and sync up targets, merge modes, and the configuration that keeps a single source of truth.
+[^5]: developer.salesforce.com. [Salesforce Mobile SDK Development Guide](https://developer.salesforce.com/docs/platform/mobile-sdk/guide/). The SDK's development guide, covering connected app authentication, OAuth token lifecycle, and the security model for mobile apps.
