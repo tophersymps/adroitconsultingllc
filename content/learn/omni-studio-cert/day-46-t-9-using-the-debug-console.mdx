@@ -1,0 +1,110 @@
+---
+title: "OmniStudio T-9: Using the Debug Console"
+slug: day-46-t-9-using-the-debug-console
+series: omni-studio-cert
+lesson: 46
+excerpt: "An OmniScript step finishes and the field the user expects to fill stays blank. A FlexCard renders its shell but no data. An Integration Procedure returns an empty JSON object even though the Data Mapper inside it extracted records. Each of these reports has a different symptom and a different component, but they share one thing: the evidence for the root cause is sitting in a log you have not opened yet. This lesson teaches you to use the OmniStudio Debug Console as the first stop in every diagnosis. You will learn what the console records, how to read a request and a response payload, how to filter by session so one user's failing interaction is not lost in the noise, and how to turn a log entry into a fix you can verify in a fresh entry."
+date: "September 24, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [OmniStudio, Troubleshooting]
+---
+
+# Using the Debug Console
+
+Every OmniStudio component you build, an OmniScript, a FlexCard, an Integration Procedure, a Data Mapper, is a machine that sends a request and waits for a response. When that machine misbehaves, the fastest way to find out why is not to stare at the configuration and guess. It is to read the record of what the machine actually did. That record lives in the Debug Console, and it is the single most useful tool in the OmniStudio troubleshooting kit.
+
+This is the last lesson in the OmniStudio Developer certification track, and it closes the Troubleshooting and Debugging domain. It is also the most practical lesson in the course, because the habit it teaches, open the console before you change anything, is the habit that separates a developer who fixes things from a developer who hopes things get fixed. By the end of this lesson you will be able to open the Debug Console, find the log entry for a failing interaction, read the request and the response to pinpoint the fault, apply a fix, and confirm the fix in a fresh log entry.
+
+## What the Debug Console is
+
+The Debug Console is the OmniStudio diagnostics hub. It is an admin tool that records the request and response traffic for the OmniStudio components that run in your org: OmniScripts, FlexCards, Integration Procedures, and Data Mappers. Every time one of these components calls out to a service, whether that service is Salesforce itself or an external system, the console captures what was sent and what came back, and it organizes those captures by session.
+
+The word session matters. A session is one user's interaction with a component, from the moment they open it to the moment they close it. When a user runs an OmniScript, every action that script performs during that run is tagged with the same session identifier. That tag is what lets you pull up one user's entire interaction and read it as a single story, instead of hunting through a pile of unrelated calls.
+
+The console is not the only debugging tool in OmniStudio. The designers for OmniScripts and FlexCards each have an Action Debugger that shows the request and response data for the actions in that specific component, and the Integration Procedure designer has a Debug Log that shows the input and output of each element in the procedure.[^1][^2] Those tools are excellent while you are building and previewing a component. The Debug Console is different in one important way: it captures what happens in the real running org, across all components, for real users, after the component is deployed. When a user reports a problem in production, the Action Debugger in the designer is not running. The Debug Console is where the evidence for that production problem lives.
+
+Think of the difference this way. The designer tools are the workbench where you test a part before you install it. The Debug Console is the flight recorder that runs while the machine is in service. When something fails in the field, you read the flight recorder.
+
+## Why the console replaces guesswork
+
+The core promise of the Debug Console is that it replaces guesswork with evidence. When a component fails, there are usually several plausible explanations. The data was wrong. The configuration was wrong. The service was down. The user did something unexpected. Each of those explanations points at a different fix, and if you pick the wrong one you will change the wrong thing and the problem will come back.
+
+The console collapses that uncertainty. A log entry shows you exactly what request the component sent and exactly what response it received. The failure is usually visible in the response: an error message, an empty result, a malformed payload. Once you can see the actual response, the list of plausible causes shrinks to the ones that are consistent with that response, and you can act with confidence.
+
+This is the exam tip for this lesson, and it is worth internalizing as a working habit: evidence over guesses. Debug Console first, read both payloads, fix, re-verify. That four-step loop is the universal diagnostic habit for OmniStudio, and it applies to every component type in the platform.
+
+## Reading a Debug Console entry
+
+Every entry in the Debug Console has two halves: the request and the response. The request is what the component sent out. It shows the endpoint or service that was called, the input parameters, and the payload that was passed. The response is what came back. It shows the status, the returned data, and any error information.
+
+The first thing you read in an entry is both payloads together, because the fault lives in the relationship between them. A response that looks wrong on its own often makes sense once you see the request that produced it. Consider a Data Mapper Extract that returns no records. If you read only the response, you see an empty array and you might conclude the data does not exist. If you read the request first, you might see that the input parameter that should carry the record ID was empty, or carried the wrong value. The empty response was correct given the request. The request was the problem.
+
+The reverse is just as common. A response contains an error that names a field or a service. That error is only useful if you can see what the component asked for. The request tells you which configuration produced that call, which lets you trace the error back to the exact element that needs fixing.
+
+So the rule is simple: read the request and the response as a pair, never one without the other. The request tells you what the component intended. The response tells you what the world did with that intention. The gap between them is where the bug lives.
+
+## Filtering by component and session
+
+A busy org generates a lot of console traffic. Every OmniScript run, every FlexCard load, every Integration Procedure call adds entries. If you open the console and scroll, you will drown in noise, and the entry you need will be buried under a hundred entries you do not care about. The console gives you two filters that cut through that noise: component and session.
+
+The component filter narrows the log to a single component type or a single named component. If the report is about a specific FlexCard, filter to that FlexCard and the log shows only the calls that card made. That is a fast way to confirm whether the card is even making the call you expect.
+
+The session filter is the more powerful of the two, and it is the answer to the exam question about isolating one user's failing interaction. Every user interaction is tagged with a session ID. When you filter by that session ID, the console shows only the entries from that one interaction, in order, from the moment the component opened to the moment it finished. You can read the whole interaction as a sequence: what the component asked for first, what came back, what it asked for next, and where the sequence broke.
+
+This is how you isolate one user's problem. The user says the form would not submit. You do not need to know which of the hundreds of entries in the console belongs to them. You filter by their session ID and you see exactly the calls their form made, and you find the one that failed. The session ID ties the interaction to its logs, and the filter turns a needle in a haystack into a single readable thread.
+
+## From log to fix: a worked example
+
+Let me walk through a realistic failure end to end, because the mechanics matter more than the theory.
+
+A user reports that a FlexCard on an account record shows the card shell but no data. The card is supposed to display the account's open service cases. You open the Debug Console and filter by the component, the FlexCard, and then by the user's session.
+
+The first thing you see is the card's data source call. The request shows the Data Mapper Extract that should fetch the cases, and it shows the input parameter that carries the account ID. The response shows an empty array. No error, just nothing.
+
+Now you apply the read-both-payloads rule. The response is empty, but is that because there are no cases, or because the request asked for the wrong thing? You look at the request again. The input parameter that should hold the account ID is empty. The card sent a null ID to the extract, so the extract queried for cases belonging to no account, and correctly returned nothing.
+
+The root cause is not in the Data Mapper. The Data Mapper did exactly what it was told. The root cause is upstream: the FlexCard never passed the account ID into the data source. You check the card's configuration and find that the data source input is bound to a merge field that does not exist on the card, so it resolves to null at runtime.
+
+The fix is to correct the binding so the card passes the real account ID. You make the change, and you re-run the card in the same session context, or ask the user to reload. Then you open the Debug Console again and look at the new entry. This time the request shows the account ID populated, and the response shows the cases. The fix is confirmed, not assumed, because the fresh log entry shows the corrected behavior.
+
+That is the whole loop. Identify the failing action from the log, correct the data, the contract, or the configuration that caused it, re-run, and confirm in a new log entry. The new entry is the proof. Without it, you are back to hoping.
+
+## The four-step configuration walkthrough
+
+The exam wants you to know the Debug Console workflow as a sequence. Here it is as numbered steps, the same sequence you will use on the job.
+
+1. Open the Debug Console from the OmniStudio admin tools. It lives with the other OmniStudio administration utilities, not inside a component designer, because it is a cross-component tool.
+2. Locate the log entry for the failure. Use the component filter to narrow to the component in the report, then the session filter to isolate the specific user interaction. If you do not have a session ID, the component filter plus a time window is usually enough to find the entry.
+3. Read the request and the response together to pinpoint the fault. Compare what the component sent with what came back. The gap between them is the root cause.
+4. Implement the fix, re-run the component, and verify in a fresh log entry. The new entry must show the corrected request and a healthy response before you call the issue resolved.
+
+That fourth step is the one most developers skip, and it is the one the exam rewards. A fix you have not re-verified is a hypothesis. A fix confirmed by a new log entry is a fact.
+
+## Exam traps to avoid
+
+The exam tests the Debug Console through the traps it sets, and each trap is a real mistake you can make on the job.
+
+The first trap is debugging without logs. This is guessing at root causes. You see a symptom, you form a theory, and you change configuration based on the theory without ever looking at what the component actually did. Sometimes the theory is right and you get lucky. Often it is wrong, and you have changed a working component to fix a problem it never had. The console exists precisely so you do not have to guess. Open it first.
+
+The second trap is reading only the response and ignoring the request. A response that looks wrong is often a correct response to a wrong request. If you read only the response, you will fix the wrong thing, usually by changing the component that is behaving correctly. The request is half the evidence. Read both.
+
+The third trap is not filtering by session. Without the session filter, you are scrolling through every call every user made, and the entry you need is lost in the noise. You either miss it entirely or you spend so long hunting that you give up and start guessing. The session filter is the tool that keeps the console usable. Use it.
+
+## Making the console a habit
+
+The Debug Console is not a tool you reach for when things are already broken. It is the first step of every OmniStudio diagnosis, and the reason is simple: it replaces guesswork with evidence. When a component misbehaves, the fastest path to the root cause is to read what the component actually did, and the console is where that record lives.
+
+Build the habit now, while you are studying, so it is automatic when you are working. Every time you hit a problem in a practice exercise, open the console before you change anything. Read the request and the response. Find the gap. Fix it. Re-run and confirm. The more you do it, the faster it becomes, and the fewer times you will change a working component to fix a problem it never had.
+
+This habit is also what the exam is really testing. The Debug Console questions are not about memorizing a menu. They are about knowing that the evidence comes first, that the payloads carry the evidence, and that the session filter is how you find the evidence for one user. Master those three ideas and you have mastered the tool.
+
+## What's next
+
+This is lesson 46 of 46, the final lesson in the OmniStudio Developer Certification track. You have now covered every requirement in the official Spring '26 OmniStudio Developer exam guide, across all six domains, from OmniStudio solution and industry use cases through FlexCards, OmniScripts, Integration Procedures, Data Mappers, and the troubleshooting and debugging skills you just finished.
+
+The course now restarts at lesson 1, OmniStudio Solution and Industry Use Cases, as a deeper V2 pass. Revisiting the foundation with everything you have learned since will sharpen the concepts that tie the whole platform together, and it is the right way to consolidate before you sit for the exam. See you at lesson 1.
+
+[^1]: Salesforce Trailhead, "Boost Productivity with OmniScript Designer," which documents the Action Debugger for inspecting action request and response data. https://trailhead.salesforce.com/content/learn/modules/omnistudio-omniscript/dig-into-the-omniscript-designer
+[^2]: Salesforce Trailhead, "Testing and Activating FlexCards for Success," which documents the FlexCard Debug pane and its Action Debugger for inspecting client and server side action calls. https://trailhead.salesforce.com/content/learn/modules/omnistudio-flexcard-fundamentals/test-and-activate-flexcards
+[^3]: Salesforce Trailhead, "Integration Procedures for Data Flow," which documents the Integration Procedure Debug Log and how each element's input and output appear in it. https://trailhead.salesforce.com/content/learn/modules/omnistudio-integration-procedures/build-simple-integration-procedures
