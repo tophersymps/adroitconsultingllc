@@ -1,0 +1,106 @@
+---
+title: "R-6a: FlexCard Data Source Selection: Performance vs Data Complexity"
+slug: day-11-r-6a-flexcard-data-source-selection-performance-vs-data
+series: sf-omni-consultant
+lesson: 11
+excerpt: "Recommend the most efficient data source for a FlexCard by weighing performance requirements against data complexity, and explain how FlexCard setup properties govern behavior. Day 11 of the Salesforce OmniStudio Consultant exam prep."
+date: "September 24, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [OmniStudio, FlexCards, Data Sources, Turbo Extract, Integration Procedures]
+---
+
+A FlexCard is a data-bound component. It renders whatever its data source hands it, nothing more and nothing less. That single fact makes the data source choice the biggest lever you pull on a FlexCard project, and it explains why this requirement (recommending the most efficient data source, and explaining FlexCard setup properties) sits in the FlexCards domain that makes up 18 percent of the OmniStudio Consultant exam. Pick the right source and a card is fast, simple, and cheap to maintain. Pick the wrong one and you get a card that is slow every time it renders, or one that is over-engineered, or one that cannot even display the shape of data the business needs. The exam tests whether you can look at a requirement and choose the source that meets the data shape and the refresh behavior with the least machinery, and whether you understand the setup properties that control when the card loads and re-fetches. The goal of this lesson is to make that decision automatic.
+
+## Deep Dive
+
+### A FlexCard is only as good as its source
+
+Before comparing the four source families, hold the core mechanic: the FlexCard binds its elements to a data JSON that the data source produces. You drop a field onto the canvas, point it at a JSON path, and the card displays whatever value lives at that path when the source returns.[^1] Change the source, change what the card can show. There is no magic in the card itself. It is a renderer, and its ceiling is set by the shape and freshness of the data it receives.
+
+This is why the source choice is a performance decision more than a configuration detail. Every time the card loads, and every time it refetches, the source runs. A source that runs one targeted query is cheap per render. A source that assembles a large payload through several orchestration steps is expensive per render. On a page that shows dozens of cards, that per-call difference multiplies fast. The practical question the exam wants you to answer is not which source is fastest in isolation, but which source satisfies the required data shape with the least work per render.
+
+### The four source families
+
+The OmniStudio toolkit gives you four broad ways to feed a FlexCard: static JSON, a Turbo Extract, a standard Extract, and an Integration Procedure. Each sits in a different spot on the spectrum from simple and fast to capable and expensive.[^2]
+
+Static JSON is a literal block of JSON embedded in the card definition itself. It lives with the card, so it needs no server round trip and no query. That makes it instant, reliable, and trivially simple, and it is the right call for fixed labels, option lists, demo scaffolding, and any data that never changes. Its hard limitation is that it cannot reflect live record data. A static source shows the same values on every render, so it is useless for anything the business expects to update as records change. Think of it as the card's built-in constants: great for things that stay true, wrong for anything that moves.
+
+Turbo Extract is the fastest live-data path. It runs a single SOQL query against the FlexCard's context record and returns a flat, row-shaped result set. One query, no orchestration, minimal work per call, which is why it is the default recommendation whenever the card needs a small, well-defined set of fields from one object or a simple parent-child join, and whenever the data must refresh with the record. Its limitation is shape: it returns rows, not nested structures. If the card needs multiple related collections or computed values, a flat result cannot deliver them. Turbo Extract answers the question "give me these fields for this record" cleanly and fast, and it stops being useful the moment the question becomes "give me a nested hierarchy."
+
+A standard Extract is a DataRaptor Extract. It can run multiple queries and apply transforms, but it still returns a single flat payload.[^3] That makes it the middle option. It is more flexible than Turbo Extract because it can pull from several objects and run pre-processing, so a standard Extract is the escape hatch when one query is not enough. But it does not give you the orchestration, branching, and multi-step logic of an Integration Procedure. Choose it when one query cannot get the job done but the output is still a single flat list the card can bind directly. It trades a little of Turbo Extract's speed for the ability to combine and reshape, without taking on the full weight of an IP.
+
+An Integration Procedure is the most capable and the most expensive source. It can call DataRaptors, invoke other Integration Procedures, run decision nodes, loop over collections, and assemble a nested JSON payload that a FlexCard can bind to deeply nested elements.[^4] Use it when the card needs data from multiple systems, computed or aggregated values, conditional logic that must run before render, or a nested structure that a flat Extract cannot produce. The cost is real: a heavier runtime and more moving parts to configure, test, and maintain. An IP earns its place only when the card actually needs its orchestration, not when a flat query would do.
+
+### The performance trade-off is about re-fetch frequency
+
+A common mistake is to judge a source by how fast it runs a single isolated call. In practice, the decisive question is how often the card re-fetches. A FlexCard bound to a Turbo Extract re-queries on every record load and on refresh. That is cheap per call, but on a list-heavy page where a card renders many times, the calls add up. Conversely, an Integration Procedure that assembles a large nested payload is slower per call, but it may be the only way to get the shape you need at all, and if that card renders rarely, the per-call cost is irrelevant.
+
+So match the source to two things: how frequently the card renders, and how much data it truly needs. Do not default to the easiest source to write, and do not default to the most powerful. A card that renders on every one of a hundred rows in a list, but only needs five fields from the context record, should use the lightest source that returns those five fields. A card that renders once on a detail page and needs a three-level nested hierarchy is a legitimate IP case, because no lighter source can produce the shape. The exam rewards the candidate who reasons about render frequency and data shape together, not the one who grabs the biggest hammer.
+
+There is also a practical trimming rule that applies to any live source. A source that assembles far more data than the card displays inflates every payload and slows every render. Keep the query to the fields the card actually binds, and trim an IP's output to what the card uses. Smaller payloads render faster and cost less, and the discipline applies to every source family.
+
+### Data complexity drives the decision predictably
+
+The selection follows a predictable pattern, which is exactly what makes it testable. Flat, single-object, low-volume data points to Turbo Extract. Multi-object but still flat output points to a standard Extract. Nested collections, cross-system joins, computed fields, or conditional assembly point to an Integration Procedure. Static JSON is reserved for data that never changes.
+
+Hold that ladder in your head and the exam questions collapse into shape recognition. Read the requirement, decide which shape it needs, and pick the lightest source that produces that shape. When in doubt, start with the simplest source that satisfies the shape and refresh requirements, and only escalate to an Integration Procedure when the card actually needs its orchestration. That "simplest that works" instinct is the thesis of this whole requirement, and it is the answer the exam rewards.
+
+### Why this matters for the exam
+
+This domain is 18 percent of the exam, and source selection is the core of it. The exam does not ask you to build a card. It asks you to look at a business requirement and choose the correct data source, and it plants wrong answers that are all too tempting. The most powerful source (Integration Procedure) is a wrong answer for a flat single-object list. The fastest source (Turbo Extract) is a wrong answer for a nested structure it cannot produce. The simplest source (static JSON) is a wrong answer for anything that must reflect live data. If you hold the shape ladder, every one of those traps is obvious.
+
+## Worked Example: the telecom case list
+
+Work through a realistic decision. A customer wants a FlexCard on the account record page that shows the five most recent cases for the current account, as a simple flat list, and it must refresh whenever the context record changes.
+
+Read the shape first. The requirement is a flat list of cases filtered by the current account, five records, no nested collections, no computed totals, no cross-system joins. That is the textbook flat, single-object, low-volume case. The context record (the account) is available, and a single SOQL query against Case can return the five most recent cases for that account ID. That is exactly what a Turbo Extract does, and it is the fastest live-data path. So the answer is Turbo Extract.
+
+Now check the traps against this choice. Static JSON is out because the cases must reflect live data and change as records change. A standard Extract is out because there is no need for multiple objects, transforms, or pre-processing when one query on one object does the job; the card would be carrying orchestration it never uses. An Integration Procedure is out for the same reason, taken further: it adds a whole orchestration runtime to produce a flat list that one query already delivers. Turbo Extract wins because it matches the shape and the refresh behavior with the least machinery. The lesson is not that Turbo Extract is always correct. It is that for this shape, nothing else earns its complexity.
+
+## Worked Example: the account with nested collections
+
+Reach for the opposite requirement. A customer wants a FlexCard on the account record page that renders the account, its list of contacts, and its list of open opportunities as separate nested collections, plus a computed total of the opportunity amounts.
+
+Read the shape again. Two separate child collections (contacts, opportunities) plus a computed aggregate value nested under one parent. A Turbo Extract returns flat rows and cannot produce a parent with multiple child lists without awkward binding or client-side logic. A standard Extract returns a single flat payload and hits the same wall. The card genuinely needs orchestration: something that loops over each collection, computes the total, and assembles a nested JSON payload the card can bind to. That is an Integration Procedure. It can call the DataRaptors to pull contacts and opportunities, run a decision or transform to compute the total, and assemble the nested structure. For this shape, the IP is the correct answer, and no lighter source suffices.
+
+The contrast between these two worked examples is the whole exam lesson. Same tool, same card type, two very different requirements, two different correct sources. The decision is driven entirely by data shape and refresh behavior, never by a rule like "always use an IP" or "always use Turbo Extract."
+
+## Configuration Walkthrough
+
+Walk through wiring a data source and its refresh behavior in the OmniStudio FlexCard editor.
+
+1. Open the FlexCard in the OmniStudio FlexCard editor and select the Data Source tab. From the source type dropdown, choose Static JSON, Turbo Extract, Extract, or Integration Procedure. The option you pick determines which properties appear next, because each source type is configured differently.
+2. For a Turbo Extract, select the object, write the SOQL query, and map the returned fields to the card's data JSON. Keep the query to the fields the card actually binds so the payload stays small. Every field you select above what the card uses makes each render slightly heavier for no benefit.
+3. For an Integration Procedure, select the IP from the list, then map the IP's output JSON to the card's data JSON. Verify the IP returns a structure the card's elements can bind to before wiring the card. This verification is where most wiring errors surface, because an IP that returns a different shape than the card expects produces a card with empty fields.
+4. Set the Refresh and Load behavior in the card's setup properties. Choose whether the card loads on record load, on demand, or on a timer, and decide whether it re-fetches when the context record changes. These properties govern how often the source runs, so they are the other half of the performance decision alongside which source you picked.
+
+## Exam Traps
+
+- **Reaching for an Integration Procedure for every card because it is the most powerful.** An IP adds orchestration overhead and maintenance cost. A card that only needs a flat list of fields from the context record is better served by a Turbo Extract, which is faster and simpler. Power you do not need is a liability.
+- **Choosing Turbo Extract for a card that needs nested collections or computed values.** Turbo Extract returns flat rows, so a card that must render a parent with multiple child lists will force awkward binding or extra client-side logic. That shape needs an Integration Procedure.
+- **Binding a card to a heavy IP that assembles far more data than the card displays.** The extra fields inflate every payload and slow every render. Trim the IP output to what the card binds, and pick the lighter source when the full shape is not needed.
+
+## Exam Tip
+
+Start with the simplest source that satisfies the shape and refresh needs: Turbo Extract for flat live data, and escalate to an Integration Procedure only when the card needs nesting, computation, or cross-system orchestration. Read every requirement as a shape question. Flat single-object data gets Turbo Extract. Multi-object flat output gets a standard Extract. Nested collections, computed values, and cross-system joins get an IP. Data that never changes gets static JSON. When the card renders often, favor the lighter source; when it renders rarely and needs a complex shape, the IP earns its cost.
+
+## Try It
+
+Open a sandbox with OmniStudio enabled and practice the shape ladder. Build a FlexCard that shows the five most recent cases for the current account as a flat list, and configure it with a Turbo Extract as the data source. Confirm it binds correctly and refreshes when the record changes. Then build a second FlexCard that must show the account, its contacts, and its open opportunities as nested collections with a computed total, and configure it with an Integration Procedure as the data source. Run both sources in the editor and compare the returned JSON shapes. You should see a flat row set from the Turbo Extract and a nested structure from the IP, which is exactly the shape difference the selection decision is about. Finally, on the first card, open the Data Source tab and change the refresh and load behavior so the card loads on demand instead of on record load, and confirm the source stops firing until you trigger it.
+
+## What's Next
+
+This lesson covered choosing the most efficient data source for a FlexCard and matching it to performance and data shape. The next lesson, Lesson 12, covers FlexCard Setup Properties and How They Govern Behavior, which explains how the card's setup settings control its behavior once the data source is wired. Where this lesson focused on the data that feeds a card, Lesson 12 focuses on the card's own configuration, and the two build on each other: you pick the source here, then control how the card behaves with its setup properties there.
+
+## Related Requirements
+
+- Day 5, Purpose of Each OmniStudio Tool: FlexCards, OmniScripts, and DataRaptors
+- Day 3, Customer Requirements and Assumptions: Eliciting and Defining
+
+## References
+
+[^1]: [Configure a Data Source on a FlexCard, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.flexcards_data_source.htm&language=en_US&type=5)
+[^2]: [Meet the Data Source Wizard, Salesforce Trailhead](https://trailhead.salesforce.com/content/learn/modules/omnistudio-flexcards/meet-the-data-source-wizard)
+[^3]: [Combine Internal Data for FlexCards, Salesforce Trailhead](https://trailhead.salesforce.com/content/learn/modules/omnistudio-data-tools-and-internal-data/combine-internal-data-for-flexcards)
+[^4]: [Build a Simple Integration Procedure, Salesforce Trailhead](https://trailhead.salesforce.com/content/learn/modules/omnistudio-integration-procedures/build-simple-integration-procedures)

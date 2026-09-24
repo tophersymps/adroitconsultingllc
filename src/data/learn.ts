@@ -2654,9 +2654,27 @@ export const learnSeries: LearningSeries[] = [
           "Access"
         ],
         "status": "published"
+      },
+      {
+        "slug": "day-11-r-6a-flexcard-data-source-selection-performance-vs-data",
+        "title": "R-6a: FlexCard Data Source Selection: Performance vs Data Complexity",
+        "series": "sf-omni-consultant",
+        "lesson": 11,
+        "excerpt": "Recommend the most efficient data source for a FlexCard by weighing performance requirements against data complexity, and explain how FlexCard setup properties govern behavior. Day 11 of the Salesforce OmniStudio Consultant exam prep.",
+        "date": "September 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "OmniStudio",
+          "FlexCards",
+          "Data Sources",
+          "Turbo Extract",
+          "Integration Procedures"
+        ],
+        "status": "published"
       }
     ],
-    "totalLessons": 10,
+    "totalLessons": 11,
     "curriculumLessons": 62
   },
   {
@@ -5063,6 +5081,24 @@ export const learnLessons: LearnLesson[] = [
       "Permission Sets",
       "Permission Set Licenses",
       "Access"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-11-r-6a-flexcard-data-source-selection-performance-vs-data",
+    "title": "R-6a: FlexCard Data Source Selection: Performance vs Data Complexity",
+    "series": "sf-omni-consultant",
+    "lesson": 11,
+    "excerpt": "Recommend the most efficient data source for a FlexCard by weighing performance requirements against data complexity, and explain how FlexCard setup properties govern behavior. Day 11 of the Salesforce OmniStudio Consultant exam prep.",
+    "date": "September 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "OmniStudio",
+      "FlexCards",
+      "Data Sources",
+      "Turbo Extract",
+      "Integration Procedures"
     ],
     "status": "published"
   },
