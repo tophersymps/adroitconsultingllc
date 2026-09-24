@@ -4581,6 +4581,15 @@ export const learnSeries: LearningSeries[] = [
     ],
     "totalLessons": 20,
     "curriculumLessons": 20
+  },
+  {
+    "slug": "sf-omni-consultant",
+    "name": "Salesforce OmniStudio Consultant Certification",
+    "description": "A one-stop prep course for the Salesforce Certified OmniStudio Consultant exam. All 31 official objectives split into 62 focused lessons across 6 domains, with config walkthroughs, architect-tier design trade-offs, exam traps, and practice questions.",
+    "gradient": "from-sky to-indigo-600",
+    "lessons": [],
+    "totalLessons": 0,
+    "curriculumLessons": 62
   }
 ];
 

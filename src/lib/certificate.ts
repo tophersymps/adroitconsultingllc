@@ -154,6 +154,7 @@ export function certificateRecipientName(user: {
  */
 export function certificateCourseName(series: string, fallbackName: string): string {
   if (series === "omni-studio-cert") return OMNI_COURSE_NAME;
+  if (series === "sf-omni-consultant") return "Salesforce OmniStudio Consultant";
   return fallbackName;
 }
 

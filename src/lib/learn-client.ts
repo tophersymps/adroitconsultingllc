@@ -14,6 +14,7 @@ export function seriesShortLabel(slug: string): string {
     "ai-adoption": "AI Adoption",
     "salesforce-sharing-visibility-architect": "Sharing & Visibility",
     "salesforce-data-architect": "Data Architect",
+    "sf-omni-consultant": "OmniStudio Consultant",
   };
   if (map[slug]) return map[slug];
   return slug

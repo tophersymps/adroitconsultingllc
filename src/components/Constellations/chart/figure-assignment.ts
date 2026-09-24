@@ -53,6 +53,7 @@ export const FIGURE_PINS: Readonly<Record<string, string>> = {
   "hermes-consultant-advanced": "Eridanus",
   "salesforce-sharing-visibility-architect": "Scorpius",
   "salesforce-data-architect": "Ophiuchus",
+  "sf-omni-consultant": "Gemini",
 };
 
 /** Deterministic processing order: biggest course first, then by slug. */
