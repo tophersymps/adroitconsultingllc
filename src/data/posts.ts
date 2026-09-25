@@ -2,6 +2,53 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "realtime-rls-enforcement-boundary-2026",
+    "title": "RLS Is the Enforcement Boundary in Multi-Tenant Realtime",
+    "excerpt": "Your Postgres Changes channel is only as secure as the row-level policies behind it. Here is how RLS gates a realtime stream in a multi-tenant Supabase app.",
+    "category": "React & Web Dev",
+    "categoryColor": "react",
+    "categoryGradient": "from-emerald to-emerald-dark",
+    "date": "September 25, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "11",
+    "featured": false,
+    "tags": [
+      "TypeScript",
+      "React",
+      "Next.js",
+      "Supabase",
+      "Real-Time",
+      "Security",
+      "Multi-Tenant",
+      "Web Development"
+    ],
+    "bannerImage": "/banners/realtime-rls-enforcement-boundary-2026.png",
+    "status": "published"
+  },
+  {
+    "slug": "salesforce-api-version-advance-2026",
+    "title": "The API Version Advance Is a Security Project, Not a Chore",
+    "excerpt": "Salesforce retires API versions in blocks and the floor is climbing. The advance is a security project: inventory the footprint and run it on a runbook.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "September 25, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "Apex",
+      "Security",
+      "API",
+      "Integration"
+    ],
+    "bannerImage": "/banners/salesforce-api-version-advance-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "salesforce-apex-trigger-framework",
     "title": "The Apex Trigger Framework: one handler per object keeps automation from collapsing at scale",
     "excerpt": "The Flow vs Apex decision guide tells you to reach for an Apex trigger framework past 30 automations. It never shows you how to build one. This is that blueprint.",
@@ -2264,31 +2311,6 @@ export const posts: BlogPost[] = [
       "AI Agents"
     ],
     "bannerImage": "/banners/salesforce-summer-26-three-things.png",
-    "status": "published"
-  },
-  {
-    "slug": "realtime-rls-enforcement-boundary-2026",
-    "title": "RLS Is the Enforcement Boundary in Multi-Tenant Realtime",
-    "excerpt": "Your Postgres Changes channel is only as secure as the row-level policies behind it. Here is how RLS gates a realtime stream in a multi-tenant Supabase app.",
-    "category": "React & Web Dev",
-    "categoryColor": "react",
-    "categoryGradient": "from-emerald to-emerald-dark",
-    "date": "September 25, 2026",
-    "author": "Adroit Consulting",
-    "authorInitials": "AC",
-    "readTime": "11 min read",
-    "featured": false,
-    "tags": [
-      "TypeScript",
-      "React",
-      "Next.js",
-      "Supabase",
-      "Real-Time",
-      "Security",
-      "Multi-Tenant",
-      "Web Development"
-    ],
-    "bannerImage": "/banners/realtime-rls-enforcement-boundary-2026.png",
     "status": "published"
   }
 ];

@@ -1,0 +1,82 @@
+---
+title: "The API Version Advance Is a Security Project, Not a Chore"
+slug: salesforce-api-version-advance-2026
+excerpt: "Salesforce retires API versions in blocks and the floor is climbing. The advance is a security project: inventory the footprint and run it on a runbook."
+category: "Salesforce"
+categoryColor: sf
+categoryGradient: "from-sky to-sky-dark"
+date: "September 25, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "12 min read"
+tags: [Salesforce, Apex, Security, API, Integration]
+bannerImage: /banners/salesforce-api-version-advance-2026.png
+---
+
+Every Salesforce org has an API version problem it does not know about. The code compiles, the integrations run, the LWC loads, so nobody touches the number. But that number is not a setting, it is a promise about which release behavior your code gets, and it is on a retirement staircase that is moving the floor upward under every org at once.
+
+Salesforce supports each API version for a minimum of three years from its first release, and it retires the ones older than that in blocks.[^1] It has been doing exactly that. Versions 21.0 through 30.0 are already gone, gone in the sense that a call to a retired version returns `410:GONE` and the integration simply stops working. Versions 31.0 through 40.0 are deprecated as of the Summer '27 release and retire in Summer '28, which is June 2028, a window closing faster than most integration estates migrate.[^2][^6] The currently supported floor is 41.0, and the latest is 68.0, which shipped with Winter '27 in October 2026.[^2][^3]
+
+The version you deployed on in 2019 is not a legacy choice, it is a future outage with a dated return. And the newest versions are not just new features, they carry the security defaults that made the platform harder to break into. API 67.0 flipped the Apex security model so database operations run in user mode by default and `WITH SECURITY_ENFORCED` no longer compiles, replaced by `WITH USER_MODE`.[^4][^7] If you never advance, you never inherit the protection.
+
+This article is the client-facing version of the argument: treat the API version advance as a recurring security project with a runbook, run it on a cadence that keeps you ahead of the staircase, and inventory the footprint before a wave lands. The cost of ignoring it is not a someday problem. It is a quarterly reconciliation job that fails silently one Tuesday.
+
+## Find the versions your org actually uses
+
+The first step is not deciding what to upgrade. It is discovering that you have a footprint at all, because versions are pinned in more places than the API reference table suggests.
+
+Apex classes and triggers carry an `apiVersion` in their metadata, and so do Lightning Web Components, Aura, and Visualforce pages. The org's `sf-project.json` or `sfdx-project.json` pins a default. Every REST endpoint URL embeds the version in the path, `/services/data/v62.0/sobjects/Account`, every SOAP WSDL names a version, every Bulk API 2.0 call carries one, and AppExchange packages ship their own pinned version that you inherit by installing them.[^2] Flow and custom REST and SOAP endpoints are a separate category, and notably the Apex metadata version retirement applies only to Apex class and trigger metadata, not to Visualforce, Flow, or custom endpoints.[^3]
+
+The accurate inventory comes from two directions. In Setup, the Apex Classes, Triggers, LWC, and Aura lists each show an API Version column, so sort ascending and you see the crust. But metadata alone misses the integrations, and the integrations are where the outage lands. The `ApiTotalUsage` event in Event Monitoring records every call to SOAP, Bulk, and REST by version, it is free, and it is the definitive answer to "what versions is my estate actually calling."[^1][^5] Pull that log, group by version, and you get the real footprint, which usually includes versions nobody listed on any inventory spreadsheet.
+
+![The API version footprint of a typical org: metadata pins in Apex classes, triggers, LWC and Aura and sf project files, plus the runtime footprint surfaced by the ApiTotalUsage event that records the versions external REST, SOAP and Bulk integrations actually call, which rarely match the metadata list](</diagrams/salesforce-api-version-advance-2026/1-version-footprint.png>)
+
+The mismatch between the two lists is the point. A class parked at 46.0 shows up in Setup and gets upgraded when someone notices. A quarterly extract script that posts to `/services/data/v55.0/` shows up only in the event log, and only if someone looked. Start the advance by reconciling these two views, so the inventory names every pinned version and where it came from, metadata, integration, or package.
+
+## The staircase is the schedule, not a rumor
+
+Once you know the footprint, the next question is the schedule, and the schedule is the retirement staircase, not a marketing blog. Two blocks of versions have already been retired: 7.0 through 20.0 in Summer '22, and 21.0 through 30.0 in Summer '25.[^2] The next block, 31.0 through 40.0, is deprecated from Summer '27 and retires in Summer '28, June 2028.[^2][^6] Below the current floor of 41.0 nothing is supported, and above it the supported window runs 41.0 through 68.0 as of Winter '27.[^2]
+
+The staircase changes the framing of an advance project. You are not deciding whether to keep old versions around. You are deciding how far ahead of the floor to sit, because the floor is a hard edge that arrives on a date. Salesforce notifies customers who use a deprecated version at least a year before support ends, but that is a courtesy, not a rescue, because the migration of a big integration estate rarely fits in a year when it starts only after the warning.[^1]
+
+![The API retirement staircase: the supported floor starts at 41.0 and the latest is 68.0 with Winter 27 in October 2026, versions 31.0 to 40.0 retire in Summer 28 while versions 21.0 to 30.0 and 7.0 to 20.0 are already gone, and a call to any retired version returns 410 GONE, so the safe operating band is sitting comfortably above the floor with room before each retirement date](</diagrams/salesforce-api-version-advance-2026/2-retirement-staircase.png>)
+
+The operational rule that falls out: never sit within one retirement block of the floor. If the floor is 41.0 and the 41.0 through 50.0 block is the next to age out, an estate pinned at 46.0 has no room to maneuver. The comfortable band is the recent three years of versions, the same window Salesforce recommends as a fallback when you cannot yet reach the latest.[^4] Being there means a wave announcement is a heads-up, not a scramble.
+
+## The advance is a cadence, and the v67 flip shows why
+
+Version advancement is not a one-time rescue at the bottom of the staircase. It is a cadence, ideally keep the codebase consolidated onto a minimal number of versions, ideally one, and run an advance each time a release you care about lands.[^4] The reason it is a security project rather than a hygiene chore is the security defaults that only arrive at the newer versions.
+
+API 67.0 is the proof. Before it, database operations in Apex ran in system mode by default, bypassing the current user's field-level security and object permissions under an implicit assumption of broad access. From 67.0 onward, SOQL, SOSL, DML, and Database methods run in user mode by default, enforcing the running user's FLS and object permissions, unless the code explicitly declares `WITH SYSTEM_MODE`.[^4][^7] `WITH SECURITY_ENFORCED` stopped compiling, replaced by `WITH USER_MODE`, and a class still using the old clause on 67.0 will not compile.[^7] This is not a cosmetic toggle. It is the difference between code that silently reads records a customer should never see and code that respects the access model the whole stack was built on.
+
+That is exactly why the advance cannot be a bulk find-and-replace of the version number. A class written against the assumptions of 66.0, where system mode was the default and sharing was opt-in, behaves differently when you roll it to 67.0 or later. We covered the full migration of that security model in [Apex security defaults flip at 67.0](/field-notes/apex-summer-26-security-v67-migration), which is the manual you reach for on the reach-the-newest half of an advance. For this article, what matters is the widening is invisible at compile time and only shows in the running behavior for a restricted user. So the advance plan for the security-relevant squads has its own anchor: before you bump anything to a version that changed the security defaults, audit every class for an implicit system-mode assumption and for any remaining `WITH SECURITY_ENFORCED` usage, then add test scenarios that run as restricted users and assert what data is and is not visible.[^7]
+
+![The advance cadence across the staircase: keep the codebase on one API version, run the advance each release you care about, and when a version changed the security defaults such as 67.0 flipping database operations to user mode and removing WITH SECURITY_ENFORCED, audit implicit system mode assumptions and add restricted-user test scenarios before the version bump lands](</diagrams/salesforce-api-version-advance-2026/3-advance-runbook.png>)
+
+## A runbook that fits the advance
+
+A repeatable advance fits in four steps, and running them on cadence keeps the staircase from ever being urgent.
+
+First, inventory every quarter, not before a deadline. Reconcile the Setup API Version column against the `ApiTotalUsage` event log, and name where each version came from, metadata, integration, package, or config file.[^1][^2][^5] The inventory is the single move that stops the 410 outage, because it finds the version the org forgot it was calling.
+
+Second, target one version with room. Do not chase the absolute latest on every advance. Pick the version that sits comfortably above the floor and within the recent three years, consolidate onto it, and only reach for the newest when a specific release feature or security default you need arrives.[^2][^4] The get-to-latest-everything project is how advances become year-long epics nobody wants to schedule again.
+
+Third, bump in a sandbox and test for behavior, not just compile. The version column change deploys cleanly, which is exactly why it is dangerous, the compile success hides behavior shifts. For the security-relevant classes, add the restricted-user tests and run the suite against the new version before it reaches production.[^7] Heap limits moved too, synchronous Apex from 6 MB to 10 MB and asynchronous from 12 MB to 25 MB in Winter '27, a relief if your batch jobs were riding the old wall, so an advance report should note the limits `Limits.getLimitHeapSize()` now returns on the target.[^3]
+
+Fourth, land it with a guard. Use the release update test runs that reject calls on unsupported versions ahead of enforcement, so a straggler integration fails in a controlled way during the window you still control, not on the first morning after the floor moved.[^3][^6] The retirement is enforced on a date, but your detection can run ahead of it.
+
+We hit this exact failure mode in our own delivery work: a long-running integration shipped on a version two blocks above the floor, compiled cleanly for years, and only surfaced in the `ApiTotalUsage` log during a quarterly reconcile the week before its block was announced. The fix was not hard once it was visible. The lesson was that the inventory is the whole game, because you cannot migrate a version you do not know you are calling.
+
+## The floor is a date, so pick your band
+
+The API version advance stops being scary the moment you treat it as a standing project instead of a rescue. Inventory the footprint quarterly against the event log, pick a band with room above the floor, consolidate the codebase onto one version, and bump on a cadence that inherits each security default as it ships. Salesforce has already retired two blocks and has a third closing in Summer '28, and it supports each version only three years, so there is no permanent parking spot on this staircase.[^1][^2][^6]
+
+The version number is the cheapest security control you can buy, and the most commonly ignored, because it looks like a setting and behaves like an obligation.
+
+[^1]: Salesforce, "API End-of-Life Policy," Connect REST API Developer Guide: each version supported a minimum of three years, and calls to retired versions return `410:GONE`. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/connect-rest-api/guide/intro_api_eol.html)
+[^2]: "Salesforce API Versions by Release," SF Updates: Winter '27 is version 68.0, the supported window is 41.0 through 68.0, and the retirement blocks by release. [sfupdates.com](https://sfupdates.com/api-versions/)
+[^3]: "Salesforce Winter '27 Release API Updates: What Developers Need to Know About API Version 68.0," conemis: use Any API Auth for SOAP login, SOAP login retirement in 31.0-64.0, Apex metadata version retirement scope, raised heap limits, and the REST `latest` keyword. [conemis.com](https://www.conemis.com/news/salesforce-winter-27-release-api-updates-version-68-0)
+[^4]: Salesforce, "Apex Versioned Behavior Changes": recommend the latest API version, otherwise versions from the past three years, and consolidate onto a minimal number of versions. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexref.meta/apexref/versioned_behavior_changes.htm)
+[^5]: Salesforce, "Track API Usage for All API Versions": the API Total Usage event type monitors SOAP, REST, and Bulk API requests by version. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=release-notes.rn_security_em_track_api_usage_all_versions.htm&release=244&type=5)
+[^6]: "Salesforce API Versions 31.0-40.0 Retire June 2028," VantagePoint: versions 31.0 through 40.0 are deprecated from Summer '27 and retire on June 1, 2028. [vantagepoint.io](https://vantagepoint.io/blog/sf/salesforce-api-versions-31-40-retirement)
+[^7]: Salesforce, "Summer '26 Release Highlights for Salesforce Architects": API 67.0 flips database operations to user mode by default, `WITH SECURITY_ENFORCED` is removed, and restricted-user tests belong in the version-upgrade plan. [salesforce.com](https://www.salesforce.com/blog/summer-26-release-architect-highlights/)
