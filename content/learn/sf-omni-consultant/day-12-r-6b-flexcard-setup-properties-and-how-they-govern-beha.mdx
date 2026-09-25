@@ -1,0 +1,119 @@
+---
+title: "R-6b: FlexCard Setup Properties and How They Govern Behavior"
+slug: day-12-r-6b-flexcard-setup-properties-and-how-they-govern-beha
+series: sf-omni-consultant
+lesson: 12
+excerpt: "Explain how FlexCard setup properties govern card behavior: context record binding, load and refresh timing, display state, and the interaction surface. Day 12 of the Salesforce OmniStudio Consultant exam prep."
+date: "September 25, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [OmniStudio, FlexCards, Setup Properties, Context Record, Load Behavior]
+---
+
+A FlexCard's data source gives it the data, and its elements give it a face, but the setup properties decide when the card lives. They sit above both: a layer of card-level configuration that controls how the card loads, refreshes, and behaves before any element renders. Every card the consultant names in that FlexCards domain, which is 18 percent of the OmniStudio Consultant exam, carries these properties, and the exam asks you to explain what they do more often than you might expect. Data source selection (Lesson 11) answers the question of where the data comes from. Setup properties answer the question of when the data is fetched, what record it is fetched for, and how the card presents itself while it waits. This lesson covers that second contract, because a card can have a flawless data source and still fail entirely if its setup properties fight the requirement.
+
+## Deep Dive
+
+### Setup properties are the card's contract with its environment
+
+Think of a FlexCard as three layers stacked together. The data source produces a JSON payload. The elements render that payload as fields, images, repeats, and action buttons. And the setup properties determine how those first two layers interact with the page around them. The setup sits above both. It does not hold data and it does not draw anything, but it controls the lifecycle of the whole card: when a fetch fires, how the card reacts when the user navigates to a different record, whether the card shows collapsed or expanded, and what the user is allowed to do with it.[^1]
+
+This is why a setup misconfiguration is so easy to chase in production. When a card misbehaves, the instinct is to blame the query or the layout. Usually it is neither. A card that shows stale data is not running a wrong query; it is failing to re-fetch at the right time. A card that loads slowly on a list page is not querying too much data by accident; its setup is telling it to fetch a heavy payload before the user has even looked at it. Because the setup properties define the contract between the card and its environment, they are the first thing to audit when a card goes wrong. Read the setup before you touch the query or the layout, every time.
+
+### The context record is the anchor of the card
+
+The single most important setup decision is the context. A FlexCard is typically bound to a record: an account, a case, a contact, an order. That record is the anchor. The card does not fetch a self-contained dataset in a vacuum; it fetches the data that belongs to the record it is placed on. The setup properties define which record type the card binds to and which fields identify that record, and the data source runs against that context.[^2]
+
+This has a practical consequence that decides success or failure. A card with the wrong context will fetch the wrong data no matter how well the source is written. Suppose a card is meant to show a case's escalation history, but its context is set to the account record. The card runs on the case page, and it asks its source for the data that belongs to the current account, not the current case. The source does exactly what it is told, and it returns the wrong rows. The query is correct; the setup is wrong. The reverse is just as common: bind a card to the case context when it needs account-level data, and you get a card that comes back empty on every page where the context record has no matching records.
+
+So the context selection determines what data is even available. Before wiring a single merge field, confirm which record the card is bound to and which fields drive it. Every element that pulls from the source draws from that context. Get the context right and the card is coherent with its page. Get it wrong and every downstream step is built on a broken foundation. The setup properties own the context, and the consultant owns the responsibility of setting it correctly.
+
+### Load and refresh behavior govern when the source runs
+
+Beyond the context, the setup properties decide when the card fetches and whether it re-fetches. Three dimensions matter: when the first fetch fires, whether the card fetches on a schedule, and whether it re-fetches when the context record changes.
+
+The first fetch can happen on record load, on demand, or on a timer.[^3] A card that fetches on record load grabs its data the moment the page renders. That is the right choice for a card the user must see immediately with current data, like an account summary or a case header. A card that fetches on demand waits until the user triggers it, which suits a card buried behind an expand, tab, or action. A timer-based fetch refreshes on an interval, which fits a dashboard value that must stay roughly current without a page reload.
+
+The refresh behavior on context change is the dimension the exam traps on most. A FlexCard placed on a record page lives in an environment where the context changes whenever the user navigates to a different record. The setup property decides whether the card re-fetches for the new record or keeps showing the old values. A card that must stay current with record edits, and with record navigation, should re-fetch on context change. A card that shows static reference data does not need to, and forcing it to re-fetch on every context change creates needless repeated queries for data that never moves.
+
+Misconfiguring this pair produces two familiar failure modes. A card that never re-fetches on context change goes stale: the user edits the record, the card keeps showing the pre-edit values, and nobody can explain why. A card that re-fetches on every context change for data that never changes floods the server with queries that all return the same result. The fix for the first is to enable re-fetch on context change for live record data. The fix for the second is to recognize that static data should load once, full stop. Matching the refresh behavior to whether the data actually moves is the whole game.
+
+### Display properties shape the user experience
+
+The setup properties also govern how the card presents itself. Two decisions matter most: whether the card is collapsed or expanded by default, and whether it shows a header.
+
+Collapsed versus expanded changes the user's first impression and interacts with performance. A collapsed card shows a compact summary and hides the detail until the user expands it. An expanded card shows everything at once. This is not purely cosmetic. The display state and the data source interact, because a collapsed card may not need to fetch its heavy detail data until the user expands it. A card that renders on a list page, where dozens of rows each carry a card, should default to collapsed and defer its heavy fetch. Making every one of those cards expand eagerly on load would double the cost of the page for data most users never open.
+
+The header controls what context the user has at a glance. A card with a header shows the record name or an identifying title, which is important when the card is part of a larger page and the user needs to know which record a summary belongs to. The header choice interacts with the context record, because a good header often displays a field from the context record itself. A card without a header uses that space for other content or keeps the surface minimal, which suits a card meant to blend into a page rather than stand out.
+
+Display properties also cover how the card behaves in a list versus a single-record view. A card in a list context renders as one row among many and should stay lean. A card on a detail page renders as the focus of the screen and can afford to show more. The setup properties let you adapt to both, and getting the display state right is what keeps the card usable across the different places it can live.
+
+### The interaction surface governs what the user can do
+
+Setup properties also define the interaction layer: whether the card is read-only or supports actions, and how those actions are exposed. This ties the setup directly to the action layer, because a card that must launch an OmniScript, open a modal, or fire an event needs the interaction behavior enabled and the action wired to the right element.
+
+A read-only card displays data and stops there. A card with actions adds buttons that open OmniScripts, navigate to records, show flyouts, or fire events that other components listen for.[^4] Enabling that surface is a setup decision, and it must be consistent with the card's job. A summary card on a service console often needs an action that launches an OmniScript to start a guided process from the context record. A read-only reference card has no business carrying a workflow action it will never use.
+
+The interaction properties matter to the exam because they connect the setup to the rest of OmniStudio. The card's action layer is where a FlexCard stops being a passive display and starts being an entry point into a process. That entry point only works if the setup enables it and the action is wired to the right element. When the exam describes a card that must open an OmniScript from a button, it is testing whether you know the setup properties are the contract that makes that possible.
+
+### Why the contract matters for the exam
+
+These four groups, context, load and refresh, display, and interaction, are the card's contract with its environment. The exam rewards the candidate who reads a behavior requirement and maps it to the correct setup property. Stale data maps to the refresh behavior. A slow list page maps to the display state and the deferred fetch. Wrong data maps to the context record. Missing actions map to the interaction surface. Each of those is a distinct property, and the trap in every question is picking the wrong one: blaming the query for a refresh problem, blaming the layout for a context problem, blaming the action wiring for a load problem.
+
+Hold that map in your head and the exam collapses into pattern recognition. When a card misbehaves, read the setup properties before the query or the layout. Load, refresh, context, and display are the contract. The source does what the setup tells it, and the elements render what the source returns. Fix the setup and the card falls in line.
+
+## Worked Example: the stale account summary
+
+Work through the most common real-world symptom. A service agent opens an account, edits the account phone number, saves, and the account summary FlexCard on the page keeps showing the old phone number for the rest of the session.
+
+Read it against the setup contract. The card is bound to the account context, so it knows which record it represents. The data source returns the account fields including the phone number. The elements render them. So where does the staleness live? It is not the query, which returns correct data at the moment it runs. It is not the layout, which renders exactly what it is given. The card fetched once when the record loaded, and it has no instruction to re-fetch when the context record changes. The user edited the record, the card did not, and now they disagree.
+
+The fix is a setup property: set the card to re-fetch when the context record changes. Live record data should refresh with the record, and the re-fetch-on-context-change property is exactly what delivers that. The lesson is that the diagnosis starts in the setup, not in the source or the elements. A consultant who opens the data source query looking for the bug finds nothing, because the query never had a bug. The setup property governing refresh did.
+
+## Worked Example: the heavy collapsed card
+
+Now a performance symptom. A customer puts a FlexCard on a list page where each row renders the card. The card is collapsed by default, showing only a short summary. Yet every row fetch pulls a large integration procedure payload full of detail the expanded view would use. The page grinds to a halt.
+
+Read it against the contract again. The card is collapsed, so the user only sees the summary until they expand. But the load behavior fetches the full heavy payload on initial render, paying for detail data nobody has looked at yet. The display state and the load behavior are fighting each other: the display says keep it lean, the load says grab everything now. On a list page with many renders, that mismatch multiplies into a slow page.
+
+The fix is to make the two setup properties agree. A collapsed card that does not need its detail until expanded should defer the heavy fetch until the expansion. Load what the collapsed summary needs, and fetch the rest on demand. The performance win is not a faster query; it is a setup change that stops paying for data the user never sees. This is the exact scenario Quiz Question 1 tests, and the reasoning is identical: static or deferrable data should not be loaded eagerly just because a card happens to render.
+
+## Configuration Walkthrough
+
+Walk through setting the setup properties for a FlexCard in the OmniStudio FlexCard editor.
+
+1. Open the FlexCard and go to the Setup panel. This is where the card-level details and behavior live, distinct from the per-element Properties panel you use when you select a field or an action on the canvas.[^1]
+2. Set the context. Choose the record type the card binds to and the fields that identify the record. This pins the card to the correct object before any data source runs, so the source queries against the right context.
+3. Configure the load behavior. Choose whether the card fetches on record load, on demand, or on a timer, and decide whether it re-fetches when the context record changes. Match this to whether the underlying data actually moves: live record data re-fetches on context change, static reference data loads once.
+4. Set the display properties. Choose the default expanded or collapsed state, whether the header shows, and how the card behaves in a list versus a single-record context. If the card is collapsed and its detail is heavy, defer that fetch until expansion.
+5. Enable the interaction properties the card needs. If the card must launch an OmniScript or open a modal, turn on the interactions and wire the action to the right element. Verify the data source and elements are consistent with the load and display behavior you chose, so the card does not fetch data its collapsed state hides or display fields its context cannot supply.
+
+## Exam Traps
+
+- **Setting a card to re-fetch on every context change when the data is static reference data.** Reference data never moves, so re-fetching on every context change just fires repeated queries that all return the same values. Static data should load once. Reserve re-fetch-on-context-change for live record data that actually changes as records are edited and navigated.
+- **Leaving a card collapsed by default but still fetching a heavy payload on load.** A collapsed card shows a summary, and if its detail data is only needed on expansion, make the fetch defer until then. Otherwise every render on a list page pays for data the user never opens. Match the load depth to the display state.
+- **Binding the card to the wrong context record type.** The setup properties define the context, and the data source runs against it. A card bound to the wrong object, or to the wrong identifying fields, queries against the wrong data regardless of how correct the query text is. Confirm the context before wiring a single element.
+
+## Exam Tip
+
+When a card misbehaves, read the setup properties before the query or the layout. They are the contract between the card and its environment: context decides what data is available, load and refresh decide when the source runs, display decides how the card presents, and interaction decides what the user can do. Map every symptom to the property that governs it. Stale data points to the refresh behavior. A slow page points to the display state and deferred fetch. Wrong data points to the context. Missing actions point to the interaction surface. If the card fetches too often, drill into the load and refresh behavior first, because that is where fetch frequency lives.
+
+## Try It
+
+Open a sandbox with OmniStudio enabled and build a FlexCard bound to the account record that shows the account name, phone, and five recent cases. In the Setup panel, set it to re-fetch when the context record changes, and confirm that editing the account phone number updates the card after a refresh. Then build a second card that shows reference data from an integration procedure, leave it collapsed by default, and configure the load behavior so the heavy fetch defers until the user expands. Run both in the editor and watch the network calls: the first card fires on context change, the second does not fire until you expand it. Finally, deliberately bind the first card to the wrong context record type and confirm the elements come back empty or wrong, which demonstrates why the setup is the first thing to audit.
+
+## What's Next
+
+This lesson covered how FlexCard setup properties govern the card's behavior: its context record, load and refresh timing, display state, and interaction surface. The next lesson, Lesson 13, covers Multi-Source FlexCard Design: Layering Data and Elements. Where this lesson explained how a single card's setup controls its lifecycle, Lesson 13 extends that to cards that pull from more than one source and layer the resulting data and elements together. The setup contract you learned here, context, load, display, and interaction, is exactly what makes a multi-source card coherent, because each source and each layer still answers to the same card-level properties.
+
+## Related Requirements
+
+- Day 11, FlexCard Data Source Selection: Performance vs Data Complexity
+- Day 17, Conditional Rendering in FlexCards: When the Card Adapts
+
+## References
+
+[^1]: [Configure Your FlexCard, Salesforce Trailhead](https://trailhead.salesforce.com/content/learn/modules/omnistudio-flexcard-fundamentals/configure-your-flexcard)
+[^2]: [FlexCards Context Variables, Salesforce Help](https://help.salesforce.com/s/articleView?id=sf.os_omnistudio_flexcards_24388.htm&language=en_US&type=5)
+[^3]: [Data Source Wizard Steps and FlexCard Configuration, Salesforce Trailhead](https://trailhead.salesforce.com/content/learn/modules/omnistudio-flexcards/meet-the-data-source-wizard)
+[^4]: [Discover the Key Capabilities of FlexCards, Salesforce Trailhead](https://trailhead.salesforce.com/content/learn/modules/omnistudio-flexcards/discover-the-key-capabilities-of-flexcards)
