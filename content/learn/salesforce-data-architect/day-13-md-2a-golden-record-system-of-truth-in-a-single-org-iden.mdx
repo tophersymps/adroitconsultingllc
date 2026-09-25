@@ -22,6 +22,9 @@ In a single org, the Salesforce Account, or the Person Account when the org is c
 
 The challenge is not choosing the golden record object. It is keeping that object clean as records arrive from multiple channels. [^3] Every channel has its own conventions. The portal brands records with a stable external key. Manual entry produces freehand names, missing emails, and variations in address formatting. API loads can inject thousands of records in a single payload without checking whether they already exist. The golden record, and the matching and deduplication infrastructure around it, exists to absorb all of that and keep one authoritative Account per real-world customer. [^3]
 
+![Three inbound channels, portal, manual entry, and marketing bulk load, all create Accounts for the same people; matching and duplicate rules collapse them into a single golden Account that becomes the system of truth](</diagrams/day-13-md-2a-golden-record-system-of-truth-in-a-single-org-iden/1-three-channels-golden-record.png>)
+
+
 ## Identity resolution: deciding when two records are the same entity
 
 Identity resolution is the process of deciding when two records refer to the same real-world entity. [^2] It is the matching half of the MDM flow introduced in md-1b. Before you can consolidate a customer, you have to decide that the portal record, the manual record, and the imported record are all the same person. That decision, done well, is what produces a golden record instead of a duplicate cluster. Done poorly, it does either of two bad things: it merges two distinct customers into one (a false positive), or it leaves two records for one customer because it never matched them (a false negative). [^4]
@@ -33,6 +36,9 @@ Exact matching compares fields for an exact, deterministic equality. [^2] Email 
 Fuzzy matching compares fields for similarity rather than equality, using normalization and tolerance. [^2] First name "Bob" matches first name "Robert" as a fuzzy first-name match. Company name "Acme Corp" matches "Acme Corporation" as a fuzzy company-name match. Fuzzy matching tolerates typos, abbreviations, word order, and format differences, which makes it the right tool when no reliable key exists. The tradeoff is confidence. Fuzzy matching produces candidates, not certainties, and it needs thresholds and blank-field handling to keep false positives under control. [^4]
 
 The exam draws a sharp line between the two and expects you to apply it like an architect. [^4] Where a stable key exists, match deterministically: it is cheaper and more accurate. Use fuzzy matching only where no reliable key exists. [^4]
+
+![Comparing deterministic matching on an external ID with fuzzy matching on name and email fields; deterministic is cheaper and more accurate where a stable key exists, fuzzy is the fallback where none does](</diagrams/day-13-md-2a-golden-record-system-of-truth-in-a-single-org-iden/2-deterministic-vs-fuzzy.png>)
+
 
 ## Deterministic matching: the external ID pattern
 
@@ -68,6 +74,9 @@ Duplicate rules can run at the user interface, via the API, or both. [^4] This c
 
 The exam tests two specific facts about duplicate rules. [^4] First, a duplicate rule can block a save both at the UI and via the API, and it combines a matching rule with an action (Alert, Block, or Allow). [^4] Second, duplicate rules never merge records permanently on their own. [^4] They detect and act at save time; the actual consolidation happens separately in the merge step. A rule is not warn-only, because the Block action prevents a save, and it does not auto-merge, because no rule performs a merge. [^4]
 
+![A duplicate rule combines a matching rule with an action; the three actions are Alert, which warns and still saves, Block, which prevents the save, and Allow with report, which saves and logs the duplicate for review](</diagrams/day-13-md-2a-golden-record-system-of-truth-in-a-single-org-iden/3-duplicate-rule-actions.png>)
+
+
 ## Deduplication: the operational process
 
 Deduplication is the operational process that turns detection into a clean data set. [^6] It has two halves: clean up the duplicates that already exist, and prevent new ones from forming going forward. [^6]
@@ -87,6 +96,8 @@ The deepest exam point in md-2a is that system of truth is usually attribute-lev
 It is tempting to think of the golden record as a single winning record that holds all the truth. That is only half right. [^8] The record can be mastered in Salesforce while individual attributes are sourced elsewhere. Phone numbers might be mastered in a telephony system, so the golden Account holds a phone value, but the authoritative source for phone is the telephony system, not Salesforce. [^8] Account is still the golden record. It does not mean Account is not the golden record, and it does not mean phone must be removed from Salesforce or that a second Account is needed. [^8] It means the golden record is a composite: the record lives in Salesforce, but source-of-truth responsibilities are assigned per attribute. [^8]
 
 This attribution is what the survivorship rules from md-1b implement. [^2] Source system priority declares one system the most trustworthy for a given attribute: telephony for phone, the billing system for tax ID, the portal for the customer's self-reported contact details. [^2] Most recent update selects the value with the newest modified timestamp. [^2] Most complete record favors the record with the fewest blank attributes. [^2] Because these rules apply per attribute, the golden record can be a blend, taking its phone from one source and its name from another, which is exactly what an attribute-level system of truth produces. [^2]
+
+![An attribute-level system of truth matrix maps each attribute to an authoritative source and a survivorship rule: phone from telephony, tax ID from billing, customer name from Salesforce, self-reported details from the portal](</diagrams/day-13-md-2a-golden-record-system-of-truth-in-a-single-org-iden/4-attribute-level-system-of-truth.png>)
 
 The architect sees this as a governance decision, not a feature decision. [^8] For each attribute on the customer entity you should know which system is authoritative and which survival rule applies when records merge. A matrix of attribute to authoritative source to survivorship rule documents that in one place. It is the difference between an org that cleans up every quarter and an org that knows, every time a merge happens, exactly which value should win and why. [^8]
 
