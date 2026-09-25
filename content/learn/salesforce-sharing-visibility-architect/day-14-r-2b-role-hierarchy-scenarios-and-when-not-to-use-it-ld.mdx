@@ -1,0 +1,131 @@
+---
+title: "When NOT to Use the Role Hierarchy: Scenarios, LDV Risk, and Opportunity Access"
+slug: day-14-r-2b-role-hierarchy-scenarios-and-when-not-to-use-it-ld
+series: salesforce-sharing-visibility-architect
+lesson: 14
+excerpt: "Decide when the role hierarchy is the right sharing mechanism and when it over-grants or bloats the sharing table. Covers criteria-based requirements, LDV risk, and Opportunity-specific behavior."
+date: 2026-09-25
+author: Adroit Learning
+readTime: 14
+tags:
+  - role hierarchy
+  - sharing rules
+  - sharing table
+  - large data volume
+  - opportunity access
+---
+
+Day 13 showed what the role hierarchy *does*: it grants managers access to the records their reports own, and for most standard objects that grant happens automatically when you enable the object's "Grant Access Using Hierarchies" setting. Knowing what a tool does is half the exam. The other half, and the part the architect certification leans on, is knowing when to leave that tool in the drawer.
+
+This lesson is that decision. How do you tell, from a scenario, that the hierarchy is the right mechanism? More often, how do you tell it is the *wrong* one? And how does all of this change when the object in question is Opportunity?
+
+## The two-question test
+
+The role hierarchy is a one-way stone. It takes a record owned by someone low in the tree and hands access to everyone above them, along the reporting line, for the entire record. That behavior is exactly right in exactly one shape of requirement. You can compress that shape into two yes/no questions, and the hierarchy is the correct tool only when *both* answers are yes.
+
+Question one: does access follow the reporting line? That means the person who needs to see the record is a manager, a director, or another user positioned strictly above the owner in the role hierarchy. Question two: is the access ownership-based, meaning the requirement is satisfied by "this user owns the record, their managers see it"?[^3]
+
+If access follows the reporting line **and** is ownership-based, the hierarchy is the natural fit. If either answer is no, you are forcing the wrong mechanism, and you will pay for it with over-grants, under-grants, or a bloated sharing table.
+
+## When the hierarchy is the wrong tool
+
+Three common scenario shapes come up again and again in the exam, and each one is a trap precisely because the hierarchy *feels* close. Let's name them directly.
+
+### Peers must see each other's records
+
+Two reps in the same role both own accounts. The business wants each rep to see the other's records, or at least read them. The role hierarchy cannot do this. Users in the same role sit at the same level; the hierarchy only moves access upward, never sideways, and it never moves it downward.[^3] Turning on the hierarchy for the object gives both reps nothing, because neither is above the other. You would need a sharing rule that targets both reps' role or a public group containing them.
+
+### Cross-division access
+
+Sales needs to see the engineering team's cases, or the eastern region needs visibility into the western region's accounts for a joint deal. These relationships cut across the reporting tree rather than running along it. A role hierarchy is a single tree; it has no way to represent "this specific branch may peek into that unrelated branch." You do not bend a tree sideways. You reach for a sharing rule that names the source group and the target group and grants the needed access level.[^11]
+
+### Criteria-based access
+
+This is the shape the exam returns to most, and it is the fundamental limit of the hierarchy. The hierarchy shares *every* record owned below. It cannot say "share only the cases worth more than $100,000" or "only the accounts in the energy industry." If the requirement is that managers see only a *subset* of their subordinates' records, the hierarchy is structurally unable to do the job, because the hierarchy does not inspect record content. It shares the whole record or nothing. Granting via the hierarchy gives the manager too much: every subordinate record, including the ones they should not see. That is an over-grant, and over-grants on the hierarchy are invisible until someone audits who can see sensitive data.[^3]
+
+Whenever a requirement is criteria-based, the hierarchy is disqualified. You move to a criteria-based sharing rule, which inspects field values and grants only the matching records to a named group.[^11]
+
+## The Exam Trap behind "wrong choice"
+
+Here is the trap in its purest form, and it appears on the real exam. A manager must see only the high-value cases of their reps, the ones where Amount is over $100,000, and nothing else. The role hierarchy will hand that manager *every* case the reps own. The correct answer is a criteria-based sharing rule that targets the managers' group (or the managers' role) and matches on the amount field. The hierarchy is the wrong choice not because it fails to grant, but because it grants too much. It cannot restrict a subset; it can only cascade everything upward.
+
+That is the single most important conceptual distinction in this lesson. The hierarchy is an *all-or-nothing upward cascade*. When the requirement is a filtered subset, the hierarchy is wrong even though it technically "works" in the sense that the manager gets access. They get access to the wrong records.
+
+## The LDV cost: every ancestor, one share row
+
+Now the performance angle, because this is an architect-level exam and the sharing table is where architecture lives and dies.
+
+Salesforce implements sharing through share objects: a `CaseShare`, an `AccountShare`, an `OpportunityShare` row, and so on, one row per user-or-group per record. When a user gains access through a sharing rule, a manual share, or other explicit grants, Salesforce materializes those rows so it can answer "who can see this record?" quickly.
+
+The role hierarchy is different. When access comes from the hierarchy alone, Salesforce does not store a share row for the direct grant the way a rule does; instead it computes hierarchy access. But here is the catch that becomes a crisis at scale: for records where the *only* reason a user gains access is the hierarchy, each ancestor can end up with a materialized share row. On a deep hierarchy, a single record at the bottom can generate one share row per ancestor above it. On a wide hierarchy, multiply that by every sibling branch. Every record does this. Now multiply again by a large data volume.[^2]
+
+This is the classic large data volume (LDV) failure mode: sharing-table bloat. Tens or hundreds of millions of share rows. Every query that needs to check access slows down. Indexes get big, storage grows, flushes go red, and the org starts doing emergency "sharing recalc" or archiving exercises to claw back performance. The sharing table becoming the biggest table in the org is not a badge of rigor; it is the smell of an architecture that leaned on the hierarchy for everything.
+
+The architect's counter-move is to be deliberate about hierarchy depth and width. Keep the tree shallow enough and narrow enough that the per-ancestor multiplication stays bounded. When a requirement only touches a specific group rather than a whole reporting branch, prefer a targeted sharing rule to a group. Rules that target exactly one group on exactly the qualifying records produce far fewer share rows than a cascade that touches every ancestor of every record.[^11]
+
+The rule of thumb you can carry into the exam: if you can satisfy the requirement with a sharing rule that names a specific group, that rule is almost always cheaper at scale than enabling the hierarchy and letting it cascade. The hierarchy should be reserved for the case where the entire upward reporting line genuinely needs access to entire records.
+
+## "Turn it off for one group" does not exist
+
+A corollary that trips up administrators: the hierarchy is a per-object switch, not a per-user or per-group switch. If the hierarchy over-grants, you cannot turn it off for the one department that is leaking access while leaving it on for everyone else. "Grant Access Using Hierarchies" is an object-level setting; disabling it removes hierarchy-based access for the entire org for that object, all at once.[^6] There is no "just for these roles" variant.
+
+So when you find the hierarchy too permissive for a subset of users, you do not surgically disable it. You weigh a global disable against the sharing rules and teams that remain standing. If you turn the hierarchy off, whatever access those groups actually needed must be re-granted through sharing rules or teams, or it disappears. This is why the decision to enable the hierarchy in the first place deserves care: enabling it is cheap, but the blast radius of disabling it later is org-wide, and the restoration work lands in your lap.
+
+## Opportunity: the object with two masters
+
+Opportunity behaves like other objects in one respect: it has its own "Grant Access Using Hierarchies" setting, on by default, and when enabled it gives users access to opportunities owned by users below them in the hierarchy. That part is familiar.
+
+Where Opportunity stops being like the other objects is its relationship to Account. Opportunity access is coupled to Account ownership in a way that catches people off guard. Several Account-level sharing mechanisms spill into Opportunity access: an account sharing rule that shares an account also shares that account's opportunities (subject to the Opportunity access level set on the account rule), and Account Teams grant team members access to the account's opportunities, contacts, and cases through the account team's access levels.[^2] The end result is that a user can see an Opportunity because of the Opportunity hierarchy, or because of Account sharing, or because an Account Team gave them access to that account's opportunities, or because of an Opportunity sharing rule, or because of Opportunity Teams. The hierarchy is one input among several, not the whole story.
+
+For the exam, read that as a warning against the reflex "Opportunity access is decided by the Opportunity role hierarchy." It is not solely hierarchy-based. To know why a particular user can see a particular Opportunity, you have to consider the Account-to-Opportunity coupling and the team model alongside the hierarchy. If the audit question asks why three reps see a deal's Opportunity, the answer may live in an Account sharing rule or an Account Team, not in the hierarchy at all.
+
+Opportunity Teams are worth a specific mention here, because they are the *scenario* answer to a common requirement: a deal owned by one rep that a small, named group of collaborators should help close. That is not a reporting-line shape. That is a team shape. Add the collaborators to the Opportunity Team with the access they need and the hierarchy never has to be involved.[^2]
+
+## The decision walkthrough
+
+Here is the sequence I would run, numbered, on every "given a scenario" question and every real org request.
+
+1. Map the access requirement. Ask: does the access follow the reporting line, and is it ownership-based? If both are true, the role hierarchy is the right call. If either is false, move to step 2.
+2. Pick the alternative before you build anything. Criteria-based requirement? That is a criteria-based sharing rule. Cross-role or peer access? An owner-based sharing rule to the relevant group. A small named collaboration on specific records? Teams. Access that must be computed at runtime, or that no static rule can express? Apex Managed Sharing.
+3. If you are leaning on the hierarchy, check the LDV math. A deep or wide hierarchy multiplies share rows per ancestor per record. If the org runs large data volumes and the requirement only touches a specific group, prefer a targeted sharing rule and keep hierarchy depth and width bounded.
+4. When the requirement is criteria-based manager visibility (a manager sees only *some* of a subordinate's records), the hierarchy is disqualified. Build a sharing rule that targets the managers' group and filters on the criteria field.
+5. For Opportunity, do not stop at the Opportunity hierarchy setting. Review the Account sharing rules and the Account-to-Opportunity access levels, check whether Account or Opportunity Teams are in play, then confirm what the hierarchy alone contributes.
+6. Test the decision, and this is not a formality. Create a manager who should see only the filtered subset and verify they see exactly that subset, neither more nor less. Create a peer who should *not* see another peer's records and verify the hierarchy granted them nothing sideways. Both checks must pass before you call the design done.
+
+## A worked example
+
+Walk one through to make it concrete. A health-services org has a case hierarchy: reps own cases, team leads sit above them, and directors above that. The org wants directors to see only the escalated cases (Priority = High), not every case their team handles. Classification is by a case field.
+
+Question one: does access follow the reporting line? Directors are above the reps, so yes, the shape is upward. Question two: is it ownership-based? No, it is criteria-based, because the director must see only the High-priority subset. The second answer disqualifies the hierarchy immediately. Enabling "Grant Access Using Hierarchies" on the case object would give directors every case owned below, including the routine ones they have no business opening. That is the over-grant and, on a large message volume, the share-row bloat.
+
+The correct build is a criteria-based sharing rule: share Case records where Priority equals High with the directors' public group (or role), access Read Only. The rule inspects the field, matches only qualifying cases, and targets only the directors. Fewer share rows, exactly the right records. No hierarchy cascade in sight.
+
+Then add the cross-division requirement the org slipped in at review: the compliance team, a separate branch, needs read access to High cases for audits. Another tree shape the hierarchy cannot satisfy. Add a second criteria-based sharing rule to the compliance group, or fold compliance into the same rule's target list. The hierarchy still never participates.
+
+## Try it yourself
+
+In a scratch or sandbox org, set up three roles, Owner, Manager, Director. Create two reps under Manager and two cases under each rep: one case with Amount (or Priority) over the threshold, one under it. Enable "Grant Access Using Hierarchies" on the case object and log in as the Manager. Confirm the Manager sees all four cases, including the one they should not. Now add a criteria-based sharing rule that shares only the qualifying cases with the Manager's role and note how the view changes. That is the whole lesson in five minutes: the hierarchy gives everything, a criteria-based rule gives exactly the filtered set.
+
+## Exam traps to avoid
+
+Three traps are worth naming as their own bullet so you recognize them under pressure.
+
+The hierarchy cannot express criteria-based or cross-division access. If you try to force it, you do not get a graceful failure; you get an over-grant (the manager sees too much) or an under-grant (the cross-branch user sees nothing). Recognize the mismatch early and switch to sharing rules.
+
+A hierarchy-only grant materializes one share row per ancestor per record. On large data volumes this is the classic sharing-table bloat and the LDV culprit. When you see a scenario with millions of records and a deep hierarchy, the "risk" answer is sharing-table bloat and degraded performance, not field-level security errors and not license consumption.[^2]
+
+Opportunity access is not solely hierarchy-based. Account-to-opportunity sharing and team sharing affect what a user sees just as much as the Opportunity hierarchy does. When a scenario asks why a user can see an Opportunity, weigh all the inputs, not just "Grant Access Using Hierarchies" on Opportunity.
+
+## Why this matters for the exam
+
+This requirement, "Given a scenario, determine when the role hierarchy is appropriate and when it is not," is a decision-making objective in the Access to Records domain, which is 39% of the exam.[^1] The examiners are not checking whether you know what the role hierarchy does; they assume you do. They are checking whether you know when *not* to use it, and whether you can name the mechanism that handles the mis-fit. Every time a scenario hinges on a filtered subset or a cross-tree relationship, the correct answer routes you away from the hierarchy and into sharing rules, teams, or Apex sharing. Internalize the two-question test and the subset trap, and this entire objective becomes formulaic.
+
+## What's next
+
+Day 15, lesson 15, starts the next requirement, r-3a: sharing rules, broken down into criteria-based and ownership-based rules in depth. You will build on today's boundary, because sharing rules are the tool you reach for whenever the hierarchy does not fit. That lesson walks through how to construct owner-based and criteria-based rules, what groups they target, and how access levels compose, so you can replace the hierarchy's blanket cascade with precise, targeted access. If today left you clear on why the subset case needs a sharing rule, tomorrow shows you exactly how to build that rule end to end.
+
+[^1]: Salesforce, "Platform Sharing and Visibility Architect Exam Guide," Trailhead. <https://trailhead.salesforce.com/help/salesforce-certification-exam-guides/platform-sharing-and-visibility/>
+[^2]: Salesforce, "About Sharing Settings," Salesforce Help. <https://help.salesforce.com/s/articleView?id=sf.security_about_sharing_settings.htm&type=5>
+[^3]: Salesforce, "Understanding the Role Hierarchy and Defining Roles," Salesforce Developer (Security Implementation Guide). <https://developer.salesforce.com/docs/atlas.en-us.securityImplGuide.meta/securityImplGuide/security_roles_understanding.htm>
+[^6]: Salesforce, "Grant Access Using Hierarchies," Salesforce Help (About Sharing Settings). <https://help.salesforce.com/s/articleView?id=sf.security_about_sharing_settings.htm&type=5>
+[^11]: Salesforce, "Overview of Sharing," Salesforce Developer (Security Implementation Guide). <https://developer.salesforce.com/docs/atlas.en-us.securityImplGuide.meta/securityImplGuide/security_sharing_overview.htm>
