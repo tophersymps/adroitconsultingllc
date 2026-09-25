@@ -1,0 +1,135 @@
+---
+title: "Lesson 6: Structured Output: Getting Data Back in a Format Downstream Tools Can Consume"
+slug: structured-output-getting-data-back-in-a-format-downstream-tools-can-consume
+series: "ai-power-user"
+lesson: 6
+excerpt: "A connected workflow hands one step's output to the next, and that only works when the output arrives in a shape the next step can read. This lesson defines structured output, plain words for the JSON format at its center, and why a table or list beats a paragraph when a downstream tool is doing the consuming. A worked example follows one person turning meeting notes into actions a tracker can read, and a try-it prompt walks you through getting your own output into a shape that carries."
+date: "September 25, 2026"
+author: "Adroit Consulting"
+readTime: "10 min read"
+tags: [LLMs, AI Power User, Workflow, Structured Output]
+---
+
+Lesson 5 showed you what a connected workflow is: one app hands its output to the next, trigger to input to tool to review, and the chain does the relaying you used to do by hand. That design assumes something you have not examined yet. It assumes the output of one step arrives in a shape the next step can actually read. A chain only works if the handoff is legible on both ends.
+
+That is the quiet problem this lesson is about. When the receiving end of a handoff is a person, a paragraph of conversation is fine. Your eye knows where the date is, where the action is, where the owner is. When the receiving end is a tool, a spreadsheet, an automation platform, a project tracker, a paragraph is a wall of text it has to guess at. The tool wants the information labeled and separated. The skill of getting data back in that labeled, separated shape is called structured output.
+
+## What structured output means
+
+Structured output is the practice of asking a tool to return its answer in a fixed, predictable shape rather than as free-flowing prose. The shape is the point. You decide in advance what fields the answer should contain, the date, the action, the owner, the priority, and the tool fills those fields in. Every answer comes back with the same fields, in the same order, slotting into the same place, so whatever reads it next does not have to hunt.
+
+Anthropic's documentation defines it directly: structured outputs constrain a model's responses to follow a specific schema, ensuring valid, parseable output for downstream processing. [^1] The word to sit with is downstream. The output is not the end of the work. It is material for the next step, and the next step's ability to read it depends on its being constrained and predictable.
+
+The format this almost always lands in is JSON. JSON stands for JavaScript Object Notation, and IBM describes it plainly as a popular format for interchanging information, simple in structure and easily read by both humans and machines. [^2] Do not let the JavaScript in the name throw you. It is not a programming language you need to learn. It is a way of writing information as labeled pairs, key and value, that any tool on earth can read without you having to re-type the meaning.
+
+A JSON document is made of labeled pairs. The label is called the key and it is always a word in quotes. The value is what the key holds, and it can be a piece of text, a number, a true or false value, a list, or another set of pairs. [^2] One pair looks like this: "owner": "Priya". A small set of pairs looks like this:
+
+```json
+{
+  "action": "Draft the Q3 rollout plan",
+  "owner": "Priya",
+  "due": "2026-10-15",
+  "priority": "high"
+}
+```
+
+Nothing there is a mystery. Action labels the task. Owner says who holds it. Due says when. Priority says how urgent. Each label has exactly one value, and the labels are the same every time. That last property is what makes the step downstream usable. When a project tracker reads this entry, it does not read a sentence and decide. It finds the field called owner and puts that value in the owner column. The predictability is the entire point.
+
+## Why the shape matters more than the wording
+
+Structured output earns its keep the moment a tool, not a person, is doing the consuming. Compare what happens when the handoff arrives two different ways.
+
+Here is prose: "Okay so for next week, Priya is going to draft the Q3 rollout plan, it's due the fifteenth, and honestly it's pretty high priority, we should make sure she has time for it."
+
+A human reads that and knows exactly what to do. A spreadsheet does not. To get that sentence into a tracker row, someone has to decide that Priya is the owner, that October 15 is the due date, that high is the priority, and that the action is drafting the Q3 plan. That someone is you, unless the chain can do it. The moment the chain has to do it, prose is a guessing game with three or four guesses per row and every guess a chance to be wrong.
+
+Now here is the same fact in a labeled pair:
+
+```json
+{
+  "action": "Draft the Q3 rollout plan",
+  "owner": "Priya",
+  "due": "2026-10-15",
+  "priority": "high"
+}
+```
+
+The receiving tool finds owner and reads Priya. No guessing, no parsing a sentence, no human deciding which words are the date. The cost of building the clear shape was paid once, up front, when you asked a tool to put the answer in that form. From then on the handoff is free. OpenAI's documentation makes the same case from the producing side: structured outputs ensure the model adheres to the schema you supply, so you do not have to worry about it omitting a required field or inventing a value outside the ones you allowed. [^3]
+
+The trouble with prose is not that it is wrong. Most of the time it is right. The trouble is that it is unstable. One week the date comes first, the next it is buried mid-sentence, one week the owner goes by first name and the next by last name. Every variation is a tool's chance to misread. Structured output does not just make the answer correct, it makes the answer the same shape every single time, and sameness is what a downstream consumer actually needs.
+
+## What gets decided before you ask
+
+Structured output is less about the tool and more about decisions you make before you ever open a chat. The tool fills in fields you already defined. So the real work is defining the fields, and that means deciding which questions you always want answered.
+
+When you are the one who will re-type the answer later, you do this without noticing. You ask yourself, what is the task, who owns it, when is it due, how urgent is it, and you carry those answers in your head. The move to structured output is writing those questions down so the tool answers them in a labeled form instead of inside a sentence. Four steps get you there.
+
+First, name the fields. List the pieces of information you always want, no more than you genuinely need. For a task list, action, owner, due, and priority might be all of it. Adding fields costs you attention on every single run, so keep the list lean.
+
+Second, decide the allowed values where they are limited. Priority is not an open text box if you want a stable tracker column. Decide it is one of low, medium, or high, and say so. A field with a fixed set of allowed values is far easier for a downstream tool to sort and filter than an open text field where everyone writes different spellings. [^3]
+
+Third, say the form out loud. You can describe the shape in plain words, and the tool will follow. "Return the answer as a list of entries, each with these four fields," is enough in most chat tools, though the exact name of the feature varies by vendor.
+
+Fourth, give one complete example. The single best way to get a tool to match a shape is to show it the finished shape once. Paste the filled-in pair from above and say, "return your answer in exactly this format with the same field names." The step downstream reads cleanly because the field names are identical, so nothing has to be re-labeled by hand.
+
+## A worked example: Ali stops re-typing meeting notes
+
+Ali runs recurring delivery updates for her team. Each update comes out of a meeting where people say what they shipped, what is blocked, and what they need. Her job afterwards is to move that into the team's shared tracker, one row per work item, with columns for what, who, status, and blocker.
+
+Before she learned to ask for structured output, her workflow had an ugly seam. She would draft the update as a chat summary in prose, then spend ten minutes re-typing each work item into the tracker, deciding the columns as she went. The prose was fine for her to read and useless for the tracker. The seam was her, translating one format into another by hand every single week.
+
+The fix was asking for the format up front instead of after. Now her prompt to the tool makes the shape explicit before any prose appears:
+
+> Summarize the delivery update below. Then return the work items as a JSON list. Each item has exactly four fields: item (short description), owner (name), status (one of done, in-progress, blocked), and blocker (what is holding it up, or null if none). Return only the JSON list, nothing else. Here is the format I want:
+> [{"item": "...", "owner": "...", "status": "done", "blocker": null}]
+
+The meeting notes go in, and the tool returns a list where every row already has its columns labeled:
+
+```json
+[
+  {"item": "Ship search filter v2", "owner": "Marcus", "status": "done", "blocker": null},
+  {"item": "Fix billing export", "owner": "Priya", "status": "blocked", "blocker": "awaiting finance"},
+  {"item": "Write onboarding doc", "owner": "Noah", "status": "in-progress", "blocker": null}
+]
+```
+
+Now consider what happens downstream. The tracker does not need Ali to decide the columns, the entries arrive with their labels already attached. Many no-code automation platforms, Zapier and Make among them, connect apps without code, and the pattern they run on is exactly this handoff of structured data from one form into the next. [^4] [^5] The tracker, or the automation filling it, reads item, owner, status, and blocker straight from the fields, because the fields were named before the output was generated.
+
+Ali's review changed shape too, and that is important. She does not stop reviewing, she reviews the structure. She checks that the number of rows matches the items discussed, that ownership is right, that nothing is marked blocked without a blocker named, and that no invented item slipped in. Anthropic's docs frame the reason clearly: even with careful prompting you can get malformed structure, missing fields, or inconsistent values, so the structured result still deserves the eye. [^1] The review that used to be buried in re-typing, where a misread column meant a wrong row, is now a fast check that the labeled shape matches the meeting. Less translation, same human judgment, and the judgment lands where it counts.
+
+## The one price you pay and why it is worth it
+
+Structured output is not free, and you should be honest about the cost. The price is working in a fixed frame instead of free conversation. You give up the loose, natural back-and-forth of a chat for a constrained, labeled answer. For a one-off question, where you are the only consumer and you just want a quick answer, that trade is usually wrong. Asking "what color should I use for the report header" and getting back a JSON object is a waste of everyone's time. Prose is the right answer when a human reads it and a human alone.
+
+The trade flips the moment the output feeds a tool. Decide your consumer by asking one question: who is doing the reading? If the answer is a person who will act on it, prose. If the answer is a spreadsheet, a tracker, an automation, or any software, structure. The moment the reader is a machine, the labeled shape stops being an option and becomes the point. That judgment, person-consumer or tool-consumer, is the whole art, and it is the same judgment every workflow designer makes.
+
+## Try it
+
+Take the two-step chain you designed in Lesson 5 and practice getting the first link's output into a shape the second link can read. Give yourself twenty minutes. Pick one clear output and force yourself to define its shape before you ask for it.
+
+First, name your consumer. Look at the output of the first link in your chain. Is it read by a person or by a software tool? If you are not sure, ask it as a design question: what would the receiving software actually do with what arrives? If the answer is "sort, filter, or match something," it is a tool-consumer and structure is warranted.
+
+Second, define the fields. Write down the four or five labels your output always needs. For a list of action items, that might be item, owner, due, status. Resist the urge to add labels you will not use. Every field is something you must fill on every run.
+
+Third, run it with any chat tool you already use and the prompt below, substituting your task:
+
+> Here is [describe your source material]. Return your answer as a JSON list, one entry per [your item]. Each entry has exactly these fields: [field 1], [field 2], [field 3]. [For any field with limited options, add: [field 3] must be one of [allowed values].] Return only the JSON list, no prose. Match these field names exactly.
+
+Read what comes back twice. First for the content, is the substance right, are there no invented rows, is each value accurate, the same judgment on the substance you would apply to any tool output. [^6] Then read for the shape, are the labels intact, are the allowed values only the ones you named, would your downstream tool match on the field names without any relabeling? The review is the price of the reliability, and this time it is fast.
+
+## What's next
+
+You have made your handoffs legible. Where a connected workflow passes prose that a tool must guess at, you now get data back in a labeled shape, JSON pairs and lists, that the next step reads cleanly. Field names decided, allowed values pinned, shape consistent run after run. That is the skill that turns a fragile chain into a rugged one.
+
+The next lesson steps back from the output and looks at the input side of the same idea. Lesson 7 is about templates that scale: parameterized prompts you reuse with different inputs. Where this lesson fixed the shape of the answer, the next lesson fixes the shape of the question, one prompt that stays the same while the specifics, the project name, the date, the numbers, slide in fresh each run. Thinking of a prompt as a fill-in-the-blank template instead of a thing you write from scratch is the next layer of owning your workflow.
+
+Come to Lesson 7 with the JSON-shaped output you just produced, because the template you build next will be what generates that output. The fixed shape of the answer and the reusable shape of the question are two halves of the same machine, and you now have the first half working.
+
+[^1]: Anthropic, "Structured outputs" (Claude Platform docs define structured outputs as constraining responses to follow a specific schema for valid, parseable output, list data extraction, structured reports, and API response formatting as use cases, and warn that even with careful prompting you can still get malformed JSON, missing required fields, or inconsistent data types without them). [platform.claude.com](https://platform.claude.com/docs/en/build-with-claude/structured-outputs)
+[^2]: IBM, "JSON concepts" (IBM describes JSON, JavaScript Object Notation, as a popular format for interchanging information, simple in structure and easily read by humans and machines, and defines a JSON document as a collection of key:value pairs where each value may be a string, number, null value, array, or another object). [ibm.com](https://www.ibm.com/docs/en/i/7.5.0?topic=data-json-concepts)
+[^3]: OpenAI, "Structured model outputs" (the API docs describe Structured Outputs as ensuring the model always generates responses that adhere to the supplied JSON Schema, so you do not worry about it omitting a required key or hallucinating an invalid enum value, and list reliable type safety and simpler prompting among the benefits). [developers.openai.com](https://developers.openai.com/api/docs/guides/structured-outputs)
+[^4]: Zapier, "Zapier: Automate AI Workflows, Agents, and Apps" (Zapier describes a Zap as an automated workflow that completes work across your apps and markets no-code automation that connects apps into automated workflows). [zapier.com](https://zapier.com/)
+[^5]: Make, "Make Automation Platform" (Make describes itself as a platform for building and automating workflows without code by connecting apps in visual scenarios). [make.com](https://www.make.com/en)
+[^6]: Adroit Consulting, "Lesson 6: AI Literacy: Judging AI Output the Way You'd Judge a Colleague's Work" (reading AI output as a draft from a fallible colleague, and the draftable versus decidable split: the tool drafts, the human decides). [adroit.io](https://adroit.io/atlas/ai-at-work/ai-literacy-judging-ai-output)
+
+*Note: structured output is a general pattern, not the private feature of one vendor. The JSON format is an open standard, and the specific button, schema, or feature name in any given tool changes over time. Use the chat tool you already have, match the pattern to what it offers today, and treat your company's data and acceptable-use policies as the binding rules. Verify any tool's current behavior against the vendor's own documentation. The transferable part is deciding which field labels you need before you ask, and asking for the answer in exactly that shape.*
