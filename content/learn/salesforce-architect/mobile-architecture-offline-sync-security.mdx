@@ -43,6 +43,8 @@ The second path is the **Mobile SDK with SmartStore and Mobile Sync**. This is t
 
 The decision framework is straightforward. If your users are internal, follow standard CRM workflows, and need basic offline record viewing and simple data entry, the standard app with Briefcase covers the majority of enterprise mobile cases with no development. If you need multi-record transactions while offline, hardware integration, or a custom consumer app, you need the Mobile SDK. [^1]
 
+![Two paths to offline capability: the standard app with Briefcase is the declarative route for internal users and basic offline work, while the Mobile SDK with SmartStore is the build route for complex offline workflows, hardware integration, or a branded consumer app](</diagrams/mobile-architecture-offline-sync-security/1-two-paths-offline.png>)
+
 ## SmartStore: the encrypted local database
 
 When you are on the SDK path, SmartStore is the foundation. It is worth understanding how it works, because the design choices you make here determine whether your offline app is fast and safe or slow and leaky.
@@ -63,6 +65,8 @@ The decision that matters most is the **merge mode**, the policy for how a sync 
 
 Here is the architectural discipline. **You choose opposing merge modes for the two directions to guarantee a single source of truth.** A common pattern is overwrite for sync down, so server data replaces local data, and leave-if-changed for sync up, so local edits do not overwrite a server change that happened while the device was offline. That pairing means the server stays authoritative, and a local edit that conflicts with a newer server change is preserved rather than silently destroyed. [^4]
 
+![Sync strategy: sync down uses overwrite so server data replaces local data, and sync up uses leave-if-changed so a local edit that conflicts with a newer server change is preserved, keeping the server as the single source of truth](</diagrams/mobile-architecture-offline-sync-security/2-sync-strategy-merge-modes.png>)
+
 ## Conflict resolution: the decision that loses or saves data
 
 The hardest part of mobile architecture is not building the offline store. It is deciding what happens when two people edit the same record and the device comes back online. This is the conflict problem, and your policy for it is an architecture decision, not an implementation detail.
@@ -72,6 +76,8 @@ The simplest policy is **last write wins**. The most recent change, by timestamp
 The more careful approach is to **detect the conflict and let a human or a rule resolve it**. Mobile Sync tracks local changes with metadata, and when a sync up finds that a record changed on the server since it was synced down, it can flag the conflict. The app then decides, by policy or by asking the user, which version wins. This is more work, but it is the difference between an app that loses data quietly and one that surfaces the problem. [^4]
 
 The lesson to carry forward: **evaluate conflict probability before you commit to an offline model.** If your users rarely edit the same records, last write wins is fine and simple. If they do, you need conflict detection and a resolution path, and you need to design it before you ship, because you cannot add it after users start losing work.
+
+![Conflict resolution: last write wins keeps the most recent change by timestamp and can silently drop the other, while conflict detection flags a record that changed on the server and lets a rule or a human decide which version wins](</diagrams/mobile-architecture-offline-sync-security/4-conflict-resolution.png>)
 
 ## Mobile security: protecting data on a device you do not control
 
@@ -84,6 +90,8 @@ The second control is **authentication and session management**. Mobile SDK apps
 The third control is **device and app management**. For regulated industries, you layer mobile device management and mobile app management on top, so you can enforce a device passcode, wipe the app's data remotely if the device is lost, and control which apps can run. The standard mobile app's offline model and the SDK's local store both benefit from these controls, because a passcode requirement is what keeps the encryption key from being trivially accessible. [^1] [^5]
 
 The architectural discipline is to **assume the device is lost and design so that losing it costs nothing**. Encrypt the data, require a passcode, and make sure a remote wipe can clear the app's local store. If you have done that, a stolen phone is an inconvenience, not a breach.
+
+![Mobile security: three layered controls protect data on a device you do not control, encryption at rest with SqlCipher, OAuth authentication and session management, and device and app management that enforces a passcode and enables remote wipe](</diagrams/mobile-architecture-offline-sync-security/3-mobile-security-controls.png>)
 
 ## A worked example: the field service technician
 
