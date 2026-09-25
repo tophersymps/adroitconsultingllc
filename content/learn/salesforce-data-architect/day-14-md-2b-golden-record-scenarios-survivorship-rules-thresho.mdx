@@ -40,6 +40,8 @@ There are a handful of survivorship strategies, and real systems mix them rather
 
 The archetype that most mid-market organizations ship is a hybrid: source priority as the default, completeness as the fallback when the priority source is null, recency as a tiebreaker between two priority sources, and a steward for everything the rules cannot decide. [^3] Weighted trust scores, where every source gets a numeric rating per attribute, are powerful but expensive to calibrate and are usually reserved for large enterprises with dedicated data quality teams. [^3]
 
+![Six survivorship strategies, what each picks, and where it breaks: source priority, most recent, most complete, most frequent, longest value, and steward override, with a hybrid of source priority as the default and completeness, recency, and steward as fallbacks](</diagrams/day-14-md-2b-golden-record-scenarios-survivorship-rules-thresho/1-survivorship-strategies.png>)
+
 ## Source priority: the auditable default
 
 Because the exam favors the simplest defensible answer, source priority deserves its own treatment. It is a trust ranking, and it is the most auditable survivorship rule you can ship. [^3]
@@ -58,6 +60,8 @@ A match score is the numeric confidence that two records are the same entity, bu
 
 The exam point is weights. [^4] Weights let you make some fields matter more than others. A matching tax ID should outweigh a matching postal code, because two companies can share a postal code all day while a shared tax ID is near proof of identity. When you design a matching rule you are deciding the relative influence of each field on the final score, trading the fields that are truly identifying against the ones that are merely corroborating. [^4]
 
+![Matching weights: strong identifiers like tax ID and email dominate the score, while corroborating fields like postal code and industry weigh less, trading truly identifying fields against merely corroborating ones](</diagrams/day-14-md-2b-golden-record-scenarios-survivorship-rules-thresho/3-matching-weights.png>)
+
 A threshold is the score at which you act. [^4] Above the threshold, the pair is a match. [^4] The design question is how many thresholds you set and what happens in each band, because a single threshold forces a single binary outcome.
 
 ## The three-band threshold design
@@ -65,6 +69,8 @@ A threshold is the score at which you act. [^4] Above the threshold, the pair is
 Here is the balance the exam wants you to see. If you set one threshold and auto-merge everything above it, you automate false merges: two companies with similar names and a shared zip code sail past the bar and collapse into one record, corrupting relationships and reporting. [^4] If you set one threshold and route everything above it to manual review, you drown the steward in easy cases and the queue backs up. The disciplined design is a three-band threshold.
 
 The three-band design distinguishes auto-merge, review, and no-match. High-confidence scores (say above a high bar) auto-merge or auto-link, because the identity evidence is overwhelming. Mid-band scores route to a review queue owned by a data steward, who resolves the ambiguity by hand. Low scores are no match, and the records stay separate. [^3] [^6]
+
+![Three-band threshold on a match score: low scores are no match and records stay separate, mid-band scores route to a review queue owned by a data steward, and high scores auto-merge or auto-link, balancing automation against the cost of a false merge](</diagrams/day-14-md-2b-golden-record-scenarios-survivorship-rules-thresho/2-three-band-threshold.png>)
 
 This balances automation against the cost of a false merge. The bulk of true duplicates land cleanly in the auto band and never touch a human. The genuinely ambiguous cases, where the score is high enough to deserve a look but not high enough to trust, get the one thing a rules engine cannot supply: human judgment. And the clearly distinct pairs are left alone instead of being forced together. The cost of the mid band is steward time, which is precisely why the exam frames a review tier as the safer choice over a single hard cutoff. One hard threshold with no review band either auto-merges too aggressively or buries the steward. [^5]
 
@@ -87,6 +93,8 @@ The exam wants you to weigh four considerations before you turn an enrichment so
 **Latency.** Real-time enrichment adds a network round trip at the point of write, which slows a create or update that is waiting on it. Batch enrichment runs on a schedule and avoids the latency but holds data that is minutes or hours old. The reference flow runs both, real-time on an event and batch on a schedule, converging on the same resolution. [^6] The architect picks the mode per field and per tolerance for staleness.
 
 **The risk of overwriting trusted values.** This is the one the exam stresses. Enrichment writes values returned by an external provider, and those values can be stale or wrong. If enrichment overwrites a good internal value by default, an automated feed silently degrades a field the org already maintained well. The correct pattern is to feed enrichment into survivorship as a source contribution, at a priority below the trusted internal systems, rather than letting it overwrite them outright. [^6] In a mature setup the provider's enriched address is written to the golden record tagged with its source and then "participates in survivorship along with other source contributions" such as the CRM, ERP-adjacent systems, and manual entry. [^6] If the provider ranks higher for a field, its value wins; otherwise the trusted internal value holds. Enrichment never becomes the system of record for everything, and it never decides record ownership in the CRM. [^1]
+
+![Reference-data enrichment flow: the org sends existing identity fields as matching inputs, the provider resolves the entity and returns a verified match plus a confidence code, the enriched source-tagged value joins survivorship alongside the trusted internal sources, and the survivorship rule decides the winning value](</diagrams/day-14-md-2b-golden-record-scenarios-survivorship-rules-thresho/4-enrichment-flow.png>)
 
 That last point is a quiz-relevant line. External reference data is a legitimate source in MDM because it validates, standardizes, and enriches. It is not legitimate as a replacement for the source systems as the system of record for all attributes, and it does not determine record ownership inside the CRM. [^1] Enrichment feeds the golden record; it does not govern it.
 
