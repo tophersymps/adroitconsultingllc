@@ -2265,5 +2265,30 @@ export const posts: BlogPost[] = [
     ],
     "bannerImage": "/banners/salesforce-summer-26-three-things.png",
     "status": "published"
+  },
+  {
+    "slug": "realtime-rls-enforcement-boundary-2026",
+    "title": "RLS Is the Enforcement Boundary in Multi-Tenant Realtime",
+    "excerpt": "Your Postgres Changes channel is only as secure as the row-level policies behind it. Here is how RLS gates a realtime stream in a multi-tenant Supabase app.",
+    "category": "React & Web Dev",
+    "categoryColor": "react",
+    "categoryGradient": "from-emerald to-emerald-dark",
+    "date": "September 25, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "11 min read",
+    "featured": false,
+    "tags": [
+      "TypeScript",
+      "React",
+      "Next.js",
+      "Supabase",
+      "Real-Time",
+      "Security",
+      "Multi-Tenant",
+      "Web Development"
+    ],
+    "bannerImage": "/banners/realtime-rls-enforcement-boundary-2026.png",
+    "status": "published"
   }
 ];
