@@ -861,6 +861,80 @@ export const learnSeries: LearningSeries[] = [
     "curriculumLessons": 90
   },
   {
+    "slug": "ai-adoption",
+    "name": "AI Adoption",
+    "description": "The Level 3 capstone of the AI at Work arc, for the person who owns AI in an organization. Lead, govern, and scale a company's AI use: adoption metrics, change management, policy, data safety, vendor evaluation, security and privacy ownership, budgeting, ROI, and the ongoing program. Vendor-agnostic for a non-technical owner.",
+    "gradient": "from-emerald-500 to-purple-600",
+    "lessons": [
+      {
+        "slug": "the-adoption-owners-job-from-rollout-to-running-program",
+        "title": "Lesson 1: The Adoption Owner's Job: From Rollout to Running Program",
+        "series": "ai-adoption",
+        "lesson": 1,
+        "excerpt": "Someone in your organization has to own AI, not just launch it. This first lesson draws the line between a rollout, a bounded project with a finish line, and a running program, an ongoing discipline with no end date. It defines the adoption owner's real job, walks through one person making that shift, and ends with a try-it exercise that maps who owns AI in your organization today.",
+        "date": "September 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Adoption",
+          "Leadership"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "where-ai-already-creates-value-in-an-org",
+        "title": "Lesson 2: Where AI Already Creates Value in an Org (and Where It Does Not)",
+        "series": "ai-adoption",
+        "lesson": 2,
+        "excerpt": "AI use is nearly universal but enterprise value stays rare, and the gap is not random. This lesson gives you a way to read any piece of work and judge whether AI can genuinely improve it. It defines the characteristics of value-ready work, shows where the survey data says value actually concentrates, draws both a worked example and a try-it exercise that score your own organization's functions, and ends with the next lesson on measuring outcomes.",
+        "date": "September 23, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "LLMs",
+          "AI Adoption",
+          "Leadership"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "measuring-what-matters-time-saved-quality-usage-churn",
+        "title": "Lesson 3: Measuring What Matters: Time Saved, Quality, Usage, and Churn",
+        "series": "ai-adoption",
+        "lesson": 3,
+        "excerpt": "Almost every organization uses AI and almost none can prove it is paying off. This lesson gives you the four metrics that turn adoption from a belief into a number: time saved, quality, usage, and churn. It defines each one, separates outcome metrics from activity metrics, shows why speed without quality is the fastest road to confident error, and builds a worked example that measures one pilot against all four. It ends with the next lesson on auditing where your organization actually is.",
+        "date": "September 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "LLMs",
+          "AI Adoption",
+          "Leadership"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "the-adoption-baseline-audit-where-your-org-actually-is",
+        "title": "Lesson 4: The Adoption Baseline: Audit Where Your Organization Actually Is",
+        "series": "ai-adoption",
+        "lesson": 4,
+        "excerpt": "Almost everyone in your organization may already be using AI, and almost none of it may be sanctioned, measured, or visible to leadership. Before you can set goals, govern use, or prove value, you need an honest baseline. This lesson defines the adoption audit, shows why the gap between what leaders believe and what workers do is so wide, and gives you the four tracks that map where your org actually is.",
+        "date": "September 25, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "LLMs",
+          "AI Adoption",
+          "Leadership"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 4,
+    "curriculumLessons": 40
+  },
+  {
     "slug": "hermes-consultant",
     "name": "Hermes Agent Consultant",
     "description": "A path to becoming an agent-implementation consultant: scoping, implementation craft, delivery practice, and the business of consulting. Platform-agnostic skills with Hermes Agent as the working example.",
@@ -2932,64 +3006,6 @@ export const learnSeries: LearningSeries[] = [
     "curriculumLessons": 36
   },
   {
-    "slug": "ai-adoption",
-    "name": "AI Adoption",
-    "description": "The Level 3 capstone of the AI at Work arc, for the person who owns AI in an organization. Lead, govern, and scale a company's AI use: adoption metrics, change management, policy, data safety, vendor evaluation, security and privacy ownership, budgeting, ROI, and the ongoing program. Vendor-agnostic for a non-technical owner.",
-    "gradient": "from-emerald-500 to-purple-600",
-    "lessons": [
-      {
-        "slug": "the-adoption-owners-job-from-rollout-to-running-program",
-        "title": "Lesson 1: The Adoption Owner's Job: From Rollout to Running Program",
-        "series": "ai-adoption",
-        "lesson": 1,
-        "excerpt": "Someone in your organization has to own AI, not just launch it. This first lesson draws the line between a rollout, a bounded project with a finish line, and a running program, an ongoing discipline with no end date. It defines the adoption owner's real job, walks through one person making that shift, and ends with a try-it exercise that maps who owns AI in your organization today.",
-        "date": "September 22, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Adoption",
-          "Leadership"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "where-ai-already-creates-value-in-an-org",
-        "title": "Lesson 2: Where AI Already Creates Value in an Org (and Where It Does Not)",
-        "series": "ai-adoption",
-        "lesson": 2,
-        "excerpt": "AI use is nearly universal but enterprise value stays rare, and the gap is not random. This lesson gives you a way to read any piece of work and judge whether AI can genuinely improve it. It defines the characteristics of value-ready work, shows where the survey data says value actually concentrates, draws both a worked example and a try-it exercise that score your own organization's functions, and ends with the next lesson on measuring outcomes.",
-        "date": "September 23, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "LLMs",
-          "AI Adoption",
-          "Leadership"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "measuring-what-matters-time-saved-quality-usage-churn",
-        "title": "Lesson 3: Measuring What Matters: Time Saved, Quality, Usage, and Churn",
-        "series": "ai-adoption",
-        "lesson": 3,
-        "excerpt": "Almost every organization uses AI and almost none can prove it is paying off. This lesson gives you the four metrics that turn adoption from a belief into a number: time saved, quality, usage, and churn. It defines each one, separates outcome metrics from activity metrics, shows why speed without quality is the fastest road to confident error, and builds a worked example that measures one pilot against all four. It ends with the next lesson on auditing where your organization actually is.",
-        "date": "September 24, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "LLMs",
-          "AI Adoption",
-          "Leadership"
-        ],
-        "status": "published"
-      }
-    ],
-    "totalLessons": 3,
-    "curriculumLessons": 40
-  },
-  {
     "slug": "ai-power-user",
     "name": "AI Power User",
     "description": "The Level 2 follow-on to AI at Work for professionals who use AI daily and want to build and own their own automations: designing repeatable workflows, making them reliable, and sustaining them. Vendor-agnostic and buildable without code.",
@@ -5015,6 +5031,22 @@ export const learnLessons: LearnLesson[] = [
       "OAuth",
       "Identity",
       "Service Accounts"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "the-adoption-baseline-audit-where-your-org-actually-is",
+    "title": "Lesson 4: The Adoption Baseline: Audit Where Your Organization Actually Is",
+    "series": "ai-adoption",
+    "lesson": 4,
+    "excerpt": "Almost everyone in your organization may already be using AI, and almost none of it may be sanctioned, measured, or visible to leadership. Before you can set goals, govern use, or prove value, you need an honest baseline. This lesson defines the adoption audit, shows why the gap between what leaders believe and what workers do is so wide, and gives you the four tracks that map where your org actually is.",
+    "date": "September 25, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "LLMs",
+      "AI Adoption",
+      "Leadership"
     ],
     "status": "published"
   },
