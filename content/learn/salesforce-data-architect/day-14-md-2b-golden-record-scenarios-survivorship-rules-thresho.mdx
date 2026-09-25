@@ -1,0 +1,151 @@
+---
+title: "Data Architect MD-2B: Golden-Record Scenarios, Survivorship Rules, Thresholds and Weights, Reference-Data Enrichment"
+slug: day-14-md-2b-golden-record-scenarios-survivorship-rules-thresho
+series: salesforce-data-architect
+lesson: 14
+excerpt: "Requirement md-2b gives you a customer scenario and asks you to recommend and use techniques for establishing a golden record, including survivorship rules, matching thresholds and weights, and leveraging external reference data for enrichment. This lesson makes it concrete. You already learned in md-2a that matching decides when two records are the same entity and that system of truth is often attribute-level. This lesson is about what happens after the match: survivorship, which picks a winning value per attribute when the sources disagree. You learn the survivorship strategies (source priority, most recent, most complete, most frequent, longest, steward override), why survivorship is attribute-level and never a single global rule, and how source priority as a trust ranking gives you the simplest and most auditable default. Then you learn matching thresholds and weights: how a fuzzy match produces a score, how weights make strong identifiers like a tax ID outweigh weak ones like a postal code, and how a three-band threshold design (auto-merge, review, no match) balances automation against the cost of a false merge. Next you learn reference-data enrichment from address validation, firmographic providers, and tax and registration databases, the considerations that govern it, and the exam-critical point that enrichment should feed survivorship as a lower-priority source rather than overwrite trusted values. A worked scenario, a five-step configuration walkthrough, three exam traps, and a try-it exercise close out requirement md-2b. Day 14 of the Platform Data Architect exam prep."
+date: "September 25, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [Salesforce, Data Architecture, Master Data Management, Certification]
+---
+
+Start from the scenario md-2a left you with. Two integrated systems feed the same customer into a single Salesforce org. A billing system holds the financial picture: legal name, tax ID, billing address, payment terms. A telephony platform holds the phone record, and a CRMyou control holds the day to day sales view. One customer, three sources, and they disagree on nearly every field. The tax IDs match, so matching resolves the cluster as one entity. You are past the question "are these the same customer?" and into the harder one: "which value of each field do we keep?"
+
+Requirement md-2b asks you, given a customer scenario, to recommend and use techniques for establishing a golden record, including data survivorship rules, matching thresholds and weights, and leveraging external reference data for enrichment. [^1] This is the operational companion to md-2a. Where md-2a set up identity resolution, deduplication, and matching rules around the single org, md-2b is the layer that decides winners when sources conflict, tunes the matching dial, and brings third-party data in to fill the gaps. The exam wants you to reason about a scenario and name the technique, not just recall a feature list. You need to know which survivorship rule fits which attribute, what a mid-band review tier costs, and how enrichment changes both matching and the golden record without ever becoming the system of record on its own.
+
+## What survivorship is, and why it is per-attribute
+
+Survivorship is the logic that picks a winning value for a field when two or more records get consolidated into one. [^3] It runs after matching, and it runs field by field. [^3] Matching answered whether two records are the same entity. Survivorship answers which value of each attribute survives the merge. The distinction matters because the two problems need opposite kinds of rules, and mixing them up is a classic exam trap.
+
+The first principle of survivorship is that it is attribute-level, never a single global rule. [^2] [^3] Customer name can survive from the billing system while phone survives from the telephony platform and industry code survives from the legal registry integration. [^3] There is no one "best source" across all fields, because no system is the best at everything. A global rule that says "the ERP always wins" would drag the ERP's poor phone data into every golden record at the same time it correctly owns the financial fields. A global rule that says "always most recent" hands the record to whichever system happened to touch it last, regardless of whether that system knows the field at all. [^3] The exam tests exactly this: survivorship is per-attribute, and the rule for one attribute has nothing forced on it from the rule for another. [^2]
+
+The practical consequence is that you need one rule per attribute. [^3] Every attribute on the customer entity needs a survivorship decision, or a human makes every decision by hand at merge time. That is the cost of doing it right, and the payoff is a golden record where each field comes from the system that genuinely owns it.
+
+## The survivorship strategies
+
+There are a handful of survivorship strategies, and real systems mix them rather than commit to one. Know each, know what it is good at, and know where it breaks. [^3]
+
+**Source priority.** Rank your systems and take the value from the highest-ranked source that has a non-blank value. [^3] The billing system wins financial fields, the legal registry wins company name, the CRM wins contact fields. [^3] Blunt, easy to explain, and the strategy that works when you know which system is authoritative for which domain. [^3] Its weakness is staleness: the preferred source can hold an old value with no mechanism to notice. [^4]
+
+**Most recent.** Whichever record was updated last wins. [^3] It is intuitive, and it is wrong about a third of the time, because recency only correlates with correctness when data entry is disciplined. [^3] If someone updated a phone number to a value that was already wrong, recency locks the error in. [^3] It suits volatile attributes like a current job title, but it needs the same care in a batch backfill, where a large load of old timestamps can crown stale values as the winners. [^7]
+
+**Most complete.** The non-blank value wins. [^3] If record A has a phone number and record B does not, A wins. [^3] When both have values, you fall back to another rule. [^3] It is useful for sparse attributes where most records have gaps, and it is often layered under source priority as a fallback: take the highest-priority source with a non-null value, and when the priority-one source is blank, let completeness fill in. [^3]
+
+**Most frequent.** The value that appears most often across the cluster wins, a consensus vote. [^7] If four of five source records say "NY" and one says "New York," the consensus wins, with a tiebreaker rule for the deadlock. [^7] It works for crowdsourced or sensor data where individual errors are random but the consensus is probably right, and it is less useful when one authoritative source genuinely knows better than the plurality of the others.
+
+**Longest value.** The most information-rich value wins, such as a full legal name surviving over an initial. [^7] It protects against the truncation and shorthand habits of some sources, but length is a proxy for completeness, not a proof of accuracy.
+
+**Steward override.** A human data steward manually selects the winner and the decision is recorded. [^3] This is not a "strategy" in the automated sense; it is the escape hatch for the conflicts no rule settles cleanly, and it should carry more authority than any source feed. [^3]
+
+The archetype that most mid-market organizations ship is a hybrid: source priority as the default, completeness as the fallback when the priority source is null, recency as a tiebreaker between two priority sources, and a steward for everything the rules cannot decide. [^3] Weighted trust scores, where every source gets a numeric rating per attribute, are powerful but expensive to calibrate and are usually reserved for large enterprises with dedicated data quality teams. [^3]
+
+## Source priority: the auditable default
+
+Because the exam favors the simplest defensible answer, source priority deserves its own treatment. It is a trust ranking, and it is the most auditable survivorship rule you can ship. [^3]
+
+The mechanism is a ranked list per attribute. For phone, rank the telephony platform above the billing system. For tax ID, rank the billing system on top. For company legal name, rank the legal registry first. The rule is then mechanical: walk the list in rank order and take the first non-blank value. [^3] Because the priority is explicit and written down, anyone can look at a golden record and see which system supplied a value and whether that system outranks the alternatives. No hidden scoring, no opaque math, just a documented ranking.
+
+Its auditability is the reason it is the correct default. When a business user asks why the golden record carries a particular phone number, the answer is "the telephony platform is ranked first for phone and it supplied this value," which a data steward can verify against the survivorship matrix. More complex scoring answers the same question poorly, because the winning value depends on a composite of weights that is harder to explain. [^3]
+
+The one trap with source priority is staleness. A high-ranked source can carry an old value, and priority alone never notices. [^4] The mitigation is to pair it with a completeness or recency fallback, and to review the ranking as sources evolve.
+
+## Matching thresholds and weights
+
+Before survivorship can pick a winner, matching has to produce a cluster, and matching produces its confidence as a score. That is where thresholds and weights live.
+
+A match score is the numeric confidence that two records are the same entity, built from per-field comparisons. [^4] In Salesforce, a matching rule compares fields and each field comparison contributes a match score that can be weighted to decide the field's influence on the total. [^4] Consider the address example from Salesforce's own education: a mailing street is broken into street name, street number, street suffix, and suite number, each with its own matching method and a weight that determines how much it contributes to the field's score. [^4] Street name carries the most weight, exact parts like the street number and suite number weigh less, and the weighted parts sum to the field's match score. [^4]
+
+The exam point is weights. [^4] Weights let you make some fields matter more than others. A matching tax ID should outweigh a matching postal code, because two companies can share a postal code all day while a shared tax ID is near proof of identity. When you design a matching rule you are deciding the relative influence of each field on the final score, trading the fields that are truly identifying against the ones that are merely corroborating. [^4]
+
+A threshold is the score at which you act. [^4] Above the threshold, the pair is a match. [^4] The design question is how many thresholds you set and what happens in each band, because a single threshold forces a single binary outcome.
+
+## The three-band threshold design
+
+Here is the balance the exam wants you to see. If you set one threshold and auto-merge everything above it, you automate false merges: two companies with similar names and a shared zip code sail past the bar and collapse into one record, corrupting relationships and reporting. [^4] If you set one threshold and route everything above it to manual review, you drown the steward in easy cases and the queue backs up. The disciplined design is a three-band threshold.
+
+The three-band design distinguishes auto-merge, review, and no-match. High-confidence scores (say above a high bar) auto-merge or auto-link, because the identity evidence is overwhelming. Mid-band scores route to a review queue owned by a data steward, who resolves the ambiguity by hand. Low scores are no match, and the records stay separate. [^3] [^6]
+
+This balances automation against the cost of a false merge. The bulk of true duplicates land cleanly in the auto band and never touch a human. The genuinely ambiguous cases, where the score is high enough to deserve a look but not high enough to trust, get the one thing a rules engine cannot supply: human judgment. And the clearly distinct pairs are left alone instead of being forced together. The cost of the mid band is steward time, which is precisely why the exam frames a review tier as the safer choice over a single hard cutoff. One hard threshold with no review band either auto-merges too aggressively or buries the steward. [^5]
+
+The same logic appears on the enrichment side. A reference-data provider returns a confidence code for a match, and the code decides whether the match auto-merges or is held as a potential match for review, the same auto-versus-review split at the reference layer. [^6]
+
+## Reference-data enrichment
+
+Survivorship and thresholds decide winners among the sources you already have. Reference-data enrichment brings in data you do not, from outside the org.
+
+Reference-data enrichment is the practice of using an external source to validate, standardize, or append attributes on the golden record. [^5] [^6] Three families matter for the exam. Address validation takes raw or malformed addresses and returns standardized, deliverable ones, often through a postal or address service. Firmographic enrichment appends organization attributes like industry code, company size, revenue, corporate hierarchy, and ownership, from providers or multiple registries that track legal entity data. [^5] Tax and registration databases confirm that an entity exists and supply its legal identifiers.
+
+Enrichment serves two jobs. First, it improves matching. [^5] A standardized address, a validated company name, and a resolved legal identifier give the matcher better input, and better input produces a stronger, more confident match score. In the reference-layer flow one vendor describes, the org sends its existing address fields to the provider as matching inputs, the provider resolves the entity and returns a verified match plus a confidence code, and that verified identity becomes the anchor for clustering. [^5] [^6] Second, enrichment improves the completeness of the golden record, filling attributes the internal sources never carried, such as a missing industry code or a corporate hierarchy that no single CRM tracks. [^5]
+
+The exam wants you to weigh four considerations before you turn an enrichment source on. [^5]
+
+**Ingestion cost.** Enrichment is not free. Firmographic providers license their data, often per record or per attribute, and address services charge per validation. [^5] At large volumes the recurring cost is a real line item, and the architect budgets for it rather than treating enrichment as unmetered.
+
+**Licensing.** Much of this data is licensed, so you need to confirm that the use case is covered. A provider's terms distinguish internal enrichment, resale, and redistribution, and some premium firmographic data is available only under a paid license on top of the base feed. [^5]
+
+**Latency.** Real-time enrichment adds a network round trip at the point of write, which slows a create or update that is waiting on it. Batch enrichment runs on a schedule and avoids the latency but holds data that is minutes or hours old. The reference flow runs both, real-time on an event and batch on a schedule, converging on the same resolution. [^6] The architect picks the mode per field and per tolerance for staleness.
+
+**The risk of overwriting trusted values.** This is the one the exam stresses. Enrichment writes values returned by an external provider, and those values can be stale or wrong. If enrichment overwrites a good internal value by default, an automated feed silently degrades a field the org already maintained well. The correct pattern is to feed enrichment into survivorship as a source contribution, at a priority below the trusted internal systems, rather than letting it overwrite them outright. [^6] In a mature setup the provider's enriched address is written to the golden record tagged with its source and then "participates in survivorship along with other source contributions" such as the CRM, ERP-adjacent systems, and manual entry. [^6] If the provider ranks higher for a field, its value wins; otherwise the trusted internal value holds. Enrichment never becomes the system of record for everything, and it never decides record ownership in the CRM. [^1]
+
+That last point is a quiz-relevant line. External reference data is a legitimate source in MDM because it validates, standardizes, and enriches. It is not legitimate as a replacement for the source systems as the system of record for all attributes, and it does not determine record ownership inside the CRM. [^1] Enrichment feeds the golden record; it does not govern it.
+
+## Stewardship and explainability
+
+Survivorship, thresholds, and enrichment cover the automated layer. Stewardship is the human layer on top, and the exam treats it as part of the technique, not an afterthought.
+
+A data steward owns the customer domain. Unresolved mid-band matches and conflicting survivorship decisions escalate to that steward, who resolves them by hand and whose decisions carry more authority than any source feed. [^3] The work is continuous, because the rules never settle every case and because the rules themselves drift as sources change. [^2] Without stewardship the system of truth quietly decays and the duplicate problem rebuilds itself. [^2]
+
+The required discipline is documentation. Document the survivorship setup so the golden record is explainable: for each attribute, record the winning source, the rule that selected it, and the last time a decision changed. [^2] [^3] That triple is what audit and business users need to trust the record. A grant of trust is earned by provenance, and provenance is a written answer to "why does this field hold this value and who decided?" When a steward overrides a rule, log the override and the reason, so the org can see where the engine is being wrong. [^3] An explainable golden record is the difference between a system users fight and one they build on.
+
+## Worked scenario: three sources, one customer
+
+Put the pieces together. A billing system, a telephony platform, and a CRM all feed one customer, and the tax IDs match, so matching clusters them as one entity. [^3]
+
+1. **Rank the sources per attribute.** For phone, rank telephony above billing and CRM. For legal name and tax ID, rank billing first. For sales contact details, rank the CRM first. [^3]
+2. **Write the survivorship matrix.** For every attribute, record the source priority and the rule. A row reads "Phone: source priority, telephony first, CRM second, billing last." This is the explainability layer. [^2]
+3. **Tune the matching weights and thresholds.** Make tax ID and email carry the most weight in the match score, and corroborating fields like industry and postal code weigh less. Set a three-band threshold: high scores auto-merge, mid scores queue to the steward, low scores stay separate. [^4]
+4. **Turn on reference-data enrichment.** Enrich the account with a standardized address, industry code, and a verified legal identifier, feeding the enriched values into survivorship at a priority below the trusted internal systems so they fill gaps without overwriting good values. [^5] [^6]
+5. **Route ambiguity to the steward.** Mid-band matches and any survivorship conflict the rules cannot decide land in the steward's queue, and every override is logged with its reason. [^3]
+
+The result: each field of the golden record carries the value from the system that genuinely owns it, the matching dial is tuned so strong identifiers dominate the score and ambiguity goes to a human, and enrichment fills the gaps without stealing the authority from the sources that earned it. That is the md-2b technique set applied as a whole. [^1]
+
+## Configuration walkthrough: five steps
+
+Here is the concrete sequence to stand this up in a Salesforce org and its reference layer.
+
+1. **Define a source priority ranking for each attribute and implement it in survivorship logic.** Write the attribute-to-source-priority matrix (for example ERP over CRM over web form for financial fields, telephony first for phone). [^3] In Salesforce the survivorship winner is selected at merge time, so the ranking becomes the documented basis for the field values you keep when you merge, and any external MDM layer that runs survivorship consumes the same matrix. [^2]
+2. **Configure matching rule weights and tune thresholds.** Build custom matching rules so strong identifiers (tax ID, email) dominate the match score and weak corroborating fields (postal code, industry) weigh less. [^4] Set the threshold bands so high-confidence matches auto-merge, mid-band matches route to a review queue, and low scores are no match. [^4]
+3. **Set up a manual review queue with a steward owner.** Build a list view or report of the mid-band matches and assign the steward as its owner. [^3] This is the human resolution layer that a single hard threshold omits. [^5]
+4. **Integrate a reference-data service and map its fields into enrichment before survivorship runs.** Wire the address, firmographic, or tax and registration provider, map its returned fields to your attributes, and enrich the record before survivorship evaluates the sources. [^5] [^6] Feed the enriched values in as a lower-priority source contribution so they participate in survivorship rather than overwrite. [^6]
+5. **Maintain and publish the attribute-survivorship matrix.** Keep a living document of attribute, source priority, rule, and steward, and publish it so the whole org and your audit can see it. [^2] Review it as sources and channels evolve. [^2]
+
+## Exam traps
+
+- **Using a single global survivorship rule for all attributes.** Survivorship is attribute-level. [^2] [^3] Phone may come from telephony while name comes from the CRM and industry from the legal registry. [^3] A global rule that "the ERP always wins" applies the ERP's weak phone data everywhere it should not. [^3]
+- **Setting a single fuzzy threshold with no review band.** A hard cutoff forces either automatic false merges or excessive duplicates; a mid-band review tier that sends ambiguous matches to a steward is the safer balance. [^4] This is the answer to any scenario that asks for auto-merge on high confidence but human review on ambiguity. [^5]
+- **Letting enrichment overwrite trusted internal values by default.** Enrichment should feed into survivorship at a priority below the trusted internal systems instead of overwriting them. [^6] Reference data validates, standardizes, and enriches; it does not become the system of record for everything. [^1]
+
+## Try it
+
+Model the survivorship task for a customer domain you know. Pick the attributes of one customer entity and name the sources that feed each one. For each attribute, write the source-priority ranking and the survivorship rule (source priority, most recent, most complete, most frequent, longest, or steward override), and say why that rule fits that attribute. Then design the matching dial: which two fields carry the most weight in the match score and why, and what your three threshold bands are. Describe one bit of reference-data enrichment you would add, name the provider type (address, firmographic, tax and registration), and explain how you would feed it into survivorship without overwriting a trusted value. Finish with the steward's queue: what lands in it, who owns it, and what you record when a steward overrides a rule.
+
+## What's next
+
+Lesson 15 turns the survivorship matrix and stewardship concepts you just built into the full methodology of consolidation. It covers consolidating attributes from multiple sources: winning-attribute criteria, methodology, and stewardship. You will take the per-attribute survivorship rules and the steward owned mid-band queue from this lesson and get concrete about how an org runs attribute consolidation end to end, the criteria that decide a winning attribute, and how stewardship carries the process through changes, so the golden record stays explainable and governed as the number of sources grows.
+
+## Related Requirements
+
+- Lesson 13 of 42 (md-2a): Golden record and system of truth in a single org, identity resolution, dedup, matching rules
+- Lesson 14 of 42 (md-2b): Golden-record scenarios, survivorship rules, thresholds and weights, reference-data enrichment
+- Lesson 15 of 42 (md-3a): Consolidating attributes from multiple sources, winning-attribute criteria, methodology, stewardship
+
+## References
+
+[^1]: Salesforce Certified Platform Data Architect Exam Guide, Master Data Management domain, requirement md-2b: given a customer scenario, recommend and use techniques for establishing a golden record, including data survivorship rules, matching thresholds and weights, and leveraging external reference data for enrichment. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005298972&language=en_US&type=1)
+[^2]: Profisee, MDM What Is a Golden Record (survivorship rules are attribute-level and select which source's value wins per attribute, using strategies such as source-system priority, most recent update, and most complete record; documentation and stewardship maintain the rules as data and channels evolve). [profisee.com](https://www.profisee.com/what-is-mdm/what-is-a-golden-record/)
+[^3]: Primentra, MDM Survivorship Rules Explained (survivorship is the logic that selects a winning value per field after matching, and it runs field by field; the common strategies are source priority, most recent, most complete, and trust score, usually combined as a hybrid with steward review for what rules cannot decide; steward overrides should carry higher authority than any source feed and be logged). [primentra.com](https://primentra.com/blog/survivorship-rules-master-data)
+[^4]: Salesforce Trailhead, Resolve and Prevent Duplicate Data in Salesforce (a matching rule compares fields and each field comparison contributes a match score; addresses break into sections each weighted to determine the field's score; you set weights so strong identifying fields dominate and thresholds decide when a comparison is a match). [trailhead.salesforce.com](https://trailhead.salesforce.com/content/learn/modules/sales_admin_duplicate_management/sales_admin_duplicate_management_unit_2)
+[^5]: Tamr, B2B Customers Data Product (reference and firmographic enrichment validates records against a corpus to confirm a company is real, appends firmographics such as corporate hierarchy, industry, and identifiers, and enriches the golden record; public and licensed premium providers, including Dun & Bradstreet with a D-U-N-S number, feed the enrichment). [cloud.docs.tamr.com](https://cloud.docs.tamr.com/docs/b2b-customers-data-product)
+[^6]: Reltio Support, How D&B RIH Recipes Update Address Data (a reference-data provider performs identity resolution and returns a confidence code that routes the match to auto-merge or to a potential-match review; the enriched, source-tagged value participates in survivorship alongside other source contributions rather than overwriting trusted values). [support.reltio.com](https://support.reltio.com/hc/en-us/articles/47605726829965-How-D-B-RIH-Recipes-Update-Address-Data-in-Reltio-DnB-DataBlocks)
+[^7]: Inference Systems, What Are Survivorship Rules? A Glossary Definition (survivorship strategies include source priority hierarchy, recency-based selection, longest value and density rules, and frequency and consensus voting, each with its own strengths and risks; rules are commonly applied per attribute). [inferensys.com](https://inferensys.com/glossary/algorithmic-trust-and-authority-signals/canonicalization-strategies/survivorship-rules)
