@@ -1,0 +1,40 @@
+{
+  "quizName": "salesforce-architect:lesson:event-driven-architecture-order-replay-duplicate-handling",
+  "title": "Lesson 52: Event-Driven Architecture: Event Ordering, Replay, and Duplicate Handling",
+  "description": "The three correctness problems every event-driven design must solve: the bus gives a partial order rather than a script, replay is how a subscriber catches up after a disconnect, and at-least-once delivery means duplicates must be filtered by an idempotent consumer.",
+  "questions": [
+    {
+      "question": "Per the Lesson 52 content, when can you rely on the Salesforce event bus to deliver events in the order you published them?",
+      "options": [
+        "Across all events, regardless of how the publish calls are made",
+        "Only within a single publish call that passes multiple events as a batch; across separate publish calls events can arrive in a different order",
+        "Never, the bus does not preserve order under any circumstance",
+        "Always, but only for Change Data Capture events and never for Platform Events"
+      ],
+      "correct_answer_index": 1,
+      "explanation": "SF is explicit: the order of events in a single publish call is guaranteed and stored and delivered in the order they were passed in, but across separate publish requests events can be delivered in a different order, because requests can be handled by different application servers at different rates."
+    },
+    {
+      "question": "A customer's order status stream labels each event with a Replay ID. When the fulfillment subscriber reconnects after a short disconnect, what should it do to recover the events it missed?",
+      "options": [
+        "Add one to its last Replay ID and pass that computed value back on resubscribe",
+        "Ignore the missed events and start fresh, since the bus drops anything a subscriber was not connected for",
+        "Store the exact Replay ID of its last successfully processed event, pass that stored value back on resubscribe, and let the bus redeliver everything published after it within the 72-hour retention window",
+        "Use commitNumber for identity and bump it by one for every reconnect"
+      ],
+      "correct_answer_index": 2,
+      "explanation": "Replay works by persisting the last successfully processed Replay ID and resubscribing from that stored position; the bus redelivers everything published after it, for events still within the 72-hour window. Replay IDs are opaque and non-contiguous, so you never compute a new one by arithmetic."
+    },
+    {
+      "question": "Your event consumer sees the same platform event twice and must not double-apply it. Which approach reflects the lesson's guidance?",
+      "options": [
+        "Check whether the Event UUID was seen before, then apply the work in a separate later step",
+        "Trust the bus never to redeliver, since Salesforce guarantees exactly-once delivery",
+        "Identify the event by its Replay ID and skip any event whose Replay ID looks familiar",
+        "Make the consumer idempotent: insert the Event UUID into a dedupe object with a unique constraint that is atomic with the work, and upsert the target record gated by a sequence check"
+      ],
+      "correct_answer_index": 3,
+      "explanation": "The bus delivers at-least-once, so duplicates are expected. The fix is an idempotent consumer: a unique-key dedupe on the Event UUID, enforced atomically with the work so two concurrent deliveries cannot both pass the check, plus an upsert gated by a sequence check. Identify the event by Event UUID, not Replay ID."
+    }
+  ]
+}

@@ -1,0 +1,125 @@
+---
+title: "Lesson 52: Event-Driven Architecture: Event Ordering, Replay, and Duplicate Handling"
+slug: event-driven-architecture-order-replay-duplicate-handling
+series: "salesforce-architect"
+lesson: 52
+excerpt: "The three problems every event-driven design must solve before it is safe: how events arrive (ordering), how a subscriber catches up after an outage (replay), and how a subscriber keeps a duplicate from double-counting (dedupe). Why the bus gives you at-least-once delivery and a partial order, and how you turn that into correct downstream state."
+date: "September 25, 2026"
+author: "Adroit Consulting"
+readTime: "11 min read"
+tags: [Salesforce, Architecture, Integration, Events]
+---
+
+# Lesson 52: Event-Driven Architecture: Event Ordering, Replay, and Duplicate Handling
+
+Lesson 7 handed you the two vehicles on the Salesforce event bus: Platform Events for business intent, Change Data Capture for record state. Lesson 28 taught you to stream at volume and pace inside the allocations. Both lessons mentioned that the bus does not promise what a relational database gives you for free. This lesson is about that gap, because it is where event-driven designs fail. Three problems decide whether an event pipeline is correct: the order events arrive in, what happens when a subscriber needs to catch up, and what happens when the same event shows up twice. An architect who has not answered all three has not finished the design.
+
+## Define the terms
+
+- **Event ordering**: the sequence in which events are delivered or processed. A strict total order means every event has a defined position relative to every other; a partial order means only some pairs have a defined relationship. [^1]
+- **At-least-once delivery**: the system may deliver an event more than once, but it will never drop it. The consumer must tolerate duplicates. [^2]
+- **Exactly-once delivery**: every event is processed exactly once. Distributed message systems rarely provide this for free; it is usually constructed by making the consumer idempotent rather than promised by the broker. [^2]
+- **Replay**: resubmitting events that were already published, so a subscriber can recover events it missed while disconnected. [^3]
+- **Replay ID**: a value the bus assigns to each received event to mark its position in the stream. A subscriber stores it and passes it back on resubscribe to resume from that point. [^4]
+- **Duplicate**: the same logical event delivered to the consumer more than once. [^2]
+- **Idempotent consumer**: a consumer that processes the same event multiple times with the same result, so duplicates are harmless. [^5]
+- **Event UUID**: a system field that uniquely identifies an event message, distinct from the replay ID. [^6]
+
+## The ordering problem: the bus gives you a partial order, not a script
+
+The first fact to internalize is that Salesforce's event bus is a distributed system, and a distributed system does not hand you a global sequence. Salesforce is explicit: "Subscribers can receive events in different order than they were published in." [^7] If downstream correctness depends on the exact order events were processed, you cannot assume arrival order is that order.
+
+What the bus *does* guarantee is narrower and matters. When you publish multiple events in a single publish call, "the order of events in that batch is guaranteed and stored and delivered in the order they were passed in." [^7] So order is guaranteed within one publish request, but not across different publish requests, because separate requests can be handled by different application servers and processed at different rates. [^7]
+
+That distinction is the whole shape of the problem. You control order at the point of a single batch. You cannot rely on it across request boundaries. So the architectural decision is how to reconstruct order yourself when you need it, and the answer is to carry explicit ordering information in the event rather than depend on the channel.
+
+There are two workable strategies.
+
+**Carry a sequence in the payload.** If you control the publisher and the consumer (a Platform Event pair owned by your team), put a sequence counter directly in the event fields. The consumer sorts by it or rejects out-of-order events it is not ready for. This works because both sides agree on the meaning of a number you own; it does not require the bus to preserve any order at all.
+
+**Use CDC's header fields.** For record-change streams, Salesforce embeds ordering signals in every change event's `ChangeEventHeader`: [^6]
+
+- `transactionKey` uniquely identifies the Salesforce transaction, so you can group every change from the same save operation.
+- `sequenceNumber` orders the changes *within* that transaction, starting at 1.
+- `commitTimestamp` establishes order across transactions.
+
+Lead conversion is the canonical example. A single lead convert emits create-Account, create-Contact, create-Opportunity, then update-Lead as a numbered sequence in one transaction. Group by `transactionKey`, sort within the group by `sequenceNumber`, and order across transactions by `commitTimestamp`, and you can reconstruct the exact order the user's save operation produced. [^6]
+
+![Order is guaranteed within a single publish call (the batch delivered in the order passed in) but not across separate publish calls; when B can be delivered before A, the consumer must sort by a payload sequence counter or CDC header fields instead of trusting arrival order](</diagrams/event-driven-architecture-order-replay-duplicate-handling/2-ordering.png>)
+
+One trap embedded in that header: `commitNumber`, the system change number, is documented as provided for diagnostic purposes, not guaranteed unique in Salesforce (it is only unique within a single database instance), and it "might not be unique or sequential" after an org migrates databases. [^6] Use the sequence value and timestamps to build order; treat `commitNumber` as a hint, never as a uniqueness or ordering contract you build logic on.
+
+The design rule: if a downstream system must apply events in order, give it the order in the data. Never assume a subscriber that connected later, or events published across separate calls, will arrive the way you sent them.
+
+## Replay: how a subscriber catches up after it falls behind
+
+Replay exists because subscribers disconnect. A connection drops, retries fail, a deployment restarts a consumer. The question is whether that consumer lost anything, and replay is the mechanism that answers "no, it can catch up." [^3]
+
+Every delivered message carries a Replay ID that marks its position in the stream. The pattern is to persist the last Replay ID you successfully processed and, when your subscription reconnects, resubscribe from that stored position. Everything published after that point is delivered again, closing the gap. [^3] [^4]
+
+Two rules govern the mechanics. First, high-volume Platform Events and CDC events are retained in the event bus for 72 hours, so replay only covers that window. [^8] A subscriber that stays down longer than retention can no longer replay the missed events; it has missed them, and you need another plan (an API backfill, a control table checkpoint) for that case. Second, Replay IDs are assigned by the bus and are opaque. Salesforce's guidance: replay IDs "are not contiguous" and "Subscribers must not compute new replay IDs based on a stored replay ID." [^3] You store the exact value you received and pass it back; you never increment it or derive the next one by arithmetic.
+
+For the Pub/Sub API, replay is built in: a client sets a replay presence when it subscribes, choosing to start from a stored position or from a specific Replay ID, and the server re-delivers from that point. [^4] This is why the Pub/Sub API is the recommended path for high-volume streaming to your own infrastructure: the replay handshake is explicit and does not require you to reconstruct a stream state manually.
+
+There is one more distinction an architect has to hold: Replay IDs identify *positions*, not *events*. Two different subscribers will have seen the "same" event at different Replay IDs if they subscribed at different times; library and relarge orgs have migrated Replay ID spaces. For identifying a specific event, use the `EventUuid` system field, which uniquely identifies the event message. [^6] Use the Replay ID for resuming a position; use the Event UUID for identity and dedupe.
+
+![A subscriber timeline: messages flow from the event bus with Replay IDs 81 through 88, the connection drops after Replay ID 84, the subscriber stores 84, and on resubscribe passes 84 back to replay messages 85 through 88 from the 72-hour retention window](</diagrams/event-driven-architecture-order-replay-duplicate-handling/1-replay-model.png>)
+
+## Duplicate handling: at-least-once means duplicates are a design input
+
+Here is the hard truth that separates a robust event design from a fragile one: the Salesforce event bus delivers at-least-once, not exactly-once. An at-least-once system may deliver an event more than once, and it will not drop one. [^2] That is a deliberate and reasonable trade, because guaranteeing no duplicates without a sophisticated distributed protocol would risk losing events instead, which is the worse failure. The consequence is that your consumer must be built to see the same event twice and not care.
+
+Teaching this properly means separating two mechanisms that people collapse into one.
+
+**Idempotent consumers** make a repeated event produce the same result. This is the Enterprise Integration Pattern called the Idempotent Receiver: the receiver filters out duplicate messages so the rest of the processing is unaffected. [^9] The canonical implementation is a unique-key guard: the consumer stores a key from the event (the Event UUID, or a business identifier) in a table with a unique constraint, and on a repeat of that key it skips the work instead of applying it again. Salesforce's integration guide calls this the most typical method of building an idempotent receiver: track duplicates based on unique message identifiers sent by the consumer. [^10]
+
+**Dedupe as a business guard** protects against real-world duplicates that are not a bus artifact. The classic example is a click or a payment: the same event happening twice because a user double-submitted, or because a remote system retried after a lost response, is a genuine duplicate in the data, and no broker filtering will catch it. That requires a business-key dedupe: an upsert on an external ID, or a uniqueness check on a field that should only ever have one value. [^10]
+
+The confusion sets in when people treat dedupe as optional. It is not optional in an at-least-once system; a consumer that blindly applies every event will double-count the moment the bus redelivers one. The rule of thumb: an event consumer should be idempotent by design, using an Event UUID (or a message ID in the payload) as the dedupe key, *and* idempotent in effect for operations where a replayed event would otherwise double-apply (respecting unique constraints, using upserts). Then a bus redelivery and a genuine duplicate both pass through without corrupting state.
+
+The one deadline amateurs get wrong: dedupe must be atomic with the work. If you check "have I seen this key?" and then apply the work in a separate step without holding the uniqueness guarantee, two concurrent deliveries can both pass the check before either one commits, and you get a duplicate despite the guard. A unique constraint on the dedupe key object (or an idempotency key the receiver enforces atomically) closes that race, because only one of the two conflicting commits succeeds and the other fails with a duplicate-value error the consumer treats as "already done." [^1]
+
+![At-least-once delivery means the same event can arrive twice. A consumer filters duplicates with a unique-key dedupe on the Event UUID that is atomic with the work, then applies an upsert gated by a sequence check, so a bus redelivery or a genuine duplicate cannot double-apply. Two concurrent deliveries cannot both pass the uniqueness check, so only one wins](</diagrams/event-driven-architecture-order-replay-duplicate-handling/3-duplicates.png>)
+
+## Worked example: order status stream with an unreliable consumer
+
+Let me make the whole lesson concrete. An online retailer streams order status changes from Salesforce to an external fulfillment system using a high-volume Platform Event. The fulfillment system must apply status changes in order, survive its own restarts, and never bill a customer twice for the same order event.
+
+**Ordering.** The publisher is a Flow that gathers the status change for an order and publishes a single event with `Order_Number__c`, `Status__c`, `Sequence__c`, and `Published_At__c`. Sequence is a counter the publisher increments per order. The fulfillment consumer sorts events it holds for the same order by `Sequence__c` before applying them, so a late-arriving earlier event lands in its correct place instead of overwriting a newer status. Because sequence travels in the payload, the consumer does not depend on delivery order at all. [^7]
+
+**Replay.** The fulfillment subscriber persists the last Replay ID after each successfully applied batch. When its connection drops and it restarts, it resubscribes from that stored Replay ID and receives everything published after it, for events still within the 72-hour retention window. [^3] [^4] The stored value is copied verbatim; the consumer never computes a next Replay ID by arithmetic, because the IDs are opaque and non-contiguous. [^3]
+
+**Duplicates.** The consumer keeps a dedupe object keyed on the event's Event UUID, with a unique constraint on the UUID field. On each incoming event it attempts to insert the UUID; if the insert succeeds, it processes the event, and if it fails with a duplicate value, it treats the event as already handled and skips it. [^9] That makes a bus redelivery harmless. On top of that, the status-update operation itself is an upsert keyed on `Order_Number__c` and gated by `Sequence__c` (only apply if the new sequence is higher), so even if two genuine `Shipped` events arrive, billing logic does not double-run. The unique UUID constraint closes the concurrency race: two concurrent deliveries of the same event cannot both win the insert. [^1]
+
+The design rule that ties it together mirrors integration reliability more broadly: **the consumer assumes it will see the same event again, in whatever order, after a gap, and is correct anyway.** Order is carried in the data, recovery is a stored position, and duplicates are filtered by identity.
+
+## The pitfall to avoid
+
+**Designing a consumer that trusts the bus for order, delivery, and uniqueness.** Three habits fail together. A consumer that applies events strictly in arrival order breaks the moment a later-produced event arrives first (the bus does not promise strict global order [^7]). A consumer with no stored Replay ID silently loses every event published during a disconnect once 72 hours pass [^3] [^8]. And a consumer that applies every event as new work double-counts on the first redelivery, because the bus is at-least-once [^2]. Each one is a design input, not an edge case. The fix is the whole lesson: put order in the payload or CDC header, persist a replay position, and make the consumer idempotent with an atomic unique-key guard.
+
+## Try it
+
+Answer before reading on, then check.
+
+1. You publish two events in two separate Apex calls, and the downstream consumer needs them applied in the order you called. Can you rely on the bus to preserve that? *(No. Order is guaranteed only within a single publish call; across publish requests, events can be delivered in a different order. Carry a sequence in the payload if order matters.)* [^7]
+2. Your event subscriber was down for two hours and missed a burst of events. How does it recover, and how long can it look back? *(It persists its last Replay ID and resubscribes from it; the bus redelivers from that position. High-volume events are retained for 72 hours, so that is the replay window. Do not compute a new Replay ID; pass back the stored value verbatim.)* [^3] [^8]
+3. A platform event arrives twice. Why is this expected, and what makes it harmless? *(The bus delivers at-least-once, so a duplicate is the normal contract, not a bug. An idempotent consumer with a unique-key dedupe guard (for example on the Event UUID) skips the second delivery, and an operation that upserts by business key prevents double-application.)* [^2] [^9]
+4. Why must your dedupe check be atomic with the work, not a separate check-then-act? *(Two concurrent deliveries of the same event can both pass a check before either commits. A unique constraint on the dedupe key (or an idempotency key enforced atomically) lets only one commit succeed and turns the loser into a handled duplicate.)* [^1]
+5. Your consumer needs to identify a specific event for logging and dedupe. Which field do you use, and which do you avoid? *(Use the Event UUID, which uniquely identifies the event message. Avoid the Replay ID for identity: it marks a stream position, is opaque and non-contiguous, and is not guaranteed unique across migrations.)* [^6] [^3]
+
+## What's next
+
+You now know how to make an event pipeline correct when the bus refuses to give you strict order, exactly-once delivery, or a guaranteed-forever stream. The discipline is the same shape you already met in mobile sync and integration reliability: the component you are connecting to is not under your control, so you design for what it actually guarantees and make your consumer correct anyway.
+
+The next lesson steps back from a single event stream to the whole integration surface. **Lesson 53 is on the integration hub: aggregating multiple systems through Salesforce.** Where this lesson was about getting one class of events right end to end, the integration hub is about the system that sits in the middle and routes messages among many source and target systems, deciding who talks to whom and how a request fans out and a response comes back. It is the natural next rung: you have the individual event mechanics, and now you assemble them into a hub that many systems use.
+
+[^1]: developer.salesforce.com. [Blog: Design Considerations for Change Data Capture and Platform Events](https://developer.salesforce.com/blogs/2022/10/design-considerations-for-change-data-capture-and-platform-events). Covers ordering semantics, transaction key and sequence fields for reconstructing order, and idempotency guidance for event consumers.
+[^2]: salesforce.com. [Platform Event Message Delivery and Durability](https://developer.salesforce.com/docs/atlas.en-us.platform_events.meta/platform_events/platform_event_delivery_durability.htm). Documents the at-least-once delivery model and the guarantee that messages are not dropped.
+[^3]: developer.salesforce.com. [Streaming API Durability and Ordering](https://developer.salesforce.com/docs/atlas.en-us.api_streaming.meta/api_streaming/using_streaming_api_durability.htm). Covers replay, why Replay IDs are opaque and non-contiguous, and the stored-position recovery pattern.
+[^4]: developer.salesforce.com. [Pub/Sub API Overview](https://developer.salesforce.com/docs/platform/pub-sub-api/overview). Describes subscription with a replay presence and resuming from a stored Replay ID.
+[^5]: developer.salesforce.com. [Implementing Idempotent Operations with Salesforce](https://developer.salesforce.com/blogs/engineering/2013/01/implementing-idempotent-operations-with-salesforce). The engineering blog walking through how to make operations safe to repeat.
+[^6]: developer.salesforce.com. [Change Data Capture: Event Fields and Header](https://developer.salesforce.com/docs/atlas.en-us.change_data_capture.meta/change_data_capture/cdc_event_fields_header.htm). Documents `transactionKey`, `sequenceNumber`, `commitTimestamp`, `commitNumber`, and `EventUuid`, with the diagnostic-only caveat on `commitNumber`.
+[^7]: developer.salesforce.com. [Platform Event Message Ordering](https://developer.salesforce.com/docs/atlas.en-us.platform_events.meta/platform_events/platform_event_ordering.htm). States that order is guaranteed within a single publish call but not across publish requests.
+[^8]: developer.salesforce.com. [Platform Event Allocations](https://developer.salesforce.com/docs/atlas.en-us.platform_events.meta/platform_events/platform_event_limits.htm). Covers the 72-hour retention of high-volume platform events and CDC events.
+[^9]: enterpriseintegrationpatterns.com. [Idempotent Receiver](https://www.enterpriseintegrationpatterns.com/patterns/messaging/IdempotentReceiver.html). The original Enterprise Integration Pattern for filtering duplicate messages so a receiver processes each once.
+[^10]: architect.salesforce.com. [Integration Patterns](https://architect.salesforce.com/docs/architect/fundamentals/guide/integration-patterns.html). Salesforce's guide to building an idempotent receiver by tracking unique message identifiers, and to dedupe via upsert by external ID.
