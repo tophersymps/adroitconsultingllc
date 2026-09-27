@@ -1,0 +1,147 @@
+---
+title: "Data Architect MD-3A: Consolidating Attributes From Multiple Sources, Winning-Attribute Criteria, Methodology, Stewardship"
+slug: day-15-md-3a-consolidating-attributes-from-multiple-sources-win
+series: salesforce-data-architect
+lesson: 15
+excerpt: "Requirement md-3a asks you to recommend, given a customer scenario, approaches and techniques for consolidating data attributes from multiple sources, and to discuss the criteria and methodology for picking the winning attributes, including the role of data stewardship. This lesson makes that concrete. You already learned in md-2b that survivorship picks a winning value per attribute once matching has clustered records into one entity. This lesson pushes one level out: it is about the whole consolidation process, not just the winning rule. You learn the five-step consolidation methodology (harmonize values, resolve identity, apply attribute-level survivorship, persist the golden record and the cross-reference, and publish), why harmonization must happen before you can meaningfully compare values, and how each step feeds the next. Then you learn the criteria a winning-attribute rule weighs: source trust and authority, recency, completeness, whether the value passed a validation or reference check, and business rules such as legal name coming from the legal system regardless of recency. Next you learn that real rules are usually composed as an ordered list per attribute, with source priority, recency, and completeness as cascading fallbacks, and why documenting that order keeps every winner explainable. Then you learn provenance: storing which source won and when, so the golden record is auditable and future rules are built on evidence. After that you learn the stewardship roles (owners set policy, stewards resolve exceptions and monitor quality, custodians run the pipelines), and the quality metrics that keep a steward honest: match rate, duplicate rate, completeness, survivorship override rate, and unresolved-conflict counts. Finally you learn how a steward's tie-break becomes a rule update so the same conflict falls away next time. Day 15 of the Platform Data Architect exam prep."
+date: "September 26, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [Salesforce, Data Architecture, Master Data Management, Certification]
+---
+
+Requirement md-3a is the consolidation step spelled out. md-2b taught you the mechanics of survivorship, the logic that picks a winning value per attribute once records are clustered. This lesson widens the frame. Consolidated data never starts as a set of clean records waiting for a rule to rank them. It starts as three systems describing the same customer in different words, different cadences, and different states of repair. The exam asks you to recommend an approach for pulling those attributes together and to discuss the criteria and methodology for deciding which attribute wins. The role of data stewardship threads through the whole answer, because no rule set survives contact with real conflict.
+
+Here is the picture md-3a assumes. Two or more source systems own attributes of the same business entity. A legal registry holds the official company name and filing status. An ERP holds the financial picture: payment terms, tax ID, billing address. A CRM holds the day to day view: phone, email, a slightly casual company name, a sales territory. You are consolidating these into one golden record. The exam wants you to think about that as a process with an order, not a single magic rule. [^1] [^2]
+
+## The consolidation methodology, in order
+
+Consolidation is a sequence. Do the steps out of order and the later steps quietly fail. [^3] The five-step methodology is the spine of this requirement.
+
+**Step one: harmonize values.** Before any record can be compared, the values must be in comparable form. Company name needs a case policy ("Acme Corp" and "ACME CORP." and "Acme" are the same legal entity but different strings). Phone numbers need a canonical format. Dates need a single timezone and format. Country codes need a single standard. Harmonization is the unglamorous step that makes every later comparison meaningful. If you skip it, your match scores and your completeness checks run on noise. [^3]
+
+**Step two: resolve identity.** With values comparable, you decide which records are the same entity, and you attach each source record to one golden record. This is the match you studied in md-2a and md-2b. The output is not the golden record itself; it is the grouping that tells you which source records belong together. [^1] In a single org this is the deduplication and matching rule work you already know. [^4]
+
+**Step three: apply attribute-level survivorship.** Grouped under one golden record, each attribute now has competing values, and survivorship picks the winner per field. This is where the winning-attribute criteria come in, covered in the next section. The key architectural point from md-2b carries forward: survivorship is per-attribute, never one global rule. [^2] [^3]
+
+**Step four: persist the golden record and the cross-reference.** The chosen values write to the golden record, and you also persist the mapping from each source record to that golden record. That cross-reference is what makes the whole thing rebuildable and auditable. If a source corrects a value, the reference tells you which golden record to update. If a match was wrong, the reference gives you the trail to unwind it. Skipping the cross-reference is how golden records decay into unchangeable, unverifiable artifacts. [^1] [^3]
+
+**Step five: publish, if the style requires it.** Some consolidation designs feed a shared view, a data warehouse, or downstream consumers from the golden record. Publishing is where the consolidated result becomes the single source of truth other systems read. Not every design publishes to a federated location; registry and consolidated styles vary. The point is that publishing, when present, is the final, deliberate act, not an accidental one. [^3]
+
+Each step produces the input the next one consumes. That dependency is why the methodology is worth memorizing as a sequence: harmonize, resolve, survive, persist, publish. The exam rewards naming the order.
+
+## Criteria for picking the winning attribute
+
+When two sources disagree on a field, you need a defensible reason to declare one value the winner. The exam wants you to know the criteria a survivorship decision weighs. [^1] Ranked roughly by how often they decide a conflict:
+
+**Source trust and authority.** The most important criterion, and the one that anchors most real rules. Which system is authoritative for this attribute? The legal registry wins the legal name. The billing system wins the bill-to address. Trust is usually ranked per domain, because no system is authoritative for everything. The ERP that owns the financial picture may have phone data nobody updates. Source authority is the reason "most recent" alone is a poor default: it hands the win to whichever system happened to touch the record last, whether or not that system knows the field. [^2] [^3]
+
+**Recency.** Which value was updated most recently. Recency correlates with correctness only when data entry is disciplined, so it works for volatile attributes (current title, current phone) and fails for stable attributes (legal name) where an old authoritative value beats a new sloppy one. Recency is best used as a fallback, not the primary rule. [^3] [^7]
+
+**Completeness.** The non-blank value wins. Useful for sparse attributes where most records carry gaps, and it slots naturally under source priority: take the highest-ranked source that has a value, and let completeness fill in when the priority source is blank. [^3]
+
+**Validation, or passed a reference check.** A value that cleared a check outranks one that did not. A validated postal code, a tax ID that passed a checksum, an email that survived a format and MX check: validation is evidence the value is real, not just present. This criterion is why enrichment data, vetted externally, can outrank an unvalidated internal entry for the fields it knows. [^3]
+
+**Business rules.** The decisive override when the criteria above conflict. A business rule says "the legal name always comes from the legal system, regardless of recency or completeness elsewhere." Business rules encode the organization's judgment about what a field means, and they take precedence over the generic criteria. [^3] The exam's signature vignette is exactly this: the legal name must win from the legal or ERP system even when the CRM value is newer. That is a business rule beating recency. [^2]
+
+No single criterion is always right. Source authority is the usual anchor, recency and completeness act as fallbacks, validation raises a value's standing, and a documented business rule overrides them all. The lesson the exam tests is that winners come from weighing these criteria per attribute, not from one universal rule.
+
+## Composed rules: an ordered list per attribute
+
+Criteria are the ingredients; a composed rule is the recipe. Real deployments rarely write one criterion as the winner. They write an ordered rule list per attribute, each entry a check with a fallback. This is the survivorship rule expressed as a decision procedure. [^3]
+
+Take legal name. A composed rule might read:
+
+1. Legal name from the ERP or legal registry, if present.
+2. Else the most recent validated name from the CRM.
+3. Else the most complete non-blank value across sources.
+
+Each line is a rule with a named source and a fallback condition. The rule walks the list, takes the first match, and stops. Because the order is written down, anyone can reconstruct why a particular value won: it satisfied line one, or it fell through to line two. That explainability is the whole point. [^3]
+
+The alternative to a composed rule is a single criterion like "most recent value always wins." That fails on the legal name case immediately: the CRM's newer value would crown the legal name, and the authoritative registry's correct value is lost. The exam tests this distinction head on. [^2] A composed ordered rule couples the authority anchor (line one) with recency and completeness as escalating fallbacks. Composing rules is how you honor both "the legal system owns legal name" and "when nobody has it, take the best available."
+
+The trade-off with composed rules is complexity. Every extra line is a branch a steward has to explain, and an ordering choice a reviewer can dispute. Keep the list short per attribute, document it in the survivorship matrix, and review it as sources change. [^3]
+
+## Confidence and provenance
+
+A composed rule produces a winner. Provenance records the reasoning trail so the winner can be audited and improved.
+
+Provenance means storing, alongside the golden value, which source supplied it and when. At minimum: winning source, the rule branch that selected it, and the timestamp of the decision. [^3] This is why the exam asks what provenance is for. It is not a performance feature, not encryption, not sharing. It is an auditability and explainability feature. When a business user asks why the golden record carries a particular legal name, provenance answers: "the ERP supplied it on September 20, satisfying rule branch one." Without it, the value is a black box and nobody can say why it is what it is. [^8]
+
+Provenance has a second job that is easy to miss: it feeds future rules. When you write a survivorship rule, you want the choice between two sources to be evidence-based, not guessed. Provenance tells you which source has actually won this attribute in the past and how the winner compared to the runner-up. Rule design becomes an empirical activity instead of an act of faith. And when a steward overrides a winner, the provenance record captures that override too, which makes the override rate a measurable thing rather than folklore. [^3]
+
+## Data stewardship roles
+
+Automation picks most winners, but the golden record decays quickly if nobody owns the exceptions. That is where data stewardship comes in, and md-3a explicitly forces you to discuss it. [^1]
+
+The roles form a clean separation that prevents the golden record from rotting:
+
+**Data owners** set policy and approve the survivorship rules. An owner is accountable for what an attribute means and how valuable it is, and signs off on the composed rule list that governs it. Owners are rarely engineers; they are the business accountable for the data.
+
+**Data stewards** resolve exceptions, approve merges, and monitor quality day to day. When sources disagree and no rule decides, the steward adjudicates. When an auto-merge looks risky, the steward reviews it. The steward watches the quality metrics and is the human face of the golden record's health. [^9]
+
+**Data custodians** operate the technical pipelines. They run the integration jobs, maintain the matching and survivorship configuration, keep the cross-reference table synchronized, and apply the owner-approved rules. Custodianship is operational; ownership and stewardship are accountable. [^9]
+
+Clear roles matter because ambiguity is how records decay. If ownership and stewardship are folded into the same overloaded person, the survivorship rules go stale, the exceptions pile up, and no one owns the outcome. The exam wants you to see stewardship as the governed counterpart to automation.
+
+## Quality metrics a steward watches
+
+A steward cannot manage what they cannot measure. The dials that keep the golden record honest are the data-quality metrics, and the exam expects you to know which of these are real stewardship signals. [^9]
+
+**Match rate.** What share of source records got attached to a golden record. A falling match rate signals identity resolution is missing clusters. [^9]
+
+**Duplicate rate.** How many golden records actually describe the same entity. Rising duplicates signal under-merging or a weak match threshold. [^9]
+
+**Completeness.** What fraction of key attributes on the golden record are populated. Persistent gaps signal a source is drying up or a rule is pointing at a sparse feed. [^9]
+
+**Survivorship override rate.** How often a steward had to manually override an automated winner. A high override rate is a red flag that the composed rules disagree with reality, and it directly prompts rule revision. [^9]
+
+**Unresolved-conflict count.** How many clusters are sitting in the review queue waiting for a human decision. This is the stewards' backlog, and it should trend down as the rules learn. [^9]
+
+These are data-quality measures. Server CPU utilization and the number of page layouts on the Account object are not, and the exam traps you by offering them as distractors. [^9] Everything a steward watches describes the golden record's quality or the state of current conflicts, nothing about infrastructure or metadata cosmetics.
+
+## Conflict resolution beyond automation
+
+Even a finely tuned rule set reaches conflicts no branch decides. Two sources genuinely disagree, both are authoritative, and neither criterion breaks the tie. That is the steward's moment.
+
+The motion is: the steward adjudicates, and the decision is captured as a rule update. [^3] The steward does not just fix one record. They recognize the type of conflict, decide it, and encode the decision so the same conflict resolves itself next time. This is the continuous-improvement loop that makes the rule set converge on reality instead of ossifying. If three clusters in a row hit the same ambiguity, the composed rule for that attribute is missing a branch, and the steward's answer becomes that branch. [^3]
+
+The trade-off is a real balance, not a free lunch. More survivorship logic lowers cost because fewer cases reach a human, but it raises the explainability burden, because every branch is a claim someone must be able to defend. Automation without review risks silent wrong winners: the rules decide confidently and incorrectly, and nobody notices because the exceptions never surface. The protection is the review band (keep a slice of merges and overrides visible) and the provenance trail (always be able to reconstruct a decision). [^3]
+
+## Configuration walkthrough
+
+Here is a concrete path for standing up attribute consolidation with survivorships, provenance, and stewardship.
+
+1. **Build the attribute-survivorship rules matrix.** For each attribute, write the ordered rule list: source priority first, recency and completeness as fallbacks. Legal name: ERP, else recent validated CRM, else most complete. Phone: telephony platform, else billing, else most recent. Document the matrix; it is the contract the rules implement. [^3] [^4]
+
+2. **Implement matching.** Set up identity resolution so every source record attaches to one golden record, and maintain a cross-reference table that maps each source key to its golden record. This is the persistence step the methodology demands. [^1] [^4]
+
+3. **Store provenance fields on the golden record.** Add winning-source and last-updated fields so every survivor is auditable. This is small work that buys the entire audit story. [^3]
+
+4. **Stand up stewardship.** Create a review queue that catches exceptions (clusters matching showed a steward, low-confidence merges), and a dashboard of quality metrics: match rate, duplicate rate, completeness, override rate, unresolved conflicts. [^9]
+
+5. **Feed decisions back into the rules.** When a steward resolves a recurring conflict, turn the resolution into a rule branch so the same conflict auto-resolves next time. The override becomes an update to the matrix from step one, closing the loop. [^3]
+
+## Exam traps
+
+**Picking winners by a single simple rule.** "Most recent wins" feels clean and is wrong about a third of the time, because recency only tracks correctness under disciplined entry. Conflicts need composed, attribute-specific rules. [^2] [^3] Same for "longest wins" or "the source with more fields wins": weak global heuristics, no authority, no audit story.
+
+**Not storing provenance.** Without winning-source and timestamp, nobody can explain why the golden value is what it is, the record becomes unauditable, and future rules are built on guesswork. Provenance is the difference between a golden record and a black box. [^3] [^8]
+
+**Omitting stewardship.** Automation alone leaves conflicting exceptions unresolved and the golden record decays. Owners, stewards, and custodians are the governed layer that keeps the rules honest and the exceptions resolved. [^9]
+
+## Try it
+
+Sketch the survivorship matrix for a fictional customer with three sources: a legal registry, an ERP, and a CRM. For each of four attributes (legal name, billing address, phone, industry code), write the composed rule and note which of the five criteria each branch relies on. Then add one exception to each: a legal name the CRM updated last week, a billing address the ERP has never populated, a phone every source has, and an industry code none of them validates. Trace where each exception lands and which branch a steward would have to rewrite. You have just walked the full consolidation methodology.
+
+## What's next
+
+Day 16 moves from the attribute-level consolidation you just learned to MDM architecture scenarios. You will apply traceability and a common context for business rules, and weigh tooling against declarative approaches, within realistic master-data management scenarios. That is requirement md-3b, the architecture-level companion to the consolidation mechanics of md-3a.
+
+[^1]: Salesforce, "Salesforce Certified Platform Data Architect" exam guide, requirement md-3a: recommended approaches and techniques for consolidating data attributes from multiple sources, criteria and methodology for picking winning attributes, and the role of data stewardship. https://trailhead.salesforce.com/credentials/architect
+[^2]: Adroit Consulting, Day 14 lesson, "Data Architect MD-2B: Golden-Record Scenarios, Survivorship Rules, Thresholds and Weights, Reference-Data Enrichment," which establishes attribute-level survivorship and the survivorship strategy set this lesson extends. https://adroit.io/learn
+[^3]: Salesforce, "The Salesforce Data Architecture and Management Guide," which covers the entity identity master data management style, the stepwise consolidation of records into a single logical view, and the governance and stewardship that keep master data trustworthy. https://www.salesforce.com/content/dam/web/en_us/www/documents/ebooks/datasheet-data-architecture-and-management-guide.pdf
+[^4]: Salesforce Help, "About Matching Rules and Duplicate Jobs," which describes how matching rules group candidate records and how to configure rules for detecting duplicates and letting users review them. https://help.salesforce.com/s/articleView?id=sf.security_duplicate_matching_rules.htm
+[^7]: Adroit Consulting, Day 14 lesson, "Data Architect MD-2B: Golden-Record Scenarios, Survivorship Rules, Thresholds and Weights, Reference-Data Enrichment," survivorship strategies including most recent, most frequent, and longest value. https://adroit.io/learn
+[^8]: Salesforce Help, "Field Audit Trail," which keeps a record of field changes over a selected number of days, supporting an audit trail for sensitive data. https://help.salesforce.com/s/articleView?id=sf.fields_tracking_field_history.htm
+[^9]: Salesforce, "Data Ownership and Stewardship" guidance in the Data Architecture and Management Guide, describing the owners, stewards, and technical custodians who together govern master and reference data. https://www.salesforce.com/content/dam/web/en_us/www/documents/ebooks/datasheet-data-architecture-and-management-guide.pdf
