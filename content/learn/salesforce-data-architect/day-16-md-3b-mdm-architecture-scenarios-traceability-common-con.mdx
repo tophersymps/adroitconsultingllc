@@ -1,0 +1,155 @@
+---
+title: "Data Architect MD-3B: MDM Architecture Scenarios, Traceability, Common Context for Business Rules, Tooling vs Declarative"
+slug: day-16-md-3b-mdm-architecture-scenarios-traceability-common-con
+series: salesforce-data-architect
+lesson: 16
+excerpt: "Requirement md-3b asks you to recommend, given a customer scenario, the approaches and techniques that capture and maintain customer reference and metadata to preserve traceability and establish a common context for business rules, and to decide when dedicated MDM tooling is warranted versus declarative Salesforce capabilities. This lesson makes that concrete. You already learned in md-1 and md-3a that a golden record consolidates attributes and that consolidation is a governed process with ownership, stewardship, and provenance. This lesson pushes up to the architecture level: it is about the whole master-data-management design, not just one record. You learn what traceability really means, why a cross-reference and provenance are the two artifacts that make it possible, and why a golden record without them is an unverifiable black box. Then you learn what a common context for business rules is, and how the canonical model and governed reference data deliver it so segmentation, pricing, and eligibility behave identically across systems. Next you learn the metadata repository, the inventory of entity definitions, source systems, mapping and survivorship rules, hierarchy definitions, and reference data, that an MDM program must maintain. Then you learn the declarative-first path on Salesforce: matching and duplicate rules, external IDs, validation rules, Flows, and Data Pipelines that cover many single-org needs without third-party tooling. After that you learn when dedicated MDM tooling is warranted, the multi-domain, multi-system, fuzzy-matching, real-time-sync, and regulatory-lineage triggers, and the honest trade-offs of that decision. Finally you learn the common hybrid pattern, a dedicated hub feeding a shared golden customer into Salesforce while duplicate rules keep local records clean, and why governance wires whichever architecture you choose. Day 16 of the Platform Data Architect exam prep."
+date: "September 27, 2026"
+author: "Adroit Consulting"
+readTime: "15 min read"
+tags: [Salesforce, Data Architecture, Master Data Management, Certification]
+---
+
+Requirement md-3b sits at the architecture level of master data management. md-3a taught you the consolidation mechanics: how attributes from multiple sources come together into one golden record and how a winning value gets chosen and audited. This lesson widens the frame again. The exam now asks you to look at an entire customer scenario and recommend an approach for capturing and maintaining customer reference and metadata so that traceability survives and every system shares a common context for business rules, then to say honestly when that means reaching for a dedicated MDM product and when declarative Salesforce is enough. [^1]
+
+Here is the customer scenario the exam keeps circling. A company has a Salesforce org that holds the customer relationships sales and service rely on. Behind that org sit a billing system, a legal registry, a support platform, and an e-commerce storefront, each holding its own version of the customer. Someone has to decide how these all relate. The trap is that there is no single right answer; there is a set of questions that filter down to the right one. How many domains and systems are in play? How much does matching need to tolerate messy, noisy source data? Does anything need real-time, bidirectional sync? Does the business face regulatory demands for lineage and stewardship? Answer those honestly and the architecture chooses itself. [^1] [^2]
+
+## What traceability means, and why it needs two artifacts
+
+Traceability in master data management is the property that every golden value can be traced back to the source record or records that produced it and to the rule that selected it. It is not a feature you bolt on afterward. It is a consequence of recording two things at build time: where a value came from, and how it won. Remove either one and the golden record degrades into a black box: a number that is correct today and that nobody can explain, justify, or correct when a source changes. [^3]
+
+The exam is specific about the two artifacts that make MDM traceable. [^1] [^3]
+
+**A cross-reference.** This maps each source record to its golden record. It answers the question "which source records participate in this entity?" At minimum each entry carries the source system and the source record identifier. The cross-reference is what makes the whole master-data store rebuildable and auditable. When a source corrects a value, the cross-reference tells you which golden record to update. When a match turns out to be wrong, the cross-reference gives you the path to unwind it. Without it, an upstream fix never reaches the golden record, and a bad merger becomes permanent and unverifiable. [^2]
+
+**Provenance.** This records how the winning value was chosen. It answers the question "why is this the golden value, and when was that decided?" At minimum provenance carries the winning source, the rule that selected the value, and the timestamp of the decision. Provenance is the audit and explainability layer. When a business user asks why the golden record carries a particular customer name, provenance answers: the billing system supplied it on September 24, satisfying rule branch one of the survivorship rule for legal name. The cross-reference tells you the members; provenance tells you the reasoning that produced the current value. Together they turn an MDM hub from a black box into a governed, auditable system. [^3]
+
+The exam traps you nicely here. The artifacts that make MDM traceable are the cross-reference and provenance. A page layout, a validation rule, a Big Object, an External Object, a duplicate rule, and a report are all legitimate Salesforce features, but none of them records master-data origin. The distractors are platform furniture, not traceability machinery. When a question asks what two artifacts are essential to make MDM traceable, the answer is the cross-reference to sources and the provenance of the winner. [^1] [^3]
+
+## Common context for business rules
+
+A second, independent requirement in md-3b is establishing a common context for business rules. The idea is simple to state and genuinely hard to deliver: all the systems in the architecture must agree on what the entities mean before any business rule that reasons over them can behave consistently. [^1]
+
+Consider what happens when systems disagree about what "customer" or "active" means. Billing treats a customer as the legal entity that owes money, with one open account. CRM treats a customer as a contact who bought something in the last year. Marketing treats a customer as a distinct email address. A segmentation rule that decides who qualifies for a campaign will return different populations for each definition, and none of them is "wrong" in its own shell. The problem is that the business rule cannot be consistent, auditable, or comparable across those systems, because it runs against different entity meanings. [^3]
+
+The common context is delivered by two things. First, the canonical model, the agreed set of entity and attribute definitions that says what a customer is, what an active flag means, how an address is structured, and which attributes are mastered where. Second, shared reference data, the harmonized set of codes, categories, and classifications that every system reads from. Country codes, industry codes, product categories, customer status values: if these are harmonized and governed centrally, a rule written once means the same thing everywhere. The exam's phrase for the goal is that segmentation, pricing, and eligibility rules should behave consistently because they all stand on the same definitions and the same reference data. [^2] [^3]
+
+The trap here is assuming shared reference data is automatic. It is not. Two systems can both contain a country field and disagree on the codes ("US" versus "840" versus "United States"). Establishing a common context requires explicitly harmonizing reference data and governing it, so that a single canonical value set is authoritative and changes to it are controlled. Common context is engineered through the canonical model and governed reference data, not inherited by having MDM in the room. [^3]
+
+## The MDM metadata repository
+
+To keep traceability and common context alive, a master-data-management program maintains a metadata repository. This is the inventory that describes the master data domain itself, and md-3b expects you to know what goes in it. [^1] [^3]
+
+**Entity and attribute definitions.** The canonical model, naming each entity and each attribute it masters, plus the meaning and format of each. This is the common-context backbone.
+
+**Source system inventories.** The list of systems contributing to master data, their identifiers, and their relative authority per attribute. Which system is authoritative for legal name? Which for phone? This inventory is what survivorship rules read.
+
+**Mapping rules.** How source fields translate to canonical fields. Billing's `account_legal_name` maps to the canonical `legalName`; the storefront's `full_name` maps to it too, through a harmonization rule.
+
+**Survivorship rules.** The ordered, per-attribute rule lists that decide which source wins a conflict, the decision procedures from md-3a.
+
+**Hierarchy definitions.** How entities relate. A customer may sit at the top of a hierarchy with subsidiaries, sites, and accounts beneath it. Hierarchy definitions record those relationships and their rules so that aggregates roll up consistently.
+
+**Reference data.** The harmonized code sets and classifications that give all systems a shared vocabulary.
+
+The metadata repository is what makes a master-data program governable over time. It is the single place a steward goes to answer "what does this attribute mean, who owns it, which source masters it, and how is a conflict resolved?" Without it, the rules live in someone's head, the definitions drift, and both traceability and common context quietly fail. [^3]
+
+You can read the metadata repository as the documentation layer of everything you already learned: the canonical model from md-1, the source authorities and survivorship rules from md-3a, and the reference-data harmonization from md-2b. md-3b elevates all of it into a deliberate, maintained artifact. [^2]
+
+## Declarative-first on Salesforce
+
+For a single-org, single-domain need, the exam wants you to start declarative. Salesforce ships native capabilities that cover a large share of customer-golden-record work without buying a third-party MDM product. [^1] [^4]
+
+The declarative toolkit for identity and cleanliness on platform:
+
+**Matching Rules.** Match candidate source records into groups using standard or custom matching on keys like email, phone, and name. Matching is the identity-resolution engine: it clusters records that are probably the same customer. [^4]
+
+**Duplicate Rules.** Apply matching results to enforce a policy, flagging or blocking new records that duplicate an existing one, and routing matches to a review queue. Duplicate rules operationalize matching into cleanliness. [^4]
+
+**External IDs.** A field marked external ID lets you upsert data keyed to a natural or source key rather than a Salesforce record ID. External IDs are the on-platform mechanism for reconnecting a source system to its records, which makes them the natural home for a cross-reference in a single org. [^4]
+
+Above those, validation rules enforce format and business checks at the point of entry, Flows orchestrate record-onboarding logic, and Data Pipelines handle data-flow and transformation work without custom code. The exam's picture is that declarative matching, duplicate rules, external IDs, validation, Flows, and Data Pipelines satisfy a large class of single-org MDM requirements natively. [^1]
+
+Here is the scenario where declarative-first wins outright. A single Salesforce org takes customer data from two channels, a web form and a phone line, and wants to keep the customer records it holds clean. That is a single domain (customer), a single system (Salesforce), no fuzzy-matching at enterprise scale, no real-time cross-system sync, and no lineage mandate beyond what its own audit trail provides. The right first move is declarative: set up matching rules for email and phone, add duplicate rules that route likely duplicates to review, mark the upstream channel and source keys in external ID fields, and let stewards clear the queue. [^1] [^4]
+
+Jumping straight to an enterprise MDM product for that scenario is resolving with a sledgehammer a need that declared configuration solves. Building a data-warehouse golden record and syncing it back injects a heavy round-trip where a native upsert suffices. And manually reviewing every record weekly does not scale as volume grows. The exam presents exactly these four options and the declarative answer is the correct first step, because it is on-platform, native, and proportionate to the need. [^1]
+
+## When dedicated MDM tooling is warranted
+
+Declarative Salesforce runs out of runway when the scenario genuinely scales past it. The exam wants you to recognize the triggers that justify a dedicated MDM tool. [^1] [^2] [^5]
+
+**Multi-domain, multi-system scale.** Master data spans customer, product, supplier, location, all federated across many source systems. Declarative matching is designed around a single org and a bounded set of records; it is not built to orchestrate identity across dozens of systems and several master-data domains. [^5]
+
+**Complex fuzzy matching with tuning and machine learning.** Matching across messy, human-entered data (name variants, address typos, language differences) benefits from similar rules, confidence scores, and model tuning that a mature MDM matching engine provides. Declarative matching handles exact and near-exact keys well but is limited for large-scale fuzzy-match volume. [^2] [^5]
+
+**Advanced hierarchy management.** When the business needs sophisticated parent-child, subsidiary, and site hierarchies with their own merging and roll-up rules, tooling offers purpose-built hierarchy management that a custom object structure struggles to match. [^5]
+
+**Real-time bidirectional sync across many systems.** When master data has to flow out to and reconcile from many systems with native, real-time sync and conflict handling at the hub, MDM tooling is built for that choreography. [^2] [^5]
+
+**Strong data-quality and profiling needs.** When the program needs built-in data profiling, standardization, and enrichment on scale, tooling packages DQ capabilities declarative Salesforce leaves to other products. [^5]
+
+**Regulatory demands for lineage and stewardship workflows.** When regulations require documented lineage and governed stewardship workflows over the master data, dedicated MDM products offer the audit and workflow machinery to meet the mandate. [^2] [^5]
+
+Vendors in this space include Informatica, Reltio, Stibo, IBM, and Semarchy. [^5] Naming a couple of them helps on the exam, but the load-bearing skill is recognizing the triggers, not reciting the vendor list.
+
+Notice how a question about justifications plays out. Consider four candidates, only two of which justify tooling: multi-domain, multi-system master data with complex fuzzy matching on one hand, and real-time bidirectional sync across many systems with lineage requirements on the other hand, both genuinely justify a dedicated tool. A single org with two channels and standard Account matching does not, and keeping a weekly duplicate report scheduled does not. The exam separates the scenarios that push past declarative capacity from the ones that merely describe routine single-system hygiene. [^1] [^2]
+
+## The trade-offs of tooling, honestly stated
+
+Choosing a dedicated MDM tool is not a win; it is a trade. The exam expects you to state both sides. [^2] [^5]
+
+Tooling delivers powerful matching, machine learning, lineage, hierarchy management, and cross-system orchestration. That is real value when the triggers above are present. But it comes with costs the architect must carry:
+
+**Added cost.** Licensing an enterprise MDM product is a significant line item, on top of the Salesforce investment already in place.
+
+**Integration complexity.** The hub has to integrate with Salesforce and every other source and consumer, which means standing up connectors, transformation jobs, and reconciliation processes. Integration is where most of the ongoing effort lands.
+
+**Another system to govern.** The MDM hub itself is master data that needs owners, stewards, and change control. It is not a passive store; it is another governed subsystem.
+
+**Potential latency between the hub and Salesforce.** A real-time sync is engineered, not free, and where it is batched or near-real-time, a consumer like Salesforce can read values slightly behind the hub. [^5]
+
+Declarative, by contrast, is native and cheaper, and it keeps the data in the system where sales and service already work. Its limits are the flip side of those strengths: it is constrained for large fuzzy-match volumes, for orchestrating identity across many systems, and for advanced lineage and hierarchy demands. The exam rewards you for naming both the capability and the cost rather than treating MDM tooling as an unambiguous upgrade. [^1] [^2] [^5]
+
+## The hybrid pattern, and governance as the common wire
+
+In practice, most large enterprises land on a hybrid. A dedicated MDM hub masters the enterprise-wide view of the customer across domains and systems, and Salesforce consumes that golden customer through integration, receiving the mastered record rather than owning the whole consolidation itself. Inside Salesforce, duplicate rules still keep local records clean during entry. The hub holds the global truth; the org holds a clean local copy. [^2] [^5]
+
+That hybrid is the answer to the multi-system scenario I opened with: billing, legal, commerce, support, and Salesforce. The hub eliminates the multiplicity of the enterprise view, Salesforce gets a consistent, governed golden customer, and local processes keep writing clean data at the edge. [^5]
+
+Whichever architecture you choose, declarative, tooling, or hybrid, one wire runs through all of them: governance. [^3] Reference data and metadata must be governed, with owners, stewards, and change control, or traceability decays and the common context erodes. The most sophisticated matching engine in the world produces an ungoverned black box if the reference data is unharmonized and nobody owns the definitions. md-3b pairs every architecture decision with the governance that keeps it true over time. [^3]
+
+## Configuration walkthrough
+
+Here is a concrete path for standing up MDM traceability and common context, whether on-platform or with a hub.
+
+1. **Document the MDM metadata repository.** Capture entity and attribute definitions, the source system inventory with per-attribute authority, mapping rules, survivorship rules, hierarchy definitions, and reference data. This is the foundation everything else reads. [^1] [^3]
+
+2. **Implement on-platform traceability.** Add a cross-reference (a custom object or external-ID fields carrying source system and source id for each source record) and provenance fields (winning source, rule id, timestamp) on the golden record. Without these two, traceability is impossible, so this step is mandatory regardless of architecture. [^3]
+
+3. **Start declarative.** For a single-org golden customer, configure Matching Rules and Duplicate Rules, and use external IDs to reconnect sources, before evaluating any third-party product. [^1] [^4]
+
+4. **Evaluate dedicated MDM tooling against explicit criteria before adopting.** Score the scenario against multi-domain scale, advanced matching, real-time bidirectional sync, and lineage requirements. Only those justify a tool. [^2] [^5]
+
+5. **If tooling is adopted, define the integration contract.** Specify which attributes the hub masters, the sync direction, the acceptable latency, and the error-handling path. An MDM hub without a defined contract with Salesforce becomes a second source of stale truth. [^2] [^5]
+
+## Exam traps
+
+**Reaching for third-party tooling on a single-org, single-domain need.** A single org with two entry channels and cleanable records needs declarative matching, duplicate rules, and external IDs, not an enterprise MDM license. Mismatching tooling to scale is the exam's favorite trap. [^1]
+
+**Building an MDM hub without a cross-reference and provenance.** A hub that consolidates but records no source membership and no winning-rule history is an unverifiable black box. Traceability is impossible without the cross-reference and provenance, so omitting them fails the architecture even if it succeeds at consolidation. [^3]
+
+**Assuming shared reference data is automatic.** Two systems both carry a country field and still disagree on the codes. Common context comes from explicitly harmonizing reference data and governing it, not from having an MDM product in the room. [^3]
+
+## Try it
+
+Take the scenario of four source systems (billing, legal, e-commerce, support) converging on one customer master. Write the cross-reference table for one customer: list each source system, the source record id, and the shared golden record id. Then add provenance for the legal-name attribute: winning source, rule id, and timestamp. Next, write down the canonical meaning of "active customer" and the harmonized status codes every system must use. Then decide declarative, tooling, or hybrid, and justify the choice against each of the triggers in this lesson. If you choose tooling, define the integration contract with Salesforce: which attributes the hub masters, the sync direction, and the latency. You have just produced a complete md-3b answer.
+
+## What's next
+
+Day 17 leaves master data management for the license layer. You will learn how license types apply to standard and custom objects: the CRM tiers, what a platform license grants, and how object access varies by license type, tying the data model you design to what users can actually see and do. That is the sm-1a requirement, the first lesson of the Security and Sharing Model domain.
+
+[^1]: Salesforce, "Salesforce Certified Platform Data Architect" exam guide, requirement md-3b: recommend approaches and techniques to capture and maintain customer reference and metadata to preserve traceability and establish a common context for business rules, and decide when dedicated MDM tooling is warranted versus declarative Salesforce capabilities. https://trailhead.salesforce.com/credentials/architect
+[^2]: Adroit Consulting, Day 15 lesson, "Data Architect MD-3A: Consolidating Attributes From Multiple Sources, Winning-Attribute Criteria, Methodology, Stewardship," which establishes consolidation methodology, survivorship criteria, provenance, and stewardship that this lesson carries into the architecture level. https://adroit.io/learn
+[^3]: Salesforce, "The Salesforce Data Architecture and Management Guide," which covers the entity identity master data management style, the cross-reference and survivorship that keep master data auditable, and the governance of reference data and metadata. https://www.salesforce.com/content/dam/web/en_us/www/documents/ebooks/datasheet-data-architecture-and-management-guide.pdf
+[^4]: Salesforce Help, "About Matching Rules and Duplicate Jobs," which describes how matching rules group candidate records and how duplicate rules flag or block duplicates, and Salesforce Help, "External IDs," which describes how external-ID fields key records to a natural or source identifier. https://help.salesforce.com/s/articleView?id=sf.security_duplicate_matching_rules.htm
+[^5]: Salesforce, "Master Data Management" section of the Data Architecture Library, describing when an enterprise MDM solution is warranted: multi-domain, multi-system scale, advanced matching and hierarchy management, real-time cross-system sync, and lineage and governance requirements, and naming leading MDM vendors. https://architect.salesforce.com/decision-guides/master-data-management
