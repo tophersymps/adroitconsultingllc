@@ -1,0 +1,154 @@
+---
+title: "Sharing Rules: Criteria-Based and Ownership-Based, In Depth"
+slug: day-15-r-3a-sharing-rules-criteria-based-and-ownership-based-i
+series: salesforce-sharing-visibility-architect
+lesson: 15
+excerpt: "Build precise record access with sharing rules. Covers ownership-based vs criteria-based rules, the two sides of a rule, target groups and access levels, related-record granularity, and the additive model that layers above OWD."
+date: 2026-09-27
+author: Adroit Learning
+readTime: 15
+tags:
+  - sharing rules
+  - criteria-based sharing
+  - ownership-based sharing
+  - sharing table
+  - public groups
+---
+
+Day 13 and 14 drew the boundary of the role hierarchy: it cascades access upward along the reporting line, and when your requirement is a filter or a sideways relationship, it is the wrong tool. Today is where you pick up the tool that is right for those shapes. Sharing rules are how you grant named groups access to a defined set of records, and for the architect exam they are the mechanism you reach for more than any other.
+
+This lesson is the deep dive on the two rule types, ownership-based and criteria-based. By the end you will be able to read any scenario, decide which rule type selects the right records, name the target group, and pick the access level, without mixing up the two sides of a rule.
+
+## What a sharing rule actually is
+
+A sharing rule is a declarative, admin-built grant of record access to a named group. It lives in Sharing Settings, and it tells Salesforce two things at once. First, which records to share. Second, who to share them with and at what level. That two-part structure is the mental model for every rule you will ever build, so hold onto it: every sharing rule has a source side and a target side.[^11]
+
+The source is the selection logic. It either names a group that owns the records (ownership-based) or names a field condition the records must match (criteria-based). The target is the group that receives access, plus the access level, Read or Read/Write.
+
+Two properties of sharing rules matter before we look at either type, because they shape every correct answer on the exam.
+
+Sharing rules are additive. They can only grant access. They layer on top of Organization-Wide Defaults and can never take access away from anyone, and they never apply to more users than the target group you named. A rule that looks like it "hides" records is impossible; hiding is the job of OWD and restriction rules, not sharing rules.[^11][^8]
+
+Sharing rules grant to groups, never to individual users. The target of a rule is a role, a public group, or a territory (and, for some object types, a role-and-subordinates group). If a scenario says "grant Abby access," you do not point a rule at Abby. You place Abby in a public group (or rely on her role) and point the rule at that group. The individual is reached through the group, or through manual sharing or Apex Managed Sharing if a group is the wrong shape.[^11]
+
+The first exam question in this lesson already exercises both properties. An org must share all Accounts where Industry equals Finance with the Finance Analysts group at Read/Write, while keeping Account OWD Private. Relaxing OWD to Public Read/Write is wrong because that affects every user, not just Finance Analysts, and it is additive in the extreme. An ownership-based rule is wrong because the selection is a field value, not an owner group. A permission set grants object-level access, not record access, and does not express "these specific records." The correct build is a criteria-based sharing rule on Industry equals Finance targeting the Finance Analysts group at Read/Write.[^11]
+
+## The two rule types
+
+### Ownership-based sharing rules
+
+An ownership-based sharing rule selects records by who owns them, using a source group. The classic phrasing is "share every record owned by the Sales Reps group with the Sales Managers group." The source group names the owners, and every record those users own becomes part of the rule's pool, regardless of the record's field values.[^11]
+
+This is the type to use when the requirement is genuinely about ownership: the person in the region owns it, the person on the team owns it, the person in the role owns it. There is no field inspection because no field inspection is needed. The rule is about the owner, full stop.
+
+The access level is set on the rule itself, Read or Read/Write, and it applies to every record the source group owns that is shared by the rule.
+
+The third exam question turns on this. A user must access records owned by two different groups. Each ownership-based rule selects one source group's records, so the clean design is two ownership-based rules: one per source group, both granting the user's group access. A single criteria rule on Owner equals User does not express the "these two specific groups, and only these groups" requirement nearly as cleanly, and it has to enumerate. Relaxing OWD gives everyone access, which is over-grant. A team is a record-by-record collaboration tool, not a bulk rule mechanism for aggregating two owner groups. Two ownership-based rules is the crisp answer.[^11]
+
+### Criteria-based sharing rules
+
+A criteria-based sharing rule selects records by matching a field-based condition. The classic phrasing is "share all Accounts where Rating equals Hot with the Executives group at Read Only." The rule inspects field values on each record and grants only the records that match.[^11]
+
+This is the type for every requirement where the selection is a property of the record, not its owner: industry, rating, an amount threshold, a status, a region field on the record. Criteria rules do not depend on ownership. Two records with identical owners can end up on different sides of a criteria rule because they differ on the filter field.
+
+The filter builder supports multiple-field conditions with AND and OR logic, so a rule can express "industry equals Finance" or "rating equals Hot AND amount greater than 50000" or "(region equals West OR region equals East) AND status equals Active." The granularity of the rule can be record-based or, in the criteria wizard, extended to related records and child records of a matched parent, which we will come back to below.[^11]
+
+The first exam question is a criteria case by definition: the selection is Industry equals Finance. Nothing about ownership describes the Finance set, so ownership-based is structurally the wrong type. Criteria is the fit.[^11]
+
+## When to choose which type
+
+The decision between the two types is one question, and it is the question the exam keeps asking: what selects the records in this requirement? If the requirement defines the set by who owns the records, use ownership-based. If it defines the set by what the records contain, use criteria-based.
+
+An ownership requirement cannot usually be expressed cleanly as criteria. Ownership is a record's owner field, so in theory a criteria rule could filter on Owner equals a value, but you would be enumerating users or groups inside a field filter, and the rule would not track membership changes the way an owner-group rule does. When the requirement says "all records owned by the Northeast Reps," an ownership-based rule on the Northeast Reps group is the natural, self-maintaining expression.
+
+A criteria requirement can never be expressed as ownership-based. You cannot select "amount over 100k" by naming an owner. If the requirement filters on field values, it is criteria, and reaching for ownership-based is a category error.
+
+There is a real overlap case worth naming. "Managers see every record their reports own" is ownership-based (select by the reports' group) and, as Day 14 showed, the role hierarchy handles it automatically. "Managers see only the records their reports own where Amount is over 100k" is a hybrid: the owner group names the pool and the field narrows it. Sharing rules cannot do this in one rule; a criteria rule does not limit to an owner group, and an ownership rule does not filter. The architect patterns are: a criteria rule scoped by a grouping field (region, territory) that also captures the field condition, or a role that is already narrow enough that the ownership rule combined with other sharing does the job. When a requirement really needs owner-plus-criteria, you either restructure the record model (add the grouping dimension as a field) or you escalate to Apex Managed Sharing, which evaluates both at runtime.[^11]
+
+## The target side: groups, roles, territories, access levels
+
+The target of a sharing rule names the group that receives access. That can be a role and subordinates, a role alone, a public group, or a territory. Whatever it is, it is a named collection of users, not an individual.[^11]
+
+Public groups deserve the most attention, because they are the flexible building block the exam loves. A public group can contain users, roles and subordinates, other public groups, and queues. You assemble a logical audience, "Finance Analysts," "West Region Managers," "External Auditors," and point rules at the group. When membership changes, the group updates and every rule that targets it follows. This is why the clean answer to a "two groups" requirement is to build the target audience once as a group and write the rules against it.[^11]
+
+The access level is Read or Read/Write. Sharing rules grant one of these two; they do not grant partial control by field. If the requirement is "these users can edit the amount but not the owner," that is a field-level security and record-level access combination, not something a rule's access level alone expresses. Record-level access is all-or-nothing per the rule's level, and field restriction on top is enforced by FLS.[^11]
+
+There is also the interaction with "users can share." The manual-share minimum, Read, applies. If the object allows users to share and the rule grants Read/Write, the rule's level is the grant level for the target group. Rules respect the manual sharing model rather than overriding it with anything the admin cannot already administer.[^11]
+
+## Related and child record granularity
+
+A single rule does not have to stop at the exact record it matches. In the criteria wizard, the granularity can extend beyond the matched record to its related records, in particular the child records of a shared parent. The classic shape is Account to child: share an Account by criteria (or by ownership) and, in the same rule, also share its child Cases or Opportunities to the target group.[^2]
+
+This is how you avoid writing three separate rules for a parent and each child object. One Account rule with related-record granularity grants the target group access to the Account and to the selected children that meet the relationship, at the access level you set. The filter builder expresses which children flow, with AND/OR logic across the related-object fields.
+
+The trade-off is the sharing-table reach. Every child record that flows through a parent rule materializes its own share rows. On a large data volume, a parent rule that cascades to thousands of children per Account multiplies rows fast. Related granularity is a convenience and a real feature, but use it deliberately: when the requirement genuinely needs the child set shared, it is the tightest expression; when you only need the parent, keep the rule record-based and let the child access come from its own rules.[^2]
+
+## The additive model and what rules cannot do
+
+Because sharing rules are additive grants above OWD, they exist entirely on the grant side of the model. Three consequences follow, and each is an exam trap.
+
+First, rules cannot remove access. If a scenario asks for a rule that "prevents" a group from seeing records, the answer is that a sharing rule cannot do it. The way to stop access is to leave OWD restrictive and never grant it, or to use a restriction rule that overrides otherwise-inherited access. Sharing rules only ever add.
+
+Second, rules never apply org-wide. A rule grants to the group it names and no one else. If a requirement affects every user, the mechanism is a change to OWD, not a sharing rule. Mixing these up is a guaranteed miss.[^8]
+
+Third, rules compose additively with the hierarchy, manual shares, and other rules. A user's final access is the union of everything granted to them: OWD, the hierarchy, sharing rules targeting their groups, manual shares, and Apex. A rule never subtracts from that union, which is why auditing "why can this user see this record" usually means tracing who granted which piece, not finding one culprit rule that over-explains everything.[^11]
+
+## Config walkthrough
+
+Build a criteria-based rule end to end to make all of this concrete. The example: share Account records where Industry equals Finance with the Finance Analysts public group at Read/Write, OWD Private for Account stays as is.
+
+1. Open Setup, search for Sharing Settings, and open it. Go to the Sharing Rules section and choose the object, Account.[^1]
+2. Click New to create a rule. Name it something descriptive, "Finance Accounts to Finance Analysts," and give it a rule label you will recognize in the sharing table later.[^1]
+3. Choose the rule type. For the Finance set, select Criteria-based, because the selection is the Industry field, not an owner group.[^11]
+4. In the filter builder, define the condition: Industry equals Finance. If you needed more, you would add fields joined with AND or OR. Leave the granularity at record-based, or extend to related/child records if the requirement also shares the Finance accounts' child records.[^11]
+5. Set the target group to Finance Analysts and the access level to Read/Write. If the group does not exist yet, create it first under Public Groups and add the analysts.[^11]
+6. Save the rule. Salesforce evaluates criteria rules on the records that exist at save time, and the grants it does not derive immediately are queued for recalculation.[^12]
+7. Run Recalculate (or wait for automatic recalculation) so every current Finance account gets its share rows, then log in as a member of Finance Analysts and confirm they see the Finance accounts at Read/Write and no other accounts.[^12]
+
+For the ownership variant the steps are the same except step 3 and 4: choose Ownership-based and, instead of a field filter, select "owned by" the source group, say Sales Reps, and grant Read to the target group, Sales Managers.[^11]
+
+## Worked example
+
+A software company needs its deal desk to see every closed-won Opportunity across all three sales regions, Read Only, without giving deal desk edit rights and without letting every salesperson into everyone else's deals.
+
+The selection is a field condition: Stage equals Closed Won. That is criteria. But it also crosses regions, and the records are owned by reps in three different regional roles. The clean build is a single criteria-based sharing rule on Stage equals Closed Won (with a date range field added if the requirement is "closed this quarter") granting the Deal Desk public group Read Only access. One rule, one target group, every qualifying deal regardless of owner. Because the rule is criteria-based, it does not care which regional role owns the deal; the Stage field selects them all.[^11]
+
+Now add the wrinkle the CFO introduces: the same deal desk must also see the Account records behind those deals at Read Only, and the Cases filed against those accounts. Instead of three criteria rules, use one Account criteria rule on the accounts that have qualifying deals, or extend the Opportunity rule's related granularity to the parent Account and its active Cases. The related-record option grants the child set with the parent in a single rule, which is exactly the shape this requirement needs.[^2]
+
+Two design notes worth naming. Read Only is the right level here because deal desk is a view-and-report role; if the requirement ever said "deal desk updates the amount," you would raise the level to Read/Write on the Object permission and the rule together. And the rule adds rows to the sharing table for every qualifying deal and the related parent and child records, so on a large closed-won history you watch the share-row growth and may scope the rule with a date condition to bound the pool.[^2]
+
+## Recalculation and the staleness trap
+
+Criteria-based rules have a property that ownership rules do not, and it is the second exam trap in this lesson. An ownership-based rule is recomputed as ownership changes, because the source group membership is tracked. A criteria-based rule is not automatically recomputed for every future field edit on every record. When a record's field changes after the rule ran, the record can be missing a grant it now qualifies for, or keep a grant the field no longer justifies, until recalculation runs.[^12]
+
+This is the staleness window. A rep changes an Account's Industry from Energy to Finance and the record should suddenly be visible to Finance Analysts, but the rule does not see the edit instantly. The grant appears when automatic recalculation runs (it runs on a scheduled basis for criteria rules) or when you manually trigger Recalculate from Sharing Settings. Expect and plan around this delay, and when a security audit demands immediate correctness after a data update, trigger recalculation explicitly or rely on a mechanism that evaluates access at runtime rather than on materialized share rows.[^12]
+
+## Why this matters for the exam
+
+This requirement, "Given a scenario, determine how sharing rules can be implemented to share records with specified groups," sits in the Access to Records domain, which is 39% of the exam.[^5] It is a decision-rule objective: the examiners hand you a scenario and check that you pick the rule type the record selection demands, target the right group, set the right level, and never violate the additive, group-only model. Every question in this lesson's quiz tests exactly those decisions: a criteria demand should route to a criteria rule, a true statement should preserve "additive and group-only," and a two-source requirement should resolve to two ownership rules. Master the two-side model, keep the selection type in the front of your mind, and this objective answers itself.
+
+## Exam traps to avoid
+
+A sharing rule's target must be a role, group, or territory, never an individual user. To grant one user via a rule you put them in a group, or fall back to manual or Apex sharing. A "grant to this one analyst" scenario that answers with a rule pointed at the user is wrong.[^11]
+
+Criteria rules are not recomputed instantly for every field edit. Grants can be stale until recalculation. Expect the delay, and for immediate correctness after a data change, trigger Recalculate or use a runtime mechanism.[^12]
+
+Sharing rules cannot remove access. A rule that seems to "hide" records from a group is impossible. Hiding is OWD or restriction rules. If a scenario asks for removal, it is not a sharing-rule requirement.[^8][^13]
+
+## Try it yourself
+
+In a scratch org, create two public groups: Northeast Reps and Northeast Managers. Give two users membership in each. Create five Accounts, three owned by a Northeast rep with Industry Energy, two owned by another Northeast rep with Industry Finance. Set Account OWD to Private.
+
+First, add an ownership-based sharing rule sharing Accounts owned by Northeast Reps with Northeast Managers at Read Only. Log in as a manager and confirm they see all five accounts (ownership is the selection). Remove that rule, add a criteria-based sharing rule on Industry equals Finance targeting Northeast Managers at Read Only, and note that now only the two Finance accounts appear. Then change one Energy account's Industry to Finance and, before recalculation, observe whether it appears; run Recalculate and watch the grant land. You have just watched both rule types select records and the recalculation behavior that separates them.
+
+## What's next
+
+Day 16, lesson 16, closes out this requirement with r-3b: sharing-rule scenarios, guest-user sharing rules, limits, and recalculation. Today gave you the two rule types and the additive, group-only model. Next you will apply that model to full scenarios, look at how sharing rules extend to guest users in Experience sites, hit the real config limits on sharing rules, and dig deeper into when recalc matters. Bring today's two-side mental model, because every scenario next is a decision between the rule types you just mastered.
+
+[^1]: Salesforce, "Set Sharing Rules," Salesforce Help. <https://help.salesforce.com/s/articleView?id=platform.security_sharing_rules.htm&type=5>
+[^2]: Salesforce, "About Sharing Settings," Salesforce Help. <https://help.salesforce.com/s/articleView?id=sf.security_about_sharing_settings.htm&type=5>
+[^5]: Salesforce, "Platform Sharing and Visibility Architect Exam Guide," Trailhead. <https://trailhead.salesforce.com/help/salesforce-certification-exam-guides/platform-sharing-and-visibility/>
+[^8]: Salesforce, "Overview of Organization-Wide Defaults," Salesforce Help. <https://help.salesforce.com/s/articleView?id=platform.security_org_wide_defaults.htm&type=5>
+[^11]: Salesforce, "Overview of Sharing," Salesforce Developer (Security Implementation Guide). <https://developer.salesforce.com/docs/atlas.en-us.securityImplGuide.meta/securityImplGuide/security_sharing_overview.htm>
+[^12]: Salesforce, "Considerations for Recalculating Sharing," Salesforce Help. <https://help.salesforce.com/s/articleView?id=platform.security_recalc_considerations.htm&type=5>
+[^13]: Salesforce, "Restriction Rules," Salesforce Help. <https://help.salesforce.com/s/articleView?id=platform.security_restriction_rule.htm&type=5>
