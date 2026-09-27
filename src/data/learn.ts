@@ -964,9 +964,26 @@ export const learnSeries: LearningSeries[] = [
           "Leadership"
         ],
         "status": "published"
+      },
+      {
+        "slug": "change-management-past-the-30-day-on-ramp",
+        "title": "Lesson 6: Change Management Past the 30-Day On-Ramp",
+        "series": "ai-adoption",
+        "lesson": 6,
+        "excerpt": "The launch is over and the novelty is fading. This is where most AI programs quietly die, not because the tool is bad but because nobody planned for the change to stick. This lesson gives you the change-management toolkit for the period after the on-ramp: why a 30-day window is far too short, how to create short-term wins, consolidate gains, and anchor the new way of working into how your organization actually operates.",
+        "date": "September 27, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Change Management"
+        ],
+        "status": "published"
       }
     ],
-    "totalLessons": 5,
+    "totalLessons": 6,
     "curriculumLessons": 40
   },
   {
@@ -5181,6 +5198,23 @@ export const learnLessons: LearnLesson[] = [
       "LLMs",
       "AI Adoption",
       "Leadership"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "change-management-past-the-30-day-on-ramp",
+    "title": "Lesson 6: Change Management Past the 30-Day On-Ramp",
+    "series": "ai-adoption",
+    "lesson": 6,
+    "excerpt": "The launch is over and the novelty is fading. This is where most AI programs quietly die, not because the tool is bad but because nobody planned for the change to stick. This lesson gives you the change-management toolkit for the period after the on-ramp: why a 30-day window is far too short, how to create short-term wins, consolidate gains, and anchor the new way of working into how your organization actually operates.",
+    "date": "September 27, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Learn",
+      "AI",
+      "Leadership",
+      "Change Management"
     ],
     "status": "published"
   },
