@@ -1,0 +1,133 @@
+---
+title: "Lesson 53: The Integration Hub: Aggregating Multiple Systems Through Salesforce"
+slug: integration-hub-aggregating-multiple-systems-salesforce
+series: "salesforce-architect"
+lesson: 53
+excerpt: "How to make Salesforce the central aggregation layer that pulls records, events, and results in from several systems at once: the fan-out/fan-in pattern, the Apex callout budget, Composite API subrequests, canonical data models, and the caching and partial-failure design that keeps a hub from becoming your single point of failure."
+date: "September 28, 2026"
+author: "Adroit Consulting"
+readTime: "11 min read"
+tags: [Salesforce, Architecture, Integration, Platform Engineering]
+---
+
+# Lesson 53: The Integration Hub: Aggregating Multiple Systems Through Salesforce
+
+Lesson 8 showed you **where** integration logic runs, and it drew the line between middleware and Salesforce as the hub. Lesson 52 taught the event side: ordering, replay, and duplicate handling on the event bus. This lesson is the other half of the hub story. It answers the question that comes up the moment an architect decides Salesforce is the aggregator: **how do you pull data and orchestrate work across several systems from inside the platform, on one transaction, without blowing the governor limits or quietly losing a partial failure?**
+
+An integration hub is not a piece of hardware and it is not a product. It is a role. A system plays the hub when it sits in the middle of a web of sources and targets, and other systems connect to it instead of to each other. Salesforce takes that role when a single business event, a single page view, or a single order needs input drawn from more than one backing system, and the org decides that the Salesforce record is the place those inputs converge. [^1]
+
+The distinguishing move is **aggregation**: the hub does not just forward or transform a message the way middleware routes it. It gathers several independent results and presents them as one coherent answer. Reps see an Account page that shows the ERP's order history enrichened by the WMS's inventory and the billing platform's balance, all without knowing or caring that three systems produced those numbers. That is aggregation, and it is architecturally distinct from the routing and transformation you met in earlier lessons.
+
+## The fan-out / fan-in shape
+
+Draw the integration hub as a single call coming in and multiple calls going out, then the results coming back and being combined. That is the canonical **fan-out / fan-in** shape, and nearly every aggregation pattern in Salesforce is a variation on it. [^2]
+
+**Fan-out** is the outbound leg: one event fans out into requests to several systems. A close of a deal fans out to the ERP, the billing system, and the warehouse. **Fan-in** is the inbound leg: the results of those calls funnel back to one place where they are combined into the response the user sees or the record that gets saved.
+
+The shape matters because it concentrates the risk. When you fan out, you multiply the number of things that can fail, and when you fan in, you have to decide what the combined answer means when only some of the calls returned. That second decision, the partial-failure case, is where hub design actually lives. Any script can fire three HTTP requests. The architecture is in what happens when one of the three times out.
+
+## The Apex callout budget is the hard constraint
+
+The first number in this lesson is a governor limit, because it is the one that decides whether your hub fits the platform at all. A single Apex transaction can make a maximum of **100 callouts** to an HTTP request or an API call, and this applies equally to synchronous and asynchronous contexts. [^3] [^4] There is also a total time budget across those callouts: the cumulative time for all external callouts in a transaction cannot exceed **120 seconds**. [^5]
+
+Read those two numbers together, because together they say something specific about aggregation. One hundred callouts sounds like a lot of headroom, and for most hubs it is. But a hub that must touch six systems on every Order save burns six callouts per transaction, and the number of concurrent users and scheduled jobs doing the same thing is what pushes an org against a different wall: the daily API request limit, which is licensed, not technical. The Apex callout cap is the technical guardrail. The Org Wide API Limit fills up from usage, and a hub that centralizes every integration magnifies that usage, so the budget argument you make at design time should be about aggregate volume, not just the per-transaction cap.
+
+The 120-second cumulative budget shapes how you aggregate. If each of five systems takes up to twenty seconds to respond, you have used your whole budget on that one transaction with nothing left over. If one system is slow, it eats time the other four needed. That is why the fan-out leg is rarely a single synchronous Apex call to each system from inside one transaction when latency matters. It is why architects reach for the patterns in the rest of this lesson: parallelize where the platform permits it, or move the fan-out off the synchronous request path entirely.
+
+## Composite API: aggregation without a loop of code
+
+The most direct aggregation tool in the REST toolkit is the **Composite resource**. Composite lets a single API request carry up to **25 subrequests** that Salesforce runs and returns as one response, with the subrequests able to reference each other's results by ID. It turns what would be many round trips into one, and it is the pragmatic answer for the hub that must call *Salesforce-side* operations together: create an Account, then a Contact tied to its new ID, then a Case, all in one call. [^6]
+
+Do not confuse its two forms. A plain **Composite** request runs up to 25 subrequests and returns each subrequest's result. A **Composite Graph** raises the ceiling to **500**, and it is the form to reach for when the dependency tree is deep: it lets subrequests reference each other while still giving you the atomicity controls you set. [^6]
+
+The relevant numeric discipline for an aggregation hub is the subrequest ceiling and the rule that at most **five** of the subrequests in a composite call can be query operations (Query, QueryAll, and count queries count against that five). [^6] That is a constraint most hub designers forget until it bites: once your aggregation needs more than five lookups in one composite call, you are back to either fewer queries or a different structure.
+
+Where Composite earns its place in this lesson is the **transformation and combination** case. When the hub must land several related records in Salesforce from data that arrived together, Composite groups the work into one call with shared atomicity, and the referenceId mechanism lets the batch behave like one coordinated unit rather than a set of independent calls that can each partially succeed. That is fan-in happening on the write side, inside one request.
+
+## External Services and Named Credentials: the canvas for custom aggregation
+
+The REST Composite resource is great when everything happens against Salesforce APIs. The moment the hub has to call out to **external** systems, the calling code lives on the Apex side, and two org constructs keep that code correct.
+
+**Named Credentials** store the endpoint, the authentication, and the callout configuration as org metadata, and Apex references the whole bundle by name. The secret stays out of version control, the endpoint can point at a sandbox in one environment and production in another without a code change, and a developer does not hold a token in a class. A Named Credential is the correct container for every external-system leg of your hub.
+
+**External Services** is the declarative cousin. It takes an external web service, traditionally one described by an OpenAPI spec, and generates an invocable action from it, which means a Flow or Apex can call a named external operation without hand-writing the HTTP call. [^7] The value for hub design is that External Services turns external calls into something a Flow can participate in: a process can fan out to external systems using invocable actions and gather the results, which keeps the orchestration in a declarative layer where it is inspectable and auditable rather than buried in Apex.
+
+Keep the two in their lanes. Named Credentials are plumbing: they hold connection details and are the right way to secure any callout. External Services is an abstraction: it wraps a service behind a name and an action. A hub commonly uses both, with Named Credentials underneath the External Services connection and underneath any hand-rolled Apex callout alike.
+
+## The aggregation view and the canonical model
+
+Aggregation is not just about firing many calls. It is about **combining payloads that do not agree**. The ERP calls the customer "Kunde" and the billing system calls them "client_id", and the ERP tracks order totals in one currency while the WMS reports weight in a unit your formula cannot use. A hub that merely concatenates raw responses hands your Aura or LWC a mess and pushes the interpretation problem into the client, which is the worst place for it to live.
+
+The two fixes are architectural habits, not libraries.
+
+The first is the **canonical data model** (also called the canonical schema): a single agreed-upon shape for the records your hub moves, independent of any source system's format. [^1] Each external system maps its own fields into the canonical shape at the boundary, and every consumer of the hub reads the canonical shape. The win is that a change in one source system is absorbed at its adapter instead of rippling through every consumer, exactly the same isolation argument you saw for API layers in Lesson 8.
+
+The second is the **aggregation view**: a presentation over many backends that presents one unified record or field set, without owning or copying the underlying source data. This is the classic facade applied to integration. The Account page in the worked example below is an aggregation view: it composes external order, inventory, and balance data into one screen. The aggregation logic, the mapping, and the error handling all live server-side, and the front end renders a single response object that already looks like one source. [^1]
+
+Keep the aggregation view honest about what it is. It is a query-time composition, not a copy. If a consumer needs the aggregated data for bulk reporting or offline processing, the aggregation view is the wrong tool and a replication path (ETL through Bulk API) is right. The aggregation view earns its place for display and modest volumes, where a live composed view beats maintaining a copy and its reconciliation job.
+
+## Caching: the lever that keeps the hub alive
+
+An aggregation view that calls three external systems on every page load is a performance design that fails as soon as the page is popular. The single most important lever an architect has is **caching** the composed result, so the hub does not pay the full fan-out cost on every visit.
+
+In LWC, the **wire service caches** data server-side and invalidation is explicit: you update the record, then call `refreshApex` or reference the mutated record to re-fetch. [^8] For a hub that composes external data, the same discipline applies one level up: store the composed aggregation view in a cache that you invalidate on a defined trigger (a platform event when the source changes, a polling interval, a manual refresh), not on a random timer. The LWC platform cache is meant for your own Salesforce data; for composed external results, a Platform Cache or a cached Apex result is the storage, invalidated by the same event that would otherwise force a re-aggregation.
+
+The design rule: **cache the composed answer, not the pieces.** If you cache each external call separately, you multiply the invalidation surfaces and you still reassemble on every request. If you cache the aggregated view, one event can invalidate one entry. The tradeoff is staleness, and the architecture accepts it deliberately: the aggregation view may be a few minutes old, and the design should say so to the user if freshness matters.
+
+## The partial-failure case is the design
+
+Re-read the fan-in problem from the top of the lesson and now answer it. Five systems. Four responded. What does the page show?
+
+The discipline this course has hammered for three lessons is that the failure path is not an afterthought, it is the design. For the integration hub, the rule is: **decide explicitly what a partial result means, and make the user able to tell it is partial.** Concretely, the aggregation service should return, alongside the data, a status that says "complete" or "incomplete", and it should identify which source is missing. A page that silently shows the ERP order number and omits the inventory because the WMS was down is a page lying to a rep. A page that shows the order and marks the inventory block "unavailable, source offline" is a page telling the truth.
+
+The second rule is **decide whether the whole transaction fails or the hub returns a partial result.** A read-side aggregation view nearly always returns partial and flags it, because a rep seeing most of the truth is better than seeing a spinner. A write-side orchestration (the fan-out that must land an Order everywhere) is the opposite: it wants commit-or-compensate behavior, retries, and idempotency, which Lesson 52's ordering and duplicate handling and the earlier reliability lesson both cover. The mistake is treating every fan-out like a write fan-out and every fan-in like a read fan-in. The read case wants graceful partial results. The write case wants atomicity, retry, and compensation.
+
+## Worked example: the real-time 360-degree Account view
+
+A distributor runs Salesforce as the front office. Orders live in an on-prem ERP. Inventory lives in a WMS. Balances and credit live in a billing platform. The ask: a rep opens an Account and sees, on one screen, current orders, live inventory for the products that account buys, and the open balance, all current.
+
+The architect builds an **integration hub that serves an aggregation view**, and the back end is a single Apex service that fans out to the three systems using Named Credentials and combines the results. [^2]
+
+1. The LWC component calls one Apex method: `getAccountOverview(accountId)`. The front end never knows the systems exist. That is the aggregation view's contract.
+2. The Apex service fans out to the ERP's order endpoint, the WMS's inventory endpoint, and the billing platform's balance endpoint. Three callouts, comfortably inside the 100-callout transaction cap. [^3] [^4]
+3. Each adapter maps its vendor's response into the canonical response shape: `orders[]`, `inventory[]` keyed by product, `balance.value` in a single currency. The mapping is done at each boundary.
+4. The service composes the three into one response object and returns it to the component.
+
+Now apply the design rules. The fan-in partial case: the ERP is slow and crosses its timeout. The service returns the view with the orders block populated, the inventory and balance blocks populated, and a `incompleteSources: ["ERP"]` field set, and the component renders an explicit "order history unavailable" banner in that section. No silent gap, no eternal spinner. [^5]
+
+The cache: the balance endpoint is called on every Account view by every rep, and Account pages are the most visited surface in the org. The architect caches the composed view in Platform Cache keyed by Account ID, invalidated by a platform event the billing system publishes when the balance changes. Reps see balances that are at most seconds old, and the org does not pay three external callouts per Account page view per rep per second.
+
+The counterfactual, written the way a review demands: if the aggregation ran client-side, the LWC would issue three separate callouts (or worse, go straight to external APIs from the browser, leaking credentials and endpoints), the mapping would be duplicated in JavaScript, and a slow WMS would spin the whole screen while the other two blocks waited. The server-side aggregation concentrates the mapping, the security, the caching, and the partial-failure policy in one auditable place.
+
+## The pitfalls to avoid
+
+**Firing synchronous fan-out calls from inside a transaction that a user is waiting on, at a scale the latency cannot support.** If each of the three systems answers in three seconds, a rep stares at a nine-plus-second spinner on every Account view. The fix is either caching (above) or moving the fan-out off the request path: trigger it via a platform event and have a Queueable or Flow gather results and post them back, returning the page immediately with "refreshing". Lesson 52's ordering machinery is what keeps that asynchronous version from reordering or duplicating the updates.
+
+**Treating the composite and the loop as interchangeable without counting subrequests and queries.** Composite caps at 25 subrequests with at most five query operations in the plain form, so an aggregation that needs to look up more than five things does not fit a single composite call and needs restructuring, not a loop pretending to be a composite. [^6]
+
+**Storing aggregation logic in the client because it "felt faster to build."** The moment the composition lives in JavaScript, the mapping, the security model, and the failure policy are scattered across and duplicated in every front end, and none of them can be audited or secured in one place. The server-side aggregation view exists precisely so the hub's contract is one response object.
+
+**Ignoring the write-side atomicity when the hub lands data.** Reading partial is fine. Writing partial is data corruption. The read fan-in returns partial gracefully; the write fan-out needs retry, idempotency, and compensation, and those come from the reliability patterns you already have, not from a fresh idea. Do not let an aggregation view that is read-only convince you the write side can be equally casual.
+
+## Try it
+
+1. Draw the fan-out / fan-in diagram for a hub that must combine a CRM, a payment gateway, and a shipping system on a single "order confirmed" event. Label the fan-out leg, the fan-in leg, and the partial-failure point.
+2. On paper, design the canonical response shape for that hub: one JSON structure that represents "order + payment + shipping" regardless of the three sources. Write the field names.
+3. You are building the read side. The payment gateway is the slowest system at three seconds. Using the numbers from this lesson, explain why you cache the composed view and what invalidates it, instead of calling the gateway on every page load.
+4. The write side: a confirmed order must land in all three systems and a partial success is unacceptable. Write three sentences describing what happens if the shipping call succeeds and the payment call fails. Which system compensates, or which retries?
+5. A review asks why the aggregation runs server-side instead of in the LWC. Give the two strongest reasons from this lesson.
+
+For scenario 4, the honest answer is not "it always works." It is: someone has defined the compensation step, the retry with idempotency keys (Lesson 52's duplicate handling), and the dead-letter path for the case that still cannot complete, and that definition lives in one place.
+
+## What's next
+
+This lesson assumed the aggregated data, once pulled together, could be composed and displayed. The next lesson challenges that assumption where holding the data locally is wrong: it covers **federated data**, Salesforce Connect, and external objects, the mechanism that lets Salesforce query and display external records in real time without copying them into the org, and it is equally clear about when that is the right architecture and when it is not. Continue to Lesson 54 to see the alternative to the replication-and-copy mode this course has mostly assumed so far.
+
+[^1]: architect.salesforce.com. [architect.salesforce.com](https://architect.salesforce.com/docs/architect/fundamentals/guide/integration-patterns.html)
+[^2]: developer.salesforce.com. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_callouts_apex_webservice_callout_vs_composite.htm)
+[^3]: developer.salesforce.com. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_gov_limits.htm)
+[^4]: developer.salesforce.com. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_callouts_timeouts.htm)
+[^5]: developer.salesforce.com. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_callouts_timeouts.htm)
+[^6]: developer.salesforce.com. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api-rest/guide/resources-composite-composite-post.html)
+[^7]: developer.salesforce.com. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/external-services/guide/external_services_intro.html)
+[^8]: developer.salesforce.com. [developer.salesforce.com](https://developer.salesforce.com/docs/component-library/documentation/en/lwc/data_wire_service_overview)
