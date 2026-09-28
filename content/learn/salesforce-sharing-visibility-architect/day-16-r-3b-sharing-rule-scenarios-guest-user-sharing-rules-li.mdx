@@ -1,0 +1,133 @@
+---
+title: "Sharing-Rule Scenarios, Guest-User Sharing Rules, Limits, and Recalculation"
+slug: day-16-r-3b-sharing-rule-scenarios-guest-user-sharing-rules-li
+series: salesforce-sharing-visibility-architect
+lesson: 16
+excerpt: "Apply sharing rules to full scenarios: guest-user sharing rules for Experience sites, the real sharing-rule count limits, and when and how recalculation makes grants current. Covers the async delay on criteria rules and the separate configuration guest access demands."
+date: 2026-09-28
+author: Adroit Learning
+readTime: 15
+tags:
+  - sharing rules
+  - guest user
+  - experience cloud
+  - sharing limits
+  - recalculation
+---
+
+Day 15 gave you the two rule types, ownership-based and criteria-based, and the mental model that every rule has a source side and a target side. Today you stop building rules in isolation and start reading full scenarios. The exam requirement for this lesson is a decision objective: given a scenario, determine how sharing rules are implemented, including guest-user sharing rules, limits, and recalculation.[^5]
+
+That phrasing hides three separate skills. First, you must recognize when a scenario involves a guest user, because guest access is configured differently from everything you have seen so far. Second, you must know that sharing rules are a finite resource with real caps, so "just add another rule" is not always a valid answer. Third, you must understand that a sharing rule does not take effect the instant you save it, and that the delay is expected behavior, not a bug. This lesson makes all three concrete.
+
+## The scenario is the unit of the exam
+
+The architect exam rarely asks "what is a sharing rule?" It hands you a business requirement and asks which configuration satisfies it. The skill being tested is translation: you read a sentence about who needs to see what, and you map it onto the correct mechanism, the correct target, and the correct access level.
+
+Day 15 established the base translation. Ownership-based access goes to an ownership rule. Field-value access goes to a criteria rule. The target is always a group, role, or territory, never an individual. Rules are additive and can only grant. Those rules hold for every scenario in this lesson. What changes today is the cast of characters: sometimes the person who needs access is not a person at all, but the anonymous guest of an Experience site.
+
+## Guest-user sharing rules: access without a user
+
+An Experience Cloud site can be browsed by people who never log in. That anonymous visitor is represented in Salesforce by a single special user record, the guest user, and the guest user has a profile just like any other user. The guest user is the public. Whatever the guest profile can read, anyone on the internet can read, because there is no login gate to stop them.[^1]
+
+Here is the problem the guest user creates for sharing. Every sharing mechanism you have learned so far assumes a logged-in user with a role, a group membership, or an ownership relationship. The guest user has none of those in the normal sense. A criteria-based rule that targets an internal public group does nothing for the guest, because the guest is not in that group. An ownership-based rule does nothing, because the guest owns no records. The role hierarchy does nothing, because the guest has no role. If you want the anonymous visitor to see records, you need a mechanism that grants access to the guest profile specifically.
+
+That mechanism is the guest-user sharing rule. It is a special type of criteria-based sharing rule, and it is the only way to grant record access to unauthenticated guest users.[^1] You build it in Sharing Settings exactly like a criteria rule, but you choose the rule type "Guest user, based on criteria," and you specify which guest users get access. The rule shares the records that match its criteria with the guest profile, so the anonymous visitor can see them without logging in.
+
+Two properties of guest-user sharing rules matter for the exam, and both are easy to miss.
+
+First, a guest-user sharing rule can only grant Read Only access.[^1] The anonymous public never gets Read/Write through a sharing rule. If a scenario asks for the guest to edit or create records, a guest-user sharing rule is not the mechanism; you would be looking at guest profile object permissions and record types, not sharing rules. For the sharing-rule portion of the exam, guest access is read-only.
+
+Second, a guest-user sharing rule is a separate configuration from any internal rule. A rule that grants access to an internal group does not also grant it to the guest, and a guest rule does not grant it to internal users. If a scenario says "the Finance Analysts group and the anonymous site visitor both need to see these accounts," that is two rules: a normal criteria or ownership rule targeting Finance Analysts, and a guest-user sharing rule targeting the guest profile. You cannot fold both audiences into one rule, because internal group access and guest access are configured through different rule types.[^1][^11]
+
+The first quiz question in this lesson tests exactly this. An Experience Cloud community must display a read-only list of approved public Accounts to the anonymous guest. The correct configuration is a guest-user sharing rule that shares the approved accounts to the guest user profile. A permission set on the guest user is wrong because permission sets grant object-level access, not record access, and they do not express "these specific approved records." An ownership-based rule to an internal group is wrong because the guest is not in that group. Setting Account OWD to Public Read/Write is wrong because that relaxes access for every user in the org, not just the guest, and it is far broader than the requirement demands.[^1]
+
+## The guest user is the public: keep exposure minimal
+
+Because the guest user represents anyone on the internet, guest access is a security boundary, not just a sharing configuration. The moment you create a guest-user sharing rule, you are granting immediate and unlimited access to every record that matches the rule's criteria, to anyone, with no login required.[^1] Salesforce's own guidance is blunt about this: you are responsible for the exposure, and you should implement security controls appropriate to the sensitivity of your data.[^1]
+
+The architect's job is to keep the guest's exposure minimal and read-only. That means the guest profile should have object and field access only to what the site genuinely needs, and the guest-user sharing rule should match only the records that are meant to be public, never a broad condition that sweeps in sensitive data. A rule that shares "all Accounts" to the guest is a different risk than a rule that shares "Accounts where Status equals Approved and Industry equals Public." The second is defensible; the first is a breach waiting to be audited.
+
+This is why the exam tip for this lesson is a rule of thumb: guest access is its own category. Use guest-user sharing rules to the guest profile, and keep the guest's exposure minimal and read-only.[^1] When a scenario involves an Experience site, your first instinct should be to ask what the guest is allowed to see, and your second should be to make sure the answer is as small as the requirement allows.
+
+## Sharing-rule limits: the cap is real
+
+The second skill in this lesson is knowing that sharing rules are a finite resource. Salesforce enforces a maximum number of sharing rules per object, and the limit is not theoretical. The default is 300 total sharing rules per object, counting both ownership-based and criteria-based rules, and within that, a separate cap of 50 criteria-based sharing rules per object. Both limits can be raised through a limit-increase request with Support, to 500 total and 200 criteria-based respectively, but they cannot be raised arbitrarily and they are not unlimited.[^2]
+
+The exam consequence is direct: "just add another rule" is not always a valid answer. When a scenario says an org has hit the maximum number of sharing rules for an object, the correct response is not to keep adding rules, because the platform will not let you. The correct response is consolidation or a different mechanism.
+
+Consolidation means fewer, broader rules. If you have ten rules that each share a small set of records to the same target group, you can often merge them into one rule that shares a wider set to that group, as long as the criteria can be expressed as a single condition or filter logic. You can also lean on groups: instead of a rule per team, put the teams in a public group and write one rule to the group. When consolidation is not enough, you move to a different sharing mechanism, such as Account or Opportunity teams, or Apex Managed Sharing, which do not consume the sharing-rule count the same way.[^2][^11]
+
+The second quiz question tests this. An org has hit the maximum number of sharing rules for Account. The recommended remediation is to consolidate rules by sharing more records per rule and using groups, or to move to team or Apex sharing where appropriate. Keeping adding rules anyway is wrong because the cap blocks it. Deleting the OWD is wrong because OWD is not a sharing rule and removing it does not free rule capacity, and it would over-broaden access. Creating a new rule type is not a thing you can do; the rule types are fixed.[^2]
+
+## Recalculation: when grants become current
+
+The third skill is recalculation, and it is the one that trips the most people, because it contradicts the intuition that saving a rule makes it work immediately.
+
+When you create or edit a sharing rule, Salesforce does not instantly rewrite every share row in the org. It schedules a recalculation, and that recalculation runs asynchronously. For criteria-based rules, the evaluation is asynchronous for new records and for edited fields, which means there is a delay between the moment a record qualifies and the moment the grant actually appears. This is expected behavior, not an error.[^3][^4]
+
+The third quiz question is the purest form of this. Why is a newly created criteria-based sharing rule not instantly granting access? Because criteria-based sharing is evaluated asynchronously and may need recalculation; grants appear after processing completes. The rule is not invalid, sharing rules do not remove access first, and OWD is not blocking it. The delay is the platform working as designed.[^3][^4]
+
+Recalculation also runs automatically when you change the things a rule depends on. Adding or removing a user from a group, changing which role a role reports to, changing a territory's subordinate relationship, or nesting a group inside another group all trigger a reevaluation of the affected sharing rules.[^3] Ownership-based rules and bulk changes, such as a mass transfer of record ownership, also trigger recalculation, because the set of records a group owns has changed and the grants must be rebuilt to match.
+
+When recalculation is needed and it has not happened, or when a rule update has failed, you can run it manually. In Sharing Settings, on the Sharing Rules related list for the object, you click Recalculate. You can monitor the progress from Background Jobs, and Salesforce emails you when the recalculation completes for all affected objects.[^3] On large data sets, manual recalculation can take a while, so you only initiate it when updates have failed or access is not working as expected, not as a routine step.[^3]
+
+There is also a deferral option for large-scale maintenance. If enabled in your org, you can temporarily defer sharing rule calculations during a big org realignment, then resume them and manually initiate a full recalculation to prevent errors.[^3] This is the architect-grade answer when a scenario involves a massive change and a maintenance window: defer, do the work, resume, recalculate.
+
+## A worked scenario, end to end
+
+Put all three skills together in one scenario, the way the exam will.
+
+A company runs an Experience Cloud site where anonymous visitors must see a read-only list of approved public Accounts. Separately, the internal Sales Analysts group must see the same approved accounts at Read/Write, because they maintain them. Account OWD is Private.
+
+Step one, identify the audiences. There are two: the internal Sales Analysts group, and the anonymous guest of the Experience site. They are configured differently, so this is two rules, not one.
+
+Step two, build the internal rule. The selection is a field value, Status equals Approved, so it is a criteria-based sharing rule targeting the Sales Analysts group at Read/Write. This is the rule from Day 15, unchanged.
+
+Step three, build the guest rule. The guest needs the same approved accounts, but read-only, and the guest is not in any internal group. Create a guest-user sharing rule, type "Guest user, based on criteria," matching Status equals Approved, granting Read Only to the guest profile. This is a separate rule from the internal one, because guest access and internal group access are configured through different rule types.[^1]
+
+Step four, check the limits. Two rules for Account is well under the 300 total and 50 criteria-based caps, so no consolidation is needed. If the org were near the cap, you would consolidate the internal rules that share to the same group before adding more.[^2]
+
+Step five, recalculate and verify. After creating the rules, run Recalculate for Account, monitor it in Background Jobs, and verify the grants for both an internal user and the guest user. Because the criteria rules are evaluated asynchronously, you expect a short delay before the grants appear; that is normal.[^3]
+
+Step six, audit the guest. Confirm the guest profile sees only the approved, public records and no sensitive data. The guest represents the public, so the exposure must be minimal and read-only.[^1]
+
+## Config walkthrough: the numbered steps
+
+When a scenario asks you to implement sharing rules including guest access, walk it in this order.
+
+1. Identify the group or groups that must receive access, and whether any of them is the guest user of an Experience site. This single step decides whether you build a normal rule, a guest rule, or both.
+2. For internal groups, create ownership or criteria rules to the target role or group. For the Experience, create a guest-user sharing rule granting the guest profile access to the needed records, usually Read Only.
+3. Check that you remain under the sharing-rule count limit. Consolidate rules that share the same target group, or move to teams or Apex sharing, if you are near the cap.
+4. After creating or editing rules, run Recalculate, or schedule it, and verify the grants for both an internal user and the guest user.
+5. Audit guest access. Confirm the guest profile sees only public or approved records and no sensitive data.
+
+## Exam traps to avoid
+
+Three traps recur in this lesson, and each one is a wrong answer waiting to be picked.
+
+Guest-user sharing rules only grant access to the guest user profile of the Experience site, not to logged-in internal users. They are a separate configuration. A scenario that asks for both internal and guest access needs two rules, and an answer that folds the guest into an internal-group rule is wrong.[^1][^11]
+
+Sharing-rule count limits are real. Exceeding them breaks the "just add another rule" answer. When a scenario says the cap is hit, the correct response is consolidation or a different mechanism, never more rules.[^2]
+
+Recalculation is not instantaneous. Answers that assume new criteria grants appear immediately are wrong. The async delay is expected behavior, and the correct response is to run or schedule Recalculate and verify after processing completes.[^3][^4]
+
+## Why this matters for the exam
+
+This requirement, "Given a scenario, determine how sharing rules are implemented including guest-user sharing rules, limits, and recalculation," sits in the Access to Records domain, which is 39% of the exam.[^5] It is the capstone of the sharing-rules objective, because it forces you to apply everything from Day 15 to realistic, multi-audience scenarios. The examiners are not checking whether you can name a sharing rule; they are checking whether you can read a requirement, spot the guest user, respect the rule-count cap, and account for the recalculation delay. Master those three decisions and this objective becomes mechanical.
+
+## Try it yourself
+
+In a scratch org, create a public group called Sales Analysts and put two users in it. Create five Accounts, three with Status Approved and two with Status Draft. Set Account OWD to Private.
+
+First, add a criteria-based sharing rule sharing Accounts where Status equals Approved with the Sales Analysts group at Read/Write. Log in as a Sales Analyst and confirm they see the three approved accounts. Now create a guest-user sharing rule, type "Guest user, based on criteria," matching Status equals Approved, granting Read Only to the guest profile. Open the Experience site as an anonymous visitor and confirm the three approved accounts appear, read-only, and the two draft accounts do not. Then change one Draft account to Approved and, before recalculation, observe whether it appears for the guest; run Recalculate and watch the grant land. You have just built both rule types, respected the separate guest configuration, and watched the async delay in action.
+
+## What's next
+
+Day 17, lesson 17, moves to the next requirement, r-4a: groups, covering public groups, queues, group membership, and when to use each. Today you used groups as the target of sharing rules and as the consolidation tool for the rule-count cap. Next you will study groups themselves: how public groups are built, how queues differ from groups, how membership is managed, and the decision of when a group is the right container for a set of users. Bring today's habit of naming the target group precisely, because the next lesson is about what those groups are and how to choose between them.
+
+[^1]: Salesforce, "Create Guest User Sharing Rules," Salesforce Help. <https://help.salesforce.com/s/articleView?id=platform.security_sharing_rules_guest.htm&type=5>
+[^2]: Salesforce, "Increase the Maximum Number of Sharing Rules per Entity," Salesforce Help. <https://help.salesforce.com/s/articleView?id=000384485&language=en_US&type=1>
+[^3]: Salesforce, "Recalculate Sharing Rules Manually," Salesforce Help. <https://help.salesforce.com/s/articleView?id=platform.security_sharing_recalculating.htm&type=5>
+[^4]: Salesforce, "Sharing Rules," Salesforce Help. <https://help.salesforce.com/s/articleView?id=platform.security_about_sharing_rules.htm&type=5>
+[^5]: Salesforce, "Platform Sharing and Visibility Architect Exam Guide," Trailhead. <https://trailhead.salesforce.com/help/salesforce-certification-exam-guides/platform-sharing-and-visibility/>
+[^11]: Salesforce, "Overview of Sharing," Salesforce Developer (Security Implementation Guide). <https://developer.salesforce.com/docs/atlas.en-us.securityImplGuide.meta/securityImplGuide/security_sharing_overview.htm>
