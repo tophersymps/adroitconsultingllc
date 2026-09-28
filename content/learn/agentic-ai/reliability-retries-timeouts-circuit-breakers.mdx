@@ -1,0 +1,195 @@
+---
+title: "Lesson 53: Reliability: Retries, Timeouts, and Circuit Breakers for LLM Calls"
+slug: reliability-retries-timeouts-circuit-breakers
+series: "agentic-ai"
+lesson: 53
+excerpt: "An agent's reliability is decided the moment a single model call fails. Not when it fails, but what the code does next: give up, wait and retry, or hammer the same dead endpoint a hundred times and bury the system in queued timeouts. This lesson separates transient failures from permanent ones, then builds the three defenses in the order you reach for them: retries that back off with jitter and honor the provider's Retry-After header instead of creating a thundering herd, timeouts so a slow call is a bounded cost rather than a hanging thread, and a circuit breaker state machine that stops sending traffic to a genuinely unhealthy provider and fails fast to a fallback. The same discipline that keeps a single call alive is what keeps the whole agent alive."
+date: "September 28, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [LLMs, AI Agents, Reliability, Retries, Circuit Breakers, Timeouts]
+---
+
+# Lesson 53: Reliability: Retries, Timeouts, and Circuit Breakers for LLM Calls
+
+Lesson 52 isolated one customer from another and capped their spend. This lesson makes the shared model calls underneath them dependable, because a multi-tenant agent is only as reliable as its least reliable dependency, and that dependency is almost always the third-party model API you do not control. [^4]
+
+A model call is a remote HTTP request to a service with its own outages, rate limits, and latency spikes. Treating it like a local function call, where the answer either arrives or the whole program fails, is the single most common reliability mistake in agent engineering. The failure is not whether the call can fail. It can, and it will, across enough traffic. The failure is what your code does at that exact moment: whether it correctly identifies the failure as transient or permanent, and whether the response to a transient failure makes the problem better or worse. This lesson builds the answer to both.
+
+The one idea to carry out: **separate transient failures from permanent ones, then apply the defense that matches each.** Transient failures, the blip that clears in seconds, get retries with backoff and jitter. Slow-but-alive failures get timeouts so they cost a bounded delay. Persistent failures, the provider that is actually down, get a circuit breaker that stops wasting time on it and fails fast to a fallback. Getting the classification wrong is where systems break: retry a permanent error and you waste budget and time on something that will never succeed; fail fast on a transient one and you drop requests that a two-second wait would have saved.
+
+## Failure is a taxonomy before it is an incident
+
+The foundation is knowing what kinds of failures exist, because each class gets a different response. The field conventionally splits HTTP status codes into two buckets. [^6] On the retryable side: **429** (rate limited, you are being throttled and the throttle will clear), **500** (internal server error, a transient server hiccup), **502** (bad gateway), **503** (service unavailable, temporary capacity or maintenance), and **504** (gateway timeout, the upstream took too long). On the permanent side: **400** (malformed request, your bug), **401** (invalid auth, your config), **403** (forbidden, your permissions), and **404** (not found, wrong endpoint or model). The retryable list is the server saying "try again shortly." The permanent list is the server saying "do not send me this again, it will never work."
+
+Retrying a 401 is how teams burn budget and mask real configuration bugs behind wall-clock delay. Failing fast on a 503 is how they drop users who would have been served twenty seconds later. The classification is the whole job.
+
+There is a provider-specific shape worth knowing because it trips up code written against other APIs. Anthropic's Claude API returns **529** as an `overloaded_error`: the platform is over capacity across the API globally, not a limit on your account. It is a retry signal, distinct from a 429 (your account is throttled) and from a hard 500. Code that only knows the common status codes either ignores 529 entirely or treats it as a permanent failure, and both are wrong. It belongs in the retryable set, and the official SDKs retry it along with connection errors, rate limits, and 5xx errors. [^3]
+
+## Retries that respect the server
+
+Once you have decided a failure is transient, the question is how to retry. The naive answer, retry immediately, is the one that makes everything worse. When a provider returns a 429 or 503 because it is overloaded, the load is the cause, and a fleet of clients retrying instantly is a thundering herd that sustains the overload you are trying to escape. The discipline has two rules: **back off exponentially**, and **add jitter**. [^4]
+
+Exponential backoff makes each wait grow: attempt one fails and you wait a base delay, attempt two waits twice that, and so on, so the rate of hitting the server decays instead of staying constant. The exact shape matters less than the growth. But backoff alone has a subtle flaw: every client that saw the failure at the same instant computes the same delay and retries at the same instant, re-creating the spike. Jitter breaks that synchronization by randomizing each wait, spreading the retries across the window so the server does not get hit by everyone at once. [^4]
+
+The second rule is to honor what the server tells you. When a provider returns a rate-limit status with a **Retry-After** header, or reports remaining capacity in its rate-limit headers, the server is giving you the exact amount of time you should wait. The reliable approach respects that value when it is present and falls back to exponential backoff with jitter when it is not. [^4] [^2]
+
+You also need a cap: a finite number of attempts after which you stop, classify the failure as persistent for this request, and move on to the fallback chain. A retry loop that never gives up is infinite retry with a linear delay, which under a real provider outage turns your application into a denial-of-service amplifier against infrastructure that is already down. [^3]
+
+## Know what your SDK already does
+
+Before writing a retry loop by hand, know that the SDK you are already using probably has one. The OpenAI Python SDK, to use the common case, automatically retries certain errors twice by default with a short exponential backoff: 429 rate limits and 500 and above are all retried out of the box. [^1] The `max_retries` option on the client configures or disables this, either globally on the client or per request with `.with_options(max_retries=...)`. A request that times out is also retried twice by default. [^1]
+
+The practical implication is that you should not stack an aggressive hand-rolled retry loop on top of several SDK retries and call it done, because the two multiply. One account of exactly this failure describes SDK built-in retries stacking with an application-level retry to produce silent double-digit retry counts on a single transient error. [^1] [^5] The correct move is to set the SDK `max_retries` deliberately, often to a low value or zero when you manage retries at the gateway or service layer, so the layers do not compound. Decide which layer owns retries, at the SDK, at your service, or at a gateway, and give one of them the job rather than several of them the same job. [^1]
+
+There is an exception hierarchy underneath this worth knowing, because your catch clauses should key off it. The OpenAI library raises `APIConnectionError` subclasses when it cannot reach the API, `APIStatusError` subclasses (including `RateLimitError` for 429) when it gets a non-2xx response, and `APITimeoutError` for requests that exceed the timeout. [^1] Catching the specific subclass, rather than a blanket exception, is how you distinguish a retryable connection blip from a bad request you should not retry.
+
+## Timeouts: a slow call is a bounded cost
+
+Retries handle failures that say no. Timeouts handle failures that never answer. An LLM that hangs is different from one that returns a 503: the request is still open, consuming a connection, a thread, and a queue slot, and if enough of them hang, the agent's own resources exhaust even though the provider never errored. [^4]
+
+A timeout is the discipline of deciding, up front, how long a call may take before you treat it as failed. Without one, a single pathological request can hang a worker indefinitely, and under a latency degradation where the provider is slow but not failing, a fleet of agents all waiting on slow responses turns into queued timeouts that cascade into the agent's own latency. [^4]
+
+Two timeouts do different jobs. The **connect timeout** bounds how long you will wait to establish the connection; if the provider's network edge is unreachable, it fails fast. The **read timeout** bounds how long you will wait between bytes of the response, which matters because a large generation can legitimately take a while but should not sit silent forever. [^7] The value should be tuned to the model and the task, not copied blindly: a short timeout on a long generation effort does not fail fast, it fails prematurely, killing requests that would have succeeded. The fix for a timeout you keep hitting is not always to raise it; sometimes it is to stream the response so the first token arrives quickly and tokens keep flowing, which is the subject of lesson 54. [^7]
+
+## The circuit breaker: when retrying is the wrong answer
+
+Retries and timeouts both assume the provider is at worst briefly sick. The failure mode they cannot handle is the provider that is genuinely down, because then the code retries, waits, retries again, and each attempt burns a full timeout before failing, and a fleet of agents doing that on a dead provider descends into queued timeouts and resource exhaustion while no one gets served. [^4] [^8]
+
+That is the moment a circuit breaker earns its keep. It is a small state machine that watches the health of a downstream dependency and cuts off traffic to it when it fails too often, so a single unhealthy provider cannot drag down the whole agent. [^8] [^9]
+
+The states are three. **Closed** is normal operation; requests flow and the breaker counts failures. When failures cross a threshold, a high error rate over a rolling window or a set number of consecutive failures, the breaker **trips to open**. In the open state, requests to that provider fail immediately, or skip straight to the fallback, without waiting for a timeout, which is the whole point: a dead provider now costs one fast rejection per request instead of one full timeout. After a cooldown period, the breaker moves to **half-open** and lets a single probe request through. If the probe succeeds, the breaker closes and normal traffic resumes. If it fails, the breaker re-opens for another cooldown. [^8]
+
+The value is precise and worth stating in those terms: the difference between a dead provider costing you a fast rejection versus a full timeout per request is the difference between a clean failover and a cascading slowdown. [^8] Configuring a breaker is three numbers: how many failures trip it open, how long it stays open before it probes again, and how many successful probes close it. [^6] [^9]
+
+Note what a circuit breaker is not: it is not a replacement for retries. The two are complementary and sit at different layers. Retries fire when an individual request fails and recover from transient errors. A circuit breaker fires when the failure *rate* crosses a threshold and protects the system during a prolonged outage. One recovers, the other contains. [^0] [^8] A common shape is to run your retries with backoff inside a chosen provider, and let the circuit breaker decide whether that provider is healthy enough to keep trying at all. [^4]
+
+## Fallbacks: the plan when everything on a provider fails
+
+When retries are exhausted and the circuit is open on the primary, the request still has to succeed, and that is the fallback's job. A **fallback chain** is an ordered list of alternative targets to try: a second provider, or a cheaper or older model on the same provider. [^6] [^0]
+
+The chain has textbook form: attempt the primary, and only when all its retries are exhausted move to the first fallback, then the next, until one succeeds or the list is empty. [^6] Failover is not free, though. The same prompt can behave differently on a fallback model, so switching providers trades availability for output variance, and the fallback's output needs the same validation as the primary's. [^4] And a fallback that shares the primary's failure domain, same provider, same private endpoint, same quota pool, is not a real fallback; it fails in exactly the way the thing it is backing up just failed. [^0] True independence means a different provider, or a separately provisioned quota pool, not more keys under the same organization, which usually share one limit. [^4]
+
+A well-shaped stack layers all four. The request arrives. Retries with backoff and jitter try the primary provider and recover the transient blips. When a retry turns into a sustained failure rate, the circuit breaker trips and stops wasting timeouts on that provider. The request fails fast to a fallback chain instead of hanging. And observability records which pattern activated and why, so "we fell back because the primary was open" is visible rather than inferred. [^4]
+
+## Worked example: a reliability wrapper
+
+Let me put the classification, the retry, and the circuit breaker on concrete code. This is a small wrapper around a provider call, and it is deliberately simple so the layers stay visible.
+
+```python
+import random
+import time
+from datetime import datetime, timedelta
+
+RETRYABLE = {429, 500, 502, 503, 504, 529}   # includes Claude's overloaded_error
+
+
+def backoff_with_jitter(attempt: int, base: float = 1.0, cap: float = 30.0) -> float:
+    exp = min(base * (2 ** attempt), cap)
+    return random.uniform(0, exp)  # jitter breaks the synchronized retry spike
+
+
+class CircuitBreaker:
+    def __init__(self, failure_threshold=5, cooldown_s=60, success_threshold=2):
+        self.failure_threshold = failure_threshold
+        self.cooldown = timedelta(seconds=cooldown_s)
+        self.success_threshold = success_threshold
+        self.failures = 0
+        self.successes_since_open = 0
+        self.state = "closed"          # closed -> open -> half_open -> closed
+        self.opened_at = None
+
+    def allow(self) -> bool:
+        if self.state == "closed":
+            return True
+        if self.state == "open":
+            if datetime.now() >= self.opened_at + self.cooldown:
+                self.state = "half_open"
+                return True  # send exactly one probe
+            return False     # fail fast, skip to fallback
+        # half_open: only letting the probe(s) through
+        return self.successes_since_open < self.success_threshold
+
+    def record(self, ok: bool):
+        if self.state == "half_open":
+            if ok:
+                self.successes_since_open += 1
+                if self.successes_since_open >= self.success_threshold:
+                    self.state = "closed"
+                    self.failures = 0
+                    self.successes_since_open = 0
+            else:
+                self.trip()
+            return
+        if ok:
+            self.failures = 0
+        else:
+            self.failures += 1
+            if self.failures >= self.failure_threshold:
+                self.trip()
+
+    def trip(self):
+        self.state = "open"
+        self.opened_at = datetime.now()
+
+
+def call_with_reliability(providers, call, max_attempts=3):
+    """providers: ordered list of provider IDs; call: fn(id, retry_attempt).
+    Skips an open circuit, retries with jitter, then fails through to the next provider."""
+    for provider_id in providers:
+        breaker = breakers[provider_id]
+        for attempt in range(max_attempts):
+            if not breaker.allow():
+                break  # circuit open, fail fast to the next provider
+            try:
+                result = call(provider_id, attempt)
+                breaker.record(ok=True)
+                return result
+            except TransientError:
+                breaker.record(ok=False)
+                time.sleep(backoff_with_jitter(attempt))
+        # retries on this provider exhausted, or the circuit was open
+    raise AllProvidersDownError()
+```
+
+What this pins down is the ordering. A retryable 529 or 503 is retried with backoff and jitter. When five failures trip the breaker open, the loop stops trying that provider immediately (`breaker.allow()` returns False) and the request fails through to the next provider in the list, which is the fail-fast behavior that separates a clean failover from a cascade. When the cooldown elapses, one probe goes through, and the breaker only closes after two straight successes. The `call` function in production would be your actual SDK call, and the transient classification comes from the exception subclasses the SDK raises for `APITimeoutError` and `RateLimitError`. [^1]
+
+## The Fortress angle: reliability is already configured here
+
+This is not a lesson the Fortress reads and then files away. The reliability discipline is built into the runtime this series is written inside. The Hermes agent's runtime config carries an `api_max_retries` setting that governs how many times the framework retries provider calls, alongside explicit timeouts on its child processes, commands, and dialogs, so a slow or failing model call becomes a bounded, retried cost instead of a hanging turn. [^10]
+
+The same principle shows up one layer up in how the Fortress ships content. A lesson that fails the verification gate, an em-dash or an AI-slop phrase, is a permanent failure, so the gate does not retry it silently; it rejects the draft and the writer fixes the message. That is the classification at work: a deterministic correctness failure gets a different response than a transient infrastructure blip. Retries are for the blips, not for defects in the payload. When you adopt retries, timeouts, and circuit breakers for your model calls, you are applying to a network dependency the same reflex the mature platforms already apply to theirs: treat the transient failure as a scheduling problem and the permanent failure as a signal to change the request. [^4]
+
+## The pitfalls to avoid
+
+The first pitfall is retrying the wrong things. Retry a 401 or a 400 and you burn budget and time on a request that will never succeed, and you hide the real bug behind delay. The classification is the gate: permanent errors fail fast and page a human; only transient ones are retried. [^6]
+
+The second is retrying everything instantly with no backoff and no jitter. This is the thundering herd, and it sustains the overload it is trying to escape. Exponential backoff alone is not enough; the synchronized retries need jitter to spread out. [^4]
+
+The third is stacking retries at every layer and calling it redundancy. SDK retries multiplied by application retries multiplied by gateway retries silently produce double-digit attempts per request and no one notices until the bill or the latency does. Decide which one layer owns retries and set the others low. [^1] [^5]
+
+The fourth is a breaker with no exit strategy. A circuit breaker that trips and then keeps your traffic blocked while a fallback chain does not exist just converts an outage into a permanent error. The breaker buys you time and a clean failover path; you still have to build the fallback and the alert that tells a human the primary is down. [^8]
+
+## Try it
+
+1. Classify a weekend of failures. Take your agent's model-call error log and bucket every status into retryable or permanent; 429, 500, 502, 503, 504, and 529 go in one pile, 400, 401, 403, 404 in the other. Check whether you are currently retrying anything from the permanent pile, and fix that first. [^6]
+
+2. Right-size your SDK retries. Find the `max_retries` setting on the client your agent uses. Set it deliberately, and if you manage retries at a higher layer, set it low or zero so the layers do not compound. Add a bounded wrapper that retries transient subclass exceptions with exponential backoff and jitter. [^1]
+
+3. Add a circuit breaker to one provider dependency. Configure a failure threshold, a cooldown, and a success threshold, and route your requests through a breaker before the retry loop. Force a provider failure and confirm the open circuit fails fast instead of waiting out a timeout, then confirm it recovers through a half-open probe. [^8]
+
+## What's next
+
+Retries, timeouts, and circuit breakers assume a call either eventually succeeds or eventually fails. The next lesson, **Performance: latency budgets, streaming, batching, and speculative execution**, is about the calls that succeed but are too slow: how to set a latency budget per request so you know what "good" even means, how streaming delivers the first token fast instead of the whole answer at once, how batching amortizes overhead across many requests, and how speculative execution trades a little extra compute for a much shorter apparent wall-clock time. You have made the model calls dependable; lesson 54 makes them fast.
+
+[^0]: portkey.ai. [Retries, fallbacks, and circuit breakers in LLM apps: what to use when](https://portkey.ai/blog/retries-fallbacks-and-circuit-breakers-in-llm-apps/)
+[^1]: developers.openai.com. [OpenAI Python API library: handling errors, retries, and timeouts](https://developers.openai.com/api/reference/python)
+[^2]: developers.openai.com. [Error codes: APITimeoutError, RateLimitError, exponential backoff and Retry-After](https://developers.openai.com/api/docs/guides/error-codes)
+[^3]: platform.claude.com. [Claude API errors: 529 overloaded_error and SDK retry behavior](https://platform.claude.com/docs/en/api/errors)
+[^4]: truefoundry.com (Boyu Wang). [Multi-Provider Failover and Load Balancing: Surviving LLM Provider Outages](https://www.truefoundry.com/blog/llm-failover-load-balancing-provider-outages)
+[^5]: nanobot (HKUDS) issue #2511. [SDK built-in retries stack with application-level retry, silent high retry counts](https://github.com/HKUDS/nanobot/issues/2511)
+[^6]: getmaxim.ai (Bifrost). [Retries, Fallbacks, and Circuit Breakers in LLM Apps: a production guide](https://www.getmaxim.ai/articles/retries-fallbacks-and-circuit-breakers-in-llm-apps-a-production-guide/)
+[^7]: community.openai.com. [Frequently getting API timeout error: connect vs read timeout on long responses](https://community.openai.com/t/frequently-getting-api-timeout-error-what-am-i-doing-wrong/611941)
+[^8]: truefoundry.com. [Circuit Breakers: failing fast instead of cascading (closed, open, half-open)](https://www.truefoundry.com/blog/llm-failover-load-balancing-provider-outages#6-circuit-breakers-failing-fast-instead-of-cascading)
+[^9]: microservices.io. [Circuit Breaker pattern](https://microservices.io/patterns/reliability/circuit-breaker.html)
+[^10]: Hermes Agent runtime configuration: `api_max_retries` and command, dialog, and child-process timeouts (Fortress internal configuration, `~/.hermes/config.yaml`).
