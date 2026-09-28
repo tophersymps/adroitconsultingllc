@@ -1,0 +1,135 @@
+---
+title: "Data Architect SM-1a: License Types to Standard and Custom Objects: CRM Tiers, Platform License, Object Access per License"
+slug: day-17-sm-1a-license-types-to-standard-custom-objects-crm-tiers
+series: salesforce-data-architect
+lesson: 17
+excerpt: "The single most common cost and access mistake in Salesforce data architecture is buying every user a full CRM license when most of them only touch custom objects. This lesson teaches how CRM-edition licenses differ from Platform licenses in their access to standard and custom objects, how Experience Cloud licenses restrict external users, why integration jobs can run on cheaper Platform or Integration licenses, and how to map each user group to the cheapest license that still reaches every object it actually needs."
+date: "September 28, 2026"
+author: "Adroit Consulting"
+readTime: "17 min read"
+tags: [Salesforce, Data Architecture, License, Certification]
+---
+
+A Salesforce license is a boundary on what a user can reach, not just a billing line. Every user you provision gets a license, and that license decides which objects the user can open, which clouds they can log into, and how the record-access model behaves underneath them. Get the mapping right and you control cost and security at the same time. Get it wrong and you either pay for seats nobody uses or lock a whole team out of the data they were hired to work with.
+
+Requirement sm-1a of the Platform Data Architect exam asks you to do this in reverse. The exam gives you a customer scenario, and you recommend the combination of license types that lets the business use its standard and custom objects effectively. That includes the core difference this lesson is built around: CRM-edition licenses reach the standard CRM objects plus custom objects, while Platform licenses reach custom objects but not the core sales and service standard objects. Everything else in this lesson follows from that single fact.[^1]
+
+## What a license actually controls
+
+Think of a license as a package of three things: which standard objects are visible and editable, which custom objects can be created or modified, and how much record access the user gets through the sharing model.
+
+A full CRM license, the kind that comes with Sales Cloud or Service Cloud, grants the standard CRM objects: Accounts, Contacts, Opportunities, Cases, Leads, and the rest. It also grants access to custom objects. A user with a Sales Cloud license can open an Account, edit an Opportunity, and work a Shipping_Request__c custom object your team built, all from the same session.
+
+A Platform license, sometimes called Force.com or Salesforce Platform, works differently. It grants the custom objects and the platform itself, but it does not grant the core sales and service standard objects. A Platform user cannot open Opportunities or Cases directly, because those objects sit inside the Sales and Service clouds they were not licensed for.[^1]
+
+That boundary is the whole point. A back-office warehouse crew that only ever creates and edits a custom Shipment__c and an Inventory__c object should not be paying for a Sales Cloud seat whose Opportunity access they will never use. The Platform license sits at a lower price point precisely because it drops the expensive CRM standard objects. Map that team to Platform and you cut cost without cutting any capability they actually rely on. Give the sales operations lead who must edit Opportunities a Sales Cloud license instead, because no Platform license can give that user what they need.[^1]
+
+## The two directions of the mistake
+
+Choosing a license by default instead of by the objects a group truly needs creates a problem in one of two directions, and both hurt.
+
+The first direction is overspending. Every internal user gets a full CRM license because that is the easy default and nobody questioned it. At a few hundred users, the difference between a CRM seat and a Platform seat is a real line item on the annual contract. Users who only touch custom objects are consuming an expensive license whose main advantage they never use.
+
+The second direction is being blocked. Someone assigns a Platform license to a user who genuinely has to edit Opportunities or Cases, because the admin assumed all licenses cover the same objects. The user logs in, the object is missing, and the whole process stalls while IT re-provisions the seat. That is a workflow failure caused by a license mapping mistake, and it tends to surface exactly when the team is under deadline.
+
+The architect's job is to decide for each user group which objects matter, then find the cheapest license that still reaches every one of them. The cost comes from the license, but the reasoning has to start from the objects.
+
+## Standard objects are not all the same
+
+A common shortcut is to assume that any standard object is available on any edition or any CRM license. It is not. Object availability varies by edition and by which clouds and features the organization has licensed.
+
+Opportunities and Cases are cloud-specific in practice. If your org has not licensed Sales Cloud, the Opportunity object is not available to sales users the way it would be in a Sales Cloud org. The same logic runs through the service side with Cases. An organization can license Service Cloud without Sales Cloud, or the reverse, and the standard object set the users can reach shifts accordingly.
+
+The deeper principle for the exam is that you confirm rather than assume. The exact set of standard objects a given license reaches is documented in the license-to-object availability matrix for the current release, and Salesforce updates these details between releases. An architect who reasons "this object probably ships with that edition" is trusting memory over a source that changes.[^2] The requirement text for sm-1a says it plainly: review the matrices in the documentation for the current release, because the exact availability per license changes and must be confirmed rather than assumed.[^1]
+
+## Experience Cloud licenses are deliberately narrower
+
+External users do not belong on the same license family as employees. Community and Experience Cloud licenses, including Customer Community, Customer Community Plus, Partner Community, and the External Apps licenses, are built for people outside the company who need a controlled view of a subset of the data model.
+
+These licenses are restricted by design. An external partner does not get the full internal data model. Their access is defined through sharing sets and a different set of record-access rules, and they cannot reach the unrestricted internal objects that an employee license would expose. The boundary is both a cost choice and a security control.
+
+The design consequence is that you architect the external experience separately. You set up sharing sets so that a partner only sees the Accounts and custom objects tied to their relationship, and you design the object access around what the community license permits. You do not hand an external collaborator a full CRM license because that inflates cost and, more importantly, widens the attack surface to the entire internal data model. The restricted community license is the correct tool for an external person by default.[^3]
+
+## Integration and batch users
+
+A class of users deserves special attention in the license strategy: the integration and batch users that load and extract data through the API rather than through the interactive UI.
+
+These users never open a browser. They call REST or Bulk APIs to move records into custom objects, run scheduled jobs, and write results back out. Paying CRM license pricing for a seat that never renders a page is a waste. The standard optimization is to assign a Platform license, or an Integration license where that is the available option in the cloud, because those licenses cover API access to custom objects at a lower cost than a full CRM license.[^1]
+
+This is one of the most reliable cost levers in a data architecture review. A large organization can have dozens of integration users, and moving them from full CRM to Platform or Integration licenses removes a significant recurring cost without changing what those integrations can do, provided the workload is object and API only.
+
+## License also sets access ceilings
+
+The license choice does not only decide which objects exist in the user's view. It also sets ceilings on object-level and field-level access, and some standard objects carry per-license record access limits.
+
+Recall the earlier point: certain portal and external licenses cannot see standard objects like Opportunities at all. That is not a sharing misconfiguration you can fix with a sharing rule. The object is not reachable under that license, period. The architect has to verify object availability against the chosen license before finalizing provisioning, because a sharing rule cannot grant access to an object a license does not expose.
+
+The same thinking applies to changes that come later. If a business process evolves and a group that was fine on Platform now needs Opportunities, the answer is not to bend the sharing model. The answer is to move that group to a license that reaches the object, and to revisit the cost consequence of doing so.
+
+## Why it matters for the whole data model
+
+This lesson lives inside the Data Management domain because the license strategy and the data model are joined. The objects you model determine the licenses you need, and the license budget you are willing to spend constrains how much custom-object modeling is sensible.
+
+If a business process relies on heavy custom-object modeling and rarely touches the standard CRM objects, standardize on the cheapest license that still reaches the few standard objects it needs. If a process must move through many standard objects, Accounts, Opportunities, Cases, then you are committing to full CRM licenses for the users in that process, and the architect should say so during budgeting rather than discover it at provisioning time.
+
+The data-modeling lesson from day 3 applies here. The design decision to model a piece of business in custom objects versus leaning on standard objects is not neutral. It has a license implication: the more a team lives in custom objects, the more it can live on cheaper Platform licenses, and the more it depends on the standard CRM objects, the more it costs to give them access. Good architects make this explicit in the design, because it determines whether the running system is affordable at the scale the business actually operates.
+
+## A worked example
+
+Here is the shape of the question the exam will ask, worked end to end.
+
+A manufacturer runs its sales team on Sales Cloud. Sales reps open Accounts, update Opportunities, and log Calls. A separate warehouse operations team only creates and edits custom objects: Inbound_Shipment__c, Inventory__c, and Asset_Request__c. They never touch Accounts or Opportunities. Meanwhile a REST integration job loads incoming shipment records into Inbound_Shipment__c overnight, and a set of external distributors needs to see only the orders tied to their own account.
+
+The mapping falls out of each group's objects.
+
+The sales reps need Opportunities, so they get a full Sales Cloud license. No cheaper license reaches the standard objects they work with.
+
+The warehouse team operates entirely on custom objects. A Platform license covers everything they do and costs less than a Sales Cloud seat. Assigning Sales Cloud here would overspend; assigning nothing would block them.
+
+The integration job calls the API against custom objects only, so it runs on a Platform or Integration license. It pays for API and object capacity without the cost of an interactive CRM seat.
+
+The distributors are external. They get an Experience Cloud license, Partner Community in this case, with sharing sets scoped to their own accounts. They see a controlled slice of the model, not the full internal data set.
+
+One mapping, four license families, each chosen because of the objects the group actually needs. That is the reasoning pattern the exam wants, and it is the same reasoning that keeps a real implementation affordable and secure.
+
+## Configuration walkthrough
+
+Follow these steps when you are handed a real org and asked to right-size the licenses.
+
+1. Inventory the business processes. Write out the user groups and, for each one, the objects they must read and the objects they must write, separating standard from custom.
+
+2. Map each group to the cheapest license that grants the required standard objects plus all needed custom objects. If a group needs Opportunities, it is on a CRM license. If it only needs custom objects, it is a Platform candidate.
+
+3. Handle the integration and batch users separately. Where the workload is API and object only with no interactive UI, assign Platform or Integration licenses rather than full CRM seats.
+
+4. For external collaborators, choose the appropriate Experience Cloud license and design the sharing sets and object access around that license's limits instead of exposing the internal model.
+
+5. Validate every choice against the current Salesforce license-to-object availability matrix before finalizing user provisioning. Confirm the objects each license reaches for the release you are running, because the matrix moves between releases.
+
+## The try-it
+
+Open a Developer Edition or scratch org and examine how the license model behaves in practice.
+
+First, count the licensed user types available to an admin. In Setup, look at the company and license information to see which standard and custom objects are reachable per license type. Then create a custom object, a field, and a tab for a warehouse-style process such as Inventory__c, and confirm it is available to a user on a custom or platform-license profile.
+
+Next, set up a simple sharing set or an Experience Cloud-style restricted user in a sandbox, and observe which standard objects that external user can and cannot reach. You should see the restriction clearly: the external or community-style user is limited to the records and objects you explicitly scoped.
+
+Finally, run a small REST API call against your custom object using an integration-style user, and confirm the API reaches the custom object without the user ever logging into the interactive UI. The confirmation that integration work does not depend on a full CRM seat is the point.
+
+## Exam traps to dodge
+
+The exam punishes three specific assumptions about licenses.
+
+The first is assigning Platform licenses to users who must access Opportunities or Cases. Platform licenses cannot touch the core CRM standard objects. A scenario where a user must edit Opportunities is a Sales Cloud scenario, no matter how otherwise custom the data model is.
+
+The second is assuming all standard objects are available on every CRM edition. Availability varies by edition and by which clouds are licensed. A Service Cloud org does not automatically expose everything a full enterprise suite does, and the exam will slip one of these into a scenario to test whether you check the objects rather than the edition label.
+
+The third is giving external community users full internal licenses. That inflates cost and weakens security by exposing the entire internal data model to people who should only see a scoped subset. External users belong on the restricted Experience Cloud licenses designed for them.
+
+## What's next
+
+Now that you can match a license to the objects a group needs, the next lesson moves you from the theory to the scenarios. Lesson 18, License and object scenarios (sm-1b), applies the same license-versus-object reasoning to realistic customer cases, the kind of situation the exam will present and ask you to resolve. Where this lesson built the framework, day 18 exercises it.
+
+[^1]: Salesforce, "License Types and Object Access," Platform license and CRM license documentation. Reviewed September 2026; object availability per license is subject to change between releases and should be confirmed against the current matrix.
+[^2]: Salesforce Help, "Standard Object Access and License Types." The license-to-object availability matrix is maintained in the current-release documentation.
+[^3]: Salesforce Help, "Experience Cloud Licenses and User Types," covering Customer Community, Customer Community Plus, Partner Community, and external-user access via sharing sets and restricted record access.
