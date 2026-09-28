@@ -24,6 +24,8 @@ The foundation is knowing what kinds of failures exist, because each class gets 
 
 Retrying a 401 is how teams burn budget and mask real configuration bugs behind wall-clock delay. Failing fast on a 503 is how they drop users who would have been served twenty seconds later. The classification is the whole job.
 
+![Classify each HTTP status into retryable or permanent before responding: 429, 500, 502, 503, 504, and 529 get retried, while 400, 401, 403, and 404 are never sent again](</diagrams/reliability-retries-timeouts-circuit-breakers/1-failure-taxonomy.png>)
+
 There is a provider-specific shape worth knowing because it trips up code written against other APIs. Anthropic's Claude API returns **529** as an `overloaded_error`: the platform is over capacity across the API globally, not a limit on your account. It is a retry signal, distinct from a 429 (your account is throttled) and from a hard 500. Code that only knows the common status codes either ignores 529 entirely or treats it as a permanent failure, and both are wrong. It belongs in the retryable set, and the official SDKs retry it along with connection errors, rate limits, and 5xx errors. [^3]
 
 ## Retries that respect the server
@@ -33,6 +35,8 @@ Once you have decided a failure is transient, the question is how to retry. The 
 Exponential backoff makes each wait grow: attempt one fails and you wait a base delay, attempt two waits twice that, and so on, so the rate of hitting the server decays instead of staying constant. The exact shape matters less than the growth. But backoff alone has a subtle flaw: every client that saw the failure at the same instant computes the same delay and retries at the same instant, re-creating the spike. Jitter breaks that synchronization by randomizing each wait, spreading the retries across the window so the server does not get hit by everyone at once. [^4]
 
 The second rule is to honor what the server tells you. When a provider returns a rate-limit status with a **Retry-After** header, or reports remaining capacity in its rate-limit headers, the server is giving you the exact amount of time you should wait. The reliable approach respects that value when it is present and falls back to exponential backoff with jitter when it is not. [^4] [^2]
+
+![Exponential backoff grows each retry wait so the hit rate decays, and jitter randomizes the waits so synchronized clients do not re-create the spike; honor Retry-After and cap the attempts](</diagrams/reliability-retries-timeouts-circuit-breakers/2-backoff-jitter.png>)
 
 You also need a cap: a finite number of attempts after which you stop, classify the failure as persistent for this request, and move on to the fallback chain. A retry loop that never gives up is infinite retry with a linear delay, which under a real provider outage turns your application into a denial-of-service amplifier against infrastructure that is already down. [^3]
 
@@ -60,6 +64,8 @@ That is the moment a circuit breaker earns its keep. It is a small state machine
 
 The states are three. **Closed** is normal operation; requests flow and the breaker counts failures. When failures cross a threshold, a high error rate over a rolling window or a set number of consecutive failures, the breaker **trips to open**. In the open state, requests to that provider fail immediately, or skip straight to the fallback, without waiting for a timeout, which is the whole point: a dead provider now costs one fast rejection per request instead of one full timeout. After a cooldown period, the breaker moves to **half-open** and lets a single probe request through. If the probe succeeds, the breaker closes and normal traffic resumes. If it fails, the breaker re-opens for another cooldown. [^8]
 
+![The circuit breaker is a three-state machine: closed counts failures and trips to open when they cross a threshold, open fails fast through a cooldown, and half-open lets a single probe through that closes the breaker on success or re-opens it on failure](</diagrams/reliability-retries-timeouts-circuit-breakers/3-circuit-breaker.png>)
+
 The value is precise and worth stating in those terms: the difference between a dead provider costing you a fast rejection versus a full timeout per request is the difference between a clean failover and a cascading slowdown. [^8] Configuring a breaker is three numbers: how many failures trip it open, how long it stays open before it probes again, and how many successful probes close it. [^6] [^9]
 
 Note what a circuit breaker is not: it is not a replacement for retries. The two are complementary and sit at different layers. Retries fire when an individual request fails and recover from transient errors. A circuit breaker fires when the failure *rate* crosses a threshold and protects the system during a prolonged outage. One recovers, the other contains. [^0] [^8] A common shape is to run your retries with backoff inside a chosen provider, and let the circuit breaker decide whether that provider is healthy enough to keep trying at all. [^4]
@@ -71,6 +77,8 @@ When retries are exhausted and the circuit is open on the primary, the request s
 The chain has textbook form: attempt the primary, and only when all its retries are exhausted move to the first fallback, then the next, until one succeeds or the list is empty. [^6] Failover is not free, though. The same prompt can behave differently on a fallback model, so switching providers trades availability for output variance, and the fallback's output needs the same validation as the primary's. [^4] And a fallback that shares the primary's failure domain, same provider, same private endpoint, same quota pool, is not a real fallback; it fails in exactly the way the thing it is backing up just failed. [^0] True independence means a different provider, or a separately provisioned quota pool, not more keys under the same organization, which usually share one limit. [^4]
 
 A well-shaped stack layers all four. The request arrives. Retries with backoff and jitter try the primary provider and recover the transient blips. When a retry turns into a sustained failure rate, the circuit breaker trips and stops wasting timeouts on that provider. The request fails fast to a fallback chain instead of hanging. And observability records which pattern activated and why, so "we fell back because the primary was open" is visible rather than inferred. [^4]
+
+![The layered reliability stack: retries with backoff and jitter recover transient blips, the circuit breaker trips on a sustained failure rate, the fallback chain answers instead of hanging, and observability records which pattern fired](</diagrams/reliability-retries-timeouts-circuit-breakers/4-layered-stack.png>)
 
 ## Worked example: a reliability wrapper
 
