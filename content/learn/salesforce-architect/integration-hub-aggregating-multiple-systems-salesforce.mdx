@@ -26,6 +26,8 @@ Draw the integration hub as a single call coming in and multiple calls going out
 
 The shape matters because it concentrates the risk. When you fan out, you multiply the number of things that can fail, and when you fan in, you have to decide what the combined answer means when only some of the calls returned. That second decision, the partial-failure case, is where hub design actually lives. Any script can fire three HTTP requests. The architecture is in what happens when one of the three times out.
 
+![Fan-out / fan-in: one business event fans out to the ERP, billing, and warehouse systems, their results fan back in and combine into one coherent answer, with the partial-failure point marked where only some calls return](</diagrams/integration-hub-aggregating-multiple-systems-salesforce/1-fanout-fanin.png>)
+
 ## The Apex callout budget is the hard constraint
 
 The first number in this lesson is a governor limit, because it is the one that decides whether your hub fits the platform at all. A single Apex transaction can make a maximum of **100 callouts** to an HTTP request or an API call, and this applies equally to synchronous and asynchronous contexts. [^3] [^4] There is also a total time budget across those callouts: the cumulative time for all external callouts in a transaction cannot exceed **120 seconds**. [^5]
@@ -43,6 +45,8 @@ Do not confuse its two forms. A plain **Composite** request runs up to 25 subreq
 The relevant numeric discipline for an aggregation hub is the subrequest ceiling and the rule that at most **five** of the subrequests in a composite call can be query operations (Query, QueryAll, and count queries count against that five). [^6] That is a constraint most hub designers forget until it bites: once your aggregation needs more than five lookups in one composite call, you are back to either fewer queries or a different structure.
 
 Where Composite earns its place in this lesson is the **transformation and combination** case. When the hub must land several related records in Salesforce from data that arrived together, Composite groups the work into one call with shared atomicity, and the referenceId mechanism lets the batch behave like one coordinated unit rather than a set of independent calls that can each partially succeed. That is fan-in happening on the write side, inside one request.
+
+![Composite vs Composite Graph: plain Composite caps at 25 subrequests, Composite Graph at 500, both allow at most five query operations, and the shared rule is that an aggregation needing more than five lookups needs restructuring, not a loop](</diagrams/integration-hub-aggregating-multiple-systems-salesforce/2-composite-vs-graph.png>)
 
 ## External Services and Named Credentials: the canvas for custom aggregation
 
@@ -82,6 +86,8 @@ The discipline this course has hammered for three lessons is that the failure pa
 
 The second rule is **decide whether the whole transaction fails or the hub returns a partial result.** A read-side aggregation view nearly always returns partial and flags it, because a rep seeing most of the truth is better than seeing a spinner. A write-side orchestration (the fan-out that must land an Order everywhere) is the opposite: it wants commit-or-compensate behavior, retries, and idempotency, which Lesson 52's ordering and duplicate handling and the earlier reliability lesson both cover. The mistake is treating every fan-out like a write fan-out and every fan-in like a read fan-in. The read case wants graceful partial results. The write case wants atomicity, retry, and compensation.
 
+![Partial failure: the read-side aggregation view returns partial and flags which source is missing, while the write-side orchestration wants commit-or-compensate behavior with retries, idempotency, and a defined compensation step](</diagrams/integration-hub-aggregating-multiple-systems-salesforce/3-read-vs-write-partial.png>)
+
 ## Worked example: the real-time 360-degree Account view
 
 A distributor runs Salesforce as the front office. Orders live in an on-prem ERP. Inventory lives in a WMS. Balances and credit live in a billing platform. The ask: a rep opens an Account and sees, on one screen, current orders, live inventory for the products that account buys, and the open balance, all current.
@@ -98,6 +104,8 @@ Now apply the design rules. The fan-in partial case: the ERP is slow and crosses
 The cache: the balance endpoint is called on every Account view by every rep, and Account pages are the most visited surface in the org. The architect caches the composed view in Platform Cache keyed by Account ID, invalidated by a platform event the billing system publishes when the balance changes. Reps see balances that are at most seconds old, and the org does not pay three external callouts per Account page view per rep per second.
 
 The counterfactual, written the way a review demands: if the aggregation ran client-side, the LWC would issue three separate callouts (or worse, go straight to external APIs from the browser, leaking credentials and endpoints), the mapping would be duplicated in JavaScript, and a slow WMS would spin the whole screen while the other two blocks waited. The server-side aggregation concentrates the mapping, the security, the caching, and the partial-failure policy in one auditable place.
+
+![Worked example: the LWC calls one Apex method, the Apex service fans out to the ERP, WMS, and billing endpoints via Named Credentials, each adapter maps into the canonical response shape, and the partial-failure case returns incompleteSources with an explicit unavailable banner](</diagrams/integration-hub-aggregating-multiple-systems-salesforce/4-account-view.png>)
 
 ## The pitfalls to avoid
 
