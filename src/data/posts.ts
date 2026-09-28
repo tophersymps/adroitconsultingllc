@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "agent-pipeline-repair-loop-2026",
+    "title": "The Repair Loop: Keeping Autonomous Pipelines Running",
+    "excerpt": "Autonomous pipelines survive on the loop around them: stall detection, auto-pause, resume, alerting, and a hard escalation boundary. Here's how to build it.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "September 28, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "14 min read",
+    "featured": false,
+    "tags": [
+      "AI Agents",
+      "Agentic Frameworks",
+      "AI Infrastructure",
+      "Reliability",
+      "SRE",
+      "Automation"
+    ],
+    "bannerImage": "/banners/agent-pipeline-repair-loop-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "realtime-rls-enforcement-boundary-2026",
     "title": "RLS Is the Enforcement Boundary in Multi-Tenant Realtime",
     "excerpt": "Your Postgres Changes channel is only as secure as the row-level policies behind it. Here is how RLS gates a realtime stream in a multi-tenant Supabase app.",
