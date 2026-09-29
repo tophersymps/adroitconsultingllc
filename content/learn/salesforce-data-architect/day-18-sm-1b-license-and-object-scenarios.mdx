@@ -1,0 +1,169 @@
+---
+title: "Data Architect SM-1b: License and Object Scenarios: Matching Licenses to Standard and Custom Objects for Cost, Access, and Platform Limits"
+slug: day-18-sm-1b-license-and-object-scenarios
+series: salesforce-data-architect
+lesson: 18
+excerpt: "How to design licenses from a customer scenario, not from a cost default: build a user-group to object-need matrix, split mixed workloads into separate license pools, put external collaborators on Experience Cloud licenses with sharing sets, and secure API-only automation users on dedicated integration or Platform licenses with Named Credentials. Includes the architectural trade-off of re-modeling onto custom objects versus upgrading a license, why a license is a ceiling and not record visibility, the three exam traps, and a worked scenario."
+date: "September 29, 2026"
+author: "Adroit Consulting"
+readTime: "18 min read"
+tags: [Salesforce, Data Architecture, License, Certification]
+---
+
+The previous lesson, day 17, gave you the map: CRM licenses reach the standard sales and service objects, Platform licenses reach custom objects but not the core CRM ones, and Experience Cloud licenses restrict external users. That was the vocabulary. Requirement sm-1b now asks you to do the thing the exam actually expects, which is to take a customer scenario and recommend the combination of license types that lets each group use its standard and custom objects while balancing cost, access, and the platform limits that nobody remembered to budget for.[^10]
+
+The shift matters. A license strategy is not a table you fill in once. It is an answer to a business question, and the question starts with what the people behind the logins do for a living. An architect who begins from the price sheet will overspend or lock people out. An architect who begins from the user's job ends up with a mapping that is simultaneously the cheapest and the most secure, because both outcomes fall out of giving each group exactly the objects it needs and nothing more.
+
+## Scenario-driven design starts from the user's job, not the catalog
+
+Day 17 established that the free-standing fact underneath every license decision is whether a given license reaches the standard CRM objects. Requirement sm-1b asks you to apply that fact in reverse: given a scenario, derive the license combo. The skill lives in never letting the price list lead.[^1][^2]
+
+To do that reliably, frame each user group with five dimensions before you reach for any license name:
+
+- **What objects does the group work?** Standard objects such as Account, Contact, Opportunity, Case, Lead, plus the custom objects your team has modeled. Separate read needs from write and edit needs, because a group that only reads renderable data may qualify for a cheaper access pattern than one that edits.
+- **How many records and at what volume?** A team moving millions of records interacts with platform storage and per-user record limits differently from a team that edits fifty records a day. Volume shapes both the license reality and whether automation should be doing the work at all.
+- **Interactive or API?** A user who opens the browser and binds records to page layouts, picklists, and the service console needs an interactive license. An integration job that only calls the API has a different shape entirely and should not consume an interactive CRM seat.
+- **Internal or external?** Employees can hold internal license families. Partners, customers, and portal users belong on Experience Cloud licenses with scoped access, for both cost and security.
+- **Which platform limit applies?** The set of standard objects a license reaches, the API entitlement for that license and edition, and per-user or per-license record caps are limits you confirm against current documentation rather than assume.[^2]
+
+Run every user group through those five questions and the correct license becomes nearly forced. The exam rewards exactly this: you show the reasoning from the job to the object set to the license, rather than reciting license names.
+
+## Split mixed workload groups into separate license pools
+
+The single most expensive license mistake is giving one license to a whole team when a subset of that team uses the expensive capability. Requirement sm-1b is explicit that the right design names user groups, and the deep-dive guidance underlines it: groups that mix workloads should be split into separate license pools rather than given everyone the most expensive seat.[^1]
+
+Consider a professional services org. A handful of solution engineers need Opportunities and Quotes to sell the deal. The rest of the delivery team configures custom objects like Engagement__c and Milestone__c, tracks time on TimeEntry__c, and never opens an Opportunity. One license for everyone would push the delivery team onto full CRM seats they never use. The split is obvious once you name the groups: the engineers get a CRM license because they need Quote and Opportunity, while the delivery team stays on Platform licenses because their entire job lives on custom objects. Same team, two pools, and the second pool cost a fraction of the first.
+
+Do not read this as only an external-facing concern. The split happens all the time inside a single department, and it is the cheapest fix an architect makes. The cost difference between a CRM seat and a Platform seat compounds across dozens of users, and every seat you move from the expensive pool to the cheap pool that still reaches everything that user needs is pure savings with no capability lost.[^1][^6]
+
+The catch is that the split must be real. If a member of the "custom only" pool needs one standard object, even occasionally, then the pool is not custom only. Either that person genuinely needs the standard object and belongs on a license that reaches it, or the object need is manufactured and the model should be trimmed. A license pool is only honest when its members share the same ceiling.
+
+## Partners collaborate on standard objects, customers get a service view
+
+External users are where the scenario questions get specific, and the distinction the exam tests is between partner collaboration and customer self-service. They are different jobs with different licenses.
+
+A partner that sells or implements your product needs to work the actual selling objects. They update the Opportunities that belong to their account, track the Accounts tied to their relationship, and manage the custom objects that hold proposal details. That is partner work, and the correct tool is a Partner Community license. Partner Community users access a controlled set of the data model and, critically, they can reach standard objects such as Accounts and Opportunities through account-based sharing, which is exactly the external collaboration surface Partner Community was built for.[^3] You scope that access with sharing sets tied to the account relationship, so a partner sees the records for their own accounts and nothing in the wider org.[^4]
+
+Contrast that with a customer self-service portal. The user is your end customer, and their job is not to sell. They authenticate, open a case, check an order status, update their profile. They do not need to see other accounts or work opportunities as a selling motion. That portal user belongs on a Customer Community or Customer Community Plus license, which exposes a reduced set of standard objects oriented around their own customer record, not the full model.[^3] When a question says "a customer should log in to track their own cases and orders," the answer is a customer community license, and slapping Partner Community on it is wrong because that license is keyed to partner selling, not customer self-service.
+
+The trap worth naming is the misread between these two. "Give the external partner a Customer Community license" fails the scenario because partners must collaborate on selling objects (Accounts, Opportunities), and Customer Community is not designed as the partner-selling surface. Equally, "give the internal sales rep Partner Community access" fails because an internal employee who works the full model needs a full Sales Cloud license, not a community seat. Keep the mapping literal: internal seller to Sales Cloud, external partner to Partner Community, external customer to Customer Community.[^3]
+
+## Service work keys to the Service Cloud license
+
+The exam scenarios do not stop at sales. When the business runs a service operation, the license follows the service objects.
+
+A service agent who opens Cases, works them through the console, resolves them against knowledge articles, and tracks service-level commitments needs Service Cloud capabilities. Cases are a standard object that the Platform license does not reach, so a service agent is a Service Cloud license holder.[^1] The service console, the high-productivity interface for handling many concurrent cases, belongs to the service cloud and its license family.
+
+The self-service variant of the same business is where service meets Experience Cloud. A customer who logs in to open and track their own cases is not a Service Cloud seat. That is a Customer Community license with access to the Case object scoped through sharing, so they see only their own cases and no internal queue.[^3] One business, two licenses: the agent on Service Cloud inside, the customer on Customer Community outside. The scenario usually hands you both halves and expects you to tell them apart.
+
+## Data management tools do not need licenses, the API user does
+
+This is the concept that most directly maps to the data management domain, and it is a favorite trap. The data loader, an ETL tool, a scheduled integration job: these utilities do not themselves consume a license. The license belongs to the user they authenticate as when they call the API.
+
+That distinction drives a best practice: do not run integration jobs under a shared admin or a human's real license. Build a dedicated integration user, give it the least privilege the job needs, and secure its endpoint with a Named Credential. A Named Credential consolidates the callout endpoint and its authentication into a single definition that Apex and flows reference without hard-coding credentials, so you stop scattering connection strings and secrets through the code base.[^5] The day 17 pattern applies: an API-only automation user that never opens the interactive UI belongs on a lower-cost license such as a Platform or Integration license rather than a full CRM seat.[^1][^7]
+
+Two subtleties are exam gold here.
+
+First, API access is not a given on every license and edition. Requirement sm-1b flags it directly: confirm whether your edition includes API access for the chosen license type, because API entitlement varies, and it is possible to stand up a user who can see objects in the UI but cannot make the API call the integration needs. That is a silent outage discovered at the first automated run, not at provisioning.[^2][^7]
+
+Second, a Platform or Integration license can write to custom objects, which a lot of architects assume it cannot. The limitation of the Platform license is about the standard CRM objects, not about object writes in general. An integration that moves data into custom objects works fine on a Platform license; the moment it must reach standard objects the license question reopens.[^2]
+
+## License mixing has architectural teeth
+
+The hardest question sm-1b poses is not which license to buy. It is what the license ceiling does to the data model. When a group cannot reach a standard object because of its license, the architecture must respond in one of two ways: re-model the need onto custom objects that the license does reach, or upgrade the license. There is no third path that pretends the object is accessible.[^1]
+
+Re-modeling is attractive because it is cheap, and that is exactly why it needs a hard look. If the warehouse team cannot touch Accounts under a Platform license, an architect can model the fragmented bits of account-like data they need into a custom object. That buys the cheap license, but it quietly gives up whatever the standard object carried: reporting that treats the data as a real Account, native Activities and events, the account hierarchy that inherits enterprise structure, and every integration out there that expects an Account. Losing standard features is a real cost, and the day 1 and day 2 lessons on standard versus custom objects support the warning: standard objects come with platform behavior you did not pay to build, and custom objects make you own every consequence of replacing them.[^1]
+
+So the architect's move is a weighed decision, not a reflex. If the group's need is genuinely custom-shaped (a proprietary record with no account semantics), re-model onto custom objects and keep them on Platform. If the need leaks into standard behavior, reporting on Accounts, Activities, standard integrations, then upgrade the license for that group and accept the recurring cost. Requirement sm-1b wants you to say both honestly: the cheap path exists, and it costs you standard features.[^14]
+
+## A license is a ceiling, not record visibility
+
+License object access and record sharing are two different layers, and conflating them is the deepest conceptual error in this domain. A license grants that a user can see the object and its fields at the object and field level. It says nothing about which records, and it never grants visibility by itself.
+
+Beneath the license sits the whole record-access stack from the day 3 and day 4 lessons: organization-wide defaults, the role hierarchy, sharing rules, teams, territories, and, for Experience Cloud, sharing sets. Record access decides what a user can actually open within an object they can reach, and it still applies even when the license permits the object.[^8] Then field-level security (FLS) trims which fields within those records the user can read or edit, independent of both the license and the sharing model. An architect who says "they have the license, so they can see the data" has skipped two layers that are still very much in force.[^9]
+
+The design consequence, and requirement sm-1b states it, is that you design license and record access together. The license sets the ceiling: which objects can be reached at all. Sharing and FLS decide what sits under that ceiling: which records and which fields. If you design only the license tier, you have given users a ceiling over locked rooms. If you design only sharing, a user cannot reach a room the license did not open. Both layers are designed together, and both are part of the same architecture review.
+
+This is also why the earlier trap is a trap. "Give the whole team the most expensive CRM license" does not actually solve their access problem if the sharing model still hides the records, and it spends the most money for a ceiling that overshoots the need. The expensive license plus a correct sharing model beats the expensive license alone, but the correct cheap license plus a correct sharing model beats both.
+
+## Very large external audiences change the architecture
+
+The final deep-dive point is about scale. When the external audience runs to millions of portal users, license cost and per-user limits stop being a line item and become the driver of the architecture. Experience Cloud licensing is per user, so the arithmetic of a hundred thousand customers is a different problem from a hundred partners.[^3]
+
+At that scale the design leans into the patterns built for high volume: guest and community access that avoids provisioning a distinct licensed user for every visitor, high-volume site-user modeling, and sharing designed for volume rather than for per-record human ownership.[^4] Requirement sm-1b says to confirm current per-user and storage limits for your edition before committing to a design, rather than assuming the numbers you read once. A design that is sound at a thousand users can break at a million, so the architect sizes the license model against the actual audience the business is running, not the audience in the original sales deck.
+
+## A worked scenario, end to end
+
+Here is the shape of the question the exam will ask, worked from the job outward.
+
+A mid-size manufacturer runs a Service Cloud org. Inside, a team of service agents handles Cases through the service console; that is their whole job. A separate finance group enters invoices into a custom Invoice__c and payment records into Payment__c, runs reports off those custom objects, and never opens a Case or Opportunity. A REST integration loads incoming shipment payloads into Shipment__c overnight using a service account. Outside, a set of distribution partners must see and update the Opportunities and the Orders__c custom object tied to their own accounts so they can manage their pipeline. Separately, end customers log in to a portal to open and track their own Cases.
+
+Now assign licenses by group.
+
+The service agents work Cases and the console, so they are Service Cloud seats. Nothing cheaper reaches those standard service objects, so this is not a place to economize.[^1]
+
+The finance group lives entirely on Invoice__c and Payment__c custom objects and doesn't touch the standard objects. They are Platform license candidates, cheaper than a CRM seat and sufficient for everything they do.[^2]
+
+The integration job is API-only against a custom object, so it runs under a dedicated integration or Platform license user secured with a Named Credential, and the architect confirms before committing that this edition includes API access for that license type.[^5][^7]
+
+The distribution partners are external and need to collaborate on selling objects tied to their accounts. They get Partner Community licenses with sharing sets bound to the account relationship, so each partner sees its own Accounts, Opportunities, and Orders while the rest of the org stays invisible.[^3][^4]
+
+End customers are not selling. They get Customer Community licenses scoped to their own Cases so they can track their issues without seeing any internal queue.[^3]
+
+Five groups, five license answers, each one reached by asking what the group actually does. That is requirement sm-1b, and it is the reasoning mode the exam grades.
+
+The reasoning above is the exam pattern in miniature: name the group, name the job, name the objects, then let the license fall out.
+
+## Configuration walkthrough
+
+When you are handed a real org and asked to right-size licenses, run this sequence.
+
+1. **Build the user-group and object-need matrix.** List every logical user group and, for each, the standard objects it reads and writes, the custom objects it reads and writes, and whether the work is interactive or API. Separate the groups cleanly; a mixed group is a candidate to split.
+2. **Map each group to the cheapest license that reaches every required object.** If a group needs Opportunities or Cases, it is on a CRM or Service Cloud license. If it needs only custom objects, it is a Platform candidate. If it needs to collaborate on Accounts and Opportunities as an external partner, it is Partner Community. If it is an external customer tracking its own records, it is Customer Community.[^1][^3]
+3. **Assign Platform or Integration licenses to API-only automation users, and secure them with Named Credentials.** Create a dedicated integration user with least privilege, bind the callout endpoint through a Named Credential rather than embedding secrets, and confirm the edition actually includes API access for that license before you rely on it.[^5][^7]
+4. **Where a group lacks a standard object it needs, decide between re-modeling and upgrading.** If the need is genuinely custom-shaped, re-model onto custom objects and keep the cheap license, accepting the loss of standard reporting and Activities. If the need anchors to standard behavior, upgrade that group's license and budget for the recurring cost. Say which one you chose and why.[^1]
+5. **Layer sharing rules and FLS on top of the license ceiling.** For each group, set organization-wide defaults, add the role hierarchy and sharing rules or sharing sets needed for record visibility, and then trim fields with field-level security. Confirm that every object the license opens actually has the record and field access the group needs underneath it.[^8][^9]
+
+The order matters. License first, because it fixes what is reachable. Sharing and FLS second, because they decide what is visible within what is reachable. Do the record layer first and you will build sharing over objects the license never opened.
+
+## Exam traps to dodge
+
+Requirement sm-1b punishes three specific assumptions.
+
+**Trap one: one expensive license for the whole base.** Giving every user the most expensive CRM license because it is the safe default over-spends wherever a subset only touches custom objects. The correct answer splits the base into license pools by what each group needs, not by what the company happens to own.[^1]
+
+**Trap two: assuming API access is universal.** Every license and edition does not include API access. It varies, and a design that assumes it will fail at the first automated run. Confirm the API entitlement for the license and edition before committing an integration to it.[^2][^7]
+
+**Trap three: confusing license object access with record sharing.** A license opens an object at the ceiling level; it does not grant record visibility. Sharing and FLS still decide which records and which fields a user can see, and both layers must be designed together or neither works.[^8][^9] A user "with the license" can still be locked out by sharing, and a user without the license can never be opened by it.
+
+## Try it
+
+Take the manufacturer scenario above and model it in a sandbox.
+
+Create the two custom objects, Invoice__c and Shipment__c, and confirm from the object-tab and profile level how a Platform-license user interacts with them versus a CRM-license user, and that the custom-only user genuinely never sees Case or Opportunity. Then map the Case object in a service context and verify a Service Cloud user opens it from the console while a Platform user cannot reach it at all.[^1]
+
+Set up a small authenticated callout to an external test endpoint using a Named Credential and run it from an Apex anonymous block under an integration user. Confirm the API call succeeds without the user ever logging into the interactive UI, then confirm the credential lives in the Named Credential definition and not in the code.[^5]
+
+Finally, create a Customer Community user and a Partner Community user side by side. Give each a sharing set tied to an account and observe that the partner can reach the Account and Opportunity records scoped to their relationship while the customer sees only their own Case. That contrast, partner selling versus customer self-service, is the exact distinction the exam wants you to hold.[^3][^4]
+
+## What's next
+
+You can now turn a customer scenario into a license design: name the groups, map them to the cheapest license that reaches every object they need, split mixed workloads into separate pools, secure API-only automation with Named Credentials, and layer sharing and FLS under each license ceiling. Lesson 19, Data consistency, moves from who can reach the data to whether the data that reaches them is trustworthy. It covers validation rules, required fields, picklists, unique constraints, lookup filters, duplicate rules, and external IDs, the mechanisms that keep a data model consistent no matter how many users and integrations write to it.
+
+## Related Requirements
+
+- Lesson 17 of 42 (sm-1a): License types to standard and custom objects, CRM tiers, Platform license, object access per license
+- Lesson 19 of 42 (sm-2a): Data consistency: validation rules, required fields, picklists, unique constraints, lookup filters, duplicate rules, external IDs
+
+## References
+
+[^1]: User Licenses, Salesforce Help. Documents that a Salesforce (CRM) user license provides full access to standard CRM objects such as Accounts, Contacts, Opportunities, and Cases, while a Lightning Platform user license provides access to custom apps and objects but not CRM objects such as Opportunities and Cases. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.users_understanding_license_types.htm&type=5)
+[^2]: Standard User Licenses, Salesforce Help. Lists the Salesforce Platform license and the standard objects and tabs it does and does not expose. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.users_license_types_available.htm&type=5)
+[^3]: Experience Cloud User Licenses, Salesforce Help. Documents Customer Community, Customer Community Plus, Partner Community, Channel Account, and External Apps licenses and the standard objects each exposes. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.users_license_types_communities.htm&language=en_US&type=5)
+[^4]: Create a Sharing Set for Experience Cloud Site Users, Salesforce Help. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.networks_setting_light_users.htm&type=5&language=en_US)
+[^5]: Create Named Credentials and External Credentials, Salesforce Help. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.nc_named_creds_and_ext_creds.htm&type=5)
+[^6]: Features Available with Lightning Platform Starter, Lightning Platform Plus, and Salesforce Platform Login Licenses, Salesforce Help. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.users_license_types_communities_lightning_platform_details.htm&type=5)
+[^7]: Give Integration Users API Only Access, Salesforce Help. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.integration_user.htm&type=5)
+[^8]: About Sharing Your Data, Salesforce Help. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.security_sharing_overview.htm&language=en_US&type=5)
+[^9]: Control Who Sees What, Salesforce Help. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.security_data_access.htm&type=5)
+[^10]: Platform Data Architect exam guide, Salesforce. [trailhead.salesforce.com](https://trailhead.salesforce.com/en/credentials/platformdataarchitect)
