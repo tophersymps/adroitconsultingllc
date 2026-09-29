@@ -1,0 +1,142 @@
+---
+title: "Lesson 54: Federated Data: Salesforce Connect, External Objects, and When Not to Use Them"
+slug: federated-data-salesforce-connect-external-objects
+series: "salesforce-architect"
+lesson: 54
+excerpt: "The whole course until now assumed external data gets copied into the org. This lesson is the alternative: querying data in place, at the source, with no copy at all. It contrasts replication with federated access, walks through Salesforce Connect and external objects, and is just as clear about the cases where federation is the wrong call as the ones where it is the only rational answer."
+date: "September 29, 2026"
+author: "Adroit Consulting"
+readTime: "13 min read"
+tags: [Salesforce, Architecture, Data, Integration, Platform Engineering]
+---
+
+# Lesson 54: Federated Data: Salesforce Connect, External Objects, and When Not to Use Them
+
+Every integration lesson in this course up to now has shared one quiet assumption: the data you need in Salesforce winds up inside Salesforce. Lesson 16 took you through ETL and ELT pipelines that extract from a source, transform, and load a copy into the org. Lesson 53 built an integration hub that aggregates results from several systems and composes them on the Salesforce record. In both cases the working model was bring the data in, then use it locally.
+
+This lesson drops that assumption. **Federated data** is the architecture where Salesforce does not copy external data at all. It queries it in place, live, at the moment a user (or a report, or a Flow) asks for it. The record you see is not a snapshot that was synced an hour ago. It is whatever the source system says right now, pulled over the wire on demand and shown through a Salesforce interface. The mechanism that delivers this on the platform is **Salesforce Connect**, and the mechanism you build on top of it is the **external object**. [^1] [^2]
+
+Federation is powerful and it is seductive, and half of this lesson is about resisting it. The second half exists because the exam wants the architect who can say no with a reason attached. So we will build the case for federation, then carve out precisely when it fails.
+
+## Replication versus federation: two ways the data can be somewhere else
+
+Start with the distinction the whole lesson turns on. When your Salesforce org needs external data, you have two broad architectural options, and they differ in a way that matters more than any implementation detail.
+
+**Replication** moves the data. A pipeline extracts it from the source, transforms it if needed, and loads a copy into a Salesforce object. From then on there are two copies of the truth, and keeping them aligned is a maintenance problem you own forever. Every schedule, every field that drifts, every schema change in the source is your problem. Your org's storage grows with the copy, and your compliance scope widens, because now sensitive data lives in more than one system and each location is subject to its own policies. Lesson 16 and the big-object and archiving machinery from Lesson 17 are the replication world's tools. [^3]
+
+**Federation** leaves the data where it is. Salesforce defines a schema that describes external data, and at query time it sends the request to the source, gets back only the rows that match, and renders them through standard Salesforce interfaces. No periodic sync, no storage consumed in the org, no second copy to keep honest. The trade is that every access is a live network round trip to another system, so latency, availability, and the source's own performance sit directly on the critical path of your user experience. [^1]
+
+The architecture itself reduces to a single principle: **the data stays at the source, and the computation moves to the data.** [^1] You do not ship the data to the query. You ship the query to the data.
+
+## What Salesforce Connect actually is
+
+Salesforce Connect is the paid platform feature that makes federation work. It is the reason the org can turn an external system into what behaves, from the user's side, like just another object in Salesforce. It does this through a stack with three recognizable layers.
+
+The **external data source** is the connection definition. It names the external system, picks an adapter, and describes how to reach it: the endpoint, the authentication, the protocol. An org can have many external data sources, and a single source can expose several collections or entities. The object reference help draws the sensible line: if your external system hosts multiple services, create a separate data source per service endpoint so each points at its own service root URL. [^2]
+
+The **external object** is the schema projection. It is a custom object in every sense a user cares about: it has fields, it lives on page layouts, it appears in related lists, it is queryable with SOQL, it is reachable through the standard APIs. The difference is that the external object holds no rows. It is a definition of what the external data looks like, not a copy of the data itself. When you load a page that references it, Salesforce executes a live query against the source and returns the result set for that interaction. [^1] [^2]
+
+The **adapter** is the translation layer that understands the source. Salesforce ships adapters for the Open Data Protocol (OData 2.0 and OData 4.0), which let you federate any system that exposes an OData producer, such as SAP, Microsoft Dynamics, or IBM systems. When none of the stock adapters fit, you can write a **custom adapter** in Apex using the Apex Connector Framework, which can pull data from a REST API or even generate it programmatically. There is also a SQL adapter used to connect to analytical stores like Snowflake more directly, which we will come back to. [^1] [^2]
+
+A useful way to hold this in your head: the external data source is the pipe and the adapter is the translator, the external object is the face you present to users, and none of the three stores the data.
+
+## Query pushdown: the computation moves to the data
+
+The phrase "query the data in place" is doing real work, and the mechanism behind it is **query pushdown**. When a user runs a SOQL query against an external object, Salesforce does not pull the whole external table down and filter it locally. It reads your SOQL, translates the meaningful parts, and pushes them to the external system. [^1]
+
+What gets pushed is exactly what you would hope: the filters from the WHERE clause, the ordering from ORDER BY, and the pagination from LIMIT. The external system runs the query on its own compute engine and returns only the filtered result set. The source does the heavy lifting where the data actually lives, and only the answer travels back across the network to Salesforce. [^1]
+
+This is the property that makes federation feasible at all. If every query dragged the entire external dataset into Salesforce to be filtered there, the pattern would collapse under its own weight. Pushdown is what keeps a federated SELECT over a warehouse with millions of rows cheap: the millions of rows stay put, and a few dozen matching rows come back.
+
+It is also the property that sets the performance guardrail you must design around. The query is only as fast as the external system's ability to answer it, plus a network round trip. If the source cannot push the filter down, or answers slowly, your user waits.
+
+## Authentication and identity: the trust chain
+
+Federated access is still secure access, and the modern configuration strings together a specific chain of components. The architect guide lays it out as a dependency chain you should be able to recite for troubleshooting: the **Auth Provider** manages the OAuth handshake with the external system; the **External Credential** holds the access and refresh tokens in Salesforce's encrypted credential store and injects them into outbound callouts; the **Named Credential** defines the endpoint and references the External Credential; and the **External Data Source** references the Named Credential. If a federated query fails, you walk that chain from the outside in. [^1]
+
+The chain supports two identity models, and choosing between them is a governance decision, not a plumbing detail. **Named principal** uses one shared service account to authenticate every Salesforce user against the source. It is simpler, but the source cannot tell one user from another and cannot apply per-user access controls there. **Per-user principal** gives each Salesforce user their own OAuth token, so the source can enforce its own row-level security and keep a real per-user audit trail, at the cost of managing many more tokens and refresh flows. The architect guidance is direct: for regulated data or personal data, use per-user principal; when Salesforce sharing rules already provide the access control you need and simplicity matters more, named principal is fine. [^1]
+
+This matters for the security lessons you already have. Lesson 27's named-credential and certificate work, and Lesson 13's external-access and OAuth material, are exactly the foundations this chain sits on. Federation does not give you an excuse to skip them; it multiplies their importance, because now two security models are both enforcing access, simultaneously, on every query. [^1] [^5]
+
+## The hard constraints that shape the design
+
+Before any "when to use" judgment, an architect needs the numbers that bound the whole pattern. These come straight from the platform and they do not soften with intent.
+
+The Apex callout limit is **100 callouts per transaction**, and the cumulative external callout time budget is **120 seconds**. Every federated query that a transaction triggers is a callout, so a page or a Flow that touches several external objects, or queries one external object several times, can burn through the budget very fast. The SOQL row limit on a query is **50,000 rows**, which matters when a federated result set wants to be large. And there is an async restriction worth flagging early: Batch Apex and most asynchronous contexts restrict callouts, so external object access is best kept inside synchronous transaction boundaries. [^4]
+
+The design consequences write themselves. Do not query an external object inside a loop, ever. Push WHERE filters down to the source so the result set stays small and the callout frequency stays low. When a large result is genuinely needed, paginate instead of asking for everything at once. [^4]
+
+There is also a subtlety that trips people who come from replication. Zero-copy does not mean zero network traffic. Every query moves a result set from the source to Salesforce across the wire. For frequent access or heavy result sets, that egress and the latency it adds are real costs to budget, not abstractions to wave away. Federation trades away your storage copy in exchange for a live connection, and a live connection is exactly as reliable as the source it reaches. [^1]
+
+## When federation is the right call
+
+Salesforce's own architecture guidance is refreshingly concrete about where this pattern earns its keep. Use it when the read-only, on-demand nature of external objects is an asset, not a compromise.
+
+**The access is read-heavy and analytical.** If users mostly query and display external data in UIs, reports, or Flows without writing back, federation removes the pipeline entirely for the read-only case. No ETL to build, no sync to monitor.
+
+**Freshness is critical and stale data is a business risk.** Nothing says "confidence" like a sales rep quoting a credit limit that is six hours old. When out-of-date balances, inventory, or compliance status cause real harm, the federated model guarantees every query reflects the live source. There is no lag to be wrong by.
+
+**Governance and data residency are strict.** When regulation or contract forbids copying sensitive data into Salesforce, federation keeps the data in its authoritative location and only lets Salesforce look at it. One system holds the data. This is the direct answer to the residency and compliance pressures you saw in Lesson 48.
+
+**Dual-layer access control is actually desirable.** Both the source's native controls and the Salesforce security model can enforce simultaneously, neither replacing the other. That defense-in-depth is a feature when two organizations both have opinions about who may see a row.
+
+**The external system is already the source of truth, and it is clean and queryable.** If the data is already governed at the source, virtualizing it avoids redundant transformation, storage cost, and the divergence that inevitably grows between a copy and its original. [^1]
+
+Read that last one carefully. It is the tell that separates a good federation use case from a stretch. Federation shines when the source is already authoritative and well run. It does not fix a source that is messy; it just gives you a live window onto the mess.
+
+## When NOT to use it (the part the exam actually asks)
+
+This is the section to study twice. The architect guidance lists four reasons federation is the wrong choice, and each one maps to a class of requirement you will meet in real orgs and on the exam.
+
+**When low-latency writes are required.** External objects are read-only in the abstraction the platform presents. If the use case must write back to the source as part of the transaction, federation is not the tool; you need a different integration pattern entirely. Do not build a federation for a write-heavy workflow and then discover the write path does not exist the way you hoped.
+
+**When you need complex multi-object joins.** SOQL across multiple external objects does not support joins the way it does for native objects. The guidance is to pre-materialize joined data as a single view in the source system, so the external object you expose is already the joined shape you need. If your requirement is to join fresh external data across several tables on the fly, federation will force you to reshape the data at the source to make it work, which changes the whole cost of the pattern.
+
+**When Salesforce AI or Agentforce features need native data.** This is a hard and current boundary. Einstein and Agentforce features, including grounding for Einstein Copilot, predictive scoring, and Agentforce actions, currently operate on native Salesforce objects and do not support external objects as a grounding or activation data source. If AI activation is in scope for the data in question, federation is the wrong vehicle for it.
+
+**When the access pattern is high-frequency and high-volume.** External objects are designed for on-demand access. A workload that fires hundreds of queries per minute will exhaust governor limits and degrade performance. If your integration sends a constant stream of lookups, federation is a bus that cannot carry your traffic. [^1]
+
+To those four, add the practical ones the pattern itself implies. If the data must be searchable, indexed, or aggregated locally as though it were native, an external object will frustrate you, because there is no local copy to index and every aggregate pushes work out over a live call. If the source has no uptime or latency guarantee you can rely on, then every user-facing page that references external data inherits that risk, because there is no cache and no standing fallback. Mission-critical data may need a tiered answer: federated for real-time access, plus a lightweight replicated fallback for the handful of fields you cannot afford to lose when the source is down. [^1]
+
+## Worked example: live credit status on the Account page
+
+Put the decision to work with the scenario that appears in the architect guidance itself, because it is the clearest example of federation winning.
+
+A finance team keeps authoritative credit limits and balances in a governed external system. The sales org needs those balances visible on the Account page, because reps were committing to deals based on stale numbers. The old route was reverse ETL: a scheduled pipeline pushing credit values into a Salesforce object on a timer. It had two problems at once. The pipeline introduced lag, so the number a rep quoted could be hours old and wrong in the dangerous direction. And compliance flagged that holding sensitive financial data in Salesforce storage expanded the org's governance and residency surface. [^1]
+
+The federated answer touches every pattern in this lesson. The team exposes the finance view as an external object and puts it on the Account page layout. Every Account load triggers a live query that pushes down to the source and returns the current balance for that account only. The rep sees a live number. The sensitive data never lands in Salesforce storage, so the compliance scope stays at the source where it belongs. The reverse ETL pipeline is gone, along with its lag and its maintenance. [^1]
+
+Now the honest version, because the exam rewards the person who sees the edge. This works because the access is read-only, the volume per user is a single row on a single page, the freshness requirement is the whole point, and the source is authoritative. Change any one of those four facts and the same setup becomes the "when NOT to use it" list you just read. If someone needed to write the credit decision back into the finance system from Salesforce, or wanted to join the credit view against three other external tables with full query flexibility, or wanted Agentforce to ground a reply on that credit data, or wanted every rep polling it once a second, the external object would stop being the clean answer. That is the discipline the section demands: federation is a precise tool, and the precise conditions for it are the conditions above.
+
+## The decision questions
+
+When a requirement involving external data arrives at your review, run it through these questions in order.
+
+1. Is this read-only, or does it write back to the source? Writes send you to another pattern.
+2. Is the data freshness that matters satisfied by live access, or could a scheduled copy look wrong? Freshness-critical favors federation.
+3. Does the query need joins across multiple external objects, or can the source pre-materialize the shape you need?
+4. Is the access frequency low enough that a live callout per access stays inside budget, or is this a high-volume stream?
+5. Will Salesforce AI or Agentforce need to act on this data as native data?
+6. Is the source authoritative, governed, and reliable enough to sit on the critical path?
+
+Answer honestly and the pattern picks itself. Roughly, replication wins for writes, joins, high volume, and AI-native needs. Federation wins for read-heavy, fresh, strict-governance, dual-security, authoritative-source access. The architect who can run that filter without reaching for a hammer is the one who gets the credit limit right.
+
+## Try it
+
+1. In two sentences each, define replication and federation, and give the single principle that distinguishes them.
+2. Name the three layers of Salesforce Connect and say, for each, whether it stores external data.
+3. You are reviewing a design that exposes an external object and then plans to let a Flow aggregate across three external objects per transaction. Using the limits from this lesson, identify the two problems in that plan.
+4. A rep views an Account page that federates a credit balance from the source of truth. List the four "when NOT to use" reasons from this lesson and explain why none of them breaks this use case.
+5. A requirement must let an Agentforce action read external credit data as though it were native. What does this lesson tell you about federation for that requirement?
+
+For question 3, the answer is the callout budget and the join limitation: multiple external-object queries per transaction stack callouts toward the 100-per-transaction cap, and SOQL across multiple external objects does not support joins, so the aggregation would have to be reshaped at the source. That pairing is exactly what a reviewer should catch.
+
+## What's next
+
+This lesson showed how to query data in place without copying it. The next lesson turns the same instinct toward the relationship between large language models and enterprise data, covering **RAG architecture, the pattern that connects LLMs to enterprise data**. Where federation lets a human query the source and see its answer, RAG solves the related problem of letting a model ground its answers in authoritative enterprise data. Continue to Lesson 55 to see how retrievable, current, enterprise data becomes the anchor that keeps an LLM honest: fully the same concern for keeping answers live, accurate, and tied to the data that actually knows.
+
+[^1]: architect.salesforce.com. [Salesforce Data Virtualization](https://architect.salesforce.com/docs/architect/fundamentals/guide/data-virtualization.html)
+[^2]: developer.salesforce.com. [External Objects: Object Reference for the Salesforce Platform](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_external_objects.htm)
+[^3]: developer.salesforce.com. [Salesforce Help: Set Up Salesforce Connect to Access External Data with OData Adapters](https://help.salesforce.com/s/articleView?id=platform.platform_connect_setup.htm&type=5)
+[^4]: developer.salesforce.com. [Execution Governors and Limits](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_gov_limits.htm)
+[^5]: developer.salesforce.com. [Named Credentials and External Credentials](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_callouts_named_credentials.htm)
