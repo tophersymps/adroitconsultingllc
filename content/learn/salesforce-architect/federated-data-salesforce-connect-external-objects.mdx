@@ -28,6 +28,8 @@ Start with the distinction the whole lesson turns on. When your Salesforce org n
 
 The architecture itself reduces to a single principle: **the data stays at the source, and the computation moves to the data.** [^1] You do not ship the data to the query. You ship the query to the data.
 
+![Replication moves a copy into the org and owns its alignment forever, while federation leaves the data at the source and queries it live, trading away storage for a live connection](</diagrams/federated-data-salesforce-connect-external-objects/1-replication-vs-federation.png>)
+
 ## What Salesforce Connect actually is
 
 Salesforce Connect is the paid platform feature that makes federation work. It is the reason the org can turn an external system into what behaves, from the user's side, like just another object in Salesforce. It does this through a stack with three recognizable layers.
@@ -40,6 +42,8 @@ The **adapter** is the translation layer that understands the source. Salesforce
 
 A useful way to hold this in your head: the external data source is the pipe and the adapter is the translator, the external object is the face you present to users, and none of the three stores the data.
 
+![Salesforce Connect stacks three layers, none of which store data: the external object users query, the adapter that translates, and the external data source that defines the connection](</diagrams/federated-data-salesforce-connect-external-objects/2-salesforce-connect-layers.png>)
+
 ## Query pushdown: the computation moves to the data
 
 The phrase "query the data in place" is doing real work, and the mechanism behind it is **query pushdown**. When a user runs a SOQL query against an external object, Salesforce does not pull the whole external table down and filter it locally. It reads your SOQL, translates the meaningful parts, and pushes them to the external system. [^1]
@@ -47,6 +51,8 @@ The phrase "query the data in place" is doing real work, and the mechanism behin
 What gets pushed is exactly what you would hope: the filters from the WHERE clause, the ordering from ORDER BY, and the pagination from LIMIT. The external system runs the query on its own compute engine and returns only the filtered result set. The source does the heavy lifting where the data actually lives, and only the answer travels back across the network to Salesforce. [^1]
 
 This is the property that makes federation feasible at all. If every query dragged the entire external dataset into Salesforce to be filtered there, the pattern would collapse under its own weight. Pushdown is what keeps a federated SELECT over a warehouse with millions of rows cheap: the millions of rows stay put, and a few dozen matching rows come back.
+
+![Query pushdown translates the WHERE, ORDER BY, and LIMIT from a SOQL query and pushes them to the external system, so only the matching rows travel back over the wire](</diagrams/federated-data-salesforce-connect-external-objects/3-query-pushdown.png>)
 
 It is also the property that sets the performance guardrail you must design around. The query is only as fast as the external system's ability to answer it, plus a network round trip. If the source cannot push the filter down, or answers slowly, your user waits.
 
@@ -97,6 +103,8 @@ This is the section to study twice. The architect guidance lists four reasons fe
 **When the access pattern is high-frequency and high-volume.** External objects are designed for on-demand access. A workload that fires hundreds of queries per minute will exhaust governor limits and degrade performance. If your integration sends a constant stream of lookups, federation is a bus that cannot carry your traffic. [^1]
 
 To those four, add the practical ones the pattern itself implies. If the data must be searchable, indexed, or aggregated locally as though it were native, an external object will frustrate you, because there is no local copy to index and every aggregate pushes work out over a live call. If the source has no uptime or latency guarantee you can rely on, then every user-facing page that references external data inherits that risk, because there is no cache and no standing fallback. Mission-critical data may need a tiered answer: federated for real-time access, plus a lightweight replicated fallback for the handful of fields you cannot afford to lose when the source is down. [^1]
+
+![Federation is the wrong call for writes, multi-object joins, Salesforce AI needing native data, and high-frequency access: the four reasons the exam wants the architect to recite](</diagrams/federated-data-salesforce-connect-external-objects/4-when-not-to-use.png>)
 
 ## Worked example: live credit status on the Account page
 
