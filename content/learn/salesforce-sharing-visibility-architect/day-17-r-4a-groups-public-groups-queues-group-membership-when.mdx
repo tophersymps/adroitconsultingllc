@@ -1,0 +1,120 @@
+---
+title: "Groups: Public Groups, Queues, Group Membership, When to Use"
+slug: day-17-r-4a-groups-public-groups-queues-group-membership-when
+series: salesforce-sharing-visibility-architect
+lesson: 17
+excerpt: "Learn how public groups and queues aggregate users into named sets that sharing rules, permission sets, and workflows can target. Covers group membership options, the shape of a queue, and the decision of when a group is the right container for a recurring set of users."
+date: 2026-09-29
+author: Adroit Learning
+readTime: 15
+tags:
+  - public groups
+  - queues
+  - group membership
+  - sharing rules
+  - access to records
+---
+
+For the last two lessons you built sharing rules that target a named set of users. Today you finally study what that set actually is. The requirement for this lesson is a decision objective: given a scenario, determine how groups can support the record access requirements.[^5] It is asking you to recognize the recurring pattern that drives most sharing configurations: a set of users that keeps needing access to the same records, over and over, in multiple places. Groups exist precisely to stop you from repeating that user list by hand in each place.
+
+Here is the mental model to hold for the whole lesson. A public group is a named container of users that does nothing on its own. Its whole job is to be referenced by something else a sharing rule, a queue, a permission set. The value is in the one-to-many relationship: one group, referenced by many rules, so one membership change updates every referencing grant at once. Understand that, and you understand why the exam treats groups as the reusable target of sharing, and why the quiz answers today all point back to the same idea.
+
+## What a group is
+
+Salesforce has two kinds of user groups. A personal group is a list of users and public groups that an individual user creates for sharing their own records, visible only to the user who made it. Personal groups sit on the users record sharing page and are mostly a single-user convenience. The public group is the sharing construct that matters for the architect exam.[^1]
+
+A public group aggregates roles, territories, individual users, other public groups, and (for queues) queue members into a single named set. The name is yours to choose, and good naming is part of the job: something like "Finance Analysts" or "East Sales" tells everyone who reads a sharing rule what this set contains without opening the group.
+
+The key structural property is that a public group can contain almost any of the building blocks you have met so far, and it can nest other groups inside it. A group can hold individual users directly, whole roles, roles and their subordinates, territories, or other public groups. That nesting is what makes groups composable: you can build a group called "All Europe" that contains the territory "EMEA" and the public group "UK Field," and then any rule that targets "All Europe" gets the union of everyone in both.[^1]
+
+This is why the exam tip for this lesson calls groups the reusable target. A sharing rule, whether ownership-based or criteria-based, needs a group, a role, or a territory to share to. The rule does not accept a raw, hand-typed list of fifteen user IDs. When a scenario keeps referring to the same collection of people in three separate rules, the correct answer is to define that collection once as a public group, then reference the group everywhere.
+
+## Groups grant nothing by themselves
+
+Here is the trap that most people trip on, and the quiz asks it directly. A public group that nobody references grants nothing. Its members see no new records the moment the group is created, because membership in a group is not itself a grant. Access only appears when a sharing rule targets the group, or a queue makes the members implicit owners, or a permission set is assigned through the group.[^1]
+
+The plainest form of this question: a public group was just created but its members see no new records. What is the likely reason? The answer is that the group is not referenced by any sharing rule or queue yet. It is not a 24-hour propagation delay, it is not that OWD is too open, and it is not a license requirement. The group simply does nothing until something uses it. Once you create a sharing rule that targets the group, the members start seeing the shared records, and they see them as soon as the rule's recalculation completes, not on some arbitrary clock.[^3]
+
+Think of the group as a mailbox label rather than a delivery. Putting users into the group is like writing their names on a mailing list. The mails still need to be sent to that list by a sharing rule. Until a rule sends access to the list, everyone on the list receives nothing.[^4]
+
+## When to use a group: the recurring-set decision
+
+The decision of when a group is the right answer comes down to one question. Does this exact set of users recur across rules, queues, or permission assignments? If yes, a group is the tool, because it centralizes "who is in the set" in one place and a single membership change propagates to everything that references the group.
+
+The first quiz question is the canonical version of this decision. An org shares high-value accounts to a recurring set of 15 analysts across two roles, and this set is reused in three sharing rules. Which structure is best?
+
+Referencing the fifteen users individually in each rule is wrong twice over. First, sharing rule targets are groups, roles, or territories, not arbitrary lists of users, so the platform cannot cleanly express "these fifteen users" as a rule target. Second, even if it could, you would be maintaining the same list in three places, and adding one analyst to the team would mean editing three rules instead of one.
+
+A permission set for each rule is also wrong, because permission sets grant object and field access, not record access, and they do not express "these specific high-value accounts." A queue is wrong here too, because queues are for work distribution, not for sharing a recurring set of records to a team at a defined access level, and nothing about this scenario mentions claiming or processing records.
+
+The best answer is to create a public group with the analysts, then target that group in the rules. One group holds the 15 analysts that cross two roles, and every referencing rule, and any future rule or queue that needs the same set, points at the group. When an analyst joins the team, you add one user to the group and all three rules pick up the change at once.[^1][^4]
+
+That is the whole value proposition. Groups exist to turn a recurring collection of users into a single object that the rest of the sharing model can reference. Use them whenever you catch yourself naming the same set of people in a second, third, or fourth place.[^4]
+
+## Group membership options
+
+You have options for how to populate a group, and the choice affects how the group behaves as roles and users change. The standard options are: roles, subordinates in roles, roles and subordinates, individual users, other public groups, and territories.[^1] Each is a different granularity of "who is in the set."
+
+Roles-as-membership means the group contains everyone who has a particular role. Subordinates in roles adds everyone who reports up through that role in the role hierarchy. Roles and subordinates is the union of the two. Individual users lets you pick specific people who may not share a role. Other public groups nests a whole group inside this one. Territories adds the users who belong to a sales territory.
+
+The decision between these turns on how the team is defined. If the team maps cleanly onto a role and its hierarchy, membership by roles and subordinates keeps the group in sync with the org chart automatically: promote someone into the role and they join the group without a manual edit. If the team cuts across roles, individual users, or nested groups, you are curating a set by hand. The architect's job is to pick the membership style that makes the group true with the least ongoing maintenance.[^1]
+
+There is also dynamic membership. Salesforce supports moving users into and out of groups automatically based on criteria, which keeps membership current without manual edits. Not every group type supports dynamic membership, and the feature availability and setup path differ by context, so check the current documentation for the group type you are building before relying on it. When it applies, it is the strongest form of "the group stays accurate on its own," because users enter and leave the set as the underlying criteria change rather than when an admin remembers to update a list.[^1]
+
+## Queues: the group that can own work
+
+A queue is a special kind of group, and it earns its own section because it does two distinct jobs. Queues help teams manage shared workloads, and a queue can hold records that are waiting to be picked up. When records such as leads or cases are routed to a queue, they sit there unowned until a member claims them. The queue is the owner of record for that waiting period, the visible placeholder, and the members are the people allowed to take the records and make them theirs.[^2]
+
+The first job of a queue is work distribution. It gives a team a shared inbox with no single bottleneck: no one person owns the incoming leads, everyone on the queue can see them, and whoever is free grabs the next one. This is why queues are the standard answer for high-volume, undifferentiated incoming work such as web leads or case intake, where assigning each record to a specific person at creation would create idle work and missed records.[^2]
+
+The second job of a queue is implicit access. Queue membership grants members implicit access to the records in the queue, and it lets them see the queue and claim its records. This is the property the exam tests, and it is easy to confuse with a sharing rule. A member of the queue does not need a separate sharing rule to see the waiting records; the membership itself is what makes the queued records visible to them. Salesforce's own guidance is direct: queue members can jump in to take ownership of any record in a queue.[^2]
+
+This is exactly the second quiz question. Which statement about queues is true? The true statement is that queue members have implicit access to records in the queue. The other three are false: queues do not grant access to all records of an object, they do not replace the role hierarchy, and they absolutely can own records (that is the whole point of the waiting period). A queue is object-specific and its access is scoped to the records routed to it, not to every record of the object.[^2]
+
+## The shape of a queue
+
+A queue has a supported object, such as Case, Lead, or a custom object, and a set of members. The members can be individuals, roles, roles and subordinates, territories, or public groups. Naming a public group as a queue member is a neat intersection of the two concepts: you group the team once, then put the group in the queue, so the queue's membership inherits every future change to the group.[^2]
+
+Records enter the queue when something sets their OwnerId to the queue. That can happen through an assignment rule, a flow, an apex trigger, or manually. While the record owner is the queue, no human claims it, and the queue members can see it through their implicit access. When a member claims it, ownership transfers to that user and the record leaves the queue's implicit access, becoming subject to the normal sharing rules for an owned record.[^2]
+
+This ownership-less model is the distinguishing feature, and it is worth isolating for the exam. A queue lets records have an owner that is not a person. That single fact enables work distribution, since the record does not sit owned-but-stuck with one user, and it creates the implicit-access side effect that members can see and take the waiting work.
+
+## Config walkthrough: the numbered steps
+
+When a scenario asks you to set up groups and queues to support a record-access requirement, walk it in this order.
+
+1. In Setup, open Public Groups and create the groups that map to your recurring user sets. Name them by what the set is for, not by who happens to be in it today, for example Finance Analysts or East Sales.
+2. Populate each group's membership using the style that stays true with the least maintenance. Use roles and subordinates when the set follows the org chart, individual users and nested groups when it cuts across roles, and territories when geography defines the team.
+3. Reference the group wherever the set needs to receive access. Use it as the target of sharing rules, as a member in a queue, or in permission-set assignments.
+4. For work-distribution needs, create a queue, add members, and route records to the queue for ownership-less handling. Use groups as queue members so queue membership inherits team changes.
+5. Test that membership changes propagate. Add a new member to the group and confirm they immediately see the records shared to it through the referencing rules, and that queue members can see and claim queued records.
+
+## Exam traps to avoid
+
+The first trap is the lesson's thesis: a public group by itself grants nothing. It must be referenced by a sharing rule, a permission set, or a queue to have any effect on record access. Answers that treat creating a group as the completion of a grant are wrong, and the quiz tests this explicitly.[^1]
+
+The second trap is that targets of sharing rules must be groups, roles, or territories, not raw lists of individual users. When a scenario hands you "fifteen analysts across two roles, reused in three rules," do not try to enumerate them per rule. Build the group once and target the group.[^1][^4]
+
+The third trap is that queues give implicit access to queued records for members, which some candidates mistake for a sharing-rule requirement. If a scenario says queue members must see the waiting leads, that is satisfied by the queue membership itself, not by an additional sharing rule. And separately, a queue does not replace the role hierarchy or grant access to all records of its object; its access is scoped to the records routed to it.[^2]
+
+## Why this matters for the exam
+
+This requirement, "Given a scenario, determine how groups can support the record access requirements," sits in the Access to Records domain, which is 39% of the exam.[^5] It is the bridge from the mechanics of sharing rules into the design of the sharing model. The examiners want to confirm you can spot a recurring user set and realize it belongs in a group, that you understand a group does nothing until something references it, and that you can tell the difference between a group (a reusable access target) and a queue (a work-distribution owner). Those are the three decisions this objective tests, and they rest on the single insight that groups exist to be referenced.
+
+## Try it yourself
+
+In a scratch org, create a public group called Finance Analysts. Add two users to it, one with a role and one added individually, so you see both membership styles in one group. Create three Accounts and set Account OWD to Private. Now do nothing else and log in as one of the analysts. They should see no Accounts, because the group references nothing yet.
+
+Create a criteria-based sharing rule that shares Accounts where Stage equals Won with the Finance Analysts group at Read/Write. Give one of the three Accounts a Won stage. Log in as the analyst again and confirm they see exactly that one Account. Now create a queue with the Finance Analysts group as a member, route a new Account into the queue, and confirm the analysts can see and claim it through implicit access, no sharing rule needed for that waiting record.
+
+Finally, add a third user to the group and confirm they immediately see the shared Account. You have just demonstrated the entire lesson: the group is reusable, it grants nothing until referenced, and one membership change propagates to every thing that references it.
+
+## What's next
+
+Day 18, lesson 18, moves to the next requirement and closes the groups objective from the grouping side: group sharing scenarios, covering sharing sets and the decision of groups versus account and opportunity teams. Today you learned what a group is, that it grants nothing until referenced, and that a queue is the ownership-less work-distribution variant. Next you will compare groups against the team-based sharing mechanisms and work through scenarios where the choice of container changes the outcome. Bring the habit of asking whether your recurring set is really just a queue in disguise, because that distinction is exactly what lesson 18 puts to the test.
+
+[^1]: Salesforce, "Public and Personal Groups," Salesforce Help. <https://help.salesforce.com/s/articleView?id=platform.user_groups.htm&type=5>
+[^2]: Salesforce, "Set Up Queues," Salesforce Help. <https://help.salesforce.com/s/articleView?id=service.queues_overview.htm&type=5>
+[^3]: Salesforce, "Recalculate Sharing Rules Manually," Salesforce Help. <https://help.salesforce.com/s/articleView?id=platform.security_sharing_recalculating.htm&type=5>
+[^4]: Salesforce, "Sharing Rules," Salesforce Help. <https://help.salesforce.com/s/articleView?id=platform.security_about_sharing_rules.htm&type=5>
+[^5]: Salesforce, "Platform Sharing and Visibility Architect Exam Guide," Trailhead. <https://trailhead.salesforce.com/help/salesforce-certification-exam-guides/platform-sharing-and-visibility/>
