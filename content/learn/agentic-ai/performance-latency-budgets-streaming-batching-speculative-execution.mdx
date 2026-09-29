@@ -1,0 +1,134 @@
+---
+title: "Lesson 54: Performance: Latency Budgets, Streaming, Batching, and Speculative Execution"
+slug: performance-latency-budgets-streaming-batching-speculative-execution
+series: "agentic-ai"
+lesson: 54
+excerpt: "Lesson 53 made the model calls dependable: retries, timeouts, and circuit breakers so a call either eventually succeeds or fails cleanly. This lesson is about the calls that succeed but are too slow. It starts with a latency budget, the single number you allocate across an agent's pipeline so you know what good even means per step. Then it adds the levers that make the budget reachable: streaming to hide generation behind reading time, batching to amortize compute across many requests, and speculative execution to trade a little extra compute for a much shorter apparent wall-clock time. A worked example budgets a three-step support agent to a two-second ceiling, and a try-it prompt has you allocate your own."
+date: "September 29, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [LLMs, AI Agents, Performance, Latency, Streaming, Batching, Speculative Decoding]
+---
+
+# Lesson 54: Performance: Latency Budgets, Streaming, Batching, and Speculative Execution
+
+Lesson 53 kept a failing call from killing the system: retries with jitter, bounded timeouts, and a circuit breaker so a dead provider fails fast instead of cascading. That work answers a binary question, will a call succeed or not. It says nothing about how long a call that succeeds is allowed to take. A model call that returns a perfect answer in forty seconds is a success by every reliability metric and a failure by every human one.
+
+Performance for an agent is the difference between promising and delivering latency. The mistake most teams make is treating "slow" as one number to push down. It is not one number. An agent's latency splits into a few quantities that move with different levers, and the right lever depends on who is waiting: a human reading the answer as it streams, or another system blocking on the finished completion. [^1]
+
+The one idea to carry out: **latency is a budget you allocate, not a wall you hit. You decide how many milliseconds each step of an agent is allowed to take before you ship, you measure the two numbers that actually matter for your consumer (time to first token for a human, end-to-end latency for a machine), and then you spend the levers, streaming, batching, and speculative execution, on the portion of the budget that is over target.** [^1] [^2]
+
+## The two numbers that dominate agent latency
+
+Before any trick, you need the vocabulary. A large language model does not produce an answer in one step. It first processes the entire prompt, a phase called prefill, and only then generates output one token at a time, a phase called decode. That split produces two latency numbers, and they respond to different levers. [^1]
+
+Time to first token, or TTFT, is the delay from sending the request to receiving the first token of output. It is dominated by the prefill phase, which must ingest every input token before generation can start, so TTFT grows with prompt length. A 500-token prompt prefills fast; a 100,000-token document does not. TTFT is the model's equivalent of time to first byte in web performance: it measures responsiveness, not total speed. [^1]
+
+Time per output token, sometimes called TPOT or inter-token latency, is the average gap between tokens after the first. It is dominated by decode speed, which is bounded by how fast the model weights and KV cache can be read from memory. Typical targets sit around 10 to 50 milliseconds per token, which reads as 20 to 100 tokens per second for a single request. [^1]
+
+End-to-end latency is the sum: the TTFT plus every output token at its per-token rate. A response with a 300-millisecond TTFT and a 30-millisecond per-token rate still takes over 15 seconds if the model writes 500 tokens. That arithmetic is the whole reason you cannot judge an agent by TTFT alone. [^1]
+
+Who is waiting decides which number is the binding one. A human reads as the tokens stream in. Once the model streams faster than a person reads, which is somewhere past 20 tokens per second, the user never waits on the model again; the only wait they consciously feel is the silence before the first token. For a human, TTFT is the experience, and cutting TPOT further past reading speed is imperceptible. An agent, in contrast, does not read as it goes. Each step blocks on the full completion before it can act, so end-to-end latency and per-token speed across long outputs dominate, and TTFT barely matters. [^1] This split is the first decision you make: who is on the other end of this request.
+
+![TTFT versus time per output token: prefill sets the first-token wait while decode sets the steady stream, and the same request takes over fifteen seconds if it writes five hundred tokens even at a fast TTFT](</diagrams/performance-latency-budgets-streaming-batching-speculative-execution/1-ttft-versus-tpot.png>)
+
+## Latency budgets: decide what good means first
+
+A latency budget is the reverse of measuring what you got. You declare the total acceptable latency for a workflow before you ship, decompose it into a per-step allowance, and then treat every step that exceeds its slice as a defect to fix rather than a number to accept. Teams that skip the budget skip the hard part: they optimize whatever is slowest today and never build a contract for what the whole flow is supposed to take.
+
+Set the budget from the consumer, not from the model. Ask what the outcome demands. A customer support ticket that a human is actively waiting on should answer in a couple of seconds; a batch summarization job that runs overnight has no such constraint and should not be optimized as if it did. [^2] A good definition from the field: choose the target that makes the product feel responsive to its users, then allocate the time backward across the pipeline. [^3]
+
+Once you have the total, slice it. An agent is rarely one model call. It is a chain: retrieve, craft the prompt, call the model, validate, maybe call again. Each step takes a share of the budget, and the shares are not equal. Prefill and decode dominate, so the model calls get the biggest slices, but retrieval and validation are not free, and their slices are what people forget to reserve.
+
+There is a second, quieter role for the budget beyond the user experience. It sets your SLO. Lesson 38 turned "reliable enough" into a measured target; the latency budget is the same move applied to speed. You can only alert on a response being too slow if you defined who it is slow for and by how much, which is exactly what the budget gives you. [^4]
+
+## Streaming: hide generation behind reading time
+
+Streaming is the cheapest lever and the one with the largest perceived effect, but only for human consumers. Instead of returning the whole answer at once, the server sends tokens as they are generated, so the client displays first content at TTFT instead of at end-to-end latency. The difference between the two is often an order of magnitude: time to first content drops from ten seconds to under a second, and from then on the user is reading faster than the model writes. [^1] [^5]
+
+Server-Sent Events, SSE, is how it is done. Every major provider streams tokens over SSE because LLM token streaming is one-way, the client sends a prompt and the server sends tokens back, and that is exactly the pattern SSE was built for. Lesson 26 covered the protocol detail; here the point is the effect on the budget. A response that is not streaming lets a 500-token answer cost fifteen seconds of perceived wait. The same answer streamed costs the TTFT, under a second, to first content, and the rest passes at reading speed. [^5]
+
+The discipline that makes streaming work is the skeleton. The user sees nothing during the TTFT window unless the UI deliberately shows something: a status line that says "searching your documents," a skeleton of the response shape, a progress indicator for a long prefill. [^3] The moment the user is told work is happening, the silent TTFT window changes from a freezing bug to a normal step.
+
+Streaming does not help an agent talking to a system. A downstream service cannot act on partial completions, so streaming there just moves the same fifteen seconds around without hiding it. If the consumer of a model call is another component, turn streaming off and treat end-to-end latency as the number to optimize. This is the same human-versus-machine split from the start of the lesson, now with a concrete answer: stream for a human, batch for a machine. [^1]
+
+![Streaming hides generation behind reading time: a streamed ten-second answer shows first content in under a second and passes the rest at reading speed, while the same answer as a full response costs the whole ten seconds of perceived wait](</diagrams/performance-latency-budgets-streaming-batching-speculative-execution/2-streaming-hides-generation.png>)
+
+## Batching: amortize compute across many requests
+
+Streaming fixes perceived latency for one request. Batching fixes throughput when there are many. The raw problem is that a transformer generates tokens one at a time, so a single request spends most of its time idle waiting for the next token. A batch runs several requests through the same decode steps together, which amortizes the fixed cost of loading the model across all of them and keeps the GPU busy. [^6]
+
+But batching has a naive version that nearly everyone outgrows. Static batching locks a set of requests together for the whole run. The batch waits for its slowest member to finish before any of them can leave, so short requests sit idle while one long request keeps the batch open. Waste grows as the variance in output lengths grows, and real workloads are all variance. [^6]
+
+Dynamic batching improves this by grouping requests within a short admission window, but it still runs the batch as a unit to completion once the window is full. [^6] The step change is continuous batching, also called iteration-level scheduling or in-flight batching. Instead of fixing the batch at admission, the server admits and evicts requests at every single decode step: a finished sequence leaves immediately and a waiting one takes its slot. It is the difference between a bus that waits for every passenger to leave the route and a bus that drops passengers off wherever they are heading. [^6] [^7]
+
+The numbers are the reason this matters. Using vLLM's continuous batching, the team behind it reported up to 23 times higher throughput on a realistic workload while also cutting p50 latency, because the GPU stops idling between generations. The ORCA paper that introduced iteration-level scheduling at scale reported a 36.9 times throughput improvement over a baseline at equivalent latency targets. [^6] [^8] These are system-level wins, not model changes, which is why the first thing you reach for when a serving tier is under-provisioned is the batching runtime, not a faster model.
+
+The trade you must hold in your head: batching trades latency for utilization, and the trade is not free for per-request users. Adding a new request to an existing batch often delays the requests already there, which is why continuous batching alone does not set your latency budget. As load rises and batch size grows, opportunities to admit new requests shrink and per-request latency climbs. Under saturation, the batch is the whole point and the individual request loses. [^6] [^8]
+
+![Batching amortizes compute: static batching makes every request wait for the slowest member of its batch, while continuous batching admits and evicts requests at every decode step so the GPU stops idling and short requests leave immediately](</diagrams/performance-latency-budgets-streaming-batching-speculative-execution/3-batching-modes.png>)
+
+## Speculative execution: trade compute for wall-clock
+
+The last lever is speculative execution, and it is the most counter-intuitive: spend extra compute to make a request finish sooner. A model's decode is sequential, each token depends on the one before it, so a single forward pass produces exactly one token and the whole output string takes that many passes. Speculative decoding breaks the dependency by running a cheap guesser ahead of the expensive model.
+
+Here is the mechanism. A small, fast draft model guesses several tokens in advance, say the next four. The large target model then verifies all four guesses in a single forward pass instead of four sequential ones. The guesses the target accepts are kept, so the target produces multiple tokens per expensive pass. Only when the target disagrees does it regenerate from the point of divergence. The acceptance rate, how often the draft's guesses match the target, decides the speedup, and it is high exactly where a small model agrees with a big one: predictable, stable, low-entropy text. [^9] [^10]
+
+The expected gains are real but bounded, on the order of 1.3 to 3 times faster generation, and usually not dramatic enough to save a runaway conversation. Applied to an 11-billion-parameter model using a 60-million-parameter draft model for a translation task, the original speculative decoding paper reported roughly a three times improvement in speed. On AMD hardware, benchmarks landed in a 1.3 to 3 times range across models and frameworks. [^11] [^12]
+
+The conditions that make it pay off are the ones worth memorizing. Speculative decoding needs the draft model to be much smaller and faster than the target, with forward-pass latencies in a similar ratio, and it needs the draft to be accepted at least once per call on average. It is a memory-bandwidth optimization, so it shines at small batch sizes where a single request is memory-bound; as the batch grows past a point, the workload becomes compute-bound and the trick fades. Benchmarks show the speedup shrinking steadily with batch size, turning into a slowdown somewhere past a batch of 8 to 32 depending on the runtime and mode. [^12] So speculative execution is the right lever for a latency-sensitive, single-stream request, and the wrong one for a saturated shared tier that is already batching hard.
+
+Speculative execution is also the one lever in this lesson you apply with a dial rather than a switch. It should never be the first thing you reach for. Streaming and batching give you more for less effort, and speculative decoding adds complexity, two models to keep in sync, and a runtime that supports it. Turn it on only when the budget is still over target after the cheap levers and the workload is smaller batch and higher per-request latency. [^2]
+
+![Speculative execution trades compute for wall-clock: a small draft model guesses four tokens ahead, the large target verifies them in one forward pass, and the accepted guesses let the target emit multiple tokens per expensive pass](</diagrams/performance-latency-budgets-streaming-batching-speculative-execution/4-speculative-execution.png>)
+
+## Worked example: budgeting a three-step support agent
+
+Put it together on a concrete system. A customer support agent takes a customer's question, retrieves context from a knowledge base, and then generates a reply that the customer reads live in the browser. The whole flow has a two-second budget, set because a human is actively waiting and anything longer reads as broken.
+
+First, allocate the budget by step. Retrieval is allowed 300 milliseconds. Prefill for the assembled prompt, given a moderately sized retrieved context, is allowed 500 milliseconds, which is the TTFT that the customer actually feels. Decode is allowed the remaining 1,200 milliseconds, which at a 30-millisecond per-token rate covers about 40 output tokens, a fine short answer for a support reply. Total, two seconds.
+
+Now decide the consumer for each part. The customer reads the answer, so decode is streamed over SSE; the customer sees the first token at 800 milliseconds, retrieval plus prefill, and the rest of the two-second answer passes at reading speed, so the perceived wait is under a second even though the compute ran the full two. [^1] [^5]
+
+The tuning then depends on what breaks. If TTFT comes in at 1,500 milliseconds instead of 500 during peak load, the cause is either a longer prefill than budgeted or queueing from too much batching, and the fix is to trim prompt tokens or split the batch. If end-to-end latency blows past two seconds because the model writes 300 tokens instead of the budgeted 40, the fix is not a faster model approach, it is tightening the prompt so the answer does not run long, because per-token rate was never the binding constraint. If the request is single-stream and latency-bound, speculative decoding is worth testing; if the tier is saturated with many requests, batching throughput is the real fix. [^1] [^6] [^12] Each symptom points at a different lever, and the budget is what makes the symptom visible in the first place.
+
+## Layer the levers in the order you reach for them
+
+There is a sane order, and it matches increasing cost and complexity.
+
+1. Decide the budget first, from the consumer and the workflow, and slice it by step so you know which part is over. [^3]
+2. Stream every answer a human reads. It is nearly free and hides the bulk of generation time behind reading speed. [^5]
+3. Put serving on a continuous-batching runtime so throughput is high and median latency is low before you tune anything else. [^6]
+4. Measure TTFT and end-to-end latency against the budget, and fix the step that is over rather than the step that is merely fastest to change. [^1]
+5. Test speculative execution only if a latency-bound, low-batch request is still over budget after the first four. [^12]
+
+## The pitfall to avoid
+
+The most common failure is optimizing the wrong number for the consumer. Teams aggressively cut the per-token rate because the dashboard shows it slow, when the user is a human who stopped noticing token rate the moment it passed reading speed. Or they add batching to a single interactive request and wonder why it feels slower, because batching is a throughput lever and they had a latency problem. [^1] The budget exists to prevent exactly this: it names the binding constraint, human TTFT or machine end-to-end, before you spend effort, so you do not pour time into a lever that does not move the number you committed to. [^2]
+
+## Try it
+
+1. **Write a latency budget for an agent you have built.** Pick one workflow, set the total from the consumer, and slice it by step: retrieval, prefill, decode, validation. For each step write the milliseconds you are willing to pay. [^3]
+2. **Decide the consumer per call.** For each model call in that workflow, say whether it feeds a human who reads or a machine that blocks. If a human, confirm streaming is on and altitude focuses on TTFT. If a machine, confirm streaming is off and the budget stewards end-to-end latency. [^1]
+3. **Read the two numbers.** Run the workflow and record time to first token and end-to-end latency side by side. Identify which step exceeds its slice of the budget, and name the one lever, stream, trim, batch, or speculate, that addresses it. [^1]
+
+## Summary
+
+Latency for an agent is a budget, not a wall. You set the total from the consumer, slice it across the pipeline, and then spend the levers on the step that is over. Two numbers, time to first token and end-to-end latency, dominate, and who is waiting decides which one binds: a human feels the TTFT and reads through the rest, a machine blocks on the whole completion. Streaming hides generation behind reading time for humans. Batching amortizes compute across requests for throughput, with continuous batching the version that does not waste the GPU. Speculative execution trades a little extra compute for faster wall-clock on low-batch, latency-bound requests. You have made the calls dependable; now you have made the ones you keep fast.
+
+## What's next
+
+You can now budget, stream, and integrate a single agent's latency. Lesson 55 widens the lens from one fast agent to many: scaling agent workloads, meaning horizontal scaling, queues, and worker pools. Where this lesson made a single request fast, the next one handles the question of what happens when thousands of requests arrive at once, how you add capacity by spreading work across workers instead of just tuning one, and how a queue smooths a burst so the whole system stays inside its budget rather than drowning in it.
+
+[^1]: ClickHouse. [LLM inference latency: TTFT, tokens per second, and what to measure](https://clickhouse.com/resources/engineering/llm-inference-latency)
+[^2]: Inworld. [Inference Latency Optimization: A Practical Map of the Levers That Matter](https://inworld.ai/resources/inference-latency-optimization)
+[^3]: AI/TLDR. [Designing for LLM Latency: Streaming UX Patterns](https://ai-tldr.dev/learn/building-ai-apps/ai-ux-patterns/designing-for-llm-latency/)
+[^4]: Anyscale. [Understand LLM latency and throughput metrics](https://docs.anyscale.com/llm/serving/benchmarking/metrics)
+[^5]: buildmvpfast.com. [SSE vs WebSockets for Streaming LLM Responses](https://www.buildmvpfast.com/blog/streaming-llm-responses-sse-vs-websockets-2026)
+[^6]: Baseten. [Continuous vs dynamic batching for AI inference](https://www.baseten.co/blog/continuous-vs-dynamic-batching-for-ai-inference/)
+[^7]: tianpan.co. [Continuous Batching: The Single Biggest GPU Utilization Unlock](https://tianpan.co/blog/2026/04/09/continuous-batching-llm-inference)
+[^8]: Anyscale. [Achieve 23x LLM Inference Throughput and Reduce p50 Latency](https://www.anyscale.com/blog/continuous-batching-llm-inference)
+[^9]: Google Research. [Looking back at speculative decoding](https://research.google/blog/looking-back-at-speculative-decoding/)
+[^10]: NVIDIA Developer. [An Introduction to Speculative Decoding for Reducing Latency in AI Inference](https://developer.nvidia.com/blog/an-introduction-to-speculative-decoding-for-reducing-latency-in-ai-inference/)
+[^11]: BentoML. [Get 3x Faster LLM Inference with Speculative Decoding](https://www.bentoml.com/blog/3x-faster-llm-inference-with-speculative-decoding)
+[^12]: AMD ROCm. [Accelerating LLM Inference: Up to 3x Speedup on MI300X with Speculative Decoding](https://rocm.blogs.amd.com/artificial-intelligence/spec_decode_mi300x/README.html)
