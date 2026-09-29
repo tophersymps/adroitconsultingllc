@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "react-19-3-two-environment-apis-2026",
+    "title": "React 19.3: First-Class APIs for Two-Environment Rendering",
+    "excerpt": "React 19.3 stabilizes four APIs that remove the friction of rendering a component once on the server and again in the browser.",
+    "category": "React & Web Dev",
+    "categoryColor": "react",
+    "categoryGradient": "from-emerald to-emerald-dark",
+    "date": "September 29, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "React",
+      "React 19.3",
+      "Server Rendering",
+      "View Transitions",
+      "Web Development",
+      "Hydration"
+    ],
+    "bannerImage": "/banners/react-19-3-two-environment-apis-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "agent-pipeline-repair-loop-2026",
     "title": "The Repair Loop: Keeping Autonomous Pipelines Running",
     "excerpt": "Autonomous pipelines survive on the loop around them: stall detection, auto-pause, resume, alerting, and a hard escalation boundary. Here's how to build it.",
