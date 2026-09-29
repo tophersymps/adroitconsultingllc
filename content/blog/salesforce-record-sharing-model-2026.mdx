@@ -1,0 +1,93 @@
+---
+title: "Who Can See What: The Salesforce Sharing Model, Decoded"
+slug: salesforce-record-sharing-model-2026
+excerpt: "Every Salesforce build inherits a sharing model few teams map. OWD, grants, sharing rules, and Apex managed sharing stack into one verdict: who sees a record."
+category: "Salesforce"
+categoryColor: sf
+categoryGradient: "from-sky to-sky-dark"
+date: "September 29, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "14 min read"
+tags: [Salesforce, Security, Sharing, Apex, Data Access]
+bannerImage: /banners/salesforce-record-sharing-model-2026.png
+---
+
+Ask an admin how a specific Salesforce record became visible to a specific user and the honest answer is usually a shrug. The org works, until the day a wrong person sees a case they should not, or a sales rep cannot see the account their teammate owns, and nobody can explain the access. The reason is structural: record access in Salesforce is the output of a stack of separate grants that compose together, and the model is rarely mapped as a whole. This article is that map. It covers the object, field, and record layers; the five grant sources that decide who sees what; the implicit sharing that runs silently underneath; the tools you have when declarative sharing is not enough; and how the API 67.0 security-default flip changes every Apex path through that model. The goal is that the next time somebody asks why a user can see a record, you can trace the answer instead of guessing. It sits alongside our [Apex v67 migration guide](/field-notes/apex-summer-26-security-v67-migration) and our [Org-wide wiring walkthrough](/field-notes/salesforce-integration-seams-2026): this is the security layer both assume.
+
+## The three layers under every "can they see it" question
+
+Salesforce splits data security into object, field, and record levels, and they are enforced independently[^1]. Object-level security decides whether a user can read, create, edit, or delete records of a given object at all, governed by profiles and permission sets. Field-level security (FLS) decides which fields on those objects the user can see and edit, down to a single field, also controlled by profiles and permission sets[^1]. Record-level access decides which individual records the user can actually reach, and it is the layer this article is about, because it is the one that runs on grants and not on a single toggle.
+
+![The three security layers stack independently: object-level access gates whole objects through profiles and permission sets, field-level access gates individual fields through field-level security, and record-level access gates individual rows through the sharing model](</diagrams/salesforce-record-sharing-model-2026/1-three-layers.png>)
+
+The composing rule matters more than any single layer. These are not alternatives, they are ANDs. A user only sees a record if they pass object security, field security, and record security for that record. Removing a user from a sharing grant is meaningless if the object is already public read/write, and locking down an object is meaningless if a sharing rule hands out access anyway. Audits miss leaks because they check one layer and assume the other two are fine.
+
+## The two halves: object access and the sharing model
+
+Record-level access in modern Salesforce is really two systems working side by side. The first is object access, the profiles, permission sets, and "View All"/"Modify All" object and data permissions that act on every record of an object at once. The second is the sharing model, which narrows that base down on a per-record basis: an object's organization-wide default (OWD) sets how much access every user has by default, and then additional access is layered on top[^2][^3]. Think of OWD as the floor and the grants as everything built above it.
+
+Salesforce's own characterization is precise: administrators first set an object's organization-wide default sharing access level, and then grant additional access based on record ownership, the role hierarchy, sharing rules, and manual sharing, after which developers can use Apex managed sharing to grant further access programmatically[^3]. Most of that sharing is maintained in a related sharing object, one per object, effectively an access control list[^3]. Every individual grant you create is a row in that list.
+
+## The five grant sources, and the rule that governs them
+
+The sharing model has two broad families of grants. Explicit sharing is declared by an admin or a user: sharing rules and manual shares are the declarative examples. Implicit sharing is granted by the system itself based on record relationships and role structure, and you cannot directly edit it[^3]. Within that, the five grant sources are record ownership, the role hierarchy, sharing rules, manual sharing, and Apex managed sharing[^3]. A record's final access is the union of everything that grants it, and the governing rule is that the most permissive level of access wins[^3].
+
+![The five grant sources stack on top of the organization-wide default, and the most permissive access level among them decides the record's final access, with record ownership and the role hierarchy at the base and sharing rules, manual shares, and Apex managed sharing layered above](</diagrams/salesforce-record-sharing-model-2026/2-grant-sources.png>)
+
+Record ownership is the origin: every record has an owner, and the owner is automatically granted full access to view, edit, transfer, share, and delete it[^3]. The role hierarchy extends that by giving users above an owner in the hierarchy the same access to records the owner owns or has shared, and notably the role hierarchy is not stored as sharing rows, it is derived at runtime[^3]. Share rows for ownership and hierarchy carry the row cause `Owner` and are maintained automatically.
+
+Sharing rules are criteria- or owner-based blocks that grant a group or role access to records in scope, and they can never be stricter than the OWD, they only grant greater access[^4][^3]. They carry the row cause `Rule`. Manual sharing, row cause `Manual`, is the end-user's tool, a record owner or a user with full access sharing one record with a user or group, and it is removed automatically if the record changes ownership or if the grant stops exceeding the OWD[^3]. Apex managed sharing is the developer's lever: code that creates sharing rows programmatically, with a developer-defined reason, used when neither the declarative tools nor the standard objects can express the sharing rule[^3][^5].
+
+The scale limits matter when you design. An object can carry up to 300 total sharing rules, including up to 50 criteria-based or guest-user rules where the object supports them[^4]. So the shared trap is real: you cannot express every access policy as a sharing rule at scale, which is why a data model that leans on fine-grained record sharing usually ends up pushing the load into Apex, control tables, or a flatter sharing design.
+
+## Implicit sharing: the access you never granted
+
+The piece of the model that surprises people is implicit sharing, because it is not a grant you made, it is a grant the system made for you. Salesforce maintains it to support collaboration between sales teams, service representatives, and customers, and it cannot be altered directly through the user interface or the API[^3][^6]. The canonical example is the parent-child relationship: a user who can see a child record usually inherits read access to the parent through the relationship, even if nothing has ever explicitly shared that parent with them[^6].
+
+The mechanism is worth stating plainly because it is a common leak source in portlets and Experience sites. OWD for a child object can be set to Public Read/Write while the parent stays private, and a user who legitimately reads the child then inherits read access to the parent account, which may expose a whole account record the business never meant them to see[^6]. Implicit shares carry row causes like `ImplicitChild` and `ImplicitParent`, so when you audit a grant you are not sure you created, that is how you identify it[^3].
+
+The design discipline that prevents the leak is to model parent-child OWD deliberately and to remember that child visibility can imply parent visibility. If an Experience Cloud site or an agent gives a user read access to support cases, check what those cases pull up with them. The guest-user variant is the sharpest version of this, because a public site's guest profile plus an implicit share can cross an account boundary nobody intended, which is exactly the class of over-permissive guest config that Salesforce has documented being actively exploited[^7].
+
+## When the declarative model is not enough: Apex managed sharing and the API 67 flip
+
+Recording that "modify all data" limitation matters: only users with the Modify All Data permission can add or change Apex managed sharing on a record[^5]. So Apex managed sharing is not a backdoor for the average admin, it is a tool for trusted system developers with a specific access right, and it is also what you reach for when a sharing rule cannot express a relationship, for example a lookup relationship where sharing should follow a field value that no standard rule supports. The share row you create in Apex is maintained when the record owner changes, unlike a manual share which is dropped on a transfer, and it stays while it grants access beyond the OWD[^5].
+
+This is where the API 67.0 security-default changes land, and they change the security posture of every Apex path that reads records. In API version 67.0 and later, Apex runs in user mode by default, meaning the running user's permissions and field-level security are enforced during execution; in version 66.0 and earlier, system mode was the default[^1][^8]. A class with no explicit sharing declaration now defaults to `with sharing` in version 67.0 and later, where it used to default to `without sharing` in most cases[^1][^8]. And the `WITH SECURITY_ENFORCED` SOQL clause is removed entirely in favor of `WITH USER_MODE`[^1][^8].
+
+![Before and after the API 67.0 change: database operations and queries previously ran in system mode with field-level security not enforced and classes defaulting to without sharing, and now they run in user mode enforcing the running user's sharing rules, field-level security, and object permissions, with the with sharing default and WITH USER_MODE replacing WITH SECURITY_ENFORCED](</diagrams/salesforce-record-sharing-model-2026/3-api67-flip.png>)
+
+The practical consequence for the sharing model is that code you did not write with security in mind now applies the user's record access by default, which is safer but not free. An Apex query that used to return everything now filters to what the running user can see, so a class written and tested on version 66.0 can behave differently on 67.0 for a restricted user[^8]. If you need the pre-change behavior you ask for it explicitly with `WITH SYSTEM_MODE` or a `without sharing` class[^1]. The rule to test both scenarios, the integration user with broad access and the restricted end user, before you advance a class, is the load-bearing advice[^8]. We hit exactly this in our own delivery pipeline: after the v67 advance, an automation that had always returned a full result set silently returned only the running user's share of it, and the fix was to state the access mode explicitly and test the restricted-path user, not to assume the old broad behavior.
+
+## Enforcing CRUD and FLS in code: user mode, stripInaccessible, and describe
+
+Once you accept that the sharing model runs through Apex, the enforcement question becomes how you keep object and field security honest inside that code, in addition to record access. The modern answer is to run in user mode and let the platform enforce, then use the explicit enforcement tools for the edge cases[^9].
+
+Apex runs in user context by default, applying the current user's object permissions and FLS during execution[^9]. To ignore those permissions you have to explicitly set the database operation or query to system mode[^9]. For sanitizing data that has already been read by broad code, or that was deserialized from an untrusted source, the `Security.stripInaccessible()` method removes fields and relationship fields the user cannot access from query and DML results before they reach anything downstream[^9]. And for the most granular control, `Schema.DescribeSObjectResult` and `Schema.DescribeFieldResult` let you check the current user's access to an object or a field before you run a specific operation[^1].
+
+![How to keep object and field security honest inside Apex: run in user mode by default and let the platform enforce, use Security.stripInaccessible to strip fields the user cannot access before any downstream use, and check object and field access explicitly with describe methods when a decision depends on it](</diagrams/salesforce-record-sharing-model-2026/4-enforce-crud-fls.png>)
+
+The pattern language is short. Default to user mode, because that is now the secure default and the least code. Use `stripInaccessible` when you are about to hand queried records to a component or an agent and you need to guarantee the output carries no field the user cannot see. Use describe checks when you need to branch behavior on access, for example hiding a button a user lacks permission to use. All three keep Apex aligned with the same AND rule the whole model runs on: object, field, and record access all have to pass.
+
+## The sharing model as a maintenance surface
+
+Record access is not a one-time configuration, it is a system you maintain, and the maintenance cost is a feature of how you build it. The DRAES (Designing Record Access for Enterprise Scale) guidance is blunt about this: what looks like a simple change, moving a user from one branch of the role hierarchy to another, triggers a substantial recalculation of everyone's access to that user's data[^10]. Sharing roles get re-derived, sharing rules that include the old or new role as their source get recalculated, and customer or partner accounts move their child access along with the user[^10].
+
+This means the choice of grant source is also a maintenance-budget decision. Role hierarchy access is derived, not stored, so it stays cheap to maintain but can surprise you when a reorg propagates. Sharing rules are stored and recalculated, so they cluster the access a group shares, but they have the 300-rule object ceiling and can be slow to recalc at scale. Manual shares are the cheapest to create and the easiest to let rot, because each is a one-off grant that disappears on ownership change. Apex managed sharing is the most controllable and the only Maintain-on-owner-change option besides the hierarchy, but it is code, with all the review, deployment, and testing that implies[^3][^5].
+
+## Decode the answer, not the guess
+
+Put the model together and a trace falls out for any "why can this user see this record" question. Start with object access: does their profile or permission set let them touch this object at all? Then field-level security: can they see this specific field? Then the record level: what is the OWD for this object, and which grant sources apply, ownership, role hierarchy, sharing rules, manual shares, or an Apex share, and which is the most permissive? And because implicit sharing may have inserted a parent grant you never created, check the row cause before you rule anything out.
+
+Salesforce's own posture is that the 2026 security changes pushed in one direction: enforce the user's access by default and make the broad-access path explicit[^8]. The sharing model was always there, but the API 67 default flip turned it from something you could ignore in code into something every Apex call enforces whether you thought about it or not. Map the grants, understand the AND across the three layers, and watch the implicit shares. That is the whole discipline, and it turns a shrug into a trace.
+
+[^1]: Salesforce, "Apex Security and Sharing Model." [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_security_sharing_chapter.htm)
+[^2]: Salesforce Help, "Set Up Your Users' Object, User, and Field Permissions." [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.security_data_access_mgmt.htm&language=en_US&type=5)
+[^3]: Salesforce, "Understanding Sharing" in the Apex Developer Guide. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_bulk_sharing_understanding.htm)
+[^4]: Salesforce Help, "Sharing Rules." [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.security_about_sharing_rules.htm&type=5)
+[^5]: Salesforce, "Sharing a Record Using Apex" in the Apex Developer Guide. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_bulk_sharing_creating_with_apex.htm)
+[^6]: Salesforce, "Designing Record Access for Enterprise Scale: Implicit Sharing." [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.draes.meta/draes/draes_object_relationships_implicit_sharing.htm)
+[^7]: Salesforce, "Essential Actions to Secure Experience Cloud Guest User Access." [salesforce.com](https://www.salesforce.com/blog/protecting-your-data-essential-actions-to-secure-experience-cloud-guest-user-access/)
+[^8]: Salesforce, "Database Operations Run in User Mode by Default, Not System Mode," Summer '26 Release Notes. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=release-notes.rn_apex_default_user_mode.htm&release=262&type=5)
+[^9]: Salesforce, "Enforce Object and Field Permissions" in the Apex Developer Guide. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_classes_perms_enforcing.htm)
+[^10]: Salesforce, "Designing Record Access for Enterprise Scale: Group Membership Operations and Sharing Recalculation." [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.draes.meta/draes/draes_group_membership.htm)

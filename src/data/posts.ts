@@ -25,6 +25,28 @@ export const posts: BlogPost[] = [
     "status": "published"
   },
   {
+    "slug": "salesforce-record-sharing-model-2026",
+    "title": "Who Can See What: The Salesforce Sharing Model, Decoded",
+    "excerpt": "Every Salesforce build inherits a sharing model few teams map. OWD, grants, sharing rules, and Apex managed sharing stack into one verdict: who sees a record.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "September 29, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "14 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "Security",
+      "Sharing",
+      "Apex",
+      "Data Access"
+    ],
+    "bannerImage": "/banners/salesforce-record-sharing-model-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "agent-pipeline-repair-loop-2026",
     "title": "The Repair Loop: Keeping Autonomous Pipelines Running",
     "excerpt": "Autonomous pipelines survive on the loop around them: stall detection, auto-pause, resume, alerting, and a hard escalation boundary. Here's how to build it.",
