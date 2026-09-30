@@ -24,6 +24,8 @@ The first mental habit is to separate the UI-only layers from the data layers. P
 
 The strongest approach is to build the model's consistency out of the layers that do not care where the write came from, and to treat the UI-only layers as convenience, never as enforcement. Everything that must be true of the data should be enforced by a layer that applies to all paths, so the loader cannot be the door the garbage walks through.
 
+![The consistency layer stack splits UI-only layers, which shape the screen and bypass programmatic paths, from data layers that fire on every write path: field-level required, validation rules, unique constraints, lookup filters, and API-enabled duplicate rules](</diagrams/day-19-sm-2a-data-consistency-validation-rules-required-fields/1-consistency-layer-stack.png>)
+
 ## Field-level required versus layout required is the single biggest trap
 
 The most common consistency gap in real Salesforce orgs, and the one the quiz hits hardest, is the difference between marking a field Required on the page layout and marking it Required at the field level. They sound alike. They are not the same layer, and they do not have the same reach.[^1]
@@ -35,6 +37,8 @@ Field-level required is different. Setting Required on the field definition in O
 So the fix for the classic failure, Accounts loaded by Data Loader missing an Industry even though the field appears required on the layout, is not another layout requirement. It is to make the field required at the field level, or to add a validation rule that rejects a missing value. Layout changes do nothing to the loader path, because the loader never reads layouts. This is the exact scenario sm-2a asks you to diagnose, and the correct answer is always to move the requirement to a layer that covers the API and Data Loader.
 
 There is a nuance worth keeping straight: field-level required is unconditional. It fires on every record, every path, always. When the rule is "this field must always be present" that is exactly what you want, and it is the strongest declarative must-have in the toolset because you cannot forget to apply it per path. When the requirement is conditional, such as only when the record is in a particular stage, field-level required is too blunt and you reach for a validation rule instead. Choosing between the two is a judgment the exam rewards.
+
+![Field-level required versus layout required: the layout is a UI-only constraint bypassed by the API and Data Loader, while field-level required rejects a blank value on every entry path](</diagrams/day-19-sm-2a-data-consistency-validation-rules-required-fields/2-field-vs-layout-required.png>)
 
 ## Validation rules enforce conditional logic on every path
 
@@ -54,6 +58,8 @@ Read that as: if the stage is Closed Won and the amount is missing or not positi
 The critical fact for consistency is the reach. A validation rule does not care about the entry path. It evaluates on the UI, on the API, on Flow writes, on Apex, and on Data Loader inserts and updates. That is what makes validation rules the robust cross-path control: any write that violates the condition is rejected with a clear error, and the caller is responsible for handling it, not silently corrupting the data.[^2]
 
 There is a trade-off the exam wants you to see. Validation rules fire before and on save, so they are a write-time guard, not a true database constraint. A rule on a cross-object condition can be fragile: it evaluates the record being saved, and it may depend on related data that is itself mid-transaction. Complex multi-object validation is where architects get bitten. Keep validation rules focused on conditions expressible against the record and its lookup targets at save time, and do not lean on them for things a field-level flag or a unique constraint handles more cheaply and more reliably.
+
+![A validation rule is a formula-driven guard that runs before the record saves: when the condition is true it blocks the save and returns an error, and it fires on every entry path](</diagrams/day-19-sm-2a-data-consistency-validation-rules-required-fields/3-validation-rule-logic.png>)
 
 ## Dependent picklists constrain valid combinations, not relationships
 
@@ -78,6 +84,8 @@ First, a unique field does not block blank duplicates. Uniqueness applies only t
 Second, uniqueness is case handling depends on the field. Text fields enforce case-sensitive uniqueness by default, which can trip integrations that are not case-consistent: the same external key arriving once as "acme" and once as "Acme" may pass as two different values unless you account for it. And there is a platform limit on the number of unique fields per object, which is a modeling limit you design within rather than a value you can inflate.[^1]
 
 The combination that gives the strongest identity protection, and this is the exact answer the quiz wants, is a unique external ID acting as the hard key plus a duplicate rule catching the fuzzy cases. The unique external ID guarantees deterministic identity for exact matches on a system of record key. The duplicate rule catches the near matches, such as "Acme Corp" versus "Acme Corporation", that no exact key ever resolves. One is deterministic, the other probabilistic, and together they cover both classes of duplicate.
+
+![A unique external ID is the deterministic hard key for exact matches, while a duplicate rule is the probabilistic fuzzy net for near matches; together they cover both classes of duplicate](</diagrams/day-19-sm-2a-data-consistency-validation-rules-required-fields/4-unique-external-id-plus-duplicate-rule.png>)
 
 ## Lookup filters preserve referential integrity declaratively
 
@@ -116,6 +124,8 @@ Third, the fuzzy duplicates that predate any key. Configure a matching rule on A
 Fourth, the referential integrity gap. On the project-to-account lookup, add a lookup filter that only permits active Accounts as the parent, so the loader can no longer attach a project to a deactivated account. Optionally make the lookup required so a project record cannot exist without a parent at all.[^1][^5]
 
 The scenario is a direct map of the requirement: validation and required fields for conditional and unconditional must-haves, external IDs and uniqueness for the hard key, duplicate rules for the fuzzy cases, and lookup filters for the relationship guard. Four problems, four distinct layers, one consistent model.
+
+![The worked customer scenario maps four inherited data problems to four distinct consistency layers: field-level required, duplicate rules, unique external IDs, and lookup filters](</diagrams/day-19-sm-2a-data-consistency-validation-rules-required-fields/5-worked-customer-scenario.png>)
 
 ## Configuration walkthrough
 
