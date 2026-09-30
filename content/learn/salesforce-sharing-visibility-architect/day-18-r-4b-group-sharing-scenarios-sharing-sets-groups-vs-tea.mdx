@@ -1,0 +1,130 @@
+---
+title: "Group Sharing Scenarios: Sharing Sets, Groups vs Teams"
+slug: day-18-r-4b-group-sharing-scenarios-sharing-sets-groups-vs-tea
+series: salesforce-sharing-visibility-architect
+lesson: 18
+excerpt: "Given a scenario, determine how groups and sharing sets support record access, and contrast groups with teams. Covers sharing sets for Experience Cloud external users, sharing groups in portals, the per-record nature of teams, and the routing decision between teams and groups by audience and scale."
+date: 2026-09-30
+author: Adroit Learning
+readTime: 15
+tags:
+  - sharing sets
+  - sharing groups
+  - account teams
+  - sales teams
+  - case teams
+  - experience cloud
+  - access to records
+---
+
+Yesterday you met the public group, the reusable named container that sharing rules, queues, and permission sets all target. Today you widen the net. The requirement for this lesson is another decision objective: given a scenario, determine how groups and sharing sets support record access, and contrast groups with teams.[^1] Where the last lesson lived entirely inside the internal org, this one opens the door to external users in Experience Cloud and then pushes you to compare two mechanisms that sound alike but scale and behave very differently.
+
+Hold two mental threads for the whole lesson. The first is audience. The decision of which sharing mechanism to use depends heavily on whether the people receiving access are internal Salesforce users or external portal users. The second is scale. Some mechanisms grant access across a whole population at once, and some grant it record by record. Your job as the architect is to match the mechanism to the audience and to the size of the population. Pick wrong on either axis and you either over-expose data or drown in the maintenance of thousands of hand-configured records.
+
+This lesson lands after you already understand public groups and sharing rules, and it sets up the next lesson, which studies teams in detail. Work through the definitions, the worked portal example, and the routing matrix, then run the configuration walkthrough in a trial org so the mechanics feel real rather than abstract.[^1]
+
+## The three sharing mechanisms and their audiences
+
+Salesforce gives you several ways to hand out record access, and three of them appear in this lesson. Sort them by who they serve and how they scale.
+
+**Sharing sets** serve external users. An Experience Cloud portal user, such as a partner or a customer contact, gets access to records that relate to their own account. The access flows from a relationship, not from a static list. If your portal user logs in and a mapping says that this user belongs to Acme Corp, then whatever Acme Corp owns or is linked to becomes visible, provided the Org-Wide Defaults allow it.[^2]
+
+**Sharing groups** appear in Experience Cloud as the target that sharing sets reference, and they can also represent the set of users tied to a particular account. In a portal context a sharing group can hold the internal users or the external users connected to an account, which lets you grant a whole set of users access to records owned by a shared account.[^3]
+
+**Teams** are the per-record mechanism. An Account Team, a Sales Team, or a Case Team is a collection of users that a record owner assembles on one specific record. The team becomes a related list on that record, each member gets an access level, and the grant applies only to that one record. Teams are owned and shaped by the person who owns the record, not by a centralized rule.[^4]
+
+Grab that contrast before anything else. Groups are broad, reusable, and configured once to serve a population. Teams are narrow, per-record, and configured by an owner for a collaboration. They solve different problems, and they rarely substitute for each other cleanly.
+
+## What a sharing set is
+
+A sharing set is a configuration object in Experience Cloud that grants external users access to records related to their account. Think of a B2B partner portal where every contact at a partner company should see the opportunities, cases, and orders that belong to that partner. You could hand each contact a long list of record IDs, but that list goes stale the moment the account gains a new opportunity. A sharing set keeps the access current by tying it to a relationship.
+
+A sharing set contains one or more mappings. Every mapping has a source and a target. The source is a field on the object you want to share, usually a lookup such as the account ID on an opportunity. The target is how the portal user connects to that source, usually the portal user's account or contact. When you map the opportunity's account ID to the portal user's account, any external user whose contact belongs to that account sees the matching opportunities, as long as the object's Org-Wide Default is more restrictive than the access you are granting through the set.[^2]
+
+The picture you should keep in mind is a bridge drawn between an object field and the user record's account relationship. The bridge does the work automatically, so records added tomorrow are visible without you reconfiguring anything. That is the property that makes sharing sets the right tool for relationship-derived access, and it is the property that the first quiz question today tests directly.
+
+### A worked B2B example
+
+Walk through a concrete case. A manufacturer runs a partner portal. Each partner is an Account record, and each partner employee is a Contact attached to that account. The manufacturer wants each partner to log in and see only the opportunities that belong to that partner, not the whole pipeline and not the opportunities of other partners.
+
+If you set Opportunity OWD to Public Read Only, every partner sees every opportunity, which leaks your entire pipeline to every partner. That over-exposure is exactly what trap in the first quiz question warns against. If you try an Account Team, you would have to build a team per opportunity and add the right contacts by hand, and those outside users are not standard internal users anyway. If you use a public group with a sharing rule, the group has no clean way to derive membership from each partner's account relationship; you would be recreating the relationship by hand in group membership.
+
+The correct answer is a sharing set. You create a set on Opportunity, add a mapping from the opportunity's account ID to the portal user's account, and set the access level to Read Only. Every partner contact whose account matches an opportunity's account now sees that opportunity. New opportunities appear automatically because the mapping is relationship based. No per-record team, no rule per partner, no over-exposed defaults.[^2]
+
+## How sharing groups fit in
+
+When you enable Experience Cloud and create external users, Salesforce creates sharing groups for you. The two special groups you will meet are the users connected to an individual account and, more broadly, the pool of all portal users or all internal users within that Experience site. A sharing group is the reusable target inside a portal, much as a public group is the reusable target inside the org.[^3]
+
+Sharing sets rely on these sharing groups. When you build a mapping in a sharing set, you are effectively telling Salesforce which sharing group should receive access, and membership in that group flows from the user's account relationship. You do not hand-add users to the group; the relationship populates it.
+
+Sharing groups also complement sharing sets for broader portal sharing. Imagine you want everyone at account Acme Corp to see not just the records linked to Acme, but also a set of records owned by a shared account that supports Acme. A sharing set covers the records directly linked to the portal user's account. A sharing group can extend that to records owned by a parent or shared account, so the set of records a user can reach is the union of relationship-linked records and group-granted records. This is the "sharing groups in Experience also let you grant a set of users access to records owned by a shared Account" idea from the requirement, and it is why an architect learns both pieces rather than the set alone.[^3]
+
+## Groups versus teams
+
+Here is the comparison the requirement asks for explicitly. Public groups and teams both aggregate users, and that superficial similarity fools people into treating them as interchangeable. They are not. They differ on configuration, on scope, and on management.
+
+**A public group is org-wide and reused broadly.** You define it once in Setup, it can hold roles, territories, other groups, individual users, and queue members, and it does nothing on its own. Its value appears when sharing rules, permission sets, and queues reference it. One membership change ripples through every referencing grant. Groups are a population-scale mechanism: they serve thousands of users through a handful of rules.[^5]
+
+**A team is per-record and owner-configured.** The owner of a specific account, opportunity, or case adds the users who need to work on that record. Each team member gets an access level, and the team shows up as a related list on the record so anyone can see who is involved. Teams are managed record by record, by many different owners, and each team applies to exactly one record.
+
+The exam keeps forcing you to tell these apart because the correct answer depends on scale. When a scenario asks for population-wide access, the answer is a group plus a sharing rule. When a scenario asks for ad-hoc collaboration on particular records, the answer is a team. Saying teams do not scale as the primary mechanism for large populations is the honest engineering truth: a team is a per-record object, so a thousand records need a thousand teams, and each needs its own owner attention. Using teams that way is an anti-pattern.[^1][^4]
+
+### Why teams exist
+
+If teams do not scale, why have them at all? Because real collaboration is not always population-wide. Two colleagues agree to work an account together, and neither is in a group that grants access. A group would be overkill, and waiting for a sharing rule to be built and recalculated is slow. The owner simply creates an Account Team, adds the colleague with Read/Write access, and both can work the record immediately.
+
+Teams also carry useful context that sharing rules do not. The team is visible on the record, so anyone already on the record can see who is involved and what role each person plays. There is a field for the team role, and that role can control access and can even be used in criteria. In an org that uses team selling, the team is as much an operational tool as a security tool.[^4]
+
+## Routing by audience and scale
+
+Pull the decision together into a matrix you can hold in your head, because the exam tip for this lesson is exactly this routing.
+
+For an internal population that needs uniform access, use public groups plus sharing rules. This is the pattern you mastered in the past two lessons. It scales, it is centrally managed, and it survives staff churn because membership lives in one place.[^1]
+
+For external portal users whose access derives from a record relationship, use sharing sets plus sharing groups. The portal user's account plus the mapping determines what they see. This is the relationship-derived access that a static list cannot keep current.[^2][^3]
+
+For ad-hoc collaboration on specific records, use teams. The owner configures the team, adds the members, and grants per-record access without any central rule.
+
+The trap to avoid is reaching for the wrong one. Do not flatten everything into groups and a rule when the population is a handful of people on one account. Do not build hundreds of teams when a whole region needs access. Sharing sets are for external users, not internal groups. Teams are for per-record collaboration, not population grants. And sharing sets are not a substitute for sharing rules. The exam is testing whether you can read the scenario and route by audience and scale, so practice reading the scenario before reaching for a mechanism.
+
+## Configuration walkthrough
+
+Work this in a Developer Edition or a trial org so the mechanics are real. You need a small Experience site with at least one external user whose contact belongs to an account.
+
+1. In Setup, search for and open Sharing Settings. Scroll to the Sharing Sets section. External users appear here automatically once your Experience Cloud site has external users configured.
+2. Create a new sharing set on the object you want to share, for example Opportunity. Give it a clear name such as "Partner Opportunities."
+3. Set the access level. Read Only is the safest starting point. You grant the minimum access the scenario needs and tighten later only if the business case demands it.
+4. Add a mapping. The source is the object field that ties the record to an account, such as the opportunity's Account ID. The target is the portal user's account or contact, and Salesforce populates it from the user's relationship. When the source and the target align, the external user sees the matching records.
+5. Reference the appropriate sharing group so membership flows from the account relationship rather than from a hand-maintained list. The set uses the sharing group that Experience Cloud maintains for each account.[^2]
+6. For internal population access, stay with the pattern from the last lesson: create public groups and sharing rules, then target the group from the rule.
+7. For ad-hoc per-record collaboration, enable Account Teams, Sales Teams, or Case Teams in Feature Settings, then let a record owner add members per record.
+8. Test both paths. Log in as the external user and confirm the expected related-record access appears. Then, for the internal path, confirm a member of your public group sees the records your sharing rule grants through the group. A test as a real user, not as the system administrator, is the only reliable proof that the mapping and the rule both hold.[^1]
+
+## Exam traps
+
+Three traps dominate this lesson, and the quiz probes all of them.
+
+**Sharing sets are not for internal groups.** A sharing set is the Experience Cloud mechanism that serves external users through a relationship mapping. It is not a general-purpose tool for granting internal teams access to records. When an internal scenario appears, the answer is a public group with a sharing rule, not a sharing set. This is the most common misapplication, and it is the second trap in the requirement.[^2]
+
+**Teams are per-record, owner-managed access.** A team applies to one record. Using teams as the population-wide sharing mechanism is an anti-pattern, because the number of teams scales with the number of records, not with the number of users. If a scenario says "every account owned by West Sales should be shared to the East Sales group," you build one sharing rule targeting the East Sales group, not an Account Team per account.
+
+**Sharing sets and sharing rules get confused.** Sharing sets are relationship-based and external. Sharing rules are group-based and internal. They are not interchangeable, and a scenario statement gives you the clue to tell them apart: if the people receiving access are portal users tied to an account, think set; if they are internal users in a named population, think rule.[^1][^2]
+
+## Routes back to the same idea
+
+Notice how cleanly the last two lessons fit together. Yesterday you learned that a public group is a reusable target that grants nothing on its own until something references it.[^5] Today you used that same group as the internal-side target for sharing rules, and you met the sharing set as the external-side counterpart that derives access from a relationship. The shared idea is that access should follow a small number of configured relationships and reusable containers, not a sprawling collection of hand-assigned record grants. Each lesson keeps returning to that compactness, because the exam rewards architects who keep their sharing configurations small and their reasoning aligned to audience and scale.
+
+## Try it yourself
+
+In a trial org, create a public group called "East Sales," add two internal users, and build an ownership-based sharing rule that shares accounts owned by the group "West Sales" to the East Sales group. Confirm the East Sales users see the West-owned accounts. Then, in the same org, set up a sharing set on Opportunity for a partner contact and confirm the partner sees only their account's opportunities. Run both checks as the affected users, not as the system administrator, and you will have exercised the exact contrast the exam wants you to hold: population access through a group and a rule, relationship access through a sharing set.
+
+## What's next
+
+Tomorrow you study Lesson 19, Teams: Account Teams, Sales Teams, Case Teams, and Team-Based Record Access. This lesson taught you the per-record nature of teams and why they do not scale as a population mechanism. The next lesson goes deep on the three team types, how team roles and access levels control what a member sees, and how team-based record access extends the model. You will learn to enable each team type, add members per record, and decide when a team is the right tool for collaboration that a group cannot serve.
+
+[^1]: Salesforce Help, "Platform Sharing and Visibility Architect Exam Guide" (consult the current exam guide for the complete objective list and weighting for the Access to Records domain). https://help.salesforce.com/s/articleView?id=sf.arch_platform_sharing_vis.htm&type=5
+[^2]: Salesforce Help, "Sharing Sets," explains how sharing sets define criteria-based access for external users and how mappings tie a source object field to the portal user's account or contact. https://help.salesforce.com/s/articleView?id=platform.networks_sharing_sets.htm&type=5
+[^3]: Salesforce Help, "Sharing Groups in Experience Cloud," describes the sharing groups setup creates for external users and how they work with sharing sets. https://help.salesforce.com/s/articleView?id=platform.networks_sharing_groups.htm&type=5
+[^4]: Salesforce Help, "Account Teams" and "Case Teams," cover enabling the per-record team features and adding members with access levels. https://help.salesforce.com/s/articleView?id=platform.account_teams.htm&type=5
+[^5]: Salesforce Help, "Sales, Account, and Contract Teams," documents the team-based selling features, team selling, and how team sales members get access to a shared record. https://help.salesforce.com/s/articleView?id=platform.sales_account_and_contract_teams.htm&type=5
+[^6]: Salesforce Help, "Sharing Rules," explains how sharing rules target groups, roles, and territories to extend access beyond the OWD. https://help.salesforce.com/s/articleView?id=platform.security_about_sharing_rules.htm&type=5
