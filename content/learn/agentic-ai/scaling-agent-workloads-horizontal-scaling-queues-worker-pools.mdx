@@ -1,0 +1,91 @@
+---
+title: "Lesson 55: Scaling Agent Workloads: Horizontal Scaling, Queues, and Worker Pools"
+slug: scaling-agent-workloads-horizontal-scaling-queues-worker-pools
+series: "agentic-ai"
+lesson: 55
+excerpt: "Lesson 54 made a single agent fast by tuning its latency budget and streaming. This lesson asks a different question: what happens when hundreds of requests arrive at once and one process cannot keep up. It covers the three moves that answer that question, horizontal scaling to add capacity by running more copies of a worker, a queue to decouple the thing that creates work from the workers that consume it, and a worker pool to decide how many consumers run and when. A worked example scales a document processing agent from one process to a set of auto-scaled workers behind a queue, and a try-it prompt has you model your own workload the same way."
+date: "September 30, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [LLMs, AI Agents, Scaling, Queues, Worker Pools, Architecture]
+---
+
+# Lesson 55: Scaling Agent Workloads: Horizontal Scaling, Queues, and Worker Pools
+
+Lesson 54 made one agent fast: a latency budget, streaming to hide generation behind reading time, batching to amortize overhead. That work is about a single request. This lesson is about the day you have ten requests, then a hundred, then a thousand, and a single process stops keeping up no matter how well you tuned it. The answer is not to make one worker faster. It is to add more workers, and to arrange the system so adding them is a knob instead of a rewrite.
+
+The core weakness of the single-process agent script is that it does everything in one place. It calls the model, runs tools, holds state, and waits for each step. When a network timeout happens, the whole workflow pauses. When model latency spikes, everything queues behind it. When demand grows, you cannot scale just the part that is busy, because the parts are not separated. [^1]
+
+Production agent systems fix that by splitting the work into layers that scale and fail independently. The useful split for this lesson is three pieces: an orchestrator that decides what work exists, a queue that holds the work until something is ready to take it, and a pool of workers that pull work off the queue and execute it. Each piece can grow without rebuilding the others. [^1]
+
+## Horizontal scaling: more copies, not a bigger one
+
+Vertical scaling means giving one process more CPU, memory, or connections. It works up to the limit of a single machine and then it stops. Horizontal scaling means running more copies of the worker and spreading work across them. You are not making the worker faster. You are making it exist more times.
+
+For many workloads the gain is close to linear. Amazon SQS documents the pattern directly: when you add more message producers and consumers, you achieve essentially linear gains in throughput, so doubling the number of clients roughly doubles throughput. The constraint that forces this is round-trip latency, the time a single connection spends waiting for a request to be answered, which caps how much one thread over one connection can do. [^2]
+
+Two points matter for agents specifically. First, an agent worker is mostly I/O bound. It sits waiting on model calls, tool calls, and external APIs far more than it computes. That means one worker can run several tasks truly at once while it waits, without faster hardware. Concurrency inside a worker and concurrency across workers are both levers; you pull the in-process one first because it is free, then scale out when that is spent. Second, an agent worker must be stateless for horizontal scaling to work. If each request's context lives in the worker's memory, only that worker can finish the request, and adding workers does not help. The state has to live somewhere addressable by any worker, in a database or a store, so any copy can pick the work up. [^1] [^5]
+
+## The queue: what decouples producers from workers
+
+A queue is the connector that makes horizontal scaling a knob. Without it, the thing that creates work has to call the thing that does the work directly, which means the two must exist and respond at the same time. A queue sits between them. A producer writes a task to the queue and moves on. A worker pulls a task from the queue when it has capacity and processes it. Neither one has to know when the other is alive. [^1] [^2]
+
+That decoupling does four useful things for an agent system.
+
+It absorbs bursts. When demand spikes, the queue grows instead of the producers failing or the workers being overwhelmed. The work waits politely rather than erroring.
+
+It enables scaling by queue depth. The natural signal for when to add a worker is how many tasks are waiting and how long they have waited. Empty queue, idle workers: scale down. Growing queue, wait time climbing: scale up. This is the standard autoscaling signal for a worker pool. [^3]
+
+It isolates failures. If a worker crashes, the task it was doing becomes visible again and another worker can take it. The failure of one consumer does not fail the work. [^2]
+
+It lets throughput rise by adding consumers, not by redesigning. For a queue you scale throughput by adding more instance of producers and consumers, with essentially linear gains, no queue-side change required. [^2]
+
+## Worker pools: how many, and when
+
+A worker pool is the set of processes that consume the queue. The practical design question is not "one or many" but "how many, and how do you decide." The pool needs a concurrency target and a scaling policy, and both should come from the queue measurements, not from a guess.
+
+The queue metrics that drive the decision are queue depth (how many tasks are waiting), queue wait time (how long a task sits before a worker picks it up), and completion rate (tasks finished per second). A consistently growing depth while completion rate holds means workers are keeping up but the backlog is building, likely from burst input. A wait time climbing past a few seconds means workers cannot pick work up fast enough, so add capacity. A steady empty queue with idle workers means the pool is oversized, so scale down to stop paying for it. [^3]
+
+A good starting point for sizing threads in one worker instance is throughput times average task duration, divided by the number of worker instances. For I/O bound tasks, like agent steps that mostly wait on model calls, you use more threads than CPU cores. For CPU bound work you match threads to cores. [^3]
+
+The other constraint to build in is the provider rate limit from Lesson 53 and the cost control from Lesson 27. A worker pool that scales up forever will happily hammer a model endpoint past its quota or blow through a budget. Pool level rate limiting caps how many executions happen in a window across all workers. One common shape is a task level rate limit, for example 100 executions per 60 second window, so the pool never exceeds what the downstream service and your budget allow. [^3]
+
+## Worked example: scaling a document processing agent
+
+Bring the pieces together with a concrete example. A document analysis agent takes an uploaded PDF, extracts text, classifies it, and summarizes it. The single process version does all of that in memory and falls over when ten files arrive at once.
+
+Step one: separate the work into a task. Define "process document with id X" as a discrete unit that any worker can run. The state, the document's extract, classify, and summary fields, lives in a store keyed by document id, not in the worker's memory. Now any worker can pick up any task. [^1]
+
+Step two: add the queue. The upload handler writes a task for document X to the queue and returns immediately. A worker pulls it, runs extract, classify, summarize, writes results back, and reports completion to the orchestrator. The producer and the worker never talk directly. [^1]
+
+Step three: size the pool. Each document takes about two minutes end to end, most of it waiting on model calls. The queue is I/O bound, so one worker can process several documents concurrently while it waits on inference. A queue of documents waits with p99 wait time low while there is capacity. When a batch of a hundred uploads lands, depth and wait time climb, and that is the signal to add worker instances. [^3]
+
+Step four: scale by the queue, within limits. The autoscaler watches queue depth and wait time, adding workers while the backlog is real and removing them when the queue drains. Two hard caps stop runaway spend: a maximum pool size, and a task level rate limit against the inference endpoint and the budget. When the burst is absorbed, the pool shrinks and you stop paying for workers that have nothing to do. [^3]
+
+The result is an agent that processes a trickle and a surge with the same code. The change was not rewriting the worker. It was separating the worker from the producer with a queue and pointing the worker count at the queue's measurements.
+
+## Choosing tools
+
+The pattern is language agnostic and the tooling is mature. On the managed side, a message queue service handles the storage, delivery, and burst absorption for you, and documents the horizontal scaling rules directly. [^2] On the self-hosted side, a distributed task queue gives a worker model with scheduling and result handling, and Celery, the current stable version as of this writing being 5.6, describes itself as a task queue focused on real time processing while also supporting task scheduling. [^4] In the Node ecosystem, a worker library with a concurrency factor lets one process run jobs in parallel, and running several workers in separate processes adds availability on top. [^5]
+
+For agents already built on an orchestrator, the orchestrator plus a queue plus a worker pool is a reference architecture used in production agent systems, with implementation notes for each layer. [^1] You do not need all of it at once. Lesson the speed of adoption to the workload: a queue and two worker processes handle a steady trickle, autoscaling and an orchestrator earn their cost when demand is genuinely variable.
+
+## Try it
+
+1. Pick an agent workload you have built or can picture. Write down the three pieces for it: what a single task is, what state a worker needs to finish it, and where that state lives so any worker could pick it up. If you cannot write the last line without the word "in memory," you have found your scaling blocker before adding any infrastructure.
+2. Model the metrics. Sketch a queue chart and a worker count chart for your workload. Mark where you would add a worker (queue depth growing, wait time past a few seconds), where you would remove one (queue empty, workers idle), and the two caps you would set: a max pool size and a rate limit against your model provider.
+3. Audit a real system's burst behavior. Take any agent or job system you run and ask what happens under a 10x burst: does work queue and smooth, or does the producer block and fail? Write the one change that would make the burst a queue depth instead of an outage.
+
+## Summary
+
+A single process agent stops being enough the day demand outruns it. Horizontal scaling adds capacity by running more copies of a stateless worker, and it pays off in near linear gains because the worker mostly waits on I/O. A queue decouples the producer from the workers so bursts become backlog instead of failure, and the queue's depth and wait time become the honest signal for how many workers to run. A worker pool sized by those measurements and capped by your rate limits and budget turns scaling from a rebuild into a knob. You tune the worker, then you count the workers, then you let the queue tell you the number.
+
+## What's next
+
+You now know how to add capacity by spreading agents across more workers and smoothing load with a queue. Lesson 56 takes the workers you just learned to scale and asks where they actually run: Kubernetes for agents, meaning pods, autoscaling, and GPU scheduling. Where this lesson decided how many workers you need, the next one handles how those workers are packaged, scheduled onto machines, and sized to the GPUs that serve the model calls they make.
+
+[^1]: GMI Cloud. [How AI Agent Workflows Are Hosted at Scale: A Production Reference Architecture](https://www.gmicloud.ai/en/blog/hosting-ai-agent-workflows-at-scale)
+[^2]: AWS. [Increasing throughput using horizontal scaling and action batching with Amazon SQS](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-throughput-horizontal-scaling-and-batching.html)
+[^3]: Orkes. [Scaling Task Workers](https://orkes.io/content/developer-guides/scaling-workers)
+[^4]: Celery. [Celery: Distributed Task Queue, current stable 5.6](https://docs.celeryq.dev/)
+[^5]: BullMQ. [Worker Concurrency](https://docs.bullmq.io/guide/workers/concurrency)

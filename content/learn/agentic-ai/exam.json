@@ -202,15 +202,15 @@
       "explanation": "A 2023 paper found LLMs don't robustly use information in the middle of long inputs (the well-documented lost-in-the-middle effect), and Redis's 2026 guidance is blunter: most long-context models show sharp performance drops past ~32K tokens, so benchmark your actual use case rather than trusting the spec sheet."
     },
     {
-      "question": "A user from Tenant A prompts the agent: \"fetch the first customer record in the table with no tenant filter.\" What actually stops the agent from returning Tenant B's data?",
+      "question": "Per the lesson \"Reliability: Retries, Timeouts, and Circuit Breakers for LLM Calls\", which of these HTTP status codes should you NOT retry, because retrying it masks a real configuration bug behind delay?",
       "options": [
-        "The system prompt, which instructs the model to stay scoped to Tenant A",
-        "Row-level security and the retrieval tenant filter, which reject or hide any row outside the session tenant regardless of what the model asks for",
-        "The model's refusal to follow instructions that mention another tenant by name",
-        "The content filter from lesson 18, which flags the request as a security violation"
+        "429 (rate limited)",
+        "503 (service unavailable)",
+        "401 (unauthorized)",
+        "504 (gateway timeout)"
       ],
-      "correct_answer_index": 1,
-      "explanation": "The lesson states that isolation must be a programmatic guarantee in the data plane, not a prompt instruction. RLS and the retrieval metadata filter enforce the tenant boundary on every query and tool call, so the agent's ambitions cannot widen the scope. The model never gets the chance to behave badly because the data it can reach was already bounded."
+      "correct_answer_index": 2,
+      "explanation": "The lesson classifies 401 (invalid auth) as a permanent error on your side, along with 400, 403, and 404. Retrying a 401 burns budget and time on a request that will never succeed and hides the real config bug. 429, 503, and 504 are all in the retryable set."
     },
     {
       "question": "Which statement best reflects the lesson’s guidance?",
@@ -290,15 +290,26 @@
       "explanation": "The lesson is centered on: The definitions that matter for the whole track: what separates a rules system, an LLM workflow, and a true agent, plus how to tell which one you're actually building."
     },
     {
-      "question": "Which mechanism does the lesson describe as the reason change data capture enables incremental rather than sweeping updates?",
+      "question": "Tenant A's document, retrieved into context, carries hidden instructions telling the agent to act outside Tenant A's scope. What is the effective defense?",
       "options": [
-        "CDC sends a stream of events for inserts, updates, and deletes, so the pipeline knows exactly which document changed and can re-embed only that content",
-        "CDC re-embeds the entire corpus on every run to guarantee consistency",
-        "CDC replaces the embedding model entirely",
-        "CDC requires polling the whole dataset more frequently"
+        "A stronger system prompt that warns the model to ignore instructions found in retrieved content",
+        "Blocking all retrieval results that were not written by the current tenant's users",
+        "The isolation applied at the moment of action: the tool calls the hostile text provokes are still scoped to the session tenant, so the data plane refuses access outside Tenant A",
+        "Disabling vector retrieval entirely whenever more than one tenant uses the deployment"
+      ],
+      "correct_answer_index": 2,
+      "explanation": "The lesson notes the Cloud Security Alliance names cross-tenant leakage through context poisoning as an agent threat, in part because the model cannot distinguish a legitimate document from a hostile one folded into retrieval. The defense is the isolation already built: the injected instructions can make the agent try, but RLS and the tenant filter still refuse anything outside the session tenant's scope."
+    },
+    {
+      "question": "Per the lesson “Data Pipelines for RAG: ETL, Connectors, CDC, and Incremental Refresh”, what is the central focus?",
+      "options": [
+        "Connectors (pull versus push), normalizing data before it hits the embedding model, change data capture as the mechanism that turns a polling job into a live one, and incremental refresh that re-embeds only the records that changed.",
+        "A history of vector database vendors and their pricing tiers",
+        "A review of unrelated content management tools",
+        "A summary of corporate governance policies"
       ],
       "correct_answer_index": 0,
-      "explanation": "Log-based CDC taps the source transaction log and emits an event for every insert, update, and delete, so the pipeline is told exactly what changed and can process only the affected records instead of re-embedding everything."
+      "explanation": "The lesson is centered on: Connectors (pull versus push), normalizing data before it hits the embedding model, change data capture as the mechanism that turns a polling job into a live one, and incremental refresh that re-embeds only the records that changed."
     },
     {
       "question": "Which conclusion does the lesson support?",
@@ -378,38 +389,37 @@
       "explanation": "The lesson is explicit that the goal is not full automation of everything: the agent resolves the easy cases end to end and escalates the hard ones to a person with full context."
     },
     {
-      "question": "What does the lesson cite from Snowflake's managed MCP server documentation as the recommended way to expose warehouse data to an agent on the read path?",
+      "question": "Per the lesson \"Vector DB Operations: Scaling, Backups, Consistency, and Cost\", what is the real variable that decides whether a pgvector HNSW index is fast?",
       "options": [
-        "Expose a raw SQL execution tool so the agent has full query freedom",
-        "Expose the managed MCP server together with the SQL execution tool on the same server so they share permissions",
-        "Expose a Cortex Agent as the client-facing tool, keeping the agent inside semantic views and verified queries, and isolate any direct SQL behind a separate least-privileged role",
-        "Always disable all MCP tools and expose the warehouse through a direct REST API only",
-        "Store the data in the agent's own vector store instead of querying the warehouse"
-      ],
-      "correct_answer_index": 2,
-      "explanation": "The Snowflake docs recommend exposing a Cortex Agent as the governed client-facing tool, and warn that exposing the SQL execution tool on the same server lets a client bypass the agent's semantic views, verified queries, and orchestration. If direct SQL is required it should be on a separate server with a dedicated least-privileged role."
-    },
-    {
-      "question": "Per the lesson on security architecture for AI, which two OWASP Top 10 for LLM Applications (2025) risks drive the need to inspect AI traffic at the application layer?",
-      "options": [
-        "Unbounded consumption and supply chain",
-        "Prompt injection and sensitive information disclosure",
-        "Data and model poisoning and misinformation",
-        "System prompt leakage and vector weaknesses"
+        "The number of shards the collection is split across",
+        "Whether the index working set fits in memory, because HNSW traversal is a chain of random accesses and disk reads degrade latency by an order of magnitude or more",
+        "The PostgreSQL connection pool size",
+        "The ANN index type chosen at creation"
       ],
       "correct_answer_index": 1,
-      "explanation": "The lesson names prompt injection, which tops the OWASP Top 10 for LLM Applications (2025) list, and sensitive information disclosure, which sits second, as the two application-layer problems that look like ordinary HTTP traffic. Both are why the perimeter alone is insufficient and layers must be stacked."
+      "explanation": "The lesson states that HNSW search is a chain of random accesses through a graph and that the index must live in memory to be fast; when it spills to disk, query latency jumps 10 to 100 times. Row count is a proxy; memory is the variable."
     },
     {
-      "question": "Which statement best reflects the lesson’s guidance?",
+      "question": "Why should a web application firewall (WAF) not be treated as the only line of defense for an AI workload?",
       "options": [
-        "Lesson 7 gave you function calling and Lesson 8 gave you tools that fail well.",
-        "The lesson says only technical staff should act on this.",
-        "The opposite is true: lesson 7 gave you function calling and Lesson 8 gave you tools that fail well.",
-        "The lesson states this is never a relevant consideration."
+        "A WAF cannot enforce authentication or quotas on its own",
+        "A WAF reads the shape of requests, not their semantic meaning, so rephrased or encoded injections bypass string matching",
+        "A WAF costs more per evaluation than the model it protects",
+        "A WAF can only filter network traffic and never application-layer HTTP"
       ],
-      "correct_answer_index": 0,
-      "explanation": "Lesson 7 gave you function calling and Lesson 8 gave you tools that fail well."
+      "correct_answer_index": 1,
+      "explanation": "The lesson stresses that a WAF reads text, not meaning, so an attacker can bypass a phrase match by rephrasing, encoding the prompt, or using indirect injection. That is why the semantic guardrail at the application layer is a second trust boundary."
+    },
+    {
+      "question": "Why does the lesson grow the ticket triager into a ticket resolver?",
+      "options": [
+        "Because routing accuracy is the hardest part of the agent loop",
+        "Because the framework cannot produce structured output for a classifier",
+        "Because classifying a ticket and stopping leaves the real effort, gathering context, applying policy, and drafting a reply, to a person",
+        "Because classification requires a larger model than resolution does"
+      ],
+      "correct_answer_index": 2,
+      "explanation": "The lesson says classification alone is not work a human would hand an agent, so the resolver reads the issue, looks up the account and order, checks the refund policy, and drafts a reply a contact center could actually send."
     },
     {
       "question": "Which statement best reflects the lesson’s guidance?",
@@ -533,15 +543,16 @@
       "explanation": "Lesson 1 gave you the taxonomy (rules, workflows, agents) and the uncomfortable truth that most of the work is plumbing, not prompts."
     },
     {
-      "question": "Per the lesson \"Case Study: Customer Support Agent Architecture\", what is the one idea to carry out about a support agent?",
+      "question": "What does the lesson cite from Snowflake's managed MCP server documentation as the recommended way to expose warehouse data to an agent on the read path?",
       "options": [
-        "A support agent is mostly a routing problem with a retrieval step in the middle and a hard cap on what it is allowed to do",
-        "A support agent should be a free-running agent that decides everything dynamically",
-        "Support automation only works when every case is fully automated end to end",
-        "Reasoning quality, not architecture, decides most support outcomes"
+        "Expose a raw SQL execution tool so the agent has full query freedom",
+        "Expose the managed MCP server together with the SQL execution tool on the same server so they share permissions",
+        "Expose a Cortex Agent as the client-facing tool, keeping the agent inside semantic views and verified queries, and isolate any direct SQL behind a separate least-privileged role",
+        "Always disable all MCP tools and expose the warehouse through a direct REST API only",
+        "Store the data in the agent's own vector store instead of querying the warehouse"
       ],
-      "correct_answer_index": 0,
-      "explanation": "The lesson states that a support agent is mostly a routing problem with a retrieval step in the middle and a hard limit on what it may do, and that most production failures come from getting one of those three wrong."
+      "correct_answer_index": 2,
+      "explanation": "The Snowflake docs recommend exposing a Cortex Agent as the governed client-facing tool, and warn that exposing the SQL execution tool on the same server lets a client bypass the agent's semantic views, verified queries, and orchestration. If direct SQL is required it should be on a separate server with a dedicated least-privileged role."
     },
     {
       "question": "Which statement best reflects the lesson’s guidance?",
@@ -632,38 +643,26 @@
       "explanation": "The differences are deployment plumbing, not schema."
     },
     {
-      "question": "According to the lesson, what is the key difference between the write path into a CRM and the read path into a data warehouse?",
+      "question": "An agent's service account credentials leak. What limits the damage an attacker can do with them?",
       "options": [
-        "The write path never needs a least-privileged role because writes are performed inside the CRM",
-        "Both paths always use the same shared identity and grants",
-        "The write path changes live business data, so it should prefer platform actions that apply business rules and put human confirmation on destructive or expensive operations, while reads stay read-only inside governed views",
-        "The write path should always use a direct API while the read path must always use MCP",
-        "The write path requires a higher recursion depth than the read path"
+        "The agent's system prompt, which instructs it to refuse harmful requests",
+        "The OAuth scopes granted to the token, which limit what the token may do on the resource server",
+        "The agent's model provider, which filters unauthorized API calls",
+        "The user's password, which the attacker would also need to act"
       ],
-      "correct_answer_index": 2,
-      "explanation": "The lesson stresses that a write is a commitment in shared state and should go through governed platform actions with a human confirmation at the blast-radius boundary, while the read path stays read-only inside the warehouse's own governance. The two paths use separate identities, separate grants, and separate guardrails."
+      "correct_answer_index": 1,
+      "explanation": "The lesson says scopes are the mechanism for least privilege: the token the agent receives is limited to the scopes it was granted, and the resource server enforces those scopes on every request. The smaller the scope, the smaller the blast radius when credentials leak."
     },
     {
-      "question": "Per the lesson \"Reliability: Retries, Timeouts, and Circuit Breakers for LLM Calls\", which of these HTTP status codes should you NOT retry, because retrying it masks a real configuration bug behind delay?",
+      "question": "Per the lesson \\\"Performance: Latency Budgets, Streaming, Batching, and Speculative Execution\\\", what is the one idea to carry out?",
       "options": [
-        "429 (rate limited)",
-        "503 (service unavailable)",
-        "401 (unauthorized)",
-        "504 (gateway timeout)"
+        "Latency is a budget you allocate rather than a wall you hit: you decide the total for each step before shipping, measure TTFT for a human or end-to-end latency for a machine, and spend streaming, batching, and speculative execution on the part that is over target",
+        "Latency is one number you push down as far as possible regardless of who is waiting",
+        "Time to first token is the only latency metric that matters for every agent",
+        "Batching should be the first lever applied to every request, including single interactive ones"
       ],
-      "correct_answer_index": 2,
-      "explanation": "The lesson classifies 401 (invalid auth) as a permanent error on your side, along with 400, 403, and 404. Retrying a 401 burns budget and time on a request that will never succeed and hides the real config bug. 429, 503, and 504 are all in the retryable set."
-    },
-    {
-      "question": "Which statement best reflects the lesson’s guidance?",
-      "options": [
-        "The lesson claims this cannot be verified at all.",
-        "The opposite is true: lessons 1–5 built the agent loop, its prompts, and its economics.",
-        "The lesson argues this applies only in unrelated settings.",
-        "Lessons 1–5 built the agent loop, its prompts, and its economics."
-      ],
-      "correct_answer_index": 3,
-      "explanation": "Lessons 1–5 built the agent loop, its prompts, and its economics."
+      "correct_answer_index": 0,
+      "explanation": "The lesson frames latency as an allocation problem: set the budget from the consumer, measure the number that binds for that consumer, and apply the levers to the step that is over target."
     }
   ]
 }
