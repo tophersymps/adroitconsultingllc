@@ -18,6 +18,8 @@ The core weakness of the single-process agent script is that it does everything 
 
 Production agent systems fix that by splitting the work into layers that scale and fail independently. The useful split for this lesson is three pieces: an orchestrator that decides what work exists, a queue that holds the work until something is ready to take it, and a pool of workers that pull work off the queue and execute it. Each piece can grow without rebuilding the others. [^1]
 
+![Three layers that scale and fail independently: the orchestrator writes a task to the queue and moves on, and a stateless worker pulls it off the queue when it has capacity, so the producer and the workers never talk directly](</diagrams/scaling-agent-workloads-horizontal-scaling-queues-worker-pools/1-three-layer-split.png>)
+
 ## Horizontal scaling: more copies, not a bigger one
 
 Vertical scaling means giving one process more CPU, memory, or connections. It works up to the limit of a single machine and then it stops. Horizontal scaling means running more copies of the worker and spreading work across them. You are not making the worker faster. You are making it exist more times.
@@ -25,6 +27,8 @@ Vertical scaling means giving one process more CPU, memory, or connections. It w
 For many workloads the gain is close to linear. Amazon SQS documents the pattern directly: when you add more message producers and consumers, you achieve essentially linear gains in throughput, so doubling the number of clients roughly doubles throughput. The constraint that forces this is round-trip latency, the time a single connection spends waiting for a request to be answered, which caps how much one thread over one connection can do. [^2]
 
 Two points matter for agents specifically. First, an agent worker is mostly I/O bound. It sits waiting on model calls, tool calls, and external APIs far more than it computes. That means one worker can run several tasks truly at once while it waits, without faster hardware. Concurrency inside a worker and concurrency across workers are both levers; you pull the in-process one first because it is free, then scale out when that is spent. Second, an agent worker must be stateless for horizontal scaling to work. If each request's context lives in the worker's memory, only that worker can finish the request, and adding workers does not help. The state has to live somewhere addressable by any worker, in a database or a store, so any copy can pick the work up. [^1] [^5]
+
+![Vertical vs horizontal scaling: vertical adds CPU, memory, or connections to one process and stops at the limit of a single machine, while horizontal runs more copies of a stateless worker for near-linear gains](</diagrams/scaling-agent-workloads-horizontal-scaling-queues-worker-pools/2-vertical-vs-horizontal.png>)
 
 ## The queue: what decouples producers from workers
 
@@ -45,6 +49,8 @@ It lets throughput rise by adding consumers, not by redesigning. For a queue you
 A worker pool is the set of processes that consume the queue. The practical design question is not "one or many" but "how many, and how do you decide." The pool needs a concurrency target and a scaling policy, and both should come from the queue measurements, not from a guess.
 
 The queue metrics that drive the decision are queue depth (how many tasks are waiting), queue wait time (how long a task sits before a worker picks it up), and completion rate (tasks finished per second). A consistently growing depth while completion rate holds means workers are keeping up but the backlog is building, likely from burst input. A wait time climbing past a few seconds means workers cannot pick work up fast enough, so add capacity. A steady empty queue with idle workers means the pool is oversized, so scale down to stop paying for it. [^3]
+
+![Scaling by queue metrics: a growing queue depth with wait time past a few seconds means add workers, while a steady empty queue with idle workers means scale down, all capped by a maximum pool size and a task-level rate limit](</diagrams/scaling-agent-workloads-horizontal-scaling-queues-worker-pools/3-scaling-by-queue-metrics.png>)
 
 A good starting point for sizing threads in one worker instance is throughput times average task duration, divided by the number of worker instances. For I/O bound tasks, like agent steps that mostly wait on model calls, you use more threads than CPU cores. For CPU bound work you match threads to cores. [^3]
 
