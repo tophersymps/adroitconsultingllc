@@ -2,6 +2,27 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "einstein-gpt-practical-use-cases-for-sales-teams",
+    "title": "Einstein GPT: Practical Use Cases for Sales Teams",
+    "excerpt": "Einstein GPT puts generative AI inside the sales workflow. Here are the use cases that deliver measurable lift and the ones to wait on.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "September 29, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "8 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "Einstein GPT",
+      "AI",
+      "Sales",
+      "Generative AI"
+    ],
+    "status": "published"
+  },
+  {
     "slug": "react-19-3-two-environment-apis-2026",
     "title": "React 19.3: First-Class APIs for Two-Environment Rendering",
     "excerpt": "React 19.3 stabilizes four APIs that remove the friction of rendering a component once on the server and again in the browser.",
