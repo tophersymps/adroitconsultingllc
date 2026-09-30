@@ -6,6 +6,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import LessonProgress from "@/components/Learn/LessonProgress";
 import EmptyState from "@/components/Learn/EmptyState";
+import CourseComingSoon from "@/components/Learn/CourseComingSoon";
 import SeriesSyllabus from "@/components/Learn/SeriesSyllabus";
 import { learnSeries } from "@/data/learn";
 import {
@@ -67,13 +68,41 @@ export default async function SeriesPage({ params }: Props) {
   if (!s) notFound();
 
   // Access seam gate (ADR-201): DB-backed status. not-launched (no courses row,
-  // or non-live + non-admin) → 404. The syllabus stays readable on a live course
-  // even when the member isn't entitled (US-004) — content-tier links gate via
-  // the lesson page seam.
-  const userId = await getAccessUserId();
-  const decision = await accessSeam.decideCourseAccess(userId, series);
-  if (decision.kind === "not-launched") notFound();
-  const courseRow = await getCourseRowBySlug(series);
+    // or non-live + non-admin) → 404. The syllabus stays readable on a live course
+    // even when the member isn't entitled (US-004) — content-tier links gate via
+    // the lesson page seam.
+    const userId = await getAccessUserId();
+    const decision = await accessSeam.decideCourseAccess(userId, series);
+    const courseRow = await getCourseRowBySlug(series);
+    // PENDING course → "coming soon" teaser (B-10/D1): real content that isn't
+    // launched yet renders a marketing surface instead of 404ing, so cross-course
+    // references to it stay valid and become a touchpoint. Only truly-absent
+    // courses (no row) keep 404ing.
+    if (decision.kind === "not-launched") {
+      if (courseRow && courseRow.status === "pending") {
+        const { published, curriculum } = getSeriesProgress(s);
+        const upcoming = Math.max(0, curriculum - published);
+        return (
+          <div className="min-h-screen flex flex-col">
+            <Header />
+            <main id="main" className="flex-1">
+              <CourseComingSoon
+                series={{
+                  name: s.name,
+                  description: s.description,
+                  gradient: s.gradient,
+                  slug: s.slug,
+                }}
+                courseRow={courseRow}
+                upcoming={upcoming}
+              />
+            </main>
+            <Footer />
+          </div>
+        );
+      }
+      notFound();
+    }
 
   // Learn v2 profile (ADR-208/209/210): the unified CatalogCourse for this
   // series — section/group, difficulty/audience/outcomes/tags, structured

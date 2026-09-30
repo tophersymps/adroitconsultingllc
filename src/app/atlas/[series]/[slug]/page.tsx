@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
 import Header from "@/components/Header";
@@ -92,7 +92,14 @@ export default async function LessonPage({ params }: Props) {
   // → 404; paywall → render the Paywall instead of content (AC-3).
   const userId = await getAccessUserId();
   const decision = await accessSeam.decideCourseAccess(userId, series);
-  if (decision.kind === "not-launched") notFound();
+  // PENDING course → redirect to its series "coming soon" teaser (B-10/D1).
+  // The lesson exists but isn't launched yet; the series page is the stable
+  // marketing surface, and the same URL resolves to the real lesson once live.
+  if (decision.kind === "not-launched") {
+    const row = await getCourseRowBySlug(series);
+    if (row && row.status === "pending") redirect(`/atlas/${series}`);
+    notFound();
+  }
 
   // Server-side session gate (ADR-104): guests NEVER receive question text —
   // the quiz JSON is loaded only in the authed branch.
