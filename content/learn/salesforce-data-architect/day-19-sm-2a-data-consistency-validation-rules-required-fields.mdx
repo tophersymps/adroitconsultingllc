@@ -1,0 +1,172 @@
+---
+title: "Data Architect SM-2a: Data Consistency: Validation Rules, Required Fields, Picklists, Unique Constraints, Lookup Filters, Duplicate Rules, and External IDs"
+slug: day-19-sm-2a-data-consistency-validation-rules-required-fields
+series: salesforce-data-architect
+lesson: 19
+excerpt: "How to keep data persisted consistently no matter how many users and integrations write to it: the difference between field-level required and layout required (and why one is a data-consistency gap), validation rules for conditional business logic, dependent and restricted picklists, unique constraints and external IDs as hard keys, lookup filters for referential integrity, and duplicate rules for fuzzy matches. Includes a worked customer scenario, when each layer applies and when it is bypassed, the three exam traps, and a configuration walkthrough."
+date: "September 30, 2026"
+author: "Adroit Consulting"
+readTime: "19 min read"
+tags: [Salesforce, Data Architecture, Data Management, Certification]
+---
+
+The last three lessons were about who gets in: which licenses reach which objects, and which records and fields each user can then see. Requirement sm-2a flips the question. Given that the org lets these people and these integrations write to the model, how do you make sure the data they persist is actually consistent? Not just present, but valid, unique where it must be, and attached to the right parent records.
+
+Consistency is a different job from access, and it is the one an architect most often underestimates. Access controls decide who may try to write. Consistency controls decide whether the write succeeds cleanly. A model can grant perfect access and still fill itself with garbage through the harmless-looking channels: a Data Loader job that skips a field the page layout marked required, an API that loads a State value the picklist never heard of, a bulk upsert that creates duplicate Accounts because the only identity key was not unique. Every one of those is a consistency failure, and every one is load-bearing for the Platform Data Architect exam because the exam scenario questions are built on exactly these gaps.[^10]
+
+The deep principle underneath sm-2a is that consistency is enforced in layers, and each layer has a different blast radius. Some layers fire on only one entry path. Some fire on every path. An architect who knows which layer catches which write can guarantee consistency; an architect who trusts a single soft layer gets surprised by the Data Loader. This lesson gives you the layer map, then shows you, layer by layer, what each one guards, where it fails, and how to cover every entry path with the right combination.
+
+## Consistency is a stack, and each layer has a blast radius
+
+Think of the mechanisms this requirement names as a stack, from the weakest to the strongest, where strong means it applies to every write path at once. The candidate list is: field-level required, page-layout required, validation rules, dependent picklists, unique constraints, lookup filters, and duplicate rules, plus external IDs used as hard keys.
+
+The first mental habit is to separate the UI-only layers from the data layers. Page-layout required and dependent picklists are largely interface concerns: they shape what a human sees and enters in the screen. They feel like guards, but they quietly bypass every programmatic path. Field-level required, validation rules, unique constraints, and lookup filters sit at the persistence layer and fire whether the write comes from the UI, the API, a Flow, or a Data Loader. This single split explains most data-consistency failures in real orgs. Data enters clean through the screen and dirty through the loader, and the org assumed the screen's guard covered the loader too.
+
+The strongest approach is to build the model's consistency out of the layers that do not care where the write came from, and to treat the UI-only layers as convenience, never as enforcement. Everything that must be true of the data should be enforced by a layer that applies to all paths, so the loader cannot be the door the garbage walks through.
+
+## Field-level required versus layout required is the single biggest trap
+
+The most common consistency gap in real Salesforce orgs, and the one the quiz hits hardest, is the difference between marking a field Required on the page layout and marking it Required at the field level. They sound alike. They are not the same layer, and they do not have the same reach.[^1]
+
+A field marked required on the page layout is a UI constraint. It stops a human from saving the record from that layout without filling the value. That is all it does. When data arrives through the API, through Data Loader, through an Apex insert, or through a Flow, the layout is not even consulted. Salesforce bypasses page layouts entirely on programmatic entry, so a value the layout promises is simply absent and the write succeeds with the field left blank.
+
+Field-level required is different. Setting Required on the field definition in Object Manager makes the platform reject a blank value on every entry path: the UI, the API, every Flow, every Apex insert, and Data Loader. A blank triggers a save error that the caller must handle, whether that caller is a human who sees the message or an integration that receives an error to re-process or report.[^1]
+
+So the fix for the classic failure, Accounts loaded by Data Loader missing an Industry even though the field appears required on the layout, is not another layout requirement. It is to make the field required at the field level, or to add a validation rule that rejects a missing value. Layout changes do nothing to the loader path, because the loader never reads layouts. This is the exact scenario sm-2a asks you to diagnose, and the correct answer is always to move the requirement to a layer that covers the API and Data Loader.
+
+There is a nuance worth keeping straight: field-level required is unconditional. It fires on every record, every path, always. When the rule is "this field must always be present" that is exactly what you want, and it is the strongest declarative must-have in the toolset because you cannot forget to apply it per path. When the requirement is conditional, such as only when the record is in a particular stage, field-level required is too blunt and you reach for a validation rule instead. Choosing between the two is a judgment the exam rewards.
+
+## Validation rules enforce conditional logic on every path
+
+Field-level required is binary: the field is either always needed or never enforced automatically. Real business rules are rarely binary. "Amount must be greater than zero when the Opportunity reaches Closed Won." "A Contact must carry an email when the account is in a billing relationship." These are conditional statements, and the declarative tool for them is the validation rule.
+
+A validation rule is a Formula-driven guard that runs before the record saves. It evaluates a condition against the record being written, and when the condition is true it blocks the save and returns an error message. The classic shape is an If that checks a trigger condition and then a validity condition:
+
+```
+AND(
+  ISPICKVAL(StageName, "Closed Won"),
+  OR(Amount == null, Amount <= 0)
+)
+```
+
+Read that as: if the stage is Closed Won and the amount is missing or not positive, fail the save. The error tells the user or the API caller exactly what to fix. When the condition is false, the rule is silent and the save proceeds normally.[^2]
+
+The critical fact for consistency is the reach. A validation rule does not care about the entry path. It evaluates on the UI, on the API, on Flow writes, on Apex, and on Data Loader inserts and updates. That is what makes validation rules the robust cross-path control: any write that violates the condition is rejected with a clear error, and the caller is responsible for handling it, not silently corrupting the data.[^2]
+
+There is a trade-off the exam wants you to see. Validation rules fire before and on save, so they are a write-time guard, not a true database constraint. A rule on a cross-object condition can be fragile: it evaluates the record being saved, and it may depend on related data that is itself mid-transaction. Complex multi-object validation is where architects get bitten. Keep validation rules focused on conditions expressible against the record and its lookup targets at save time, and do not lean on them for things a field-level flag or a unique constraint handles more cheaply and more reliably.
+
+## Dependent picklists constrain valid combinations, not relationships
+
+Picklists control the set of values a field can hold, and a dependent picklist goes one step further: it makes the allowed values on one field depend on the value of a controlling field. The canonical pair is Country controlling State. Choose "United States" and the dependent State picklist offers only US states; choose "Canada" and it offers Canadian provinces. The mechanism enforces valid value combinations through the controlling-field dependency, and it is the declarative way to stop nonsense pairs such as a US state attached to a Canadian country.[^1][^3]
+
+Keep the reach in mind. A dependent picklist is, like the layout, primarily a UI-value constraint. On the screen it prevents a human from picking an invalid combination because the dependent values only show the valid ones. But the enforcement question for consistency is whether the platform blocks an invalid combination when it arrives from the API or Data Loader.
+
+That is where the restricted setting matters. A plain picklist accepts any value that matches the picklist's defined values; it is not free text, but it does not independently verify dependency pairs on every path. A restricted picklist is the version that refuses unknown values outright, so an API writing a value that is not in the defined list is rejected rather than silently accepted. For value governance across all entry paths, the restricted picklist is the control to reach for, but the architects' habit is to treat restricted picklists and validation rules as the enforced layer while treating the visible dependent dropdown as the human-friendly layer on top.[^3]
+
+And here is the trap that maps straight to the exam: do not confuse a dependent picklist, which constrains values, with a mechanism that preserves referential integrity, which constrains relationships. A dependent picklist says nothing about which parent a lookup points to. It governs the values of a single field. If the quiz asks which two mechanisms preserve referential integrity on a lookup, the dependent picklist is a distractor: it constrains values, not relationships.[^1]
+
+## Unique constraints and external IDs give the model hard keys
+
+Uniqueness is the layer that stops duplicate values on a specific field, and it is delivered two ways. You can set the Unique flag on a field, which prevents two records from holding the same value in that field. Or you can designate a field as an external ID and, further, make it unique, which both identifies records by an external key and prevents key collisions. A unique external ID is the strongest integration key in the model: it gives you a deterministic value by which an integration can identify a record, and it guarantees no two records share it.[^4]
+
+Why does an external ID matter for consistency and not just for convenience? Integration is only consistent when identity resolution is deterministic. When an upstream system pushes a record carrying its own system's key, the Salesforce org needs a reliable way to say "is this the same record I already have, or is it new?" Without a key, the answer is guesswork and duplicates. With an external ID the answer is mechanical: look up by that key, and replace or insert. The external ID is what makes upsert-based integration possible, and a unique external ID makes that resolution deterministic and collision-free.[^4]
+
+The exam traps around uniqueness are precise, and both come from a misreading of the word unique.
+
+First, a unique field does not block blank duplicates. Uniqueness applies only to populated values. Two blank records do not collide because blank is not a value, so a unique field quietly allows an unlimited number of records with the field empty. If the data must never have blanks, uniqueness alone is not enough; you pair it with field-level required or a validation rule so the field cannot be both empty and populated-with-duplicates in a way that undermines the model.[^1]
+
+Second, uniqueness is case handling depends on the field. Text fields enforce case-sensitive uniqueness by default, which can trip integrations that are not case-consistent: the same external key arriving once as "acme" and once as "Acme" may pass as two different values unless you account for it. And there is a platform limit on the number of unique fields per object, which is a modeling limit you design within rather than a value you can inflate.[^1]
+
+The combination that gives the strongest identity protection, and this is the exact answer the quiz wants, is a unique external ID acting as the hard key plus a duplicate rule catching the fuzzy cases. The unique external ID guarantees deterministic identity for exact matches on a system of record key. The duplicate rule catches the near matches, such as "Acme Corp" versus "Acme Corporation", that no exact key ever resolves. One is deterministic, the other probabilistic, and together they cover both classes of duplicate.
+
+## Lookup filters preserve referential integrity declaratively
+
+A lookup field says this record points at a parent record of a certain type. It does not, by itself, say which parents are acceptable. A lookup filter narrows the set of eligible parent records that the lookup can point to. Configure a lookup on Account that can only reference active Accounts, and the UI only offers active Accounts as the parent, blocking the architect's nightmare of a record tied to an ineligible, inactive, or otherwise wrong parent.
+
+This is the declarative guard against pointing at the wrong parent, and it is the referential-integrity control in the lookup family. Alongside it, a master-detail relationship enforces the relationship's existence and cascade behavior, and a required lookup forces a parent to be present at all. Masters delete children and inherit sharing and record access; required lookups refuse to save a child with no parent. Together these are the mechanisms that preserve referential integrity: a filter restricting who can be the parent, and the master-detail or required relationship guaranteeing the parent exists and behaves correctly on delete.[^1][^5]
+
+Keep the relationship between the layers clear. A dependent picklist constrains values, a lookup filter constrains parents, and a master-detail or required lookup enforces the existence and delete semantics of a relationship. When the quiz asks which two mechanisms preserve referential integrity on a lookup, the answer is the lookup filter (it restricts which parents are eligible) and the master-detail relationship or required lookup (it enforces the relationship's existence and its cascade behavior). The dependent picklist is a value constraint, not a relationship guard, and a read-only layout is a UI-only detail, not a data-integrity layer.[^1][^5]
+
+The reach of a lookup filter mirrors the other layers. It applies strongly to the UI, where it shapes the parent picker, and it applies to data operations depending on the configuration. Because a filter is a declarative restriction, it is the layer you configure to stop a bulk load from attaching records to a parent that the business rules consider ineligible.
+
+## Duplicate rules catch fuzzy matches and can be configured for the API
+
+External IDs and unique fields handle the deterministic duplicates: two records carrying the same key. A whole class of duplicates carries no shared key. "Acme Consulting Inc." and "Acme Consulting Inc" differ by punctuation. "John Smith" at the same street on two Contact records never had an external ID at all. These are fuzzy matches, and the tool for them is the duplicate rule.
+
+A duplicate rule pairs a matching rule, which defines how the platform decides two records are likely the same (exact or fuzzy matches on chosen fields), with an action, such as Block, which refuses the save, or Alert, which warns the user a duplicate may exist. Configure a matching rule on Account Name and integration-type fields, attach a Block action, and a human or a load that creates a near-duplicate Account is stopped at save time and told about the probable match.[^6]
+
+The consistency-bearing detail here, and the reason sm-2a names it, is that duplicate rules can be configured to run on the API as well. That matters because the classic fuzzy-duplicate source is not the sales rep typing a new Account; it is the marketing automation platform and the Data Loader inserting thousands of near-identical records in a batch. If duplicate rules only fired on the UI, an org would protect the screen and still spray duplicates through every integration. Configuring the duplicate rule to evaluate on the API closes that path and makes fuzzy protection apply across entry channels.[^6]
+
+This is also where deterministic and probabilistic protection combine cleanly, which we touched on above and the quiz tests directly. A unique external ID is the hard key, exact and deterministic. A duplicate rule with a matching rule and a Block or Alert action is the fuzzy net, probabilistic and value based. For the strongest identity protection, configure both: the unique external ID resolves the system-of-record key exactly, and the duplicate rule catches the near-identical records that no key ever matches. Where an integration upserts keyed on an external system's ID, that unique external ID plus a duplicate rule is the combination that gives deterministic and fuzzy protection at once.[^1][^4][^6]
+
+## A worked customer scenario
+
+Put the whole layer map together on a scenario, the way sm-2a will ask.
+
+A consulting firm runs a Salesforce org and has inherited a mess. Accounts load with an empty Industry roughly a fifth of the time, because the sales team typed it in the UI but the Data Loader that backfills the rest never touched the field and the field was only required on the page layout. Two separate implementation projects each created their own "Acme Mechanical" style records, so the org carries fuzzy duplicates it cannot reconcile. An integration keys its inbound project records on the upstream system's ID, but that integration works unpredictably because no field in Salesforce is actually bound to that ID as a unique key. And a bulk load recently attached project records to a deactivated parent account, because nothing restricted the lookup to eligible parents.
+
+Walk the fixes layer by layer.
+
+First, the Industry gap. Make Industry required at the field level, not just on the layout, so every path, the loader included, must supply a value, or reject the record if it cannot. That single change closes the loader hole that layout-required left open.[^1]
+
+Next, the deterministic identity. Add a text field to hold the upstream integration key, mark it as an external ID, and enable the Unique flag. Now the integration can upsert by that key deterministically: one key, one record, no blind guesses and no silent duplicates from the same system of record.[^4]
+
+Third, the fuzzy duplicates that predate any key. Configure a matching rule on Account Name and ZIP or domain, attach a duplicate rule with a Block action, and enable its API behavior so the marketing automation platform is subject to the same guard the UI is. The hard key handles "same ID", the duplicate rule handles "same company spelled differently." Together they convert the org from duplicate-prone to duplicate-resistant.[^6]
+
+Fourth, the referential integrity gap. On the project-to-account lookup, add a lookup filter that only permits active Accounts as the parent, so the loader can no longer attach a project to a deactivated account. Optionally make the lookup required so a project record cannot exist without a parent at all.[^1][^5]
+
+The scenario is a direct map of the requirement: validation and required fields for conditional and unconditional must-haves, external IDs and uniqueness for the hard key, duplicate rules for the fuzzy cases, and lookup filters for the relationship guard. Four problems, four distinct layers, one consistent model.
+
+## Configuration walkthrough
+
+When you are handed a real org and asked to make the data persist consistently, run this sequence. The order moves from the strongest, most-path-independent layer first.
+
+1. **Set truly unconditional must-haves at the field level.** In Setup, Object Manager, open the object then the field, and set Required. This makes the value mandatory on every entry path and is your strongest declarative must-have. Only fields that must always be present belong here. For anything conditional, hold it for the validation rule.[^1]
+2. **Configure dependent picklists for valid value combinations.** For a controlling-dependent pair such as Country and State, edit the dependent field and set up the controlling field and its dependent values. Where an invalid value must be refused from the API as well, mark the picklist restricted and add the conditional check as a validation rule, so the value governance does not live only in the screen.[^1][^3]
+3. **Add validation rules for conditional business rules.** In Object Manager, the object, Validation Rules, add a rule whose formula raises an error when an invalid condition holds. This is your cross-path guard for stages and conditional requirements, and it fires on the API and Data Loader too.[^2]
+4. **Turn on uniqueness and external IDs for your hard keys.** In Object Manager, the field, enable Unique for fields that must never repeat (remembering that blanks are not duplicates), or set the field as an external ID and mark it unique for integration identity. This is the deterministic layer the integrations key against.[^1][^4]
+5. **Restrict eligible parents with lookup filters.** Open the lookup field and add a filter, for example only active Accounts, so the declarative relationship guard limits which parents a record can point to. Pair it with required lookups or master-detail where the parent must exist and carry cascade semantics.[^1][^5]
+6. **Add the fuzzy net with duplicate rules.** In Setup, Duplicate Management, create a matching rule on the fields that signal a duplicate, then a duplicate rule with a Block or Alert action, and configure it to run on the API so batch loads and integrations get the same protection the UI gets.[^6]
+
+Notice what the sequence optimizes for. The layers that apply to every entry path, field-level required, validation rules, uniqueness, lookup filters, and API-enabled duplicate rules, do the real enforcement. The layout-required and dependent-picklist layers are set for the human convenience on top, but they are never the thing you rely on for a guarantee. Build enforcement out of the path-independent layers and the loader cannot be the door the garbage walks through.
+
+## Exam traps to dodge
+
+Requirement sm-2a punishes three specific misreadings.
+
+**Trap one: trusting page-layout required for consistency.** Layout-required is UI-only and completely bypassed by the API and Data Loader. A field required on the layout but not at the field level or by validation rule will silently arrive blank through every programmatic path. The fix is always the field-level requirement or a validation rule, never another layout.[^1]
+
+**Trap two: assuming a unique field blocks blank duplicates.** Uniqueness applies only to populated values. A blank is not a duplicate, so a unique field permits as many empty records as you want. If blanks themselves are the problem, add field-level required or a validation rule on top of uniqueness.[^1]
+
+**Trap three: assuming a picklist blocks invalid API values.** Unless the picklist is restricted, and unless a validation rule enforces the conditional logic, the API and Data Loader can load values the dropdown never offered. The visible dependent dropdown is a convenience layer; restricted picklists and validation rules are where the enforcement lives across paths.[^1][^2][^3]
+
+The unifying thread, and the exam tip sm-2a wants burned in, is this: the layers that cover every entry path are field-level required, validation rules, unique external IDs, and duplicate rules configured for the API. Page layouts and dependent picklists make the interface pleasant; they do not make the data consistent. Reach for the path-independent layers whenever the scenario demands a guarantee rather than a hint.[^1]
+
+## Try it
+
+Reproduce the failure, then the fix, in a sandbox.
+
+Create a Contact with a field marked required on the layout but not at the field level. Enter a record through the UI and confirm the layout enforces the value, then load the same records through Data Loader or a REST insert and observe that records with the field blank save without error. Now flip the field to required at the field level and repeat the loader insert; the load rejects the blank records. That contrast is the entire lesson in one experiment.[^1]
+
+Build a dependent picklist with Country controlling State, then validate its behavior from the API. Craft an insert that pairs an invalid country-state combination and observe whether the restricted picklist and a validation rule reject it while the plain picklist alone does not.[^1][^3]
+
+Add a text field as a unique external ID and run an upsert keyed on it twice with the same ID, confirming it resolves to one record and refuses a second with the same key. Then try inserting duplicates of a blank value to confirm blank does not collide, and add a validation rule to close that gap. Finally, set up a matching rule and a duplicate rule with an API Block action and insert a near-duplicate Account from Data Loader to watch the fuzzy net fire.[^4][^6]
+
+## What's next
+
+You can now make a data model persist consistently across every entry path: field-level required for unconditional must-haves, validation rules for conditional logic, restricted and dependent picklists for value governance, unique external IDs as deterministic hard keys, lookup filters and required lookups for referential integrity, and duplicate rules, API-enabled, for the fuzzy cases. Lesson 20, Persistence-consistency scenarios, turns these mechanisms into concrete integration patterns: how keys, natural keys, idempotent writes, and upsert come together to keep remote systems and Salesforce in agreement under load. It is where the individual controls you just learned get orchestrated into an end-to-end persistence strategy.
+
+## Related Requirements
+
+- Lesson 20 of 42 (sm-2b): Persistence-consistency scenarios: keys, natural keys, idempotent writes, upsert
+- Lesson 13 of 42 (md-2a): Golden record and system of truth
+
+## References
+
+[^1]: Define Field Attributes for a Custom Object, Salesforce Help. Documents field-level Required versus page-layout requirements, the unique flag and its behavior with blank values, case-sensitive uniqueness, and the platform limit on unique fields. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.custom_field_attributes.htm&type=5)
+[^2]: Define Validation Rules, Salesforce Help. Explains that validation rules run when a record is saved and block the save with an error message when the condition is true, across entry paths. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.defining_validation_rules.htm&type=5)
+[^3]: Custom Field Types, Salesforce Help. Covers picklists, dependent picklists, controlling and dependent fields, and restricted picklists that refuse values not in the defined list. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.custom_field_types.htm&type=5)
+[^4]: About External IDs, Salesforce Help. Documents that external IDs can be marked unique and used for upsert-based integration identity resolution. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.fields_external_ids.htm&type=5)
+[^5]: About Lookup Filters, Salesforce Help. Documents that lookup filters restrict the parent records a lookup field can reference, preserving referential integrity. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.fields_lookup_filters.htm&type=5)
+[^6]: What Are Matches and Duplicate Rules?, Salesforce Help. Documents matching rules, duplicate rules with Block or Alert actions, and configuring duplicate rules to run on the API. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.duplicate_overview.htm&type=5)
+[^10]: Platform Data Architect exam guide, Salesforce. Outlines the Salesforce Data Management domain and the objective to recommend techniques that persist data consistently. [trailhead.salesforce.com](https://trailhead.salesforce.com/en/credentials/platformdataarchitect)
