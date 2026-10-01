@@ -1,0 +1,148 @@
+---
+title: "Lesson 55: RAG Architecture: Connecting LLMs to Enterprise Data"
+slug: rag-architecture-connecting-llms-to-enterprise-data
+series: "salesforce-architect"
+lesson: 55
+excerpt: "The architecture that lets a large language model answer from your data instead of its training corpus. Why RAG exists, how the retrieval and generation phases work, how hybrid and semantic search fit, and the system-level decisions (index freshness, evaluation, latency, cost, source fidelity) an architect owns. Ties to the federated-data lesson and to Data Cloud grounding on the Salesforce platform."
+date: "October 1, 2026"
+author: "Adroit Consulting"
+readTime: "13 min read"
+tags: [Architecture, AI, LLMs, RAG, Data]
+---
+
+# Lesson 55: RAG Architecture: Connecting LLMs to Enterprise Data
+
+Lesson 54 showed you the architecture for a human who wants live, authoritative external data: federate it, query it in place, and never copy the source. This lesson takes the same instinct and points it at a different consumer. Not a rep on a page. A large language model.
+
+Here is the problem in one sentence. An LLM only knows what its training data taught it, and its training data is a snapshot of the public internet frozen at some point in the past. So the moment a client says the obvious thing, "can the assistant answer questions about our contracts, our products, our policies," you have a gap. The model has never seen their contracts. It does not know their products. It will not know their policies until someone puts that knowledge where the model can reach it.
+
+**Retrieval-augmented generation (RAG)** is the architecture that closes that gap. It connects an LLM to an external knowledge base and grounds each answer in the specific, current, authoritative enterprise data that actually answers the question. [^1] IBM puts the definition plainly: RAG is an architecture "for optimizing the performance of an AI model by connecting it with external knowledge bases," so the model delivers more relevant, higher-quality responses. [^1]
+
+The part that matters for an architect is that RAG does not retrain the model. It changes how the model answers. That one fact drives every design decision in this lesson, and it is the deep link back to lesson 54.
+
+## Why RAG exists: the three failures of a naked LLM
+
+Before the pattern, the reasons it exists. An LLM handed a question with no retrieval layer fails in three specific ways, and AWS names them directly.
+
+It makes things up. When the model does not have the answer in its parameters, it does not say "I do not know." It produces the most statistically plausible completion, which is often a confident falsehood. AWS describes it as presenting false information when the model does not have the answer. [^2]
+
+It is out of date. The model answers from its training snapshot, so it reports yesterday's status as current fact. AWS calls this presenting out-of-date or generic information when the user expects a specific, current response. [^2]
+
+It cannot tell authoritative from random. Without ground truth to check against, the model has no way to prefer your policy over some blog it read in training. AWS frames the core value as redirecting the LLM toward authoritative, pre-determined knowledge sources and giving users insight into how the response was generated. [^2]
+
+Wall the three failures together and you get the architect's reason for RAG. You are not asking the model to know your business. You are giving it the facts for this one question, this one time, and asking it to argue from those facts only. The knowledge lives and stays in the data stores you already govern, and the model becomes a reader of your data rather than an oracle in its own right.
+
+That is exactly the shape lesson 54 gave you for humans. Federation says the data stays at the source and the query moves to the data. RAG says the same for a model: the enterprise data stays where it is governed, and instead of moving the data to the model's memory, we retrieve what is relevant at answer time and hand it to the model as prompt context. [^1] The data does not get copied into the model at all. That overlap is not a coincidence; RAG is the generalization of the federated instinct to LLMs.
+
+## The two phases: retrieval and generation
+
+RAG has exactly two phases, and every implementation is a stack around them. IBM breaks it down this way: the retrieval phase finds relevant information from the knowledge base, and the generation phase composes the answer from that retrieved context. [^3]
+
+Read an end-to-end turn and the phases separate cleanly. A user asks a question. The retrieval stage turns that question into a search against the enterprise knowledge base and pulls back a small ranked set of relevant passages. Then the generation stage builds an augmented prompt, one that combines the user's question with the retrieved passages, and hands it to the LLM, which writes an answer using only the material it was given. [^1] [^2] The user's original question is no longer answered from nothing. It is answered from context that an architect chose.
+
+Hold on to the phrase **augmented prompt**. It is the mechanical heart of RAG and the reason the pattern stays cheap relative to training. The model's weights never change. The prompt simply gets longer and more specific with each turn. You are not buying a model that knows your business. You are buying a few tokens of well-chosen context per question.
+
+## What it takes to build one: indexing and retrieval
+
+Go one layer deeper, because the exam and the real review both live here. A RAG system is more than the two phases; it is a specific set of moving pieces, each with an owner and a decision.
+
+**The knowledge base.** The external source of enterprise data. This is the non-parametric memory, the thing the model does not hold in its weights and can therefore be updated, corrected, and governed independently. [^4] It can be contracts, policies, product specs, support cases, or a document store, the same sources lesson 54 taught you to leave at their authoritative origin.
+
+**Chunking and embedding (indexing).** Before the knowledge base is searchable, source documents are split into chunks and each chunk is converted into a vector, a list of numbers that captures meaning rather than exact words, by an embedding model. The chunks and their vectors are written to an index with metadata and a mapping back to the source document. [^5] This is the data-modeling discipline from lesson 15; the walkthrough there went through chunk sizing, metadata schema, and source mapping in detail, and it applies here unchanged.
+
+**Retrieval.** At query time the user's question is embedded with the same model, then compared against the stored vectors using a similarity metric such as cosine similarity, and the closest matches return ranked. [^3] [^5] The number of passages you pull, usually called top-k, is an architecture parameter you choose, and it directly trades context quality against prompt size and cost.
+
+**Generation.** The retrieved passages and the question are combined into the augmented prompt and passed to the LLM, which writes the grounded answer. [^1] [^2]
+
+Every piece is a place where a decision gets made, and the decisions are the interesting part. Which source data is authoritative. How large a chunk. What metadata to carry. How many passages to retrieve. An architect who cannot say why the knowledge base chooses document X over document Y, or why top-k is five and not fifty, has built a demo, not a system.
+
+## The quality levers an architect actually turns
+
+Retrieval quality is where RAG lives and dies, because generation can only be as good as what retrieval hands it. If retrieval returns the wrong passages, the model will confidently argue from them. So the serious engineering is all on the retrieval side, and there are three levers worth naming.
+
+**Hybrid search.** Semantic search alone misses things. Salesforce's own RAG design is explicit that meaning-based semantic search is combined with keyword search "to further refine results," so Einstein Copilot retrieves data based on meaning and intent while still catching exact-term matches. [^6] The lesson: do not bet the retrieval layer on embeddings alone. Combine vector similarity with lexical or keyword matching, and blend the ranked results, because real questions are sometimes about intent and sometimes about an exact product code or policy number.
+
+**Metadata filtering.** Store structured fields alongside every chunk, then filter before you search the way a WHERE clause narrows a query. Filtering to a product line, a region, or an effective date before computing similarity shrinks the candidate set and pulls answers from the right slice of the knowledge base. Without metadata, you retrieve from the whole corpus and hope.
+
+**Reranking.** A first-pass retriever returns a broad candidate set; a reranker scores those candidates against the question a second time with a stronger model and reorders them before they reach generation. This two-stage pattern buys precision at two costs: more compute and more latency. It is the kind of lever you reach for when retrieval reads as noisy and the application can tolerate the added round trip.
+
+Keep the overarching principle from lesson 15 in view while you tune: the vector index is a derived artifact over authoritative source documents. Every quality lever you turn is working against a snapshot. Which is why freshness, not cleverness, is the difference between a trusted system and a liability.
+
+## Index freshness: the RAG version of "keep the index in sync"
+
+Lesson 54 hammered one cost of federation: a live query is only as good as the source answering it. RAG has the mirror-image cost, and it is easier to miss because it looks like you are done. Indexing produces a copy, a set of vectors derived from source documents, and a copy goes stale the moment a source document changes.
+
+The contract is yours to build. When a policy is revised, a contract is signed, or a product spec changes, the corresponding chunks must be re-embedded and the index updated, or the model answers from yesterday's truth with the same smooth confidence it would give today's. This is the re-embedding job lesson 15 designed: a pipeline that watches the source, detects new and changed documents, and refreshes only the affected chunks, mapping each embedding back to its source version so you can prove the retrieved answer is current. [^5]
+
+Here is the uncomfortable truth that separates a real deployment from a prototype. The value of RAG is that it grounds the model in current, authoritative, enterprise data. If the index is stale, you have negated the entire reason the pattern exists. You have an LLM confidently reporting outdated policies from an ungoverned copy, which is worse than a naked LLM, because it looks sourced. Freshness is not a maintenance chore. It is the product.
+
+## Security and governance of the retrieval layer
+
+Because RAG pulls enterprise data into a prompt, it inherits every security concern you have spent this course accumulating, and adds a few. The prompts you build carry sensitive content to wherever the model runs, so the handling of that content is a first-class architecture decision.
+
+The retrieval layer itself is a filter, and it must implement access control. You do not want a user outside the finance group to retrieve a contract they have no right to see, even if the model would be perfectly happy to quote it. Coarse approaches retrieve from the whole corpus regardless of the questioner, which leaks across role boundaries. A properly designed system restricts what a given user can retrieve, the same way Salesforce sharing rules restrict what a given user can query. The federated-data lesson's dual-security lesson applies here with force: both the source system's controls and your retrieval ACL are enforcing access, on every turn.
+
+When the prompts cross into a hosted model, the enterprise data goes with them. On the Salesforce platform, that crossing is governed by the Einstein Trust Layer, the secure architecture that sits between Salesforce and the model. Keep that in mind for the platform section below; for now, hold the governing question: where does this data physically travel when the model generates, and who has a guarantee about what happens to it there.
+
+## Worked example: a support agent grounded in the service knowledge base
+
+Put the whole pattern together against a concrete client, the field-services company from lessons 14 and 15, the one with technicians, services, and sites. That company wants a support agent that answers technician questions from its operations manuals and past service notes, instead of making techs thumb through PDFs.
+
+Walk the design decisions in order.
+
+1. **Choose the knowledge base and leave it where it is governed.** The manuals and service notes already live in the CRM and a document store, their authoritative origin. Those stay put. RAG does not copy the source of truth into the model; it indexes it. The index is derived, the source is record. [^5]
+
+2. **Chunk with retrieval in mind.** A technician asks "what do I do if a compressor lockout trip happens during a night call?" The manual sections on compressor faults must be retrievable as a unit. Chunk per section, not per page and not per whole manual, so the answer and its surrounding procedure return together. This is lesson 15's chunk-size decision applied to a real query.
+
+3. **Model the metadata.** Every chunk carries document ID, section heading, product line, and last-updated timestamp. Those fields are the pre-filter: techs and the agent narrow to the right product line before similarity search runs, the way a WHERE clause narrows a query. Without them, retrieval has to guess which of a thousand manuals contains the answer.
+
+4. **Map back to source and stay current.** Each chunk retains a pointer to its source document and section, so an answer can cite the manual section it argues from. [^5] A refresh job watches the CRM for new and changed service notes and re-embeds only the affected chunks. Staleness here is a safety issue, an outdated lockout procedure, so the refresh cadence is a design spec, not an afterthought.
+
+5. **Protect access.** Technicians see service notes for the sites they work. The retrieval layer restricts the corpus a given question searches to what that questioner is entitled to see, before any embedding or generation. The agent does not summon knowledge it has no business handing to the caller.
+
+6. **Evaluate before you trust it.** Before this goes live, the team builds a golden set of representative technician questions with the manual section that should answer each, and tests retrieval against it. Did the right section come back? Did the answer cite the current version? This is the eval step, the subject of lesson 49 in full, and it is the gate to cutover here.
+
+Now the honest edge. The plan works precisely because the knowledge is bounded and controllable, the access model is clear, and the freshness requirement is safety-critical, which forces the refresh job into the design instead of letting it be an afterthought. Change one of those facts, say add a requirement to answer confidently from documents the company does not control or keep a data source that changes faster than the re-embedding job can track, and the same design becomes the source of the failure, not the solution.
+
+## The Salesforce connection: Data Cloud and Einstein Copilot
+
+You are studying for the System Architect track, so tie the abstract pattern to the platform you will actually deploy on. Salesforce has productized RAG inside its own stack, and the architect who reads this lesson should recognize the pieces.
+
+Salesforce Data Cloud ships a vector database that combines structured and unstructured data and transforms it into vector embeddings by calling an embedding model through the Einstein Trust Layer. [^6] This is the indexing side of RAG, productized. You define which parts of your data should be searchable, as Salesforce puts it, "by using clicks to create a search index," rather than hand-building a pipeline. [^6]
+
+Retrieval on that store is hybrid by design. Salesforce states that semantic search is combined with keyword search "to further refine results," which is exactly the hybrid-search lever from earlier in this lesson. The retrieved context is then combined with the user request into an augmented prompt, and that prompt is passed through the Einstein Trust Layer, Salesforce's secure AI architecture, to an LLM, which generates the grounded answer. [^6] Every layer of the RAG pattern from this lesson, the index, the hybrid retrieval, the augmented prompt, the secured generation, maps one-to-one onto a named Salesforce capability.
+
+The lesson lesson 15 made still holds as the close of that thought. You do not retrain the model. You index your data, retrieve what is relevant at query time, and stuff it into the prompt. Data Cloud and the Einstein Trust Layer are the productized names for layers of a pattern you now understand from first principles. [^6]
+
+## The pitfalls to design around
+
+Four failure modes recur in real RAG deployments, and naming them is the difference between shipping a system and shipping a demo.
+
+**Treating retrieval as a solved step.** The classic mistake is to build the index, wire the prompt, and call it done without ever measuring whether the right passages come back. Retrieval is the load-bearing half of RAG, and it only works as well as your chunking, metadata, and evaluation. Skip the eval and you discover the gaps in production, where they are expensive.
+
+**Forgetting the index is a snapshot.** As covered above, a stale index actively harms you because confident, sourced-sounding answers are worse than honest ignorance. Freshness must be a designed pipeline, not a hope.
+
+**Leaking access through the corpus.** Retrieving the whole knowledge base regardless of who asks hands users knowledge they should not have. Access control belongs on the retrieval layer, before generation, and it compounds every security lesson in this course rather than replacing it.
+
+**Ignoring latency and cost.** Every turn is a retrieval plus a generation, and a reranker or a large top-k adds to both. A good RAG system is often 80 percent retrieval infrastructure, and that infrastructure is on the critical path of every answer. Budget it, do not assume it is free.
+
+## Try it
+
+1. In two sentences, state the three failure modes of a naked LLM and the single thing RAG changes instead of retraining.
+2. Name the two phases of RAG and, for each, what the phase produces.
+3. A client wants a support agent grounded in product manuals. List the five design decisions from the worked example and give the reasoning behind one of them.
+4. Your design retrieves from the knowledge base regardless of who asks. Using the lesson, identify the security problem and where access control belongs in the stack.
+5. A product spec changes weekly but the index refreshes monthly. What does this lesson say about the resulting behavior, and what must you build to fix it?
+
+For question 5, the answer is that the index is a stale snapshot, so the model answers from outdated specs with misplaced confidence, and the fix is a re-embedding pipeline that detects changed source documents and refreshes only the affected chunks, mapping each embedding back to its source version.
+
+## What's next
+
+You now have the architecture for connecting an LLM to enterprise data: retrieval, generation, freshness, and access control over the grounding layer. The next lesson shifts from data retrieval to how systems represent and price the world. Lesson 56 covers **localization and multi-currency architecture**, the locale, language, and DatedExchangeRate mechanics that let a single org present the right language, region, and currency values for each user. Continue to Lesson 56 to see the system decisions that make one Salesforce org speak correctly to customers in many countries at once.
+
+[^1]: ibm.com. [What is retrieval augmented generation (RAG)?](https://www.ibm.com/think/topics/retrieval-augmented-generation)
+[^2]: aws.amazon.com. [What is RAG? Retrieval-Augmented Generation AI Explained](https://aws.amazon.com/what-is/retrieval-augmented-generation/)
+[^3]: research.ibm.com. [What is retrieval-augmented generation (RAG)?](https://research.ibm.com/blog/retrieval-augmented-generation-RAG)
+[^4]: en.wikipedia.org. [Retrieval-augmented generation](https://en.wikipedia.org/wiki/Retrieval-augmented_generation)
+[^5]: salesforce.com. [New Vector Database in Salesforce Data Cloud Will Power Generative AI](https://www.salesforce.com/news/press-releases/2023/12/14/unstructured-data-ai-search-einstein/)
+[^6]: salesforce.com. [How Einstein Copilot Search Uses Retrieval Augmented Generation to Help Deliver Trusted Answers](https://www.salesforce.com/news/stories/retrieval-augmented-generation-explained/)
