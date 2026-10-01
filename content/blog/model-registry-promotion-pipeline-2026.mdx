@@ -1,0 +1,90 @@
+---
+title: "The Model Registry: Promote Models Like You Promote Code"
+slug: model-registry-promotion-pipeline-2026
+excerpt: "A model registry turns a trained model into an immutable, evaluation-gated, pointer-promoted artifact you ship like a release candidate, rollback included."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "2026-09-30"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "11 min read"
+tags: [Model Registry, MLOps, CI/CD, Model Deployment, Canary Release]
+bannerImage: "/banners/model-registry-promotion-pipeline-2026.png"
+---
+
+Most teams treat their first production model like a finishing move. Train it, tune it, kneel in front of the loss curve, and then ssh into a box and `pip install` the wheel that happens to be sitting in a shared drive. It works, for a while. Then someone retrains, the new weights are subtly worse on one cohort, and nobody can say which version is actually serving traffic, let alone roll it back.
+
+The model registry exists to make that impossible. It is the piece most MLOps setups borrow from software release engineering and then forget to actually install. This article walks through what a registry is, how a promotion pipeline moves a model through it under evaluation gates, and why pointer-based rollback is the release lever you will reach for most.
+
+## A model is a versioned artifact, not a notebook
+
+The mental shift a registry forces is the one that fixes most production ML failures: treat a model as an artifact with a version, a lineage, and an owner, and treat promoting it to production as a separate, reviewable act from training it. In practice this means a "registered model" holds every version you have ever validated, each one immutable once registered, each one linked back to the code, data, and training run that produced it. Immutability is the load-bearing property. If a version cannot change after registration, then "what is serving now" always has a concrete, reproducible answer, and you never discover at 2 a.m. that the deployed weights drifted because someone re-saved the file.
+
+Lineage matters for the same reason an audit trail matters in finance: when a model misbehaves in production, you need to know exactly what went in so you can either fix the data and retrain or roll back to the last version that did not misbehave. A registry stores that mapping automatically at registration time, so you are not reconstructing provenance from Slack history.[^1]
+
+## Move the pointer, do not redeploy the weights
+
+Here is the design decision that separates a registry from a folder full of `.pkl` files: promotion is a pointer movement, not a binary copy. Each registered model exposes a small set of aliases that stay stable across promotions. You point the `champion` alias at whatever version should serve production traffic, and deployment layers read the alias rather than a hard-coded version. MLflow expresses this as a model URI: `models:/MyModel@champion` resolves to "whatever version is currently behind the champion alias," which is exactly the indirection you want in a serving config.[^1]
+
+The production consequence is that promoting a new model becomes two tiny, reversible operations. First you register the candidate version and run it through evaluation gates (covered below). Once it clears, you flip one alias from the old champion to the new one. Rollback is the same flip in reverse, pointing `champion` back at the previous version. No rebuild, no container redeploy, no risky patch applied to a running service. You moved a label, and the serving layer did the rest. This read-the-pointer model is why a registry and a deployment platform are separate layers: the registry decides which version is authoritative, and the deployment platform decides how traffic gets to it.
+
+![Promotion as a pointer move: serving config resolves the champion alias to whichever version it names, and rollback means repointing the alias at the previous version with no redeploy](</diagrams/model-registry-promotion-pipeline-2026/2-alias-pointer.png>)
+
+## The promotion pipeline, stage by stage
+
+A promotion pipeline is the release engineering skeleton that turns "a promising run" into "a version you can trust at scale." It does not replace CI/CD for the surrounding code; it wraps the model in the same discipline the code already has. It sits alongside the work we covered on [release engineering for agents](/field-notes/agent-release-engineering-2026) and the [feature flag rollout patterns](/field-notes/feature-flags-deploy-release-2026) that gate user-visible changes at the platform level. A common shape has four stages, each with its own gate.
+
+![The promotion pipeline in four stages: register and validate, business evaluation, shadow review, then canary and promote, with a gate after each stage and one reversible alias pivot for rollback](</diagrams/model-registry-promotion-pipeline-2026/1-promotion-pipeline.png>)
+
+1. **Register and validate.** Log the trained artifact into the registry under the model name, with lineage and a validation report. Mechanical checks run here: schema conformance, file integrity, the required evaluation metrics being present. A version that does not carry its metrics cannot be promoted, which keeps gut-feel saves from sneaking through.
+2. **Business-aware evaluation.** A pipeline that only checks loss on a hold-out split misses the failures that actually hurt you. This stage scores the candidate against the metrics the product cares about: precision and recall at the decision thresholds you will actually serve, latency under the frame budget, per-cohort slices, and any regulatory or safety thresholds. KodeKloud's four-step CI/CD recipe makes this explicit: evaluate against a threshold on held-out data first, and if the candidate does not clear it, fail the build with a non-zero exit so it cannot merge.[^2]
+3. **Shadow review.** You ship the candidate to a shadow tier where it sees real traffic and logs predictions, but its decisions are not served to users. This is the cheapest way to get production-distribution evidence without production risk, because a shadowing model cannot hurt anyone; it only produces data.
+4. **Canary and promote.** With shadow evidence in hand, route a small, increasing slice of real traffic to the candidate while the champion keeps serving the rest. Only after the canary holds do you flip the alias to make the candidate the new champion, and you keep the previous champion alive for a rollback window before you retire it.[^2][^3]
+
+### Shadow is a measurement stage, canary is a release stage
+
+It is easy to elide shadow and canary into one vague "test it live" step, but they answer different questions, and mixing them up hides risk. In a shadow deployment, the new and old models both score 100 percent of requests, but only the old model's output is returned to users; the new model's predictions are logged alongside it, keyed by the same request ID, so you can compare them offline after the fact. Because the shadow model never serves, you can run it through days of real traffic without any chance of user-facing damage.[^3]
+
+![Shadow deployment measures and canary release ships: shadow scores 100 percent of requests but serves none, while canary ramps a growing slice of live users from 1 to 100 percent](</diagrams/model-registry-promotion-pipeline-2026/3-shadow-vs-canary.png>)
+
+A canary release moves the responsibility in the opposite direction: a small percentage of live users, commonly starting near a single percent, actually get the new model's output. If it behaves, you ramp the percentage up through steps like 10, 25, 50, and 100. Canary traffic is real traffic, so it is the moment when latency, edge-case behavior, and prediction quality meet actual production load. The classic guidance is that shadowing proves the model is not catastrophically wrong, and canarying proves it can carry production load and hold its quality under it. Run them in that order and you never jump from a simulated grade to a full cutover with no evidence in between.[^3]
+
+A defensive rollout also keeps the old champion running in an inactive or low-traffic state for a few days after promotion, so a regression found late has a fast path back. Flipping a percentage back toward the previous version is the same pointer or routing change you made to promote, just in reverse. Retire the old version only once the new one has proven itself under sustained traffic.[^3]
+
+## The evaluation gate is the real new discipline
+
+Software release engineering gated releases on tests, lint, and code review. Models add a gate those tools never covered: a quantitative verdict on whether this particular weights file improves the product. The promotion pipeline's quality gate is where you encode that verdict as a threshold that, if unmet, blocks the merge or the promotion outright.
+
+Make the gate specific or it is theater. A pass/fail on a single loss number hides the failure modes users actually feel. Write gates that capture the contract between the model and the product: a minimum recall at the serving threshold, a capped p99 latency, parity or better on the historically disadvantaged slices, a drift tolerance on the input distribution that the monitoring layer will keep enforcing. The gate should exit non-zero and refuse promotion when any threshold is missed, and the report should say which one failed, so a human reacts to a specific gap rather than a vague "model did not score well." This is the model equivalent of a failed test suite, and it should block exactly as hard.[^2]
+
+![The evaluation gate blocks promotion with a specific reason: it checks recall at the serving threshold, p99 latency under budget, per-cohort slice parity, and drift tolerance, and refuses to promote when any threshold is missed](</diagrams/model-registry-promotion-pipeline-2026/4-eval-gate.png>)
+
+If you are deciding between multiple candidates, the gate becomes the ranking step too. Score them all against the same business-metric suite, pick the one that clears every gate with the best margin, and register that one as the champion candidate. Doing the comparison once inside the pipeline means you are not re-running offline experiments against a moving baseline every time a retrain lands.
+
+## Where the registry depends on the rest of the stack
+
+A registry does not fix data quality or monitoring by itself, and pretending it does is the trap a lot of first-time MLOps builds fall into. The promotion pipeline assumes a few surrounding pieces are already real:
+
+- **A CI/CD layer for the surrounding code.** The model's serving code, preprocessing, and config move through the same review-and-test pipeline as any application. The registry promotes the artifact; the CI system promotes the code that hosts it. When they route through a deployment platform that supports the canary and shadow mechanics above, the two promotions line up under one reviewable change.[^2]
+- **Signed, pinned artifacts and environments.** Pinning container images and dependency versions before you register a model keeps the shift from training to serving reproducible. A model trained on torch 2.3 with a pinned base image is a different beast to reproduce than one trained against whatever the default channel resolved that week.[^2]
+- **Deployment strategy support.** Shadow and canary both require the serving platform to split and compare traffic, so the deployment layer has to understand them. The promotion pipeline hands the platform a candidate and a plan; the platform executes the split and reports the signal back.
+- **Monitoring that closes the loop.** Promotion should trigger the telemetry the team will actually watch in production: prediction drift, input distribution drift, per-cohort performance, and latency. The retraining loop that feeds new versions back into the pipeline starts here, because the fastest way to discover a new champion needs retiring is a monitoring alert, not a customer complaint.[^2]
+
+## A concrete example end to end
+
+Trace a single promotion to see how the pieces collide. A team wants a new fraud model in production. The data pipeline produces a fresh snapshot, the training job runs nightly, and the resulting model is logged to the registry as version 14, tagged with lineage back to that snapshot. Validation runs immediately and confirms the artifact is intact and the schema is unchanged.
+
+The promotion pipeline picks up version 14, scores it against the business gate: recall at the serving threshold, p99 latency, and the under-banked-segment slice. Version 14 clears all three thresholds, so a human reviews the one-line report and the diff versus the current champion. Shipment goes to a shadow tier, where version 14 scores 100 percent of live requests against the champion but serves none; the team compares logged predictions overnight and sees materially fewer false positives on the slice they care about. That evidence earns version 14 a canary: one percent of users get it, ramping to 25, then 50. Latency holds under the frame budget at every step, and the false-positive reduction reproduces under real load. The team flips the `champion` alias to version 14, routes all traffic to it, and leaves version 13 in an inactive state for a week. On day three, monitoring flags a drift spike in an input feature. Because promotion was a pointer move, rolling back to version 13 is a single alias flip, and the incident is closed minutes after it is detected instead of after a redeploy.
+
+Nothing in that story required heroic engineering. It required an artifact mindset (immutable, versioned, lineage-tracked), a gate that says no with a specific reason, and a promotion mechanism that is reversible. The model registry is what lets the whole chain answer the one question every model-owning team eventually gets asked in a crisis: exactly which version is serving right now, and how do we change it?
+
+## Settling on the registry pattern
+
+If you have even one model in production and you cannot answer "which version, and is it reversible," a registry and a promotion pipeline is the highest-leverage thing you can add. Start small: register versions, attach lineage, add a single percentage-based canary on your next deployment, and keep the previous champion alive for a rollback window. The pattern compounds. Every future model ships through the same gates, the same pointer flips, and the same fast rollback, and the whole team gets a shared vocabulary for what "released" means. That is the difference between babysitting a model and operating a reproducible pipeline.
+
+[^1]: MLflow, "Model Registry" documentation. Versioning, aliases, and the `models:/` model URI scheme. [mlflow.org](https://mlflow.org/docs/latest/model-registry/)
+[^2]: KodeKloud, "CI/CD for Machine Learning: An Introductory Guide with Best Practices." The four-step quality gate, artifact versioning, and deployment strategy guidance. [kodekloud.com](https://kodekloud.com/blog/ci-cd-for-machine-learning/)
+[^3]: Qwak (JFrog), "Shadow Deployment vs Canary Release of Machine Learning Models." Shadow and canary mechanics, request-ID comparison, and the rollback window. [qwak.com](https://www.qwak.com/post/shadow-deployment-vs-canary-release-of-machine-learning-models)
+MDXEOF
+echo "bytes:"; wc -c < "/Users/kelex/.hermes/vault/Adroit Blog/_editorial-staging/model-registry-promotion-pipeline-2026.mdx"; echo "prose-ish word count (frontmatter stripped):"; awk 'BEGIN{f=0} /^---$/{c++; next} c>=2{f=1} f' "/Users/kelex/.hermes/vault/Adroit Blog/_editorial-staging/model-registry-promotion-pipeline-2026.mdx" | wc -w

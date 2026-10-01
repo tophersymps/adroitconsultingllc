@@ -2,6 +2,28 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "model-registry-promotion-pipeline-2026",
+    "title": "The Model Registry: Promote Models Like You Promote Code",
+    "excerpt": "A model registry turns a trained model into an immutable, evaluation-gated, pointer-promoted artifact you ship like a release candidate, rollback included.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "2026-09-30",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "11 min read",
+    "featured": false,
+    "tags": [
+      "Model Registry",
+      "MLOps",
+      "CI/CD",
+      "Model Deployment",
+      "Canary Release"
+    ],
+    "bannerImage": "/banners/model-registry-promotion-pipeline-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "einstein-gpt-practical-use-cases-for-sales-teams",
     "title": "Einstein GPT: Practical Use Cases for Sales Teams",
     "excerpt": "Einstein GPT puts generative AI inside the sales workflow. Here are the use cases that deliver measurable lift and the ones to wait on.",
