@@ -1,0 +1,151 @@
+---
+title: "Data Architect SM-2b: Persistence-Consistency Scenarios: Keys, Natural Keys, Idempotent Writes, and Upsert"
+slug: day-20-sm-2b-persistence-consistency-scenarios-keys-natural-key
+series: salesforce-data-architect
+lesson: 20
+excerpt: "How to make cross-system persistence consistent: the difference between surrogate and natural keys, why the Salesforce record Id is not a cross-org identity, using external IDs as stable keys, composite keys for multi-source consistency, and upsert as the canonical idempotent write so re-running a failed load never duplicates records. Includes a worked customer scenario, a numbered configuration walkthrough, the three exam traps, and a try-it exercise."
+date: "October 1, 2026"
+author: "Adroit Consulting"
+readTime: "21 min read"
+tags: [Salesforce, Data Architecture, Data Management, Certification]
+---
+
+Lesson 19 put consistency controls on the data model: validation rules, unique constraints, external IDs, duplicate rules. That was the static layer, the shapes a single record must obey when a write arrives. Requirement sm-2b moves the question to motion. Given that records flow between Salesforce and other systems continuously, how do you persist them in a way that stays consistent when a load fails halfway, when the same record arrives twice, when four source systems all claim to own the Account, or when a natural key changes?
+
+This is the persistence layer, and it sits above the validation controls. You can have perfect field-level rules and still duplicate every Account in the org the first night an integration hiccups, because "insert and hope" is not a persistence strategy. Consistency across systems depends on one decision more than any other: how you identify a record that already exists. That is the key design question, and the answer is almost always a stable, immutable external key combined with upsert.
+
+The exam frames this requirement as: given a customer scenario, recommend techniques that persist data consistently, including the design of keys (surrogate vs natural), idempotent write patterns, and upsert as the core integration persistence pattern.[^1] Every question in this domain is a scenario where something went wrong with identity and the architect who picked the right key and the right write pattern wins. This lesson gives you the decision framework.
+
+## Surrogate keys versus natural keys: the identity question
+
+Every record in every system needs an identity, something that says "this is the same record as before." Architects split identity into two families, and conflating them is how integrations go wrong.
+
+A surrogate key is a system-generated unique identifier that carries no external meaning. In Salesforce that is the 15-character (or 18-character case-safe) record Id. It is opaque, assigned by the platform at insert time, and its only job is to be unique. Nobody outside Salesforce knows what `0015f00000XYZaA` means, and nothing about the Account 0015f00000XYZaA carries business information about who the customer is.
+
+A natural key, also called a business key, is a real-world identifier that means something outside the system. An email address, a tax identification number, a SKU, the source system's own record Id, an employee number. The defining property is that it is meaningful to a human or another system independent of Salesforce. When an ERP pushes data, it does not care about Salesforce Ids; it cares about how it identifies the record itself.[^2]
+
+The reason this distinction is load-bearing: a surrogate key guarantees uniqueness but guarantees nothing about attachment to the real world. A natural key guarantees attachment to the real world but may fail to be unique or stable. Consistency across systems is won at the intersection, by giving the model a field that is both meaningful to the source systems (a natural key) and guaranteed unique within Salesforce (a unique constraint).
+
+The cleanest way to hold that intersection in your head is the exam's own vocabulary. The Salesforce record Id is the surrogate key. It is stable and unique, but it is not meaningful to external systems and it differs across orgs. A record for the same customer in a sandbox and in production gets a different Id, and a different Id in another Salesforce org entirely. So the one thing you cannot use to identify a record across systems is the thing Salesforce gives you by default. Any cross-system persistence must lean on a natural key that both systems understand.[^2]
+
+## Why the Salesforce Id is not cross-org identity
+
+The single most dangerous assumption in integration design is treating the Salesforce record Id as a stable identity across systems. It is not, and the exam says so directly. Here is the failure chain, stated plainly.
+
+First, record Ids are org-specific. The same logical customer, the same real company, gets a brand new Id in every org it touches: production, sandbox, a second partner org, a scratch org. An Id that identifies `Acme Corp` in prod identifies nothing in the sandbox copied from it, because the sandbox regenerates Ids on copy. So if you store "the Salesforce Id of the customer" in the ERP and try to match on it later, the lookup fails after any environment reset that regenerates Ids.
+
+Second, record Ids are not meaningful to outside systems. The ERP, the billing platform, the warehouse, none of them know what `001XXXXXXXXXXXX` refers to. They cannot look it up, verify it, or reason about it. They need a key they already understand, which means an external key that the source system itself produced.
+
+This is exactly why external ID fields exist. An external ID is a custom field, of text, number, or email type, marked with the External ID attribute so the platform indexes it and lets integrations use it as the matching key for upsert. Because it carries a value from an external system, it gives Salesforce a natural-key identity for records that other systems can produce and re-produce on every load. Salesforce even lets you mark an external ID unique, so the platform enforces that no two records share the key, which is what makes identity resolution deterministic and collision-free.[^3]
+
+A quick note on type and reach: external ID fields are indexed, so selective filters on them run fast, and you are capped at a default of 25 external ID fields per object, requestable higher through a limit increase. They can be placed on custom text, number, or email fields. That index is what makes upsert lookups efficient even on large tables.[^3]
+
+## Idempotency: the property that makes re-runs safe
+
+With identity sorted, the next concept is the write pattern, and the word to know is idempotency. An operation is idempotent when repeating it produces the same end state as doing it once. Run the same upsert twice and you still have one record, updated twice, not two records. Run an insert twice and you have duplicates. That single property is the difference between a load you can trust to retry and a load that corrupts itself on the first accidental re-run.
+
+Why does this matter so much in practice? Real integrations fail. A network drops mid-batch. A bulk job times out after processing 8,000 of 10,000 rows. A credential expires and the run aborts. When you fix the cause and re-run, the loader re-sends the whole batch, including the rows that already landed. If the write is an insert keyed on nothing, every row that succeeded the first time becomes a duplicate the second time. You end up with a cleanup nightmare that is far harder to unwind than the original failure was to catch.
+
+Idempotency is a design decision you make at write time, not a property of the data. You make a load idempotent by keying it on a stable external ID and issuing an upsert instead of an insert. That way "the same record arrived again" is not a bug; it is just another update to the same row. This is why the exam calls upsert the canonical idempotent write, and why "insert and hope" is the anti-pattern to avoid at all costs.[^4]
+
+## Upsert: create-if-absent, update-if-present
+
+Upsert is the operation that combines insert and update into one call. For each incoming record, the platform looks up an existing record by a matching key. If it finds one, it updates that record. If it finds none, it inserts a new one. The matching key is either the Salesforce record Id or an external ID field you designate. When an external ID is the key, you can hand the platform the source system's identifier and let it decide, per row, whether this is a new record or a known one.[^2][^4]
+
+The mechanics in Data Loader: your CSV carries a column of external ID values, you select that external ID field as the matching key, and the upsert operation resolves each row against it. A row whose external ID already exists updates that record; a row whose external ID is new inserts. Because the operation is keyed on the external ID rather than on a count or an assumption, re-running the same file converges rather than explodes.
+
+Upsert inherited a real design constraint: if the external ID you key on is not unique in the org, the load fails for those rows. The platform cannot decide which of two records with the same key to update, so it errors instead of guessing. This is the coupling between the two ideas: idempotent upsert only behaves predictably when the key it matches against is guaranteed unique. Marking the external ID unique closes that gap and makes the pattern safe.[^3][^4]
+
+## The mutable-key trap: when a natural key changes
+
+Here is the subtle failure that trips even experienced architects, and it is the exam trap delivered several ways. Idempotency assumes the key is stable. If the natural key you chose as the external ID can change, your idempotent upsert silently becomes a duplicate factory.
+
+Take email as the external ID on Contact. The first load creates a Contact with email `ada@acme.com`. A few months later the source system corrects it to `ada.lovelace@acme.com`. On the next upsert, Salesforce finds no record with the new email, so it inserts a second Contact for the same person, while the original still carries the old address. Two records, one person, and the reconciliation that should keep them in sync now actively created the mess.
+
+The rule that prevents this: keys should be immutable where possible, and when you must persist data that a source system could re-identify, prefer a stable surrogate from the source system over a mutable business value. An employee number does not change; an email can. A tax ID is meant to be stable; a display name is not. When the real-world identifier is inherently mutable, you do not key on it. You key on something the source system guarantees not to reassign.
+
+This is where the split between a stable natural key and a mutable one becomes an architect's call. Email is a natural key, but a bad external ID because it changes. A source-system record Id (the ERP's internal identifier) is also a natural key, from Salesforce's point of view, but it is the stable-choice. Choose the immutable one.
+
+## Composite keys for multi-source consistency
+
+Once more than one system feeds the same object, a single natural key often no longer uniquely identifies a record, because two source systems may use overlapping or conflicting identifiers. The answer is a composite key: a combination of fields that together uniquely identify a record across all the integrated systems.
+
+The canonical composite is "source system code" plus "source record id." The value says, in one field, which system produced this record and what that system calls it: `ERP|ACME-00047` versus `Billing|ACME-00047`. Those are two different records, from two different systems, even though the source id portion is identical, because the source system code disambiguates them.
+
+Salesforce external IDs are single fields, which sounds like a problem for a composite. It is not a real one. You create a dedicated external ID field, often named something like `Source_Key__c`, and you map it to carry the composite value. Whether you concatenate the parts into one string, as `ERP|ACME-00047`, or you store the code and the id in separate fields and concatenate at load time, the field holds a value that is unique across every source. The field can then be marked unique and used as the upsert key.[^3]
+
+Why composite keys matter for the exam: the moment a scenario says "data comes from four source systems," a single-field natural key is suspect, and the architect who proposes a composite source-key field is the one who preserves identity. The scenario tests whether you recognize that identity is not inherent in any single system's number but in the combination of system and number.
+
+## Referential ordering: parents before children
+
+Keys and idempotent writes solve record identity. A second class of consistency failure comes from relationships: you persist an Account and its Contacts, and the Contacts need to point at the Account, but the Account does not exist yet when the Contacts land. This is the referential-ordering problem, and it is the third exam trap.
+
+The rule is to order loads parent-first. Upsert the Accounts, capture their Salesforce Ids, then load the Contacts using those Ids in the lookup fields. The parent must exist, and be resolvable, before any child that references it.
+
+There are two ways to resolve the parent. The direct way is two sequential loads: upsert parents, capture the returned Ids, then map children to those Ids. The leaner way, preferred in the composite-key world, is to resolve the parent by its own external ID directly in the child's lookup. Salesforce lets you populate a lookup field by an external ID value of the parent rather than by the parent's Salesforce Id, so you can load the Contact with its `Account_Ext_Lookup__c` filled with the Account's external key and let the platform resolve the relationship on load. That avoids a round-trip of Id-capture and keeps one pass per object.[^2]
+
+The failure to avoid: loading children before their parents exist, which produces relationship-resolution errors or, worse, child records attached to no parent. Ordering is not a chore; it is part of consistency. A graph is only persisted consistently when you persist its roots first.
+
+## Persisting consistency requires a re-runnable, reconcilable design
+
+Keys and ordering make the load correct. What makes it durable is designing the load so it can be re-run, reconciled, and audited after the fact. This is the layer the exam rewards when it asks you to recommend a complete persistence design rather than a single mechanism.
+
+The load-bearing habit is to record the source key on the record itself. When every record carries its `Source_Key__c`, the integration can always know which source system owns it, can re-run against that key without guesswork, and can be reconciled. An empty key immediately flags a record that no integration should own, and a report grouping records by source key and last-sync timestamp shows you exactly which sources have drifted and which writes never landed.
+
+Include reconciliation as the final step, not an afterthought. Run a periodic report against every integrated record keyed by source and last-sync, and compare it to what each source says it sent. The report surfaces two silent failures that upsert alone cannot catch: writes that never arrived, and writes that landed with the wrong values. Idempotency keeps re-runs safe, but reconciliation is what tells you whether a run actually happened at all.[^1]
+
+## Worked customer scenario
+
+Put all five ideas together with a concrete case. A healthcare CRM integrates with three source systems: an EHR that owns patients, an ERP that owns billing accounts, and a lab system that owns test orders. Each system identifies a patient differently, and the org is seeing duplicate patients every time a nightly sync re-runs after a partial failure.
+
+The diagnosis is identity plus write pattern. Each source uses its own patient number, so no single system's id uniquely identifies a patient in the org. One loader was inserting without a key, so a re-run duplicated every patient that had already landed. The org was solving the fallout manually every morning.
+
+The fix is a composite key, a unique flag, an upsert design, and correct ordering. Create a single `Patient_Source_Key__c` external ID field on the Patient object, and map it to the value `EHR|<ehr-patient-id>` for the EHR, `ERP|<bill-account-id>` for billing accounts, and `LAB|<test-order-patient-id>` for the lab. Mark it unique. Every integration write becomes an upsert keyed on that field, so a re-run updates existing patients instead of duplicating them. Because the key embeds the source code, a patient that exists in both the EHR and the lab system is two records, correctly, each owned and reconciled by its own source. Parent-first ordering handles any patient-to-account relationship, resolving the parent by its external key in the child lookup. A nightly reconciliation report groups patients by source and last-sync timestamp to catch what never landed.
+
+That single constellation, a stable immutable composite key, unique, upserted, ordered, and reconciled, is the persistence design the exam wants you to be able to propose from a scenario in one breath.
+
+## Configuration walkthrough, numbered
+
+Here is the field-and-load setup in the order you would build it.
+
+1. Create the external ID field on each target object. In Object Manager, open the object, add a custom text field, and select the External ID checkbox. Where the key genuinely must be unique, also select the Unique checkbox and set its format on the previous screen. This gives you the field, the index, and the uniqueness guarantee in one step.[^3]
+
+2. For multi-source consistency, store a composite key. Name the field to communicate its role (for example `Source_Key__c`), and populate it with the combination of source system code and source record id, as `ERP|ACME-00047`. Mark it unique so no two sources collide on the same field value.
+
+3. Design all integration writes as upsert keyed on the external ID. In Data Loader (or the API call, or any integration tool), choose upsert as the operation and select your external ID field as the matching key. The load becomes repeatable and idempotent: re-running it updates existing records instead of creating duplicates.[^2][^4]
+
+4. Order loads parent-first. For any parent-child graph, upsert parents first, then children. Resolve the parent either by capturing its Salesforce Id after the parent upsert, or by filling the child lookup with the parent's external ID and letting the platform resolve the relationship on load. Never insert children before their parents exist.
+
+5. Add reconciliation. Build a report (or scheduled query) over the integrated records, grouped by source key and last-sync timestamp. Use it to detect drift: writes that were skipped, records whose source key got orphaned, or source systems that stopped syncing. Make reconciliation part of the run schedule, not a manual afterthought.[^1]
+
+## The three exam traps, avoided
+
+The exam will present you with the failure modes and ask you to pick the prevention. All three are covered above, but restate them so you recognize them instantly.
+
+Trap one, the mutable natural key. Using something that can change, like an email or a renumbered account code, as the external ID. When the value changes, the next upsert sees no matching key and inserts a duplicate instead of updating the existing record. Prevention: key on an immutable surrogate from the source system, or on a composite that includes a stable source id, never on a mutable business value.
+
+Trap two, insert instead of upsert. Inserting with no stable key makes the load non-idempotent, so a retry after a partial failure duplicates every already-succeeded record. This is the exact "nightly integration fails midway and is re-run" scenario: upsert keyed on a stable external ID prevents the duplicates. Prevention: make upsert, not insert, the default persistence pattern for any integration that can be retried.
+
+Trap three, ignoring load ordering. Inserting children before their parents exist causes relationship-resolution failures, or child records that cannot attach to their parent. Prevention: parent-first, with the parent resolved by its external ID in the child lookup where possible.
+
+## Try it for yourself
+
+In a sandbox or scratch org, add a custom text field to Account, mark it as an external ID and unique. Create two test Accounts, then run an upsert from Data Loader keyed on that field with a CSV that repeats the same external key twice. Confirm the second run updates, not duplicates, the existing records, and that a second run of both rows converges to the same two Accounts.
+
+Then reproduce trap one. Change the external key of one Account and re-upsert. The changed key inserts a new Account instead of updating the old one, which is exactly why a mutable key is dangerous. Finally, model a parent-child mismatch: attempt to load Contacts before their Account exists and observe the relationship error, then correct the order and confirm the load succeeds. Each experiment teaches the concept better than reading about it.[^2][^3]
+
+## What's next
+
+You can now design persistence that stays consistent across systems: distinguish surrogate from natural keys, refuse to treat the Salesforce Id as cross-org identity, key integrations on stable immutable external IDs (composite where sources overlap), and make every write an idempotent upsert, ordered parent-first and backed by reconciliation. Lesson 21, Single view of the customer across systems: integration, master record, and Change Data Capture (sm-3a), takes these same persistence principles and asks what they mean at the system-of-record level: how to consolidate many sources into one coherent view of a customer, how a master record emerges from that consolidation, and how Change Data Capture keeps the view in sync as the underlying systems change. Identity and idempotency give you consistent writes; lesson 21 gives you the consistent read of the customer those writes produce.
+
+## Related Requirements
+
+- Lesson 21 of 42 (sm-3a): Single view of the customer across systems: integration, master record, Change Data Capture
+- Lesson 19 of 42 (sm-2a): Data consistency: validation rules, required fields, unique constraints, external IDs, duplicate rules
+
+## References
+
+[^1]: Platform Data Architect exam guide, Salesforce. Outlines the Salesforce Data Management domain and the objective to recommend techniques that persist data consistently, including surrogate and natural key design, idempotent write patterns, and upsert as the core integration persistence pattern. [trailhead.salesforce.com](https://trailhead.salesforce.com/en/credentials/platformdataarchitect/)
+[^2]: Insert, Update, or Delete Data Using Data Loader, Salesforce Developers. Documents that the upsert operation combines inserting and updating, and that upsert matches rows against an external ID field or the Salesforce record Id. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/data-loader-impl/guide/inserting-updating-or-deleting-data.html)
+[^3]: Define Field Attributes for a Custom Object / About External IDs, Salesforce Help. Covers the External ID attribute on custom fields, that external IDs are indexed and can be marked unique for upsert matching, and the default limit of external ID fields per object. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.custom_field_attributes.htm&type=5) / [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.fields_external_ids.htm&type=5)
+[^4]: Upsert Data Load Mode, Salesforce Help. Documents the upsert load mode that updates existing keys and inserts new records, and the behavior when matching keys are duplicated. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=mktg.dato_data_load_mode_upsert.htm&type=5)
