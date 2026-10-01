@@ -24,6 +24,8 @@ A surrogate key is a system-generated unique identifier that carries no external
 
 A natural key, also called a business key, is a real-world identifier that means something outside the system. An email address, a tax identification number, a SKU, the source system's own record Id, an employee number. The defining property is that it is meaningful to a human or another system independent of Salesforce. When an ERP pushes data, it does not care about Salesforce Ids; it cares about how it identifies the record itself.[^2]
 
+![Surrogate and natural keys compared: the Salesforce record Id is a system-generated surrogate with no external meaning, while a natural key such as an email, tax ID, SKU, or source record Id is meaningful outside Salesforce, and consistent persistence rides on the intersection of the two](</diagrams/day-20-sm-2b-persistence-consistency-scenarios-keys-natural-key/1-surrogate-vs-natural.png>)
+
 The reason this distinction is load-bearing: a surrogate key guarantees uniqueness but guarantees nothing about attachment to the real world. A natural key guarantees attachment to the real world but may fail to be unique or stable. Consistency across systems is won at the intersection, by giving the model a field that is both meaningful to the source systems (a natural key) and guaranteed unique within Salesforce (a unique constraint).
 
 The cleanest way to hold that intersection in your head is the exam's own vocabulary. The Salesforce record Id is the surrogate key. It is stable and unique, but it is not meaningful to external systems and it differs across orgs. A record for the same customer in a sandbox and in production gets a different Id, and a different Id in another Salesforce org entirely. So the one thing you cannot use to identify a record across systems is the thing Salesforce gives you by default. Any cross-system persistence must lean on a natural key that both systems understand.[^2]
@@ -48,6 +50,8 @@ Why does this matter so much in practice? Real integrations fail. A network drop
 
 Idempotency is a design decision you make at write time, not a property of the data. You make a load idempotent by keying it on a stable external ID and issuing an upsert instead of an insert. That way "the same record arrived again" is not a bug; it is just another update to the same row. This is why the exam calls upsert the canonical idempotent write, and why "insert and hope" is the anti-pattern to avoid at all costs.[^4]
 
+![Insert versus upsert on a re-run: when the same batch arrives again after a partial failure, an insert with no stable key creates a second record for the same identity, while an upsert keyed on the external ID matches and updates the existing record so the load converges instead of doubling](</diagrams/day-20-sm-2b-persistence-consistency-scenarios-keys-natural-key/2-insert-vs-upsert.png>)
+
 ## Upsert: create-if-absent, update-if-present
 
 Upsert is the operation that combines insert and update into one call. For each incoming record, the platform looks up an existing record by a matching key. If it finds one, it updates that record. If it finds none, it inserts a new one. The matching key is either the Salesforce record Id or an external ID field you designate. When an external ID is the key, you can hand the platform the source system's identifier and let it decide, per row, whether this is a new record or a known one.[^2][^4]
@@ -62,6 +66,8 @@ Here is the subtle failure that trips even experienced architects, and it is the
 
 Take email as the external ID on Contact. The first load creates a Contact with email `ada@acme.com`. A few months later the source system corrects it to `ada.lovelace@acme.com`. On the next upsert, Salesforce finds no record with the new email, so it inserts a second Contact for the same person, while the original still carries the old address. Two records, one person, and the reconciliation that should keep them in sync now actively created the mess.
 
+![The mutable-key trap: when an idempotent upsert is keyed on a mutable natural key such as an email, and the source corrects ada@acme.com to ada.lovelace@acme.com, the next upsert finds no record with the new email and inserts a second Contact, leaving two records for one person](</diagrams/day-20-sm-2b-persistence-consistency-scenarios-keys-natural-key/3-mutable-key-trap.png>)
+
 The rule that prevents this: keys should be immutable where possible, and when you must persist data that a source system could re-identify, prefer a stable surrogate from the source system over a mutable business value. An employee number does not change; an email can. A tax ID is meant to be stable; a display name is not. When the real-world identifier is inherently mutable, you do not key on it. You key on something the source system guarantees not to reassign.
 
 This is where the split between a stable natural key and a mutable one becomes an architect's call. Email is a natural key, but a bad external ID because it changes. A source-system record Id (the ERP's internal identifier) is also a natural key, from Salesforce's point of view, but it is the stable-choice. Choose the immutable one.
@@ -75,6 +81,8 @@ The canonical composite is "source system code" plus "source record id." The val
 Salesforce external IDs are single fields, which sounds like a problem for a composite. It is not a real one. You create a dedicated external ID field, often named something like `Source_Key__c`, and you map it to carry the composite value. Whether you concatenate the parts into one string, as `ERP|ACME-00047`, or you store the code and the id in separate fields and concatenate at load time, the field holds a value that is unique across every source. The field can then be marked unique and used as the upsert key.[^3]
 
 Why composite keys matter for the exam: the moment a scenario says "data comes from four source systems," a single-field natural key is suspect, and the architect who proposes a composite source-key field is the one who preserves identity. The scenario tests whether you recognize that identity is not inherent in any single system's number but in the combination of system and number.
+
+![Composite source key preserves identity across multiple systems: an EHR, an ERP, and a lab each map a source-code plus source-record-id value into a single unique Patient_Source_Key__c external ID, so the same source id from two systems yields two distinct records, each owned by its own source](</diagrams/day-20-sm-2b-persistence-consistency-scenarios-keys-natural-key/4-composite-source-key.png>)
 
 ## Referential ordering: parents before children
 
