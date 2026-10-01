@@ -32,6 +32,8 @@ Third, a pod can hold sidecar containers alongside the agent. Because the contai
 
 For agents you almost always run a Deployment, the controller that manages a set of identical replica pods behind one desired count. Stateful workloads, such as the vector database from earlier chapters, want a StatefulSet because each pod needs stable identity and storage. Your stateless agent workers want a Deployment.
 
+![A Deployment manages identical replica pods, and each pod holds the agent container plus a sidecar that shares its network namespace. Pods are ephemeral, so the Deployment replaces a dead pod with a fresh copy, and each container declares a resource request and a limit.](</diagrams/kubernetes-for-agents-pods-autoscaling-gpu-scheduling/1-pod-deployable-unit.png>)
+
 ## How Kubernetes decides where a pod runs
 
 Before autoscaling changes how many pods run, the scheduler decides which node each pod lands on. The kube-scheduler examines each pod's requested resources and picks a node with enough free capacity. This is why requests matter beyond billing: a pod with a large memory request can only be scheduled onto a node that has that much memory to give.
@@ -64,6 +66,8 @@ One limit matters before you rely on it. KEDA's scale to zero only works for eve
 
 For the worker pattern from Lesson 55, KEDA is the natural controller. You already decided the queue is the source of truth for how many workers are needed. KEDA is the piece that reads that source and turns it into a pod count, from zero workers when the queue is empty up to as many as the max replica setting allows.
 
+![The Horizontal Pod Autoscaler scales on CPU and memory, a lagging signal for a queue driven agent, while KEDA extends it to scale on the queue, from zero pods when the queue is empty up to the max replica setting.](</diagrams/kubernetes-for-agents-pods-autoscaling-gpu-scheduling/2-hpa-vs-keda.png>)
+
 ## GPU scheduling: getting agents to the accelerator
 
 Most of an agent's work is the control loop and tool calls, which run fine on ordinary CPU. The accelerator use case is the model itself. When you self host inference, the model serving container needs a GPU, and Kubernetes has to treat that GPU as a schedulable resource so the pod lands on a machine that actually has one. [^5] [^6]
@@ -89,6 +93,8 @@ Step three, autoscale the workers on the queue. A plain HPA on CPU would scale l
 Step four, protect the accelerator pool. The model service requests a GPU through its limits, sits in the labeled and tainted GPU node, and tolerates the taint. Its own scaling runs off inference request load, not document queue depth. When a batch needs a 2,000 token summarization, that call runs on the GPU in the model pool while the agent loop waits on the result, never needing the accelerator itself. [^5] [^6]
 
 The result is the same agent from Lesson 55, now declarative. You did not write a script to start and stop workers. You described a desired pod count, a queue metric, and a maximum, and the cluster turned that into running capacity that costs nothing when idle.
+
+![A document agent on Kubernetes splits into a CPU worker pool scaled by KEDA on queue depth and a protected GPU node pool for model inference scaled by request load, with the queue as the source of truth between them.](</diagrams/kubernetes-for-agents-pods-autoscaling-gpu-scheduling/3-gpu-split-worked-example.png>)
 
 ## Choosing your cluster
 
