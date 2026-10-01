@@ -2,6 +2,27 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "continuous-discovery-weekly-habit-2026",
+    "title": "Continuous Discovery: The Weekly Habit Over the Big Study",
+    "excerpt": "Continuous discovery swaps the big quarterly study for a weekly habit of small customer interviews, so research keeps pace with the build.",
+    "category": "UI/UX",
+    "categoryColor": "ux",
+    "categoryGradient": "from-violet to-violet-dark",
+    "date": "October 1, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "9 min read",
+    "featured": false,
+    "tags": [
+      "UI/UX",
+      "Research",
+      "Product",
+      "Consulting"
+    ],
+    "bannerImage": "/banners/continuous-discovery-weekly-habit-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "model-registry-promotion-pipeline-2026",
     "title": "The Model Registry: Promote Models Like You Promote Code",
     "excerpt": "A model registry turns a trained model into an immutable, evaluation-gated, pointer-promoted artifact you ship like a release candidate, rollback included.",
