@@ -1,0 +1,125 @@
+---
+title: "Teams: Account Teams, Sales Teams, Case Teams, Team-Based Record Access"
+slug: day-19-r-5a-teams-account-teams-sales-teams-case-teams-team-ba
+series: salesforce-sharing-visibility-architect
+lesson: 19
+excerpt: "Learn how Account Teams, Sales (Opportunity) Teams, and Case Teams grant per-record, owner-managed access with roles and access levels. Covers the additive share row teams create, the Use Account Teams setting on Opportunity that can over-share, and the decision of when a team beats a group, a rule, or a permission set."
+date: 2026-10-01
+author: Adroit Learning
+readTime: 16
+tags:
+  - account teams
+  - opportunity teams
+  - case teams
+  - team-based access
+  - sharing model
+  - access to records
+---
+
+Yesterday you compared groups against teams and decided which container fits a recurring set of users. Today you study the team side of that decision in full. The requirement for this lesson is a decision objective: given a scenario, determine how teams can support the record access requirements.[^5] It asks the same kind of question the previous objectives asked, but for a different mechanism. Teams are the owner-managed, per-record sharing tool. Where a sharing rule applies to a whole population of records and a public group is a reusable target, a team is a one-off set of named people attached to one specific record.
+
+Hold this contrast from the start. Teams work at the grain of a single record, they are added by the owner (or someone above them) rather than by an admin in Setup, and the access they grant holds only as long as the member stays on that team. That is their entire personality as a sharing mechanism. The exam wants you to recognize when that per-record, owner-managed shape is the right answer and when you should have reached for a group or a rule instead.[^5]
+
+## The mental model: an additive share row on one record
+
+A team does not create a global rule. When you add a member to a team on a specific Account, Salesforce adds a sharing row for that account, scoped to that member, at that access level. The member gets access to that one record, independent of the org-wide default and independent of the role hierarchy. If the Account's OWD is Private and the member sits outside the hierarchy, the team grant is still what opens the record for them.[^1]
+
+This is the property the exam leans on hardest, so state it precisely. The team grant is additive. It can only give access, never take it away. If a member already has Read/Write through some other source, adding them to a team cannot lower them to Read Only. And it is scoped to a record: team membership affects the named record (and, through linked sharing, the related records the setting permits), not every record of the object, and not the rest of the org.[^1]
+
+A team is distinct from a public group in one decisive way. A group is a reusable container referenced by rules and queues, so one membership change updates every referencing grant at once. A team is not reusable. It is built per record, and there is no shared list backing it the way a group backs a rule. The team's members are meaningful only for the record they sit on.[^2]
+
+## Account Teams: per-record collaboration on an Account
+
+An Account Team is a set of users who work on a specific Account record, each with a role such as Account Executive, Support, or Executive Sponsor, and each with an access level of Read Only or Read/Write. When account teams are enabled, the Account Team related list appears on each Account, and the owner can add, edit, or remove members there.[^1]
+
+The access you can grant is bounded by the owner's own access. A team member's access defaults to at least the Account owner's access, and you can give them more access than the org-wide default, but not more than you hold yourself. If the account owner has Read access to the related child records, they can grant Read access to a team member, but not Read/Write, because you cannot hand out more than you have. This ceiling is a recurring exam detail: the team can only amplify access up to what the person creating the grant already holds.[^1]
+
+There are real constraints to keep straight, because they produce multiple-choice wrong answers.
+
+First, the linked-account behavior. When Account and Opportunity OWD are Private, accounts and their opportunities have linked access levels. If you grant a team member access to an Opportunity, Salesforce also gives them Read access to the related Account even when Account OWD is Private. And the reverse: if you remove a member's access to an individual Account, Salesforce removes them from all the related Opportunity Teams. The two objects move together through the team model.[^1]
+
+Second, membership type matters for what happens when the account owner changes. Sharing rules grant access to individuals or to groups, queues, roles, and territories. If a user who gained their position through group-based access added a team member, then when the account owner changes, that team member is dropped, even if you selected Keep account team. To have team members survive an ownership change, the person who added them must be a Salesforce admin, a user with Modify All Data, the account owner, or someone higher in the owner's direct role-hierarchy chain. If they were added by someone who only holds access through a group, the member does not persist.[^1]
+
+Third, the storage dimension. Account Team Member records count against your org's data storage, and the same is true of case teams, where each team member on a case counts as 2 KB. It is not a huge number, but on a high-volume org where every account and every case carries several team members, it adds up. The architect notes this when a large team footprint threatens storage headroom, and it is one reason teams are a poor fit for mass automatic grants.[^4]
+
+## The first decision: when an Account Team beats the alternatives
+
+The canonical scenario for an Account Team is a handful of users, not necessarily managers, who need to collaborate on a single high-value Account, each with a defined role. None of the population-wide tools fit cleanly. A public group with a sharing rule, a permission set granting View All, and relaxed OWD are all container-level or org-level changes; they affect a population or every record. Only an Account Team expresses "these specific people can work on this one account, in these roles, at these access levels."
+
+That is the first quiz question in miniature. The best fit is an Account Team on that Account. A group with a sharing rule works when the same set recurs across many records, but here the set is tied to one record. A permission set with View All over-grants broadly. Relaxing OWD changes access for the whole org. The Account Team hits exactly the record the scenario names.[^1][^5]
+
+## Sales Teams: extending the same idea to Opportunities
+
+A Sales Team, more precisely called an Opportunity Team, applies the team model to a deal. When opportunity teams are enabled, the Opportunity Team related list appears on each Opportunity, and the owner can add team members with a role and an access level of Read Only or Read/Write, always at least equal to the default opportunity sharing access.[^2]
+
+Opportunity Teams and Account Teams share the same pool of available team member roles, so adding or updating a role for one updates it for the other. That shared role list is why an admin customizes them in one place. It is also a trap: candidates assume the teams themselves are linked, when they are separate lists on separate records that merely share a vocabulary of roles.[^2]
+
+You can set up a default opportunity team that gets applied to your opportunities automatically, or you can add members to one opportunity at a time. Either way the team is per-deal. The default team is a convenience for the owner, not a sharing rule: it stamps the same set of collaborators onto each new opportunity the owner works,[^2] and it still grants access one record at a time.
+
+## The Use Account Teams setting and the over-sharing side effect
+
+This is the most exam-weighted configuration in the lesson, so give it real attention. When the admin enables sales teams, there is an additional setting on the Opportunity sharing configuration: Use Account Teams. Turning it on means each Opportunity inherits the Account Team members of its related Account automatically, so those members gain access to the Opportunity without anyone explicitly adding them to an Opportunity Team.[^2][^6]
+
+Here is the trap. Enabling Use Account Teams shares every Opportunity to every Account Team member of the related account. If your Account Teams are broad, this widens opportunity access across the org in a way that surprises everyone. A low-stakes collaboration team on an Account suddenly confers access to the deals under that Account, and removing the members from the Opportunity is not a one-off, because the account team keeps feeding the access as long as the setting is on.[^2]
+
+The second quiz question is exactly this scenario. After enabling Use Account Teams on Opportunity, an org finds opportunities visible to more people than expected. The cause is not that OWD changed, not that sales teams were disabled, and not that the hierarchy was removed. It is that every Opportunity now shares to the Account Team members automatically. That is the intended behavior of the setting, and its consequence is over-sharing when account teams are broad. The design discipline is to enable Use Account Teams only when opportunity access should mirror the account team, and to audit the breadth of your account teams before you do.[^2][^6]
+
+## Case Teams: shared case handling without a group
+
+Case Teams bring the same per-record, owner-managed access to Service Cloud. A case team is a set of users who work together to solve a specific Case, each with a role (read-only or read and write) that the admin predefines. To set up case teams you define team roles, then add the Case Team related list to case page layouts, and users add people to that list on individual cases.[^4]
+
+The access a Case Team grants is strictly scoped to the named case. It is not an org-wide sharing rule, it requires no public group, and it does not disable the role hierarchy. The member gains access to that one case for as long as they are on the team. This is the third quiz question: which statement about case teams is true. The true statement is that they grant access to a specific Case for the named members, with a role and an access level. They are not org-wide, they need no group, and they have no effect on the hierarchy.[^4]
+
+Case teams have service-specific conveniences. You can predefine teams so reps quickly add frequent collaborators, create assignment rules that stamp a predefined team onto cases matching criteria such as "origin is email," and set up email alerts that notify team members when a comment is added or the case changes. You can also filter case lists to My Case Teams and run reports on My team's cases. These are the workflow payoffs of the team model on the service side.[^4]
+
+## Maximizing flexibility: when teams are the right call
+
+Teams load share on the mechanism that matches ad-hoc, record-centric collaboration. The owner manages them, no admin-created group is required, and adding or removing a person is a change to one record in seconds. That gives teams a flexibility no rule can match: a salesperson can assemble a deal team for a single big opportunity, a support rep can pull a product manager onto a tough case, and neither of them waits for an admin to edit a sharing rule.[^1][^4]
+
+Use teams when the collaboration is genuinely per-record and owner-driven. Use the population tools when the access is recurring and should be defined once. The previous lesson's trade-off question, groups versus teams, comes down to that. If you catch yourself building the same team on every account, the set is really a recurring set that belongs in a public group referenced by a sharing rule. If the team is bespoke to one record, the team is the honest answer.[^2][^6]
+
+## Config walkthrough: enable and test teams
+
+When a scenario asks you to set up team-based access, walk it in this order.
+
+1. In Setup, open Account Settings and enable Account Teams. Optionally enable Sales Teams and Case Teams for the objects you need. Each is a switch that turns on the related-list and the ability to add members to records.
+2. On the Opportunity sharing settings, decide whether to enable Use Account Teams. Enable it only if you want opportunity access to mirror the account team, and audit your account team breadth first, because this is the step that can over-share deals to broad account teams.
+3. As the record owner (or with the required permission), open a specific Account, Opportunity, or Case and add members to its team, choosing a role and an access level for each. Give members access up to, but no more than, what you hold.
+4. Test that a team member who has no hierarchy access and no sharing rule can now open the record, and that removing them from the team revokes their access immediately. This proves the team grant was the only thing opening the record.
+5. Review whether broad account teams leak into Opportunity access when Use Account Teams is on, and plan to tighten the teams or turn the setting off if deals are visible to more people than they should be.
+
+## Exam traps to avoid
+
+The first trap is the Use Account Teams side effect. Enabling it on Opportunity shares each Opportunity to every Account Team member automatically, so broad account teams over-share opportunities unexpectedly. When a scenario notes "opportunities are visible to more people than expected, why," the answer is almost always this setting, not an OWD change or a broken hierarchy.[^2][^6]
+
+The second trap is granularity. Teams grant record access only to the named team members on the specific record. They do not affect the rest of the org and do not touch other records. Wrong answers that claim a team opens up the whole object, or the org, confuse teams with OWD or sharing rules. The team's grant is a row on one record.[^1][^4]
+
+The third trap is independence from the hierarchy. Team access levels are independent of the role hierarchy. A team member who sits below the owner in the hierarchy still gains access through the team, because the team grant is an additive share row, not a hierarchy climb. Do not eliminate a team member because they are junior in the chart; the team made them equal to the task on that record.[^1]
+
+The fourth trap is the access ceiling. A team member's access is at least the owner's default access, and you can raise it, but never above what you hold yourself. If you have Read on child records, you cannot hand a member Read/Write on them. Answers that grant more than the giver holds are wrong.[^1]
+
+## Why this matters for the exam
+
+This requirement sits in the Access to Records domain, which is 39% of the exam.[^5] Teams are one of the four families of sharing mechanism you must place alongside OWD, the hierarchy, sharing rules, groups, and queues. The examiners want to confirm you know two things cold. First, that a team is an additive, per-record, owner-managed grant that works independent of OWD and the hierarchy. Second, that the setup decision, especially Use Account Teams on Opportunity, has a real over-sharing consequence you must design around. Get both right and the team scenarios resolve cleanly.[^1][^5]
+
+## Try it yourself
+
+In a scratch org, set Account OWD to Private and turn off the role hierarchy to keep the test pure. Enable Account Teams. Log in as an account owner, pick one Account, and add a second user to its team at Read/Write with the role Account Executive. Log in as that second user: they should see the Account even though they have no sharing rule and no hierarchy access. Remove them from the team and confirm the Account disappears, which proves the team grant was the only source of their access.
+
+Create an Opportunity under that Account with Opportunity OWD private, and enable Use Account Teams on the Opportunity sharing settings. Confirm the same team member now also sees the Opportunity automatically, without ever being added to an Opportunity Team. That is the side effect. Then create a broad Account Team on a second account and watch those members gain access to deals you did not intend to share, demonstrating exactly why the setting demands a breadth audit.
+
+Finally, enable Case Teams, define a role, and add a user to a single high-priority Case at Read Only. Confirm they can see and comment on that case but not other cases, and that a user who is not on the case team sees nothing. You have now exercised all three team types and proved each one's per-record, additive, owner-managed nature.
+
+## What's next
+
+Day 20, lesson 20, closes this objective with the trade-off decision you have been building toward all along: comparing teams against roles and groups in concrete scenarios. Today you learned that a team is an additive, per-record, owner-managed grant, that sales teams inherit account team members through Use Account Teams with an over-sharing cost, and that case teams scope access to one case. Next you will put teams, roles, and groups side by side and work through which container fits which scenario, the exact decision this whole grouping-and-teams objective is testing. Bring the contrast from today: a team is bespoke to one record, a group is reusable across many, and the scenario tells you which one the requirement actually needs.
+[^1]: Salesforce Help, "Considerations for Using Account Teams" (https://help.salesforce.com/s/articleView?language=en_US&id=sales.accountteam_def.htm&type=5). This is the source for how an account team grant is an additive share row scoped to one record, theat team member access must be at least the org-wide default and can go up to what the adding owner holds, that a team member who is below the owner in the hierarchy still gains access through the team, and what happens when the account owner changes./
+
+[^2]: Salesforce Help, "Add Teams to Your Opportunities"(https://help.salesforce.com/s/articleView?language=en_US&id=sales.salesteam_add.htm&type=5). This is the source for opportunity (sales) teams, adding editing and removing team members, team member access levels (read only or read write, at least the default opportunity sharing access), and that account teams and opportunity teams share the same pool of team member roles./
+
+[^4]: Salesforce Help, "Case Teams"(https://help.salesforce.com/s/articleView?language=en_US&id=service.caseteam_setup.htm&type=5). This is the source for case teams roles, adding usersand contacts to a specific case, per-case access levels, the My Case Teams filter and report filter, predefined case teams, assignment rules, email alerts, and that each case team member counts as 2 KB of storage toward the org storage limit./
+
+[^5]: Salesforce Help, "Salesforce Certified Platform Sharing and Visibility Architect Exam Guide"(https://help.salesforce.com/s/articleView?id=005298977&language=en_US&type=1). This is the source for the exam requirement portfolio: Access to Records accounts for 39% of the exam, and the scenario-based objective themes such as determining how teams can support record access requirements./
+
+[^6]: Salesforce Help, "Add Teams to Your Opportunities"(https://help.salesforce.com/s/articleView?language=en_US&id=sales.salesteam_add.htm&type=5). This is the source for the account team to opportunity overlap that the Use Account Teams behavior builds on, where enabling it mirrors account team members onto each opportunity, so broad account teams can widen opportunity access unexpectedly./
+
