@@ -1301,6 +1301,307 @@ export const learnSeries: LearningSeries[] = [
     "curriculumLessons": 42
   },
   {
+    "slug": "sf-omni-consultant",
+    "name": "Salesforce OmniStudio Consultant Certification",
+    "description": "A one-stop prep course for the Salesforce Certified OmniStudio Consultant exam. All 31 official objectives split into 62 focused lessons across 6 domains, with config walkthroughs, architect-tier design trade-offs, exam traps, and practice questions.",
+    "gradient": "from-sky to-indigo-600",
+    "lessons": [
+      {
+        "slug": "day-01-r-1a-omnistudio-solution-overview-the-omnistudio-toolse",
+        "title": "OmniStudio Solution Overview: The OmniStudio Toolset and Ecosystem",
+        "series": "sf-omni-consultant",
+        "lesson": 1,
+        "excerpt": "Describe the OmniStudio solution and common customer use case scenarios in different industries (telco, energy, healthcare, public sector, etc.).",
+        "date": "September 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "OmniStudio",
+          "Salesforce"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-02-r-1b-industry-use-cases-for-omnistudio-telco-energy-hea",
+        "title": "OmniStudio R-1B: Industry Use Cases (Telco, Energy, Healthcare, Public Sector)",
+        "series": "sf-omni-consultant",
+        "lesson": 2,
+        "excerpt": "Describe the OmniStudio solution and common customer use case scenarios in different industries: telco, energy, healthcare, and the public sector. Day 2 of the OmniStudio Consultant exam prep.",
+        "date": "September 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-03-r-2a-customer-requirements-and-assumptions-eliciting-an",
+        "title": "OmniStudio R-2a: Customer Requirements and Assumptions: Eliciting and Validating the Project Need",
+        "series": "sf-omni-consultant",
+        "lesson": 3,
+        "excerpt": "Determine a project's needs by eliciting and validating a customer's requirements and assumptions before design begins. Day 3 of the Salesforce OmniStudio Consultant exam prep.",
+        "date": "September 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-04-r-2b-risks-and-constraints-evaluating-a-customer-projec",
+        "title": "R-2B: Risks and Constraints: Evaluating a Customer Project Needs across the Solution",
+        "series": "sf-omni-consultant",
+        "lesson": 4,
+        "excerpt": "Determine a project's needs by evaluating a customer's requirements, assumptions, risks, and constraints. Day 4 of the Salesforce OmniStudio Consultant exam prep.",
+        "date": "September 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-05-r-3a-purpose-of-each-omnistudio-tool-flexcards-omniscri",
+        "title": "R-3A: Purpose of Each OmniStudio Tool: FlexCards, OmniScripts, Integration Procedures, Data Mappers",
+        "series": "sf-omni-consultant",
+        "lesson": 5,
+        "excerpt": "Explain the purpose of FlexCards, OmniScripts, Integration Procedures, and Data Mappers. Day 5 of the Salesforce OmniStudio Consultant exam prep.",
+        "date": "September 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-06-r-3b-choosing-the-right-omnistudio-tool-per-business-ne",
+        "title": "R-3B: Choosing the Right OmniStudio Tool per Business Need",
+        "series": "sf-omni-consultant",
+        "lesson": 6,
+        "excerpt": "Explain the purpose of Flexcards, Omniscript, Integration procedures, and Data Mapper, and choose the right OmniStudio tool for each business need. Day 6 of the Salesforce OmniStudio Consultant exam prep.",
+        "date": "September 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-07-r-4a-managed-package-runtime-vs-standard-runtime-when-e",
+        "title": "R-4A: Managed Package Runtime vs Standard Runtime: When Each Applies",
+        "series": "sf-omni-consultant",
+        "lesson": 7,
+        "excerpt": "Explain the managed package runtime and the standard runtime for OmniStudio, and know when each applies, including how the choice shapes installation, upgrades, and versioning. Day 7 of the Salesforce OmniStudio Consultant exam prep.",
+        "date": "September 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-08-r-4b-automatic-upgrades-vs-manual-intervention-upgrade",
+        "title": "R-4B: Automatic Upgrades vs Manual Intervention Upgrade",
+        "series": "sf-omni-consultant",
+        "lesson": 8,
+        "excerpt": "Explain Managed Package Runtime vs Standard Runtime, Automatic Upgrades, and Manual Intervention Upgrade, and choose the right upgrade strategy from the org's tolerance for change. Day 8 of the Salesforce OmniStudio Consultant exam prep.",
+        "date": "September 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "OmniStudio"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-09-r-5a-omnistudio-license-requirements-and-permission-set",
+        "title": "OmniStudio R-5a: OmniStudio License Requirements and Permission Set Licenses",
+        "series": "sf-omni-consultant",
+        "lesson": 9,
+        "excerpt": "Explain OmniStudio license requirements, Permission Set Licenses, and Permission Sets. Day 9 of the Salesforce OmniStudio Consultant exam prep.",
+        "date": "September 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "OmniStudio",
+          "Licensing",
+          "Permission Sets"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-10-r-5b-permission-sets-and-permission-set-licenses-granti",
+        "title": "R-5b: Permission Sets and Permission Set Licenses: Granting OmniStudio Access",
+        "series": "sf-omni-consultant",
+        "lesson": 10,
+        "excerpt": "Explain OmniStudio license requirements, Permission Set Licenses, and Permission Sets, and design a least-privilege, role-based access model for builders, reviewers, and end users. Day 10 of the Salesforce OmniStudio Consultant exam prep.",
+        "date": "September 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "OmniStudio",
+          "Permission Sets",
+          "Permission Set Licenses",
+          "Access"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-11-r-6a-flexcard-data-source-selection-performance-vs-data",
+        "title": "R-6a: FlexCard Data Source Selection: Performance vs Data Complexity",
+        "series": "sf-omni-consultant",
+        "lesson": 11,
+        "excerpt": "Recommend the most efficient data source for a FlexCard by weighing performance requirements against data complexity, and explain how FlexCard setup properties govern behavior. Day 11 of the Salesforce OmniStudio Consultant exam prep.",
+        "date": "September 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "OmniStudio",
+          "FlexCards",
+          "Data Sources",
+          "Turbo Extract",
+          "Integration Procedures"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-12-r-6b-flexcard-setup-properties-and-how-they-govern-beha",
+        "title": "R-6b: FlexCard Setup Properties and How They Govern Behavior",
+        "series": "sf-omni-consultant",
+        "lesson": 12,
+        "excerpt": "Explain how FlexCard setup properties govern card behavior: context record binding, load and refresh timing, display state, and the interaction surface. Day 12 of the Salesforce OmniStudio Consultant exam prep.",
+        "date": "September 25, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "OmniStudio",
+          "FlexCards",
+          "Setup Properties",
+          "Context Record",
+          "Load Behavior"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-13-r-7a-multi-source-flexcard-design-layering-data-and-ele",
+        "title": "R-7a: Multi-Source FlexCard Design: Layering Data and Elements",
+        "series": "sf-omni-consultant",
+        "lesson": 13,
+        "excerpt": "Design FlexCards that assemble data from multiple sources and layer it logically: decide what belongs on the card, shape the Integration Procedure payload, and bind each element to the right part. Day 13 of the Salesforce OmniStudio Consultant exam prep.",
+        "date": "September 26, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "OmniStudio",
+          "FlexCards",
+          "Integration Procedures",
+          "Data",
+          "Elements"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-14-r-7b-designing-flexcards-for-role-and-context-clarity-a",
+        "title": "R-7b: Designing FlexCards for Role and Context: Clarity and Logic",
+        "series": "sf-omni-consultant",
+        "lesson": 14,
+        "excerpt": "Design FlexCards that show the right data to the right person in the right moment: make role and context drive what the card displays, keep each element necessary, and make the card read as one coherent story. Day 14 of the Salesforce OmniStudio Consultant exam prep.",
+        "date": "September 27, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "OmniStudio",
+          "FlexCards",
+          "Role",
+          "Context",
+          "Design"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-15-r-8a-flexcard-actions-links-modals-launching-omniscript",
+        "title": "R-8a: FlexCard Actions: Links, Modals, Launching OmniScripts and IPs",
+        "series": "sf-omni-consultant",
+        "lesson": 15,
+        "excerpt": "An action is what turns a FlexCard from a display into a workflow driver. Learn the action types (links, modals, launching an OmniScript, calling an Integration Procedure, opening a child FlexCard), how to match each action to the user's next step, and how to wire actions to the right element, data, and role. Day 15 of the Salesforce OmniStudio Consultant exam prep.",
+        "date": "September 28, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "OmniStudio",
+          "FlexCards",
+          "Actions",
+          "OmniScript",
+          "Integration Procedure"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-16-r-8b-child-flexcards-and-nested-action-flows",
+        "title": "R-8b: Child FlexCards and Nested Action Flows",
+        "series": "sf-omni-consultant",
+        "lesson": 16,
+        "excerpt": "A child FlexCard is a card embedded inside another card, and it is the mechanism that turns a simple summary into a real, multilayered workflow. Learn what a child FlexCard is, how data passes between parent and child, how to host a child card in a modal for drill-down, and how shallow nesting keeps the full card tree fast and maintainable. Day 16 of the Salesforce OmniStudio Consultant exam prep.",
+        "date": "September 29, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "OmniStudio",
+          "FlexCards",
+          "Child FlexCard",
+          "Nested Action Flows",
+          "Modal"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-17-r-9a-conditional-rendering-in-flexcards-when-the-card-a",
+        "title": "R-9a: Conditional Rendering in FlexCards: When the Card Adapts",
+        "series": "sf-omni-consultant",
+        "lesson": 17,
+        "excerpt": "A FlexCard that shows the same thing to every record is a FlexCard doing half a job. Learn how conditional rendering lets a single card definition show or hide elements and change their appearance based on the underlying data or its own state, so the same card adapts to different records, roles, and moments. Day 17 of the Salesforce OmniStudio Consultant exam prep.",
+        "date": "September 30, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "FlexCards",
+          "Conditional Rendering",
+          "State Variables",
+          "Conditions"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-18-r-9b-state-variables-driving-dynamic-appearance-and-int",
+        "title": "R-9b: State Variables: Driving Dynamic Appearance and Interaction",
+        "series": "sf-omni-consultant",
+        "lesson": 18,
+        "excerpt": "A FlexCard that only shows fetched data is half an application. Learn what state variables are, how they hold the transient values that change as the user interacts, and how they drive dynamic appearance and interaction logic so the card responds in real time without a server round trip. Day 18 of the Salesforce OmniStudio Consultant exam prep.",
+        "date": "October 01, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "FlexCards",
+          "State Variables",
+          "Conditional Rendering",
+          "Data Source",
+          "Interactivity"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 18,
+    "curriculumLessons": 62
+  },
+  {
     "slug": "salesforce-sharing-visibility-architect",
     "name": "Platform Sharing and Visibility Architect Certification",
     "description": "A one-stop prep course for the Salesforce Certified Platform Sharing and Visibility Architect exam. All 18 official objectives split into 36 focused lessons, with config walkthroughs, sharing-model trade-offs, exam traps, and practice questions.",
@@ -2858,288 +3159,6 @@ export const learnSeries: LearningSeries[] = [
     ],
     "totalLessons": 9,
     "curriculumLessons": 30
-  },
-  {
-    "slug": "sf-omni-consultant",
-    "name": "Salesforce OmniStudio Consultant Certification",
-    "description": "A one-stop prep course for the Salesforce Certified OmniStudio Consultant exam. All 31 official objectives split into 62 focused lessons across 6 domains, with config walkthroughs, architect-tier design trade-offs, exam traps, and practice questions.",
-    "gradient": "from-sky to-indigo-600",
-    "lessons": [
-      {
-        "slug": "day-01-r-1a-omnistudio-solution-overview-the-omnistudio-toolse",
-        "title": "OmniStudio Solution Overview: The OmniStudio Toolset and Ecosystem",
-        "series": "sf-omni-consultant",
-        "lesson": 1,
-        "excerpt": "Describe the OmniStudio solution and common customer use case scenarios in different industries (telco, energy, healthcare, public sector, etc.).",
-        "date": "September 24, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "OmniStudio",
-          "Salesforce"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-02-r-1b-industry-use-cases-for-omnistudio-telco-energy-hea",
-        "title": "OmniStudio R-1B: Industry Use Cases (Telco, Energy, Healthcare, Public Sector)",
-        "series": "sf-omni-consultant",
-        "lesson": 2,
-        "excerpt": "Describe the OmniStudio solution and common customer use case scenarios in different industries: telco, energy, healthcare, and the public sector. Day 2 of the OmniStudio Consultant exam prep.",
-        "date": "September 24, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-03-r-2a-customer-requirements-and-assumptions-eliciting-an",
-        "title": "OmniStudio R-2a: Customer Requirements and Assumptions: Eliciting and Validating the Project Need",
-        "series": "sf-omni-consultant",
-        "lesson": 3,
-        "excerpt": "Determine a project's needs by eliciting and validating a customer's requirements and assumptions before design begins. Day 3 of the Salesforce OmniStudio Consultant exam prep.",
-        "date": "September 24, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-04-r-2b-risks-and-constraints-evaluating-a-customer-projec",
-        "title": "R-2B: Risks and Constraints: Evaluating a Customer Project Needs across the Solution",
-        "series": "sf-omni-consultant",
-        "lesson": 4,
-        "excerpt": "Determine a project's needs by evaluating a customer's requirements, assumptions, risks, and constraints. Day 4 of the Salesforce OmniStudio Consultant exam prep.",
-        "date": "September 24, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-05-r-3a-purpose-of-each-omnistudio-tool-flexcards-omniscri",
-        "title": "R-3A: Purpose of Each OmniStudio Tool: FlexCards, OmniScripts, Integration Procedures, Data Mappers",
-        "series": "sf-omni-consultant",
-        "lesson": 5,
-        "excerpt": "Explain the purpose of FlexCards, OmniScripts, Integration Procedures, and Data Mappers. Day 5 of the Salesforce OmniStudio Consultant exam prep.",
-        "date": "September 24, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-06-r-3b-choosing-the-right-omnistudio-tool-per-business-ne",
-        "title": "R-3B: Choosing the Right OmniStudio Tool per Business Need",
-        "series": "sf-omni-consultant",
-        "lesson": 6,
-        "excerpt": "Explain the purpose of Flexcards, Omniscript, Integration procedures, and Data Mapper, and choose the right OmniStudio tool for each business need. Day 6 of the Salesforce OmniStudio Consultant exam prep.",
-        "date": "September 24, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-07-r-4a-managed-package-runtime-vs-standard-runtime-when-e",
-        "title": "R-4A: Managed Package Runtime vs Standard Runtime: When Each Applies",
-        "series": "sf-omni-consultant",
-        "lesson": 7,
-        "excerpt": "Explain the managed package runtime and the standard runtime for OmniStudio, and know when each applies, including how the choice shapes installation, upgrades, and versioning. Day 7 of the Salesforce OmniStudio Consultant exam prep.",
-        "date": "September 24, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-08-r-4b-automatic-upgrades-vs-manual-intervention-upgrade",
-        "title": "R-4B: Automatic Upgrades vs Manual Intervention Upgrade",
-        "series": "sf-omni-consultant",
-        "lesson": 8,
-        "excerpt": "Explain Managed Package Runtime vs Standard Runtime, Automatic Upgrades, and Manual Intervention Upgrade, and choose the right upgrade strategy from the org's tolerance for change. Day 8 of the Salesforce OmniStudio Consultant exam prep.",
-        "date": "September 24, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "OmniStudio"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-09-r-5a-omnistudio-license-requirements-and-permission-set",
-        "title": "OmniStudio R-5a: OmniStudio License Requirements and Permission Set Licenses",
-        "series": "sf-omni-consultant",
-        "lesson": 9,
-        "excerpt": "Explain OmniStudio license requirements, Permission Set Licenses, and Permission Sets. Day 9 of the Salesforce OmniStudio Consultant exam prep.",
-        "date": "September 24, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "OmniStudio",
-          "Licensing",
-          "Permission Sets"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-10-r-5b-permission-sets-and-permission-set-licenses-granti",
-        "title": "R-5b: Permission Sets and Permission Set Licenses: Granting OmniStudio Access",
-        "series": "sf-omni-consultant",
-        "lesson": 10,
-        "excerpt": "Explain OmniStudio license requirements, Permission Set Licenses, and Permission Sets, and design a least-privilege, role-based access model for builders, reviewers, and end users. Day 10 of the Salesforce OmniStudio Consultant exam prep.",
-        "date": "September 24, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "OmniStudio",
-          "Permission Sets",
-          "Permission Set Licenses",
-          "Access"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-11-r-6a-flexcard-data-source-selection-performance-vs-data",
-        "title": "R-6a: FlexCard Data Source Selection: Performance vs Data Complexity",
-        "series": "sf-omni-consultant",
-        "lesson": 11,
-        "excerpt": "Recommend the most efficient data source for a FlexCard by weighing performance requirements against data complexity, and explain how FlexCard setup properties govern behavior. Day 11 of the Salesforce OmniStudio Consultant exam prep.",
-        "date": "September 24, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "OmniStudio",
-          "FlexCards",
-          "Data Sources",
-          "Turbo Extract",
-          "Integration Procedures"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-12-r-6b-flexcard-setup-properties-and-how-they-govern-beha",
-        "title": "R-6b: FlexCard Setup Properties and How They Govern Behavior",
-        "series": "sf-omni-consultant",
-        "lesson": 12,
-        "excerpt": "Explain how FlexCard setup properties govern card behavior: context record binding, load and refresh timing, display state, and the interaction surface. Day 12 of the Salesforce OmniStudio Consultant exam prep.",
-        "date": "September 25, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "OmniStudio",
-          "FlexCards",
-          "Setup Properties",
-          "Context Record",
-          "Load Behavior"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-13-r-7a-multi-source-flexcard-design-layering-data-and-ele",
-        "title": "R-7a: Multi-Source FlexCard Design: Layering Data and Elements",
-        "series": "sf-omni-consultant",
-        "lesson": 13,
-        "excerpt": "Design FlexCards that assemble data from multiple sources and layer it logically: decide what belongs on the card, shape the Integration Procedure payload, and bind each element to the right part. Day 13 of the Salesforce OmniStudio Consultant exam prep.",
-        "date": "September 26, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "OmniStudio",
-          "FlexCards",
-          "Integration Procedures",
-          "Data",
-          "Elements"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-14-r-7b-designing-flexcards-for-role-and-context-clarity-a",
-        "title": "R-7b: Designing FlexCards for Role and Context: Clarity and Logic",
-        "series": "sf-omni-consultant",
-        "lesson": 14,
-        "excerpt": "Design FlexCards that show the right data to the right person in the right moment: make role and context drive what the card displays, keep each element necessary, and make the card read as one coherent story. Day 14 of the Salesforce OmniStudio Consultant exam prep.",
-        "date": "September 27, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "OmniStudio",
-          "FlexCards",
-          "Role",
-          "Context",
-          "Design"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-15-r-8a-flexcard-actions-links-modals-launching-omniscript",
-        "title": "R-8a: FlexCard Actions: Links, Modals, Launching OmniScripts and IPs",
-        "series": "sf-omni-consultant",
-        "lesson": 15,
-        "excerpt": "An action is what turns a FlexCard from a display into a workflow driver. Learn the action types (links, modals, launching an OmniScript, calling an Integration Procedure, opening a child FlexCard), how to match each action to the user's next step, and how to wire actions to the right element, data, and role. Day 15 of the Salesforce OmniStudio Consultant exam prep.",
-        "date": "September 28, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "OmniStudio",
-          "FlexCards",
-          "Actions",
-          "OmniScript",
-          "Integration Procedure"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-16-r-8b-child-flexcards-and-nested-action-flows",
-        "title": "R-8b: Child FlexCards and Nested Action Flows",
-        "series": "sf-omni-consultant",
-        "lesson": 16,
-        "excerpt": "A child FlexCard is a card embedded inside another card, and it is the mechanism that turns a simple summary into a real, multilayered workflow. Learn what a child FlexCard is, how data passes between parent and child, how to host a child card in a modal for drill-down, and how shallow nesting keeps the full card tree fast and maintainable. Day 16 of the Salesforce OmniStudio Consultant exam prep.",
-        "date": "September 29, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "OmniStudio",
-          "FlexCards",
-          "Child FlexCard",
-          "Nested Action Flows",
-          "Modal"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-17-r-9a-conditional-rendering-in-flexcards-when-the-card-a",
-        "title": "R-9a: Conditional Rendering in FlexCards: When the Card Adapts",
-        "series": "sf-omni-consultant",
-        "lesson": 17,
-        "excerpt": "A FlexCard that shows the same thing to every record is a FlexCard doing half a job. Learn how conditional rendering lets a single card definition show or hide elements and change their appearance based on the underlying data or its own state, so the same card adapts to different records, roles, and moments. Day 17 of the Salesforce OmniStudio Consultant exam prep.",
-        "date": "September 30, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "OmniStudio",
-          "FlexCards",
-          "Conditional Rendering",
-          "State Variables",
-          "Conditions"
-        ],
-        "status": "published"
-      }
-    ],
-    "totalLessons": 17,
-    "curriculumLessons": 62
   },
   {
     "slug": "hermes-consultant",
@@ -5581,6 +5600,25 @@ export const learnLessons: LearnLesson[] = [
       "Data Architecture",
       "Data Management",
       "Certification"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-18-r-9b-state-variables-driving-dynamic-appearance-and-int",
+    "title": "R-9b: State Variables: Driving Dynamic Appearance and Interaction",
+    "series": "sf-omni-consultant",
+    "lesson": 18,
+    "excerpt": "A FlexCard that only shows fetched data is half an application. Learn what state variables are, how they hold the transient values that change as the user interacts, and how they drive dynamic appearance and interaction logic so the card responds in real time without a server round trip. Day 18 of the Salesforce OmniStudio Consultant exam prep.",
+    "date": "October 01, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "FlexCards",
+      "State Variables",
+      "Conditional Rendering",
+      "Data Source",
+      "Interactivity"
     ],
     "status": "published"
   },
