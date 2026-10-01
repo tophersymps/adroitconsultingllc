@@ -23,6 +23,28 @@ export const posts: BlogPost[] = [
     "status": "published"
   },
   {
+    "slug": "critical-path-dependency-scheduling-2026",
+    "title": "The Critical Path Is Where Delivery Actually Happens",
+    "excerpt": "Most of a project's tasks can slip without moving the finish date. The tasks that cannot are the critical path, and they alone decide when you deliver.",
+    "category": "Project Management",
+    "categoryColor": "pm",
+    "categoryGradient": "from-teal to-teal-dark",
+    "date": "October 1, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "10 min read",
+    "featured": false,
+    "tags": [
+      "Project Management",
+      "Delivery",
+      "Scheduling",
+      "Dependencies",
+      "Consulting"
+    ],
+    "bannerImage": "/banners/critical-path-dependency-scheduling-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "model-registry-promotion-pipeline-2026",
     "title": "The Model Registry: Promote Models Like You Promote Code",
     "excerpt": "A model registry turns a trained model into an immutable, evaluation-gated, pointer-promoted artifact you ship like a release candidate, rollback included.",
