@@ -26,6 +26,8 @@ The single most useful distinction in this lesson is also the easiest to blur. P
 
 The clean rule to carry into any design conversation: language answers "what word is on the button?" and locale answers "how is the value written on the page?" Salesforce lets a single-language org change its locale even when it cannot change its language, which is a neat demonstration that the two really are independent. [^1] You can format everything for a German reader while every label stays English.
 
+![A comparison of locale and language: language controls what word is on the button while locale controls how the value is written, so the same date and number render differently for a US reader and a German reader](</diagrams/localization-multi-currency-architecture/1-locale-vs-language.png>)
+
 ## How language and locale are set: org defaults, then user choice
 
 Neither setting is a single global switch. There is a default layer and a personal layer, and the defaults apply to a user only until that user chooses their own.
@@ -62,6 +64,8 @@ Multi-currency is a distinct feature, gated by edition: it is available in Enter
 
 One more notion rounds it out: **record currency**. Every standard and custom object record that has currency fields carries a field that specifies the currency for all the amount fields on that record; you can make it editable or locked by field-level security. [^3] Set an account's currency to US dollars and its annual revenue displays in dollars. If you then change that record's default currency, here is the fact most people misremember: the amounts are not converted. They simply display with the new currency code. [^3] Changing the currency on a record does not revalue the amounts; it changes what unit label they carry. Revaluation is a separate, deliberate operation.
 
+![The three notions of currency, corporate, personal, and record, and the two-step conversion that runs from record currency through the corporate anchor to the user's personal currency](</diagrams/localization-multi-currency-architecture/2-three-currencies-conversion.png>)
+
 ## Conversion mechanics: the shape of the money math
 
 Once multiple currencies exist, conversion is everywhere, and it has rules worth knowing so you can predict the number that shows up.
@@ -86,6 +90,8 @@ The date that picks the rate is worth stating precisely: with advanced currency 
 
 **The object behind the concept is `DatedConversionRate`.** This is the standard object that represents the dated exchange rates used by an org with both multicurrency and the effective dated currency feature enabled. [^6] It carries the `IsoCode` (the three-letter ISO 4217 currency code, unique per org, for example USD, GBP, or JPY), the `ConversionRate` against the corporate currency, a `StartDate`, and a read-only `NextStartDate` that is effectively the day after the current rate's end. [^6] The same object is what you load when you bulk-import dated exchange rates with Data Loader rather than clicking through Setup. [^6] It is only available in multicurrency orgs with advanced currency management enabled; it does not exist in single-currency orgs or in multicurrency orgs that skipped advanced currency management. [^6] Which makes it a clean architectural signal: if your design needs it, your org has made both of those choices.
 
+![Dated exchange rates: a deal closed between January 1 and February 1 converts at 1.39 while a deal closed after February 1 converts at 1.42, because the opportunity close date selects the rate](</diagrams/localization-multi-currency-architecture/3-dated-exchange-rates.png>)
+
 ## Where dated exchange rates apply, and where they do not
 
 The trickiest part of advanced currency management is not what it does. It is where it refuses to operate. Dated exchange rates are used for opportunities, opportunity products, opportunity product schedules, campaign opportunity fields, opportunity splits, and reports related to those objects and fields. [^4] That is the scope, and the scope is narrower than most people assume on day one.
@@ -93,6 +99,8 @@ The trickiest part of advanced currency management is not what it does. It is wh
 Concretely, dated exchange rates are **not** used in forecasting, in currency fields on other objects, or in currency fields in other types of reports. [^4] They are also not used when calculating formula fields whose return type is Currency. [^4] So the moment a money value flows out of the opportunity family into a forecast, a report on a non-opportunity object, or a currency formula, the dated rate stops applying and the conversion effectively reverts to static behavior. If your design assumes "we turned on dated rates, so all money is historical and correct," that assumption is wrong wherever the value leaves the opportunity scope.
 
 Two more consequences are the kind a reviewer will probe. Roll-up summary fields are supported between two advanced-currency objects, for example from an opportunity line item up to its opportunity, because both sides honor dated rates. [^4] But if you enable advanced currency management, you can no longer create a currency roll-up on the opportunity object that rolls up to the account, and you cannot filter on the opportunity currency field on the account. [^4] Existing currency roll-up summary fields on the opportunity that summarize objects that do not support dated rates get disabled and stop calculating. [^4] And cross-object formulas always use the static conversion rate for currency conversion, never the dated rate. [^4]
+
+![Where dated exchange rates apply: the opportunity family and its related reports use dated rates, while forecasting, other objects' currency fields, currency formulas, and cross-object formulas fall back to static rates](</diagrams/localization-multi-currency-architecture/4-dated-rates-scope.png>)
 
 There is also a platform constraint worth filing away: with advanced currency management enabled, you cannot bind Visualforce pages that use `apex:inputField` or `apex:outputField` to currency fields that support advanced currency management. [^4] If a legacy page relies on that binding, enabling dated rates breaks it. This is a real migration consideration, not a theoretical one, because it surfaces in a review as a page that stopped working for a reason nobody connected to the currency feature.
 
