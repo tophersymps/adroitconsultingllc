@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "test-time-compute-inference-scaling-2026",
+    "title": "Test-Time Compute Is a Knob, Not a Fix",
+    "excerpt": "Reasoning models spend more compute at the moment you ask. Turn it on everywhere and it becomes a latency and billing trap. The discipline is routing.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "2026-10-02",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "13 min read",
+    "featured": false,
+    "tags": [
+      "Test-Time Compute",
+      "Reasoning Models",
+      "Model Routing",
+      "AI Infrastructure",
+      "LLM Cost",
+      "Inference"
+    ],
+    "bannerImage": "/banners/test-time-compute-inference-scaling-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "continuous-discovery-weekly-habit-2026",
     "title": "Continuous Discovery: The Weekly Habit Over the Big Study",
     "excerpt": "Continuous discovery swaps the big quarterly study for a weekly habit of small customer interviews, so research keeps pace with the build.",
