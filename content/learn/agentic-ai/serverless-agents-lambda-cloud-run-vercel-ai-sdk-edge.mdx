@@ -1,0 +1,124 @@
+---
+title: "Lesson 57: Serverless Agents: Lambda, Cloud Run, Vercel AI SDK, and Edge"
+slug: serverless-agents-lambda-cloud-run-vercel-ai-sdk-edge
+series: "agentic-ai"
+lesson: 57
+excerpt: "Lesson 56 put you in charge of a cluster. This lesson shows the other contract: serverless platforms that run your agent code without you managing servers. It covers AWS Lambda as event and API driven compute with a per-invocation time cap, Cloud Run as a container service that scales to zero and scales back up on request volume, the Vercel AI SDK as a streaming layer for agent responses, and edge compute for agents that must answer close to the user. A worked example retakes the document agent from Lesson 55 and runs it serverless: a synchronous summary function, a queue-driven batch worker, and a streaming assistant endpoint."
+date: "October 2, 2026"
+author: "Adroit Consulting"
+readTime: "15 min read"
+tags: [LLMs, AI Agents, Serverless, AWS Lambda, Cloud Run, Vercel AI SDK, Edge Computing]
+---
+
+# Lesson 57: Serverless Agents: Lambda, Cloud Run, Vercel AI SDK, and Edge
+
+Lesson 56 showed you the self-managed path: packaging agents into pods, scaling them from the queue, and routing model work to GPUs you operate yourself. This lesson is the opposite contract. Serverless platforms run your code without you provisioning or patching servers, scale from zero on demand, and bill you by what you actually use rather than by idle capacity you reserved. The name undersells the real trade. You give up the steering wheel in exchange for not owning the car.
+
+This chapter covers the four platforms you will meet most often as a practitioner: AWS Lambda, the event and API driven function service; Google Cloud Run, a request driven container service that still lets you ship a full environment; the Vercel AI SDK, which is not a runtime but the TypeScript toolkit you use to stream agent output over HTTP; and edge compute, where code runs closer to the end user rather than in a fixed region. The connective thread is the same question raised in the last two lessons: which contract do you want for each piece of the agent, and what does that choice cost you when it breaks.
+
+## What serverless changes for an agent
+
+An agent is a loop: it takes an input, calls a model, runs tools, observes the results, and repeats until it has an answer. Nothing about that loop requires a server you own. What makes the loop hard to host is that it is long-running, stateful, and latency sensitive at the same time. A platform that scales to zero and back has to reconcile those three needs with the fact that it cannot hold your process open forever.
+
+Serverless shifts three things you previously controlled. First, scaling becomes automatic and mostly invisible. You do not set a desired replica count or a queue metric. The platform creates and destroys compute as demand arrives, and your job is to design the code so a fresh instance can pick up work safely. Second, state gets pushed out of the process. Because an instance can disappear between requests, anything you need to remember must live in a database, a queue, or an object store. This is the statelessness rule from Lesson 55, and serverless enforces it harder than Kubernetes did, because you cannot pin a pod to a machine even if you wanted to. Third, each execution has a hard time budget. Unlike a long-lived container that runs until you stop it, serverless functions and services impose limits on how long a single invocation or request may run, which changes how you structure a long agent task.
+
+The platform comparison below matters less than the pattern. Whatever you choose, you want the pieces of the agent that must answer immediately to be reachable, and the pieces that do heavy work to be durable. Serverless is excellent for the first and requires care for the second. The rest of this lesson is about where that care goes.
+
+## AWS Lambda: the event and API workhorse
+
+AWS Lambda is a serverless compute service. You write a handler function, connect it to a trigger such as HTTP via API Gateway, an object drop in S3, or a message from a queue, and Lambda runs that code when the trigger fires. You do not provision servers, manage capacity, or patch anything. AWS describes Lambda as a service where each invocation runs independently with no shared state and scales horizontally to match demand, with execution environments that can be reused across invocations. [^1]
+
+The unit of work is the execution environment, a container that holds your runtime and code. When a function is invoked and a warm environment is available, it is reused. When none is available, a new environment has to be created, and that is where cold starts come from. A function that sits idle gets its environments shut down, so the next invocation pays a setup cost.
+
+### The cold start layer
+
+A cold start is the initialization that happens when Lambda must create a new execution environment because none is ready. AWS breaks that initialization into four steps: container provisioning, where resources are allocated for your configured memory; runtime initialization, where the language runtime loads; function code loading, where your deployed code is downloaded and unpacked; and dependency resolution, where libraries load before your handler runs. [^2]
+
+Two things make cold starts a practical concern for agents specifically. The first is latency on user-facing responses. Cold starts occur after inactivity or during a rapid burst of traffic, exactly when an assistant endpoint is most visible to a user. AWS notes that they typically affect under one percent of requests, but that it is a variability you cannot ignore in a latency-sensitive application. [^2] The second is the model client. Loading a model SDK and re- establishing a connection inside the handler adds initialization cost on every cold start, so keeping heavy setup outside the handler and reusing clients saves meaningful time.
+
+You mitigate cold starts in two directions. SnapStart takes a snapshot of a fully initialized execution environment and resumes from it, trading a fast startup for the need to avoid cached state that must not survive. Provisioned Concurrency keeps a configured number of environments warm so they are ready before a request arrives, at the cost of paying for idle capacity. Both are available on Lambda and each solves a different flavor of the problem. [^2]
+
+### The time budget and how it shapes agents
+
+Lambda caps each invocation at a maximum duration, which was fifteen minutes for functions. [^1] That cap is the single most design-shaping constraint for agents, because a single agent run is usually expected to finish inside a few seconds, while a batch that must summarize hundreds of documents will not.
+
+You handle this the way Lesson 55 taught you: split fast and slow work. A request-response agent that answers one question belongs in a function that returns within the cap. A batch that processes a backlog belongs behind a queue, with the function consuming one unit of work per invocation and tracking state in the store. Each individual invocation stays short even though the overall workload is large. Lambda has since added models for long-running work, but the durable worker pattern is the one that keeps your architecture portable, and it is the one this course builds on.
+
+## Google Cloud Run: the container that scales to zero
+
+Cloud Run is a different shape of serverless. Instead of a function handler, you give it a container image, and it runs that container as an HTTP service, scaling the number of instances up and down to match incoming requests. [^4] If you already built the agent worker as a container in Lesson 56, Cloud Run accepts that container almost unchanged, which is its main appeal for agent teams that want the portability of containers without the cluster.
+
+The scaling behavior is the headline. When a Cloud Run service gets no traffic, its revision scales to zero instances by default and runs at no cost. When a request arrives, Cloud Run starts an instance and serves it. You can pin a number of instances to stay warm with a minimum-instances setting, which is the equivalent of Provisioned Concurrency for Cloud Run: it guarantees an idle instance is running to avoid the cold start on the first request, at the cost of paying while it idles. [^4]
+
+Autoscaling runs off two metrics rather than a queue. Cloud Run's metrics-based scaling adjusts the instance count from average CPU utilization and average request concurrency, then clamps the result between the minimum and maximum instance limits you configure. This is the request-serving model: more concurrent traffic means more instances, and the count is bounded by your max so a backing service does not get overwhelmed. [^4] Notably, Cloud Run does not scale on memory, so an agent that is memory heavy but CPU light needs a higher maximum concurrency setting or a higher per-instance allocation, not a bigger instance count.
+
+### Why request driven matters for agents
+
+For a user-facing agent, request concurrency is the honest signal. Each chat or API call occupies one concurrent request on an instance. Cloud Run sizes the fleet from that number, which maps directly to the number of users waiting on answers. This is the mirror image of the KEDA queue scaling from Lesson 56. There you scaled workers on the backlog of a queue because there was no interactive caller. Here you scale on the number of interactive callers directly, because each one arrives as a live request.
+
+The cost model follows from the same rule. You pay per instance that is running and active, not for capacity you keep reserved. [^4] For a background agent that mostly waits, Cloud Run spends fractions of a cent between bursts. For an always-on assistant with steady traffic, you set a minimum instance count to keep first responses fast, and you pay for that warmth deliberately.
+
+### Cloud Run and the model layer
+
+Cloud Run also supports attaching GPUs to instances, which means you can serve a self-hosted model as a container that scales to zero and comes back up in roughly five seconds when a request arrives. [^5] That closes a gap the earlier chapters left open: Lesson 56 ran model inference on GPU pods you operated. Cloud Run gives you a way to host the same model container serverlessly, so the accelerator is idle-and-free until a request needs it. You would still put the agent control loop on plain CPU instances and the model on GPU instances, keeping the split independent as before, but now neither fleet requires you to operate nodes.
+
+The tension is the same one from the cold start discussion. A GPU model that must answer in under a second wants minimum instances warm, and that warmth costs money. The trade is real and worth naming explicitly: scale to zero saves cost only if your users tolerate the cold spin-up that first request pays.
+
+## Streaming agent output with the Vercel AI SDK
+
+None of the runtimes above give you the agent's voice. That is the job of a toolkit, and the Vercel AI SDK is the TypeScript toolkit that most serverless agent deployments reach for. It is not a hosting platform. It is a library that standardizes calling models, streaming their output, and executing tools, across React, Next.js, and Node.js servers. [^6]
+
+The part that matters for agents is streaming. An agent that waits for a model to finish the whole answer before sending anything returns a long pause and then a wall of text, which feels broken to a user. The AI SDK's `streamText` function starts returning tokens as the model produces them, so the client renders the answer as it arrives. [^7] Because `streamText` also carries tool call and tool result messages in the same stream, a multi-step agent can stream not just the final answer but the running record of what the model is doing, which is the observability UX from the agent-loop lesson applied to the wire.
+
+A minimal pattern is a POST route that reads the user's prompt, calls `streamText`, and pipes the resulting UI message stream back to the client. [^7] That route is a plain serverless function. It scales the same way any other function scales, which means the agent's interactive layer inherits all the properties this lesson covered: it sits behind the platform's scaling, it observes the per-invocation budget, and it streams rather than waiting.
+
+The reason the AI SDK belongs in a serverless lesson and not an earlier one is that streaming is how you make a disposable, stateless instance feel like a live conversation. Your Lambda or Cloud Run instance can vanish the moment the request ends. The user never sees that, because the stream already closed cleanly. The toolkit is the bridge between a platform that forgets you and an interface that remembers you.
+
+## Edge compute: the agent that answers close to the user
+
+The last shape in this chapter is edge compute, which is not a specific product so much as a placement strategy. Edge runtimes run your code on infrastructure distributed closer to the end user, so a request travels a shorter network path than it would to a central region. Vercel's Edge Runtime, for example, is built on the V8 JavaScript engine and runs in isolated environments that do not require a container or a virtual machine. [^8]
+
+For agents, edge placement helps the parts of the loop that are about proximity, not the parts that are about the model. The model call still goes to wherever the model lives, usually a managed API that is already geographically distributed. What edge placement shortens is the round trip between the user and your orchestrating code: the request comes in near the user, you gather context and call the model, and the streaming response flows back on a short path. It is still worth doing, because that first leg is on the critical path of perceived latency.
+
+Edge runtimes come with constraints, and they are the same ones you should expect by now. They run a constrained subset of the runtime's APIs. Libraries that need full Node or full browser APIs may not run, dynamic code execution is restricted, and heavy dependencies are a poor fit. [^8] You do not put your whole agent, including a large model SDK and a vector client, on the edge by default. You put the thin, stateless orchestration there, and you push the heavy work to a region that can host it. If the orchestrator itself needs APIs the edge runtime does not provide, you run it on the normal serverless runtime instead, which is a completely legitimate choice. Edge placement is an optimization, not a requirement.
+
+## Worked example: the document agent, serverless
+
+Revisit the document processing agent from Lesson 55. It pulls a document ID from a queue, extracts text, classifies, summarizes, and writes results back to a store, with state living outside the process so any worker can take any task. This lesson runs that same agent without a cluster.
+
+Step one, expose the fast answer. Stand up a Lambda function behind API Gateway that accepts a document ID and returns the stored summary. The function reads from the document store, calls the model for a summary if one does not exist yet, and writes the result back with a short time-to-first-token because it streams through `streamText`. Because this path must answer the user immediately, you use the AI SDK streaming pattern and, if first-request latency matters, warm the function with Provisioned Concurrency. [^2]
+
+Step two, keep the batch durable. The heavy backlog the Lesson 55 agent processed as a KEDA-scaled pod pool becomes a Lambda function subscribed to the document queue. Each invocation is a single worker taking one document, processing it entirely within the per-invocation time budget, and writing the result to the store. Cold starts still happen as the burst scales up, but because each unit of work is small and stateless, a cold start delays one document rather than an entire fleet. [^1] [^2]
+
+Step three, add the live assistant as a separate contract. Instead of overloading the batch worker, run a Cloud Run service that hosts an interactive assistant container: it takes a chat request, calls `streamText` for a streaming answer, and autoscales on request concurrency, bounded by a max instance count so the backing model API is not saturated. [^4] If the team wants a self-hosted model, a GPU-enabled Cloud Run instance serves it, scaling to zero between requests. [^5]
+
+Step four, move the thin front leg nearer the user. The route that accepts the request, checks rate, and fans out to the assistant runs on an edge runtime close to the caller, while the assistant and the model call stay in a region that can host their dependencies. [^8]
+
+The result is the same agent as Lesson 55, now expressed as three serverless contracts instead of one cluster: an API function for the immediate answer, a queue function for the backlog, and a streaming service for the live conversation. Each scales on its own signal, each costs nothing when idle, and none of them needs a node you manage. What you gave up is the control Lesson 56 gave you. What you gained is that there is no infrastructure to patch, scale, or plan for at all.
+
+## Choosing a serverless contract
+
+You do not pick one serverless platform for the whole system. You pick the contract that fits each piece of the agent. The rule that patterns this chapter: if the work must answer a caller directly, put it behind HTTP scaling (Cloud Run or an API-triggered function with streaming). If the work is a backlog a caller is not waiting on, put it behind a queue and consume one unit per invocation. If the work must run near the user, keep the thin orchestration at the edge and push the heavy parts to a region. And when in doubt about whether a platform can run a dependency, check the runtime's API surface before you commit to it, and prefer the standard runtime when the edge cannot host your stack.
+
+## Try it
+
+1. Take the agent loop you built earlier in the course and split it into the two serverless contracts this lesson described: a function that answers one synchronous request within the time budget, and a queue-fed worker that consumes one unit of durable work per invocation. Write the boundary between them as an explicit rule about what may and may not live in each.
+2. Walk the cold start math for a user-facing assistant. If the platform shuts down idle instances and the next request pays a one-second cold start, at what request frequency does keeping a warm instance make sense instead of paying that latency every time? State the condition you would use to decide, in terms you could measure.
+3. Sketch a streaming assistant endpoint with the Vercel AI SDK. Write the route signature, the `streamText` call, and how the tool-result messages flow back to the client. Then note which piece you would move to the edge and which you would keep in a region, and why.
+
+## Summary
+
+Serverless platforms run agent code without you managing servers. AWS Lambda runs a handler on each trigger, reuses warm execution environments to avoid cold starts, and caps each invocation at a time budget that forces you to split fast answers from durable batch work. Google Cloud Run runs a full container as an HTTP service that scales to zero between requests and sizes its fleet from request concurrency and CPU, with optional warm minimums and GPU instances for self-hosted models. The Vercel AI SDK is the streaming layer, letting `streamText` return tokens and tool messages as they are produced so a disposable instance feels like a live conversation. Edge compute shortens the path between the user and the orchestrator at the cost of a constrained runtime. Across all four, the same rule holds: answer what you must, queue what you can defer, stream what you can, and place each piece where its dependencies and latency needs actually live.
+
+## What's next
+
+You now know an agent's compute can be fully managed: functions, container services, streaming toolkits, and edge placement, none of which you operate. The trade in every platform so far has been a managed model API, whose cost and latency are set by someone else. Lesson 58 changes that assumption and looks at the opposite side: running open models yourself, from choosing a model you can actually serve, to quantizing it so it fits your hardware, to the CPU, memory, and accelerator requirements that decide whether local serving is viable for your workload. Where this lesson removed the servers, the next one brings the model into the stack you own.
+
+[^1]: AWS. [What is AWS Lambda?](https://docs.aws.amazon.com/lambda/latest/dg/welcome.html)
+[^2]: AWS Compute Blog. [Understanding and remediating cold starts: an AWS Lambda perspective](https://aws.amazon.com/blogs/compute/understanding-and-remediating-cold-starts-an-aws-lambda-perspective/)
+[^3]: AWS Lambda Developer Guide. [Lambda execution environment lifecycle](https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtime-environment.html)
+[^4]: Google Cloud. [About instance autoscaling in Cloud Run services](https://docs.cloud.google.com/run/docs/about-instance-autoscaling)
+[^5]: Google Cloud. [GPU support for services in Cloud Run](https://docs.cloud.google.com/run/docs/configuring/services/gpu)
+[^6]: Vercel. [AI SDK by Vercel](https://ai-sdk.dev/docs)
+[^7]: Vercel. [Streaming in the AI SDK](https://ai-sdk.dev/cookbook/api-servers/node-http-server)
+[^8]: Vercel. [Edge Runtime](https://vercel.com/docs/functions/runtimes/edge)
