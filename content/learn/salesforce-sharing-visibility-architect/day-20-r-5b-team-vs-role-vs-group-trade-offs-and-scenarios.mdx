@@ -1,0 +1,137 @@
+---
+title: "Team vs Role vs Group Trade-Offs and Scenarios"
+slug: day-20-r-5b-team-vs-role-vs-group-trade-offs-and-scenarios
+series: salesforce-sharing-visibility-architect
+lesson: 20
+excerpt: "Given a scenario, recommend teams, roles, or groups (and their trade-offs) to satisfy record access requirements. Covers the decision rule that maps a reporting line to the role hierarchy, a recurring population to a group plus a sharing rule, and per-record collaboration to a team, plus the scalability and maintainability cost of each choice."
+date: 2026-10-02
+author: Adroit Learning
+readTime: 16
+tags:
+  - role hierarchy
+  - public groups
+  - sharing rules
+  - account teams
+  - sharing model
+  - access to records
+---
+
+Yesterday you studied teams in full: account teams, sales teams, case teams, and the additive share row each one writes onto a single record. Two days before that you studied groups and queues, and the lesson before that compared groups against teams. Today you stop studying the mechanisms one at a time and start choosing between them. The requirement for this lesson is a pure decision objective: given a scenario, recommend teams, roles, or groups, and justify the trade-offs, to satisfy a record access requirement.[^5]
+
+This is the objective the exam uses to test whether you can think like an architect instead of a feature list. A scenario hands you a business need and four mechanisms, and only one of them fits cleanly. The examiners are not checking whether you know what a team is. They are checking whether you know when a team is the wrong tool, when the role hierarchy under-grants, and when a group plus a sharing rule is the only choice that scales. Get the decision rule right and the whole objective resolves.
+
+## The three containers and what each one is for
+
+Before you can choose, you need a crisp definition of each container and the access pattern it expresses. The three mechanisms answer three different questions about who should see a record.
+
+**The role hierarchy expresses the reporting line.** A role is a position in an org chart, and the hierarchy grants users access to records owned by or shared with users in roles below them.[^1] Access flows upward along the management chain. A manager sees what their direct reports own, and their manager sees that too, all the way up. The hierarchy is ownership-based and structural: it exists because of where people sit in the org, not because of what a record contains or who happens to be collaborating on it.
+
+**A public group is a reusable population target.** A group is a named set of users, queues, or other groups that grants nothing on its own. It only becomes meaningful when something references it, most often a sharing rule.[^2] The group answers the question "who is the same set of people across many records?" It centralizes the who in one object so a rule can point at it once.
+
+**A team is a per-record, owner-managed collaboration set.** A team is a one-off set of named people attached to one specific record, added by the record owner or someone above them in the hierarchy.[^3] The team answers the question "who helps on this one record?" It is bespoke, ad hoc, and controlled by the person who owns the record.
+
+Hold those three answers in your head. Reporting line, recurring population, per-record collaboration. Every scenario in this objective is a restatement of one of those three patterns, and your job is to match the mechanism to the pattern.
+
+## The decision rule: match mechanism to pattern
+
+The exam tip for this lesson is the whole game: reporting line equals hierarchy, fixed population equals group plus rule, per-record ad hoc equals team.[^5] Expand that into a working rule you can apply to any scenario.
+
+**Use the role hierarchy when access follows the management line.** The scenario says managers see their team's records, or a director sees everything their department owns, or access is defined by the org chart. That is the hierarchy. It is the cheapest mechanism for this pattern because it requires no rule, no group, and no per-record work. You build the roles, assign users, and the access materializes from the structure.
+
+**Use a group plus a sharing rule when the same population must see the same population of records.** The scenario says all analysts see all accounts, or every member of the Support group sees every case regardless of owner. That is a fixed population and a fixed record set. You create the group once, build one sharing rule that targets it, and the access applies to every matching record. This is the scalable choice because the rule is one row of configuration that covers a whole population.
+
+**Use a team when the access set varies record by record and the owner controls it.** The scenario says the owner of each high-value account decides which specific people help on that account, and the people differ from account to account. That is per-record, owner-selected collaboration, and it is precisely what a team does. No group can express it, because the population is different on every record. No rule can express it, because the who changes per record. Only a team can.
+
+The rule is a filter, not a menu. Run the scenario through it in order. If the access is by management line, stop at the hierarchy. If it is a recurring population, stop at the group and rule. If it is per-record and owner-controlled, stop at the team. Most scenarios resolve on the first pass.
+
+## Worked example: three requirements, three mechanisms
+
+Put the rule to work on a single fictional org so you can see the decision in context. A mid-size services company has three access requirements that arrive in the same week.
+
+**Requirement one: regional managers see their region's accounts.** The company has four regions, each with a manager, and each manager must see every account owned by the reps in their region. This is a reporting line. The reps sit under the manager in the org chart, so the manager should see what the reps own. You build a role hierarchy with the four managers above their reps, and the access follows. No group, no rule, no team. The hierarchy is the correct and cheapest mechanism.[^1]
+
+**Requirement two: every member of the Support group sees all cases.** The support team is a stable population of twenty people, and every one of them must see every case in the org regardless of who owns it. This is a recurring population and a fixed record set. You create a public group called Support, add the twenty users, and build a sharing rule that shares all cases to that group.[^2] One rule covers every case and every support user. This is the scalable choice.
+
+**Requirement three: the owner of each high-value account picks their helpers.** The company has fifty strategic accounts, and the owner of each one decides which specific people help on that account. The helpers differ from account to account: one account might have a solutions engineer and a legal contact, another might have a different engineer and a finance person. This is per-record, owner-selected collaboration. You enable account teams and let each owner add their own helpers per account.[^3] No group can express this, because the population changes per record. No rule can express it, because the who is not a fixed set. Only a team fits.
+
+Three requirements, three mechanisms, and each one maps cleanly. That is the whole objective in miniature.
+
+## Scalability: where each mechanism writes rows
+
+The exam is an architect exam, so it cares about what each mechanism does to the sharing table at scale. This is where teams lose to groups and rules, and where the hierarchy has its own cost.
+
+**Teams write a share row per member per record.** When you add a user to an account team, Salesforce materializes a share row for that user on that account. Add five members to one account and you get five rows. Add five members to a thousand accounts and you get five thousand rows. The cost multiplies with both the number of members and the number of records.[^3] Teams are correct for per-record collaboration, but they are a scalability anti-pattern when you use them for population-wide access, because the row count explodes.
+
+**Groups plus sharing rules write one rule, not one row per user.** A sharing rule that targets a group is a single piece of configuration. Salesforce evaluates it and grants access to every member of the group across every matching record, without a per-member, per-record share row for each combination. For population-wide access this is dramatically more scalable than teams, because the configuration stays small no matter how many users or records are involved.[^2]
+
+**The hierarchy also materializes ancestor rows.** When a user owns a record, Salesforce grants access to the users above them in the hierarchy, and those grants are stored. A deep hierarchy with many levels can materialize a row for each ancestor on each record. The hierarchy is still the right tool for a reporting line, but you should know it is not free, and you should keep the hierarchy as shallow as the business allows.
+
+The scalability lesson is the one the quiz tests hardest. When a scenario says a whole population must see a whole population of records, the scalable answer is a group plus a sharing rule, not a team per record and not the hierarchy. Teams do not scale for population access because they write a share row per member per record.[^3]
+
+## Maintainability: who owns the who
+
+Scalability is about rows. Maintainability is about who has to change the configuration when the who changes, and how consistent the result stays.
+
+**Groups centralize the who in one reusable object.** When a person joins or leaves the support team, you change their membership in the Support group once, and every rule that references the group picks up the change. The who lives in one place, so it stays consistent across every record the rule covers.[^2]
+
+**Teams are maintained per record by owners.** Each team is edited on its own record, by the record owner, whenever the collaboration changes. That is good for agility: the owner can react to a new deal or a new account without waiting for an admin. It is bad for consistency: nothing forces the same people onto the same teams across records, so the access can drift. Two similar accounts can end up with different helpers because two different owners made different calls.[^3]
+
+**Roles are org-structure-driven and can be fragile.** The hierarchy grants access based on where people sit, so it is only as stable as the org chart. When the company reorganizes, when a manager leaves, when a team is split, the roles change and the access changes with them. The hierarchy is cheap to build but can be fragile if the org chart changes often.[^1]
+
+The maintainability trade-off is a real one. Groups give you consistency at the cost of admin involvement. Teams give you agility at the cost of consistency. Roles give you structure at the cost of fragility. The scenario tells you which cost the business can absorb.
+
+## Combination is normal: pick the right layer per requirement
+
+Real orgs rarely use one mechanism. They combine them, because different requirements in the same org map to different patterns. The architect's job is to pick the right layer for each requirement, not to standardize on a single tool.
+
+A realistic design might look like this. The role hierarchy gives managers visibility into their teams' records, because that is a reporting line. A criteria sharing rule to a public group gives the support population access to all cases, because that is a recurring population. Account teams give owners control over who helps on each strategic account, because that is per-record collaboration. All three coexist, and each one is the correct tool for its own requirement.[^1][^2][^3]
+
+The combination is not a sign of a messy design. It is the sign of a design that matched each mechanism to the pattern it expresses. The exam rewards you for recognizing that a single scenario can need two layers, and for not forcing one mechanism to do a job it cannot do.
+
+## Config walkthrough: classify, apply, watch, validate
+
+When a scenario lands on your desk, run it through four steps. This is the same sequence the exam wants you to internalize.
+
+**Step one: classify the requirement.** Read the scenario and decide which pattern it expresses. Is the access by management line? That is a role. Is it a recurring population seeing a fixed record set? That is a group plus a rule. Is it per-record, owner-controlled collaboration? That is a team. Name the pattern before you name the mechanism.
+
+**Step two: apply the cheapest correct mechanism first.** Start with the mechanism that expresses the pattern with the least configuration. The hierarchy for a reporting line, a group and rule for a population, a team for per-record collaboration. Add layers only where the base mechanism cannot express the access. If the hierarchy already grants a manager their team's records, do not also build a rule for the same thing.
+
+**Step three: watch sharing-table growth.** Before you commit to a mechanism, estimate what it writes. A team writes a share row per member per record, so a broad team across many records bloats the sharing table. For population-wide access, prefer a group plus a rule, which stays small. Reserve teams for truly record-specific needs where the row count stays bounded.[^3]
+
+**Step four: validate with test users.** Create a test user for each pattern: a manager, a group member, a team member. Log in as each one and confirm they see exactly the records the requirement intends, and no more. A manager should not see a peer's records. A group member should not see records outside the rule. A team member should not see records they were not added to. Validation is how you catch over-granting before it ships.
+
+## Exam traps to avoid
+
+The exam builds its wrong answers around the mistakes architects actually make. Three traps dominate this objective.
+
+**Choosing teams for a population-wide need is a scalability anti-pattern.** When the scenario says all these users see all these records, the scalable answer is a group plus a sharing rule. A team per record would write a share row per member per record and bloat the sharing table. The exam will offer "an account team per case" as a tempting wrong answer precisely because it sounds collaborative. It is the wrong tool for a population.[^3]
+
+**Choosing the hierarchy when access is criteria-based or cross-division under-grants or over-grants.** The hierarchy grants access along the reporting line. If the requirement is criteria-based, like "all cases labeled Urgent," the hierarchy cannot express it, because the access depends on a field value, not on who owns the record. If the requirement is cross-division, like "the East and West teams both see the shared accounts," the hierarchy under-grants, because a user in East does not sit above a user in West. The hierarchy is for the management line, and only the management line.[^1]
+
+**A group referenced in a rule but never given members grants nothing.** Membership is part of the design. A sharing rule that targets an empty group is a rule that grants nothing, because there is no one in the group to receive the access. When you design a group plus a rule, you must design the membership too. The exam will test whether you remember that a group is a container, and a container with nothing in it is empty.[^2]
+
+## Why this matters for the exam
+
+This requirement sits in the Access to Records domain, which is 39% of the exam.[^5] It is the decision objective that ties together the mechanisms you studied in the previous lessons: the hierarchy, groups, queues, and teams. The examiners want to confirm you can read a scenario, name the pattern, and pick the mechanism that expresses it with the right scalability and maintainability trade-off. They are not testing feature recall. They are testing architectural judgment.
+
+The three quiz questions for this lesson each hit one of the three decisions. The first asks which mechanism is most scalable when every member of a group must see all cases: the answer is a sharing rule to the reusable group, because per-case teams do not scale and the hierarchy cannot grant all-case access to peers. The second asks which scenario is best handled by account teams: the answer is the one where the owner of each high-value account decides which specific people help, because that is per-record, owner-selected collaboration. The third asks the primary scalability disadvantage of teams across many records: the answer is that each team generates a share row per member per record, which can bloat the sharing table. If you hold the decision rule and the scalability model, all three resolve cleanly.[^2][^3][^5]
+
+## Try it yourself
+
+In a scratch org, set Account and Case OWD to Private and turn off the role hierarchy to keep the test pure. Create three roles, a manager above two reps, and assign the users. Confirm the manager sees the reps' accounts through the hierarchy alone, with no rule and no team.
+
+Then create a public group called Support, add two users, and build a sharing rule that shares all cases to that group. Confirm both support users see every case regardless of owner. Then remove one user from the group and confirm they lose access, which proves the group membership is what carries the grant.
+
+Finally, enable account teams, log in as an account owner, and add a different helper to each of two accounts. Confirm each helper sees only the account they were added to, and not the other. Then add the same helper to a third account and watch the share rows grow, which demonstrates exactly why teams do not scale for population access. You have now exercised all three mechanisms and proved the decision rule.
+
+## What's next
+
+Day 21, lesson 21, moves from choosing a container to understanding how records relate to each other. The next lesson is Object Relationships and Sharing: Parent-Child, Master-Detail Rollups, Lookups, and Implicit Sharing. Today you learned that a reporting line maps to the role hierarchy, a recurring population maps to a group plus a sharing rule, and per-record collaboration maps to a team. Next you will study how the relationship between records, whether a parent-child master-detail or a lookup, changes what access a user has to related records, and how implicit sharing flows through those relationships. Bring the decision rule from today, because the next lesson asks the same kind of question about a different axis: not who should see a record, but how the records themselves are connected.
+
+[^1]: Salesforce Help, "Create a User Role" (https://help.salesforce.com/s/articleView?language=en_US&id=platform.admin_roles.htm&type=5). This is the source for how the role hierarchy grants users access to records owned by or shared with users in roles below them, and how roles within the hierarchy affect record access.
+
+[^2]: Salesforce Help, "Sharing Rules" (https://help.salesforce.com/s/articleView?id=sf.security_about_sharing_rules.htm&type=5). This is the source for how sharing rules extend access to users in public groups, roles, or territories, how a rule can be based on record ownership or other criteria, and how a rule grants access to the group or users it targets.
+
+[^3]: Salesforce Help, "Considerations for Using Account Teams" (https://help.salesforce.com/s/articleView?id=sf.accountteam_def.htm&type=5). This is the source for how an account team is a per-record, owner-managed grant, how team member access is stored as an account team member record, and how team access is additive alongside OWD, the hierarchy, and sharing rules.
+
+[^5]: Salesforce Help, "Salesforce Certified Platform Sharing and Visibility Architect Exam Guide" (https://help.salesforce.com/s/articleView?id=005298977&language=en_US&type=1). This is the source for the exam requirement portfolio: Access to Records accounts for 39% of the exam, and the scenario-based objective of recommending teams, roles, or groups to satisfy record access requirements.
