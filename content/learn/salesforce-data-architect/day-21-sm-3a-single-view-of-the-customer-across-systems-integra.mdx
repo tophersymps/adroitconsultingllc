@@ -1,0 +1,158 @@
+---
+title: "Data Architect SM-3a: Single View of the Customer Across Systems: Integration, Master Record, and Change Data Capture"
+slug: day-21-sm-3a-single-view-of-the-customer-across-systems-integra
+series: salesforce-data-architect
+lesson: 21
+excerpt: "How to represent one authoritative view of a customer when the data lives across many systems: the four approaches to a single view, per-attribute system of record, shared identity through external IDs and cross-references, the integration patterns that propagate changes, and Change Data Capture for near-real-time synchronization. Includes a worked multi-system scenario, a numbered configuration walkthrough, the three exam traps, and a try-it exercise."
+date: "October 2, 2026"
+author: "Adroit Consulting"
+readTime: "22 min read"
+tags: [Salesforce, Data Architecture, Data Management, Certification]
+---
+
+Lesson 20 gave you the persistence layer: stable keys, idempotent upserts, parent-first ordering, reconciliation. That was about writing records consistently. Requirement sm-3a moves the question up a level, from how a single record stays consistent to how a whole customer stays coherent when the truth about that customer is scattered across four systems that each hold their own copy.
+
+This is the single view of the customer, and it is the hardest data problem most architects ever face, because it is not a data problem at all. It is an identity problem and an ownership problem wearing a data costume. Every system in the chain has a record for the same person, and none of them calls that person by the same name. The ERP knows them as `ACME-00047`. The billing platform knows them as `bill_8821`. The warehouse knows them as `WH-ACME`. Salesforce, if it is in the middle, knows them by a 15-character Id that means nothing to any of the others. Until you solve identity, there is no single view, no matter how good your integration tooling is.
+
+The exam frames the requirement as: given a scenario with multiple systems of interaction, describe techniques to represent a single view of the customer on the Salesforce Platform, including integration patterns, master record management, and Change Data Capture for near-real-time synchronization.[^1] Every question in this domain hands you a scenario where systems disagree about a customer and asks you to pick the architecture that makes them agree. This lesson gives you the decision framework.
+
+## What a single view of the customer actually is
+
+Start with the definition, because the phrase gets thrown around until it means nothing. A single view of the customer is one authoritative, enriched customer record, or a virtualized composite of one, that all channels and systems reference, rather than each system holding its own disconnected copy.
+
+The key word is authoritative. A single view is not a giant table that merges every field from every system into one row. It is a decision about which system owns which fact, and a mechanism that lets every other system read the current truth without maintaining its own stale copy. When a customer updates their phone number in the portal, the single view is what makes the billing system, the support console, and the marketing platform all see the new number within seconds, instead of each holding the old one until its own nightly sync happens to run.
+
+The second key word is reference. Systems do not all need to store the customer. They need to be able to look the customer up. That distinction, between holding a copy and referencing a source, is the entire architecture in one sentence.
+
+## The four approaches to a single view
+
+There is no one right way to build a single view. There are four families, and the choice depends on two questions: who needs to author the customer, and how real-time the view must be. The exam rewards the architect who can name the trade-off, not the one who memorizes a single answer.
+
+Approach one, master the customer in Salesforce and sync outward. Salesforce becomes the system of record for the customer record, and every other system receives copies of the changes. This works when Salesforce is the natural home of the customer, which it usually is when the org runs sales and service. The cost is that every downstream system must be kept in sync, which is exactly the problem Change Data Capture solves.
+
+Approach two, master elsewhere and sync into Salesforce. The ERP or the master data management (MDM) hub owns the customer, and Salesforce receives the changes. This is common when the customer record originates in a back-office system and Salesforce is a consumer. Salesforce holds a copy for its own use, but it is not the author. Writes flow one way, from the master into Salesforce.
+
+Approach three, master nowhere and consolidate into a hub that feeds all. No single system owns the customer. Instead, a dedicated hub, often an MDM platform, ingests records from every source, resolves which records refer to the same customer, and publishes the consolidated view back to every system. This is the heavyweight option, and it is the right one when no existing system can credibly claim ownership and the org needs a neutral arbiter.
+
+Approach four, virtualize with External Objects and Salesforce Connect, and avoid copying entirely. Instead of storing a copy of the customer in Salesforce, you map an external object to the table in the source system and access it on demand. Salesforce Connect reads the data in real time through a web service callout, so the data is never stale and you never copy what you do not need.[^2] This is the right choice when the customer data is large, you only need small amounts at a time, and you want the latest value without a sync pipeline.
+
+The exam trap hidden in these four: there is no universally correct approach. A scenario that says "the ERP owns the customer and Salesforce must show the latest credit limit" is approach two, master elsewhere. A scenario that says "Salesforce is the system of record and the warehouse must react to account changes" is approach one, master in Salesforce with CDC outward. The architect who matches the approach to who authors and how real-time the view must be is the one who passes.
+
+## Per-attribute system of record: the ownership decision
+
+Here is the subtlety that separates a real single view from a naive one. A single view does not mean one system owns the customer. It means one system owns each attribute of the customer. The two are different, and the difference is where write conflicts come from.
+
+Take a customer record. The Account name might be mastered in Salesforce, because sales owns the relationship. The credit limit might be mastered in the ERP, because finance owns the risk decision. The shipping address might be mastered in the warehouse system, because logistics owns fulfillment. Each of those attributes has a single system of record, and the other systems treat that attribute as read-only.
+
+The rule that makes this safe: writes flow only from the master to the consumers, never in both directions. If the ERP owns the credit limit, then the ERP writes it, Salesforce reads it, and Salesforce never writes it back. The moment two systems both author the same attribute, you get the failure the exam tests directly: an infinite update loop, where system A writes a value, system B sees it and writes its own, system A sees that and writes again, and the two systems ping-pong forever, or you get last-write-wins corruption, where whichever system happened to write last silently overwrites the other's value, and nobody can say which one is right.
+
+The way to keep this straight is to document the authoritative direction of every field. For each attribute on the customer record, write down which system is the master and which direction the write flows. That one document, a field-ownership matrix, is what prevents the loops. It is also what the exam is really testing when it asks about master record management: not the tooling, but the discipline of deciding, per attribute, who owns the truth.
+
+## Shared identity: the foundation of any single view
+
+None of the above works without identity. A single view is impossible if the four systems cannot agree that two records refer to the same customer. This is the point lesson 20 made about keys, applied at the system level, and it is the single most important concept in this requirement.
+
+The mechanism is a shared identity: a stable identifier that every system can produce and recognize. In Salesforce terms that is an external ID field, a custom field marked with the External ID attribute so the platform indexes it and lets integrations use it as a matching key. Because it carries a value from an external system, it gives Salesforce a natural-key identity that other systems can produce and re-produce on every load.[^3]
+
+But a single external ID is not enough when four systems each have their own identifier. The answer is a cross-reference: a mapping that says "this Salesforce record is the same customer as `ACME-00047` in the ERP, `bill_8821` in billing, and `WH-ACME` in the warehouse." You can hold that cross-reference in a dedicated object, one row per system per customer, or you can store multiple external ID fields on the customer record, one per source system, each marked unique.
+
+The exam trap here is the one lesson 20 already warned about, and it is worth restating because it is the difference between a working single view and a broken one. The Salesforce record Id is not a shared identity. It is org-specific, it is regenerated on sandbox copy, and it means nothing to external systems. You cannot key a cross-system single view on the Salesforce Id. You key it on external IDs that the source systems themselves produce, and you maintain a cross-reference so every system can translate its own identifier into the shared one.
+
+Without shared identity, a single view is impossible. That is not hyperbole; it is the definition. If the systems cannot agree on which records are the same customer, there is nothing to consolidate, and every "single view" you build is really four views wearing a shared label.
+
+## Integration patterns: how changes move
+
+With identity and ownership decided, the next question is how changes actually travel between systems. The exam wants you to know the integration patterns by name and to pick the right one for the scenario. There are five families, and the customer view typically combines a master-authoring pattern with event-driven propagation.
+
+Request-reply is synchronous. A system sends a request and waits for the response. It is good for real-time lookups, where you need the current value of a customer attribute right now, such as a callout to the ERP to check a credit limit before approving an order. The cost is that the caller blocks, so it is not the right pattern for high-volume propagation.
+
+Fire-and-forget, also called one-way, sends an event and does not wait. The sender does not need a response, so it is ideal for notifications and for propagating changes where the consumer can act asynchronously. This is the pattern behind event-driven propagation.
+
+Batch is the Data Loader and ETL world. You move large volumes of data on a schedule, using upsert keyed on external IDs as lesson 20 described. It is efficient for bulk loads and reconciliation, but it is not real time. A nightly batch means the single view is up to a day stale.
+
+Publish-subscribe is the streaming world. A publisher emits events, and any number of subscribers receive them. In Salesforce this is platform events and the Streaming API, and it is the pattern that Change Data Capture uses. It gives near-real-time propagation without polling.
+
+Remote call-in is the inverse direction, where an external system invokes Salesforce, typically through a REST or SOAP API call. It is how a source system pushes a change into Salesforce rather than Salesforce pulling it.
+
+The exam trap: the customer view is not one pattern. It is a combination. You master the customer in one system, and you propagate changes with event-driven publish-subscribe, and you reconcile with batch. An architect who proposes "just use batch" for a scenario that needs near-real-time synchronization has missed the point, and an architect who proposes "just use request-reply" for high-volume propagation has built a system that blocks.
+
+## Change Data Capture: near-real-time synchronization
+
+This is the mechanism the requirement names explicitly, and it is the answer to the most common exam question in this domain. Change Data Capture, CDC, publishes changes to Salesforce records as change events, so external systems can react in near real time without polling.
+
+Here is how it works. You enable CDC on the objects you care about, such as Account and Contact. When a record is created, updated, deleted, or undeleted, Salesforce publishes a change event for that change. The event is delivered through the Streaming API, using the Bayeux protocol and CometD for long polling, or through the newer Pub/Sub API, which is the recommended path for new applications.[^4] An external system subscribes to the change event channel and receives the change as it happens, instead of polling Salesforce on a timer to ask "did anything change?"
+
+The reason CDC is the native answer to the near-real-time question is that it replaces polling. Polling is wasteful: an application that polls every minute makes thousands of API calls that mostly return "nothing changed," and it still only sees changes up to a minute late. CDC pushes the change the moment it happens, so the consumer reacts in near real time and the API call volume collapses. The exam question that asks "downstream systems must react to Account changes within seconds without polling" is testing exactly this: the answer is CDC change events via the streaming API, not a scheduled export, not Data Loader, and not Field Audit Trail.
+
+A change event carries two things: the changed fields, the delta, and the change header. The header includes metadata about the change, such as the record Id, the object type, the change type, and a change event sequence number. The payload includes the fields that changed, which is what lets a consumer apply a diff to its own copy rather than re-fetching the whole record. This is the efficiency that makes CDC practical: you propagate only what changed, not the entire record, on every change.
+
+There is an important caveat the exam expects you to know. CDC is not a substitute for a middleware queue under heavy load. Change events are delivered with best-effort semantics, and consumers must handle ordering, retries, and replays. If a consumer is down when a change is published, it can miss the event, and it must be able to reconcile or replay from the retention window. Salesforce stores high-volume events, which include change data capture events, for 72 hours, so a consumer can replay events within that window through durable streaming.[^4] But CDC does not give you the guaranteed, ordered, exactly-once delivery of a dedicated message queue. If the scenario demands strict ordering and guaranteed delivery under high load, you put a middleware queue in front of CDC, and CDC feeds the queue.
+
+## CDC versus Field Audit Trail: complementary, not interchangeable
+
+This is the distinction the exam tests directly, and it is the one most candidates get wrong. Change Data Capture and Field Audit Trail both record changes, so it is easy to think they are the same thing. They are not. They serve different purposes, and a single view needs both.
+
+Change Data Capture is for system propagation. Its job is to tell downstream systems that a record changed, so they can update their copies in near real time. It is about moving the change outward, to consumers, fast.
+
+Field Audit Trail is for compliance history. Its job is to keep a long-term, immutable record of who changed what and when, for audit and regulatory purposes. Field Audit Trail extends Field History Tracking so you can keep field history indefinitely, up to 200 tracked fields per object, stored in the FieldHistoryArchive big object, and it does not count against your data storage limits.[^5]
+
+The two are complementary because they answer different questions. CDC answers "what changed, so I can react to it." Field Audit Trail answers "who changed it, and when, for the record." A downstream system that needs to react to a credit-limit change uses CDC. A compliance officer who needs to prove, three years later, who changed the credit limit and when, uses Field Audit Trail. You cannot replace one with the other. CDC does not give you long-term compliance history, and Field Audit Trail does not propagate changes to external systems.
+
+The exam trap is the false equivalence. A question that asks why Field Audit Trail is needed in addition to CDC is testing whether you understand that CDC propagates changes while Field Audit Trail provides long-term compliance change history. They are complementary, not interchangeable, and a single customer view needs both: CDC to keep the systems in sync, and Field Audit Trail to keep the audit trail.
+
+## Worked customer scenario
+
+Put all five ideas together with a concrete case. A retail company has four systems that each hold a view of the customer: Salesforce for sales and service, an ERP that owns billing accounts and credit limits, a marketing platform that owns consent and preferences, and a warehouse system that owns shipping addresses. The org is seeing the classic failure: a customer updates their phone number in the portal, and the support console still shows the old one for three days, because each system syncs on its own schedule and none of them agree on who the customer is.
+
+The diagnosis is identity plus ownership plus propagation. Each system uses its own identifier, so no system can translate another's record into its own. Multiple systems author the same attributes, so the phone number and the address get overwritten by whichever system wrote last. And propagation is batch-only, so changes take a day to travel.
+
+The fix is the full single-view architecture. First, establish shared identity. Create external ID fields on the Account object, one per source system, each marked unique, and populate them with the source system's own identifier. Maintain a cross-reference so every system can translate its identifier into the shared one. Second, decide per-attribute ownership. Salesforce owns the Account name and the relationship. The ERP owns the credit limit. The marketing platform owns consent. The warehouse owns the shipping address. Document the authoritative direction of each field, and make every write flow only from the master to the consumers. Third, enable Change Data Capture on Account and Contact so that when Salesforce, as the master of the name and relationship, changes a record, the change event propagates to the ERP, the marketing platform, and the warehouse in near real time. Fourth, enable Field Audit Trail on the customer objects so the org keeps a long-term compliance record of who changed what, distinct from the CDC propagation. Fifth, keep a nightly batch reconciliation, keyed on the external IDs, to catch writes that never landed and to re-sync any system that fell behind.
+
+That single constellation, shared identity, per-attribute system of record, event-driven propagation through CDC, and a compliance audit trail, is the single view of the customer the exam wants you to be able to propose from a scenario in one breath.
+
+## Configuration walkthrough, numbered
+
+Here is the setup in the order you would build it.
+
+1. Decide the master per attribute and document the authoritative direction of each field. For every attribute on the customer record, write down which system is the master and which direction the write flows. This field-ownership matrix is the design document that prevents write loops. Do this before you touch any configuration.
+
+2. Define external IDs and a cross-reference so all systems share a stable customer identity. In Object Manager, open the customer object, add a custom text field for each source system, and select the External ID checkbox. Where the key must be unique, also select the Unique checkbox. Populate each field with the source system's own identifier, and maintain a cross-reference so every system can translate its identifier into the shared one.[^3]
+
+3. Enable Change Data Capture on the customer objects. In Setup, search for Change Data Capture, and select the objects you want to publish change events for, such as Account and Contact. This is what publishes near-real-time change events when those records change.[^4]
+
+4. Build the integration pattern that propagates changes without write loops. Subscribe to the change event channel from the downstream systems, using the Streaming API or the Pub/Sub API, and have each consumer apply the delta to its own copy. Where the scenario demands guaranteed ordering and delivery under high load, put a middleware queue in front of CDC and let CDC feed the queue. Never let a consumer write back to an attribute it does not own.
+
+5. Enable Field Audit Trail for compliance-level change history, distinct from CDC propagation. Enable Field History Tracking on the objects and fields you need, then define and deploy a Field Audit Trail policy so the history is archived to the FieldHistoryArchive big object for long-term retention. This is the compliance record, separate from the CDC propagation that keeps systems in sync.[^5]
+
+## The three exam traps, avoided
+
+The exam will present you with the failure modes and ask you to pick the prevention. All three are covered above, but restate them so you recognize them instantly.
+
+Trap one, dual authoring. Two systems both author the same attribute, causing infinite update loops or last-write-wins corruption. Prevention: decide a single system of record per attribute, document the authoritative direction, and make writes flow only from the master to the consumers. Never let two systems write the same field.
+
+Trap two, polling instead of CDC. Polling Salesforce on a timer when CDC change events would give near-real-time, low-overhead propagation. Prevention: when the scenario says "react within seconds without polling," the answer is CDC change events via the streaming API, not a scheduled export, not Data Loader, and not Field Audit Trail.
+
+Trap three, confusing CDC with Field Audit Trail. CDC is for system propagation; Field Audit Trail is for compliance history. They serve different purposes and are complementary, not interchangeable. Prevention: when the question is about reacting to a change, use CDC. When the question is about long-term compliance history of who changed what, use Field Audit Trail. A single view needs both.
+
+## Try it for yourself
+
+In a sandbox or scratch org, enable Change Data Capture on Account. Then, from a terminal or a small script, subscribe to the Account change event channel using the Streaming API or the Pub/Sub API. Update an Account record in the org, and confirm the change event arrives in near real time, carrying the changed fields and the change header. Then delete the record and confirm the delete event arrives. This is the mechanism that keeps a single view in sync, and watching it fire is worth more than reading about it.[^4]
+
+Then reproduce trap one. Create two external ID fields on Account, one for the ERP and one for the warehouse, and mark each unique. Write a small integration that updates the same field from both "systems," and observe the last-write-wins corruption or the update loop. Then enforce a single system of record per attribute and confirm the conflict disappears. Each experiment teaches the concept better than reading about it.
+
+## What's next
+
+You can now design a single view of the customer that stays coherent across systems: choose the right approach for who authors and how real-time the view must be, decide a per-attribute system of record, establish shared identity through external IDs and a cross-reference, propagate changes with Change Data Capture, and keep a compliance audit trail with Field Audit Trail. Lesson 22, Single-customer-view scenarios: merging and deduplication (sm-3b), takes the view you just built and asks what happens when it is wrong: how to merge duplicate customer records, how to deduplicate across systems, and how to resolve the conflicts that a single view inevitably surfaces. Identity and ownership give you the coherent view; lesson 22 gives you the cleanup when the view is not yet coherent.
+
+## Related Requirements
+
+- Lesson 22 of 42 (sm-3b): Single-customer-view scenarios: merging, deduplication
+- Lesson 16 of 42 (r-3a): MDM architecture scenarios
+
+## References
+
+[^1]: Platform Data Architect exam guide, Salesforce. Outlines the Salesforce Data Management domain and the objective to recommend techniques that represent a single view of the customer, including integration patterns, master record management, and Change Data Capture for near-real-time synchronization. [trailhead.salesforce.com](https://trailhead.salesforce.com/en/credentials/platformdataarchitect/)
+[^2]: Salesforce Connect, Salesforce Help. Documents that Salesforce Connect maps external objects to data tables in external systems and accesses the data on demand in real time, instead of copying it into the org, and the cases where it is recommended. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.platform_connect_about.htm&type=5)
+[^3]: Define Field Attributes for a Custom Object / About External IDs, Salesforce Help. Covers the External ID attribute on custom fields, that external IDs are indexed and can be marked unique for upsert matching, and the default limit of external ID fields per object. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.custom_field_attributes.htm&type=5) / [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.fields_external_ids.htm&type=5)
+[^4]: Change Data Capture, Salesforce Developers. Documents that Change Data Capture publishes change events for record creation, update, deletion, and undeletion, that events are delivered through the Streaming API and Pub/Sub API, and that high-volume events are stored for 72 hours for replay. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/change-data-capture/guide/cdc-intro.html)
+[^5]: Field Audit Trail, Salesforce Help. Documents that Field Audit Trail extends Field History Tracking to keep field history indefinitely, up to 200 tracked fields per object, stored in the FieldHistoryArchive big object, and that it does not count against data storage limits. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=xcloud.field_audit_trail.htm&type=5)
