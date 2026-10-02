@@ -38,6 +38,8 @@ Approach four, virtualize with External Objects and Salesforce Connect, and avoi
 
 The exam trap hidden in these four: there is no universally correct approach. A scenario that says "the ERP owns the customer and Salesforce must show the latest credit limit" is approach two, master elsewhere. A scenario that says "Salesforce is the system of record and the warehouse must react to account changes" is approach one, master in Salesforce with CDC outward. The architect who matches the approach to who authors and how real-time the view must be is the one who passes.
 
+![Four approaches to a single view: master in Salesforce and sync outward, master elsewhere and sync into Salesforce, master nowhere and consolidate into a hub, or virtualize with External Objects, chosen by who authors the customer and how real-time the view must be](</diagrams/day-21-sm-3a-single-view-of-the-customer-across-systems-integra/1-four-approaches.png>)
+
 ## Per-attribute system of record: the ownership decision
 
 Here is the subtlety that separates a real single view from a naive one. A single view does not mean one system owns the customer. It means one system owns each attribute of the customer. The two are different, and the difference is where write conflicts come from.
@@ -48,6 +50,8 @@ The rule that makes this safe: writes flow only from the master to the consumers
 
 The way to keep this straight is to document the authoritative direction of every field. For each attribute on the customer record, write down which system is the master and which direction the write flows. That one document, a field-ownership matrix, is what prevents the loops. It is also what the exam is really testing when it asks about master record management: not the tooling, but the discipline of deciding, per attribute, who owns the truth.
 
+![Per-attribute system of record: the account name is mastered in Salesforce, the credit limit in the ERP, the shipping address in the warehouse, and consent in marketing, with writes flowing only from each master to the consumers](</diagrams/day-21-sm-3a-single-view-of-the-customer-across-systems-integra/2-per-attribute-system-of-record.png>)
+
 ## Shared identity: the foundation of any single view
 
 None of the above works without identity. A single view is impossible if the four systems cannot agree that two records refer to the same customer. This is the point lesson 20 made about keys, applied at the system level, and it is the single most important concept in this requirement.
@@ -57,6 +61,8 @@ The mechanism is a shared identity: a stable identifier that every system can pr
 But a single external ID is not enough when four systems each have their own identifier. The answer is a cross-reference: a mapping that says "this Salesforce record is the same customer as `ACME-00047` in the ERP, `bill_8821` in billing, and `WH-ACME` in the warehouse." You can hold that cross-reference in a dedicated object, one row per system per customer, or you can store multiple external ID fields on the customer record, one per source system, each marked unique.
 
 The exam trap here is the one lesson 20 already warned about, and it is worth restating because it is the difference between a working single view and a broken one. The Salesforce record Id is not a shared identity. It is org-specific, it is regenerated on sandbox copy, and it means nothing to external systems. You cannot key a cross-system single view on the Salesforce Id. You key it on external IDs that the source systems themselves produce, and you maintain a cross-reference so every system can translate its own identifier into the shared one.
+
+![Shared identity: the ERP knows the customer as ACME-00047, billing as bill_8821, and the warehouse as WH-ACME, all mapped to one Salesforce record through external ID fields, one per source system, each marked unique](</diagrams/day-21-sm-3a-single-view-of-the-customer-across-systems-integra/3-shared-identity.png>)
 
 Without shared identity, a single view is impossible. That is not hyperbole; it is the definition. If the systems cannot agree on which records are the same customer, there is nothing to consolidate, and every "single view" you build is really four views wearing a shared label.
 
@@ -98,6 +104,8 @@ Field Audit Trail is for compliance history. Its job is to keep a long-term, imm
 
 The two are complementary because they answer different questions. CDC answers "what changed, so I can react to it." Field Audit Trail answers "who changed it, and when, for the record." A downstream system that needs to react to a credit-limit change uses CDC. A compliance officer who needs to prove, three years later, who changed the credit limit and when, uses Field Audit Trail. You cannot replace one with the other. CDC does not give you long-term compliance history, and Field Audit Trail does not propagate changes to external systems.
 
+![Change Data Capture versus Field Audit Trail: CDC propagates changes to downstream systems in near real time through change events, while Field Audit Trail keeps a long-term immutable compliance record, and a single view needs both](</diagrams/day-21-sm-3a-single-view-of-the-customer-across-systems-integra/4-cdc-vs-field-audit-trail.png>)
+
 The exam trap is the false equivalence. A question that asks why Field Audit Trail is needed in addition to CDC is testing whether you understand that CDC propagates changes while Field Audit Trail provides long-term compliance change history. They are complementary, not interchangeable, and a single customer view needs both: CDC to keep the systems in sync, and Field Audit Trail to keep the audit trail.
 
 ## Worked customer scenario
@@ -127,6 +135,8 @@ Here is the setup in the order you would build it.
 ## The three exam traps, avoided
 
 The exam will present you with the failure modes and ask you to pick the prevention. All three are covered above, but restate them so you recognize them instantly.
+
+![The three exam traps: dual authoring causes update loops or last-write-wins corruption, polling instead of CDC wastes calls and stays stale, and confusing CDC with Field Audit Trail mixes propagation with compliance history, each with its prevention](</diagrams/day-21-sm-3a-single-view-of-the-customer-across-systems-integra/5-three-exam-traps.png>)
 
 Trap one, dual authoring. Two systems both author the same attribute, causing infinite update loops or last-write-wins corruption. Prevention: decide a single system of record per attribute, document the authoritative direction, and make writes flow only from the master to the consumers. Never let two systems write the same field.
 
