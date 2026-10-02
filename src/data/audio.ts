@@ -115,6 +115,7 @@ export const articleAudio: ArticleAudio[] = [
   { slug: "supabase-pipelines-cdc-bigquery", voice: "af_heart", storagePath: "blog/supabase-pipelines-cdc-bigquery/af_heart.mp3", timingsStoragePath: "blog/supabase-pipelines-cdc-bigquery/af_heart.timing.json" },
   { slug: "supabase-realtime-binary-payloads", voice: "af_heart", storagePath: "blog/supabase-realtime-binary-payloads/af_heart.mp3", timingsStoragePath: "blog/supabase-realtime-binary-payloads/af_heart.timing.json" },
   { slug: "test-drive-qwen-local", voice: "af_heart", storagePath: "blog/test-drive-qwen-local/af_heart.mp3", timingsStoragePath: "blog/test-drive-qwen-local/af_heart.timing.json" },
+  { slug: "test-time-compute-inference-scaling-2026", voice: "af_heart", storagePath: "blog/test-time-compute-inference-scaling-2026/af_heart.mp3", timingsStoragePath: "blog/test-time-compute-inference-scaling-2026/af_heart.timing.json" },
   { slug: "token-first-design-systems-2026", voice: "af_heart", storagePath: "blog/token-first-design-systems-2026/af_heart.mp3", timingsStoragePath: "blog/token-first-design-systems-2026/af_heart.timing.json" },
   { slug: "typescript-7-go-native-compiler", voice: "af_heart", storagePath: "blog/typescript-7-go-native-compiler/af_heart.mp3", timingsStoragePath: "blog/typescript-7-go-native-compiler/af_heart.timing.json" },
   { slug: "utilization-trap-capacity-planning-2026", voice: "af_heart", storagePath: "blog/utilization-trap-capacity-planning-2026/af_heart.mp3", timingsStoragePath: "blog/utilization-trap-capacity-planning-2026/af_heart.timing.json" },
