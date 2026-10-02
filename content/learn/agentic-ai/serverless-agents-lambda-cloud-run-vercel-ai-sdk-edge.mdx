@@ -24,6 +24,8 @@ Serverless shifts three things you previously controlled. First, scaling becomes
 
 The platform comparison below matters less than the pattern. Whatever you choose, you want the pieces of the agent that must answer immediately to be reachable, and the pieces that do heavy work to be durable. Serverless is excellent for the first and requires care for the second. The rest of this lesson is about where that care goes.
 
+![The agent loop stays the same under serverless, but the platform shifts how scaling, state, and the time budget are handled](</diagrams/serverless-agents-lambda-cloud-run-vercel-ai-sdk-edge/1-serverless-agent-loop.png>)
+
 ## AWS Lambda: the event and API workhorse
 
 AWS Lambda is a serverless compute service. You write a handler function, connect it to a trigger such as HTTP via API Gateway, an object drop in S3, or a message from a queue, and Lambda runs that code when the trigger fires. You do not provision servers, manage capacity, or patch anything. AWS describes Lambda as a service where each invocation runs independently with no shared state and scales horizontally to match demand, with execution environments that can be reused across invocations. [^1]
@@ -38,6 +40,8 @@ Two things make cold starts a practical concern for agents specifically. The fir
 
 You mitigate cold starts in two directions. SnapStart takes a snapshot of a fully initialized execution environment and resumes from it, trading a fast startup for the need to avoid cached state that must not survive. Provisioned Concurrency keeps a configured number of environments warm so they are ready before a request arrives, at the cost of paying for idle capacity. Both are available on Lambda and each solves a different flavor of the problem. [^2]
 
+![A cold start initializes a Lambda execution environment in four steps, and SnapStart and Provisioned Concurrency mitigate it in different ways](</diagrams/serverless-agents-lambda-cloud-run-vercel-ai-sdk-edge/3-cold-start-layer.png>)
+
 ### The time budget and how it shapes agents
 
 Lambda caps each invocation at a maximum duration, which was fifteen minutes for functions. [^1] That cap is the single most design-shaping constraint for agents, because a single agent run is usually expected to finish inside a few seconds, while a batch that must summarize hundreds of documents will not.
@@ -51,6 +55,8 @@ Cloud Run is a different shape of serverless. Instead of a function handler, you
 The scaling behavior is the headline. When a Cloud Run service gets no traffic, its revision scales to zero instances by default and runs at no cost. When a request arrives, Cloud Run starts an instance and serves it. You can pin a number of instances to stay warm with a minimum-instances setting, which is the equivalent of Provisioned Concurrency for Cloud Run: it guarantees an idle instance is running to avoid the cold start on the first request, at the cost of paying while it idles. [^4]
 
 Autoscaling runs off two metrics rather than a queue. Cloud Run's metrics-based scaling adjusts the instance count from average CPU utilization and average request concurrency, then clamps the result between the minimum and maximum instance limits you configure. This is the request-serving model: more concurrent traffic means more instances, and the count is bounded by your max so a backing service does not get overwhelmed. [^4] Notably, Cloud Run does not scale on memory, so an agent that is memory heavy but CPU light needs a higher maximum concurrency setting or a higher per-instance allocation, not a bigger instance count.
+
+![Lambda runs a handler function on each trigger while Cloud Run runs a container as an HTTP service, and the two differ in scaling, time budget, and warmth](</diagrams/serverless-agents-lambda-cloud-run-vercel-ai-sdk-edge/2-lambda-vs-cloud-run.png>)
 
 ### Why request driven matters for agents
 
@@ -95,6 +101,8 @@ Step three, add the live assistant as a separate contract. Instead of overloadin
 Step four, move the thin front leg nearer the user. The route that accepts the request, checks rate, and fans out to the assistant runs on an edge runtime close to the caller, while the assistant and the model call stay in a region that can host their dependencies. [^8]
 
 The result is the same agent as Lesson 55, now expressed as three serverless contracts instead of one cluster: an API function for the immediate answer, a queue function for the backlog, and a streaming service for the live conversation. Each scales on its own signal, each costs nothing when idle, and none of them needs a node you manage. What you gave up is the control Lesson 56 gave you. What you gained is that there is no infrastructure to patch, scale, or plan for at all.
+
+![The document agent runs as three serverless contracts, an API function, a queue worker, and a streaming service, with a thin edge front leg and state in a document store](</diagrams/serverless-agents-lambda-cloud-run-vercel-ai-sdk-edge/4-document-agent-contracts.png>)
 
 ## Choosing a serverless contract
 
