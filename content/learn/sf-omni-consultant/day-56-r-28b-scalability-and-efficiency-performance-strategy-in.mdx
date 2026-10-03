@@ -1,0 +1,91 @@
+---
+title: "R-28b: Scalability and Efficiency: Performance Strategy in Practice"
+slug: day-56-r-28b-scalability-and-efficiency-performance-strategy-in
+series: sf-omni-consultant
+lesson: 56
+excerpt: "Requirement r-28b in the Best Fit Solutions domain (15% of the Salesforce OmniStudio Consultant exam) separates a fast demo from a scalable solution. Lesson 56 of the Salesforce OmniStudio Consultant Certification course turns the cross-component view into a layered efficiency strategy, with asynchronous processing as the tool that keeps heavy work out of the user's way."
+date: "October 02, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [OmniStudio, Scalability, Performance, Asynchronous Processing]
+---
+
+A solution passes the demo with ten records and ten users. Then it goes live, the data grows to a million records, a thousand users log in, and the whole thing grinds to a halt. Nobody changed the code. The data changed, and the solution was never designed to survive it.
+
+That is the difference this lesson is about. Requirement r-28b, part of the Best Fit Solutions domain worth 15% of the Salesforce OmniStudio Consultant exam, asks you to recommend performance optimization strategies across all components to ensure scalable and efficient solutions. The exam wants you to understand that scalability means the solution stays within limits as data and users grow, not just that it is fast today. A fast demo is not a scalable solution, and the exam rewards the architect who can tell the difference.
+
+## Deep Dive
+
+### Scalability is about the ceiling, not the moment
+
+Here is the core idea. Scalability means the solution stays within limits as data and users grow, not just that it is fast today. A solution that passes a demo with ten records and ten users can fail with a million records and a thousand users. The architect should design for the projected ceiling: selective queries, bounded result sets, cached reference data, and asynchronous work for anything that does not need to block the user.
+
+The quiz tests this directly. One question describes an architect designing for a solution that will grow from hundreds to millions of records, and asks which practice best supports scalability. The answer is to keep queries selective and bounded, and cache read-mostly reference data. Returning full result sets will hit row limits at scale. Running all work synchronously blocks users and does not scale. Storing all external data in custom settings is wrong, because custom settings are for configuration, not for storing large external datasets. Selective and bounded queries plus cached reference data keep the solution within limits as data grows.
+
+### The efficiency strategy is layered
+
+The efficiency strategy is a layered one, and each layer has its own levers. At the data layer, keep queries selective and bounded. At the integration layer, batch external calls and trim payloads. At the interaction layer, defer loading and keep the first render light. At the orchestration layer, push heavy or slow work into asynchronous processing so the user is not waiting on it.
+
+The architect should pull the lever at the layer where the cost actually sits. If the cost is a query that returns too much, the fix is at the data layer, not the interaction layer. If the cost is a slow external call, the fix is at the integration layer. If the cost is a heavy save, the fix is at the orchestration layer. Reaching for the wrong lever is how you spend a day tuning a query when the real problem is a synchronous document generation two steps later.
+
+### Asynchronous processing is the underused scalability tool
+
+Asynchronous processing is the scalability tool that OmniStudio architects underuse. A long-running Integration Procedure, a large document generation, or a heavy save should not block the user's browser. The architect should identify the work that can be deferred, move it to asynchronous execution, and let the OmniScript confirm submission and return control to the user. This converts a slow synchronous wait into a fast acknowledgment plus a background completion.
+
+The quiz tests this directly. One question describes a long-running Integration Procedure that blocks the user's browser while it completes, and asks for the correct approach. The answer is to move the heavy work to asynchronous processing and let the script confirm submission. Keeping it synchronous preserves the block. Duplicating the IP logic inside the OmniScript adds maintenance without fixing the wait. Reducing the IP to a single Data Raptor cannot perform the external orchestration the IP does. Moving the heavy work to asynchronous processing lets the script confirm submission and return control, which is the scalable pattern.
+
+Salesforce frames the difference between Integration Procedures and Omniscripts around exactly this. Unlike Omniscripts, Integration Procedures have no end-user UI, run on the server, and can run either synchronously or asynchronously.[^1] That asynchronous option is the lever. When a procedure can run in the background, the user does not have to wait on it.
+
+A concrete example makes the trade-off visible. A loan application journey ends with a credit check that takes twenty seconds against an external bureau. Run it synchronously and the user sits on a spinner for twenty seconds, wondering if the page broke. Run it asynchronously and the OmniScript confirms the application was submitted, returns control to the user, and the credit check completes in the background. The user gets a fast acknowledgment, and the heavy work happens where it does not block anyone. That is the whole point of the pattern: convert a slow synchronous wait into a fast acknowledgment plus a background completion.
+
+### Document generation is a common scalability trap
+
+Document generation is a common scalability trap. Generating a large document synchronously inside an OmniScript can time out and consume significant CPU. The architect should generate documents asynchronously, especially for large or batched output, and have the OmniScript poll for or receive the completed document.
+
+The quiz tests this directly. One question describes a solution that generates a large document inside an OmniScript and users report timeouts, and asks for the best fix. The answer is to generate the document asynchronously and have the script confirm submission. Increasing the OmniScript timeout to the maximum only delays the failure. Reducing the document size by removing required fields changes the business output. Moving the document generation to a FlexCard does not work, because a FlexCard is a display component and does not generate documents. Generating the document asynchronously lets the OmniScript confirm submission and return control, which removes the synchronous wait and the timeout.
+
+Salesforce's server-side document generation is built for exactly this. It is an asynchronous process designed to handle the rendering of large and complex documents, and to generate documents in batches.[^2] The generated document is stored in your Salesforce org and attached to the object for which it is generated.[^2] When a document is large or batched, server-side generation keeps the work off the user's browser and out of the synchronous path. The same principle applies to any heavy transformation: if it can run in the background, it should.
+
+Picture a renewal journey that produces a forty-page policy document. Generated synchronously, the user waits while the template renders, the CPU climbs, and the call risks timing out entirely. Generated asynchronously, the OmniScript confirms the renewal, the document renders on the server, and the completed file is attached to the policy record for the user to open when it is ready. The user is not blocked, the CPU is not consumed in the browser, and the document still lands where it belongs. That is the scalable pattern, and it is the answer the exam is looking for.
+
+### Monitoring is part of the strategy
+
+Monitoring is part of the strategy, not an afterthought. The architect should instrument the solution with debug logs, event monitoring, and performance data so that a regression is caught before it reaches users. A performance strategy without monitoring is a guess.
+
+The team should know the baseline timings for each OmniScript and IP, and alert when a change pushes a component outside its expected range. The quiz tests this indirectly through the trap of building a strategy without monitoring. Without baseline timings and alerts, a regression ships silently, and the team only learns about it from user complaints. Instrument the solution, record the baselines, and set a review trigger when a component exceeds its expected range.
+
+Here is what that looks like in practice. Before a release, you run each OmniScript and IP and record how long it takes: the first render, the IP call, the save. Those numbers are the baseline. After the release, you run the same journeys and compare. If the first render jumped from two seconds to eight, something in the release changed the load path, and the log tells you which Data Raptor or IP is responsible. Without the baseline, you have no way to know the jump happened, and the regression reaches users before anyone notices. Monitoring turns a silent regression into a caught one.
+
+### Efficiency is a design discipline, not a tuning pass
+
+Efficiency is a design discipline, not a tuning pass. The cheapest query is the one never run, the fastest call is the one never made, and the lightest payload is the one never sent. The architect should design the data model, the mappings, and the orchestration so that the solution does less work by construction, then use tuning only for the residual hotspots.
+
+This is what separates a scalable solution from a fast demo. A fast demo is tuned. A scalable solution is designed. If the OmniScript queries in a loop or the IP returns full payloads, no amount of tuning fixes the design; the work must be reduced at the source. The exam rewards the architect who designs the solution to do less work by construction, then tunes only the residual hotspots.
+
+The distinction shows up in how you spend your time. The tuning architect spends a week shaving milliseconds off a query that should not run at all. The design architect spends that week removing the query, caching the reference data, and moving the heavy save to the background. The first solution is marginally faster today and still breaks at scale. The second does less work by construction and holds up as the data grows. That is the difference the exam is testing, and it is why efficiency is a design discipline, not a tuning pass.
+
+## Config Walkthrough
+
+Apply the scalability strategy in four steps.
+
+1. Design for the projected ceiling. For each OmniScript and IP, state the expected record count and user concurrency, and verify the queries and limits hold at that scale before you build. If the query returns a thousand rows today and the projection is a million, the design is already wrong.
+2. Move heavy work to asynchronous processing. Identify any IP, document generation, or save that can run in the background, and have the OmniScript confirm submission and return control to the user. A fast acknowledgment plus a background completion beats a slow synchronous wait.
+3. Instrument the solution. Enable debug logging and event monitoring on the OmniScripts and IPs, record baseline timings, and set a review trigger when a component exceeds its expected range. A regression caught by a log is a regression that never reached a user.
+4. Apply the efficiency levers by layer. Keep queries selective and bounded at the data layer, batch and trim calls at the integration layer, defer loading at the interaction layer, and push heavy work to asynchronous processing at the orchestration layer.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, tuning a solution that was designed to do too much. If the OmniScript queries in a loop or the IP returns full payloads, no amount of tuning fixes the design; the work must be reduced at the source. Design the solution to do less work by construction, then tune only the residual hotspots.
+
+Second, generating large documents synchronously inside the OmniScript. The call can time out and consume CPU, and the user waits on work that should run in the background. Generate documents asynchronously, especially for large or batched output.
+
+Third, building a performance strategy without monitoring. Without baseline timings and alerts, a regression ships silently, and the team only learns about it from user complaints. Instrument the solution and set a review trigger when a component exceeds its expected range.
+
+## What's Next
+
+The next lesson, lesson 57, is Right-Sizing Data Mappers and IPs Inside OmniScripts: The Architecture View, requirement r-29a. That lesson moves from the strategy to the tool choice, teaching you to name the business outcome before you pick a Data Raptor or an Integration Procedure, so each data operation uses the lightest tool that does the job.
+
+[^1]: Salesforce Help, "Integration Procedure Features Not in Omniscripts," https://help.salesforce.com/s/articleView?id=xcloud.os_integration_procedure_features_not_in_omniscripts_8210.htm&language=en_US&type=5
+[^2]: Salesforce Help, "Omnistudio Server-Side Document Generation," https://help.salesforce.com/s/articleView?language=en_US&id=ind.doc_gen_foundation_server_side_document_generation_391775.htm&type=5

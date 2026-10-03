@@ -1,0 +1,91 @@
+---
+title: "R-28a: Cross-Component Performance Optimization: OmniScript Load Time, IP Execution, Data Mapper Queries"
+slug: day-55-r-28a-cross-component-performance-optimization-omniscrip
+series: sf-omni-consultant
+lesson: 55
+excerpt: "Requirement r-28a in the Best Fit Solutions domain (15% of the Salesforce OmniStudio Consultant exam) treats performance as a property of the whole journey, not of any single component. Lesson 55 of the Salesforce OmniStudio Consultant Certification course shows you how to profile the full path from first click to final save, then fix the slowest leg first."
+date: "October 02, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [OmniStudio, Performance, OmniScripts, Integration Procedures]
+---
+
+You tune the OmniScript until the first step loads in a blink. Then you watch a user click through, and the whole thing still crawls. The load time was never the problem. The slow Integration Procedure two steps in was, and you spent your whole afternoon polishing the wrong leg of the journey.
+
+That is the trap this lesson exists to break. Requirement r-28a, part of the Best Fit Solutions domain worth 15% of the Salesforce OmniStudio Consultant exam, asks you to recommend performance optimization strategies across all components: OmniScript load time, Integration Procedure execution, and Data Mapper queries. The exam wants you to see performance as a cross-component property, not a per-component one. The user's perceived speed is the sum of everything the journey does, and the slowest leg is the one that decides how fast the whole thing feels.
+
+## Deep Dive
+
+### Performance is a property of the whole journey
+
+Here is the idea underneath the whole objective. An OmniScript's perceived speed is not its load time. It is the load time, plus the Data Raptors it fires, plus the Integration Procedures it calls, plus the rendering of every step. Optimize one component and ignore the others, and you do not remove the bottleneck. You move it. The user still waits, just at a different point in the journey.
+
+The architect's job is to profile the whole path, from the first click to the final save, and treat the slowest leg as the target. That sounds obvious, but it is exactly what most tuning misses. People optimize the component they are looking at, not the component the user is waiting on. The exam tests this directly. One question describes an OmniScript that feels slow on the first step even though the server is fast, and asks which change is most likely to help. The answer is to defer data loading to the step that needs it and load only displayed fields. Adding more Data Raptors to the first step makes it slower. Increasing row limits returns more data and worsens the problem. Moving all logic into a single Integration Procedure does not address the load-time queries and may add a round trip. The fix targets the leg the user actually perceives, which is the first render.
+
+### OmniScript load time is a tax on first impressions
+
+The load time of an OmniScript is dominated by two things: what the script fetches on load, and how much metadata it carries. A script that fires several Data Raptors on the first step, each returning large result sets, will feel slow no matter how fast the server is. The user is waiting on data they do not even see until a later step.
+
+The fix is to defer data loading to the step that needs it, load only the fields the step displays, and use lazy loading so the initial render stays light. Every field and every query on the first step is a tax on the user's first impression. Salesforce's Omniscript best practices make the same point from the naming and structure side: outline the whole OmniScript before building it, and use unique names for elements and response nodes, so the data flow is visible before any element exists.[^1] When you can see which queries fire on the first step, you can see which ones do not belong there.
+
+A concrete example makes it real. A claims journey starts with a policy number the user types. The first step should fetch the policy holder's name and status, and nothing else. It should not pull the full policy object, the claim history, or the list of every document attached. Those belong on later steps, fetched when the user reaches them. The first render stays light, and the user gets a fast first impression instead of a spinner.
+
+Now watch what happens when you ignore this. The same claims journey fires four Data Raptors on the first step: one for the policy, one for the account, one for the claim history, and one for the document list. The server answers each one quickly, but the user still stares at a spinner while all four round trips complete, and the JSON fills with data the first step never shows. The server was never the bottleneck. The design was. Deferring those three extra fetches to the steps that display them turns a four-round-trip first render into a one-round-trip first render, and the user feels the difference immediately.
+
+### Integration Procedure execution cost is round trips and payloads
+
+The cost of an Integration Procedure is driven by three things: the number of server round trips, the size of the payloads, and the work done inside the procedure. Each external call inside an IP adds latency. The architect should batch calls, reuse a single connection, and avoid calling the same external system repeatedly in a loop.
+
+The quiz tests this directly. One question describes an Integration Procedure that calls the same external system three times in a loop to gather data, and asks for the best optimization. The answer is to batch the calls into a single request and return only needed fields. A longer timeout does not reduce the number of calls. Moving the loop into the OmniScript just relocates the problem to the browser. Caching the external system's entire database in Salesforce is not feasible or appropriate. Batching cuts the round trips, and trimming the payload keeps the JSON small and the parse fast.
+
+The IP should also return only the fields the consuming OmniScript needs, not the full external payload. Extra fields bloat the JSON, slow the parse, and consume memory for data the OmniScript never displays. Salesforce's guidance on when to use Data Mappers versus Integration Procedures frames the choice around the work: an IP is the right tool when you must orchestrate multiple steps, call external systems, or handle errors, and it usually calls one or more Data Mappers.[^2] The IP is the orchestrator, and the orchestrator should hand back a lean result.
+
+### Data Mapper queries follow the rules of any Salesforce query
+
+Data Mapper query performance follows the same rules as any Salesforce query: selective filters, indexed fields, and no unbounded result sets. A Data Raptor that filters on a non-indexed field or returns thousands of rows will be slow and may hit query row limits.
+
+The quiz tests this directly. One question describes a Data Raptor that filters on a non-indexed field and returns thousands of rows, and asks for the correct fix. The answer is to filter on an indexed field and add a row limit where the business allows. Removing the filter returns even more rows. Running the query inside a loop multiplies the queries and hits limits. Converting the Data Raptor to a FlexCard does not fix the query, because a FlexCard is a display component. Filtering on an indexed field makes the query selective, and a row limit bounds the result set, which addresses both the slowness and the row-count risk.
+
+Salesforce's Data Mapper best practices spell out the same discipline. Use unique names for elements and response nodes, create targeted Data Mappers that only extract or load the data needed for one operation, and use relationship notation to pull data from related SObjects instead of adding extra extract steps.[^3] Keep the number of SObjects to three or fewer, and ensure that all filtering and sorting happens on indexed fields, because the Id and Name fields are always indexed.[^3] The architect should also avoid querying inside a loop by fetching the data once and reusing it.
+
+### Governor limits are the hard ceiling
+
+Governor limits are the hard ceiling on every optimization. OmniScripts, Integration Procedures, and Data Raptors all run inside the Apex and platform limits of the current release, including the number of SOQL queries, the rows returned, and the CPU time. An optimization that reduces latency but pushes a component against a limit is not a win.
+
+The architect should design for headroom, not for the edge of the limit. A solution that sits at 95% of the query limit today will break when data grows or users multiply. Design for the projected ceiling, and keep the solution comfortably inside the limits so it survives growth. The exam rewards the architect who thinks about headroom, because that is the difference between a fast demo and a scalable solution.
+
+### Caching and reuse are the highest-leverage optimizations
+
+Caching and reuse are the highest-leverage optimizations available. Data that does not change often, such as picklist values, product catalogs, or reference data, should be cached rather than re-queried on every load. An Integration Procedure result that is identical for many users can be cached.
+
+Salesforce offers two user-configurable caching types for Data Mappers and Integration Procedures: Org Cache and Session Cache, both part of the Salesforce Platform Cache.[^4] Org Cache is shared among all users in the same org and is recommended only for non-sensitive, non-user-specific data, with a maximum time to live of 48 hours. Session Cache stores user-specific data, is limited to active user sessions, and is safer for personalized data, with a maximum time to live of 8 hours.[^4] The architect should identify the read-mostly data in the solution and move it out of the per-request path, because eliminating a query is always faster than tuning one.
+
+A product catalog is the classic candidate. Every user who opens a quote journey needs the same list of products, prices, and descriptions, and that list changes rarely. Query it on every load and you pay the same cost a thousand times a day. Cache it in Org Cache and the first user pays the query, and everyone after reads from the cache until it expires. The same logic applies to an Integration Procedure whose result is identical for many users: cache the top-level response so the external call happens once, not once per user. The rule of thumb is simple. If the data is the same for everyone and changes rarely, it belongs in the cache, not in the per-request path.
+
+## Config Walkthrough
+
+Apply the cross-component optimization in four steps.
+
+1. Profile the full journey. Record the load time, the number of Data Raptors fired on the first step, the IP call count, and the payload sizes. Rank the legs by their contribution to perceived latency, and identify the slowest one. This is the leg you fix first.
+2. Defer data loading. Move every Data Raptor that is not needed for the first visible step to the step that uses it, and enable lazy loading on the OmniScript. Load only the fields the first step displays.
+3. Trim IP payloads. Have each Integration Procedure return only the fields the consuming OmniScript displays, and batch external calls inside the procedure instead of looping over the same system.
+4. Make Data Raptor filters selective. Use indexed fields in the filter, add a row limit where the business allows, and fetch data once instead of querying inside a loop.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, optimizing only the OmniScript load time while leaving a slow Integration Procedure in the middle of the journey. The user still waits, and the bottleneck just moves to the IP call. Profile the whole journey and fix the slowest leg, not the leg you happen to be looking at.
+
+Second, firing every Data Raptor on the first step for convenience. Each query adds to the initial load, and the user waits for data they do not see until a later step. Defer data loading to the step that needs it.
+
+Third, returning the full external payload from an Integration Procedure. The extra fields bloat the JSON, slow the parse, and consume memory for data the OmniScript never displays. Return only the fields the consuming script uses.
+
+## What's Next
+
+The next lesson, lesson 56, is Scalability and Efficiency: Performance Strategy in Practice, requirement r-28b. That lesson takes the cross-component view you just built and turns it into a strategy for growth, teaching you to design for the projected ceiling, move heavy work to asynchronous processing, and instrument the solution so regressions surface before users feel them.
+
+[^1]: Salesforce Help, "Omniscript Best Practices," https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_omniscript_best_practices_8368.htm&type=5
+[^2]: Salesforce Help, "When to Use Omnistudio Data Mappers and Integration Procedures," https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_or_integration_procedure_8166.htm&language=en_US&type=5
+[^3]: Salesforce Help, "Omnistudio Data Mapper Best Practices," https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_dataraptor_best_practices_47412.htm&type=5
+[^4]: Salesforce Help, "Cache for Omnistudio Integration Procedures (Managed Package)," https://help.salesforce.com/s/articleView?id=xcloud.os_cache_for_dataraptors_and_integration_procedures_1.htm&language=en_US&type=5

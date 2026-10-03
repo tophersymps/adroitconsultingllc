@@ -1,0 +1,101 @@
+---
+title: "R-15b: Child OmniScripts for Reuse and Branding with FlexCards"
+slug: day-30-r-15b-child-omniscripts-for-reuse-and-branding-with-flex
+series: sf-omni-consultant
+lesson: 30
+excerpt: "Requirement r-15b in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) covers child OmniScripts for reuse and FlexCards for branded display. Lesson 30 of the Salesforce OmniStudio Consultant Certification course teaches when a child OmniScript earns its place, how to define its data contract, and how to tell a child from a FlexCard by asking one question: does the user interact, or just look?"
+date: "October 02, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [OmniStudio, OmniScripts, FlexCards, Reuse]
+---
+
+Requirement r-15b from the OmniScripts domain, worth 17% of the Salesforce OmniStudio Consultant exam, is about the two tools people reach for when a standard Step is not enough: child OmniScripts for reuse, and FlexCards for branded display. Last lesson we wrestled with the LWC Embed and custom components. This one is friendlier. You are not writing code. You are deciding which of two well-behaved tools does the job, and the exam mostly wants to know you can tell them apart.
+
+Here is the whole trick in one sentence. A child OmniScript captures data through interaction. A FlexCard shows data through display. If you can hold that distinction, you are most of the way to passing this objective. The rest is knowing when a child is worth building at all, because a child that nobody reuses is just extra machinery you have to maintain.
+
+## Deep Dive
+
+### What a child OmniScript actually is
+
+A child OmniScript is an OmniScript that runs inside another OmniScript. Salesforce's own docs put it plainly: an Omniscript can be reused in one or more existing Omniscripts, which lets you build a variety of smaller scripts and then piece them together into one or more parent scripts, and embedded Omniscripts behave just like other Omniscript elements.[^1] The child runs its own Steps, collects its own data, and hands the result back to the parent. Build it once, use it everywhere.
+
+The classic example is an address capture. Think about how many journeys need a shipping address. A checkout flow needs one. A service appointment flow needs one. A returns flow needs one. If you build the address Steps three times, you now have three copies of the same form, and the day you change the address form you get to edit it three times and hope you did not miss one. Instead you build the address capture once as a child OmniScript and invoke it from each parent. The user fills it in, the result flows back into the parent's data JSON, and the address logic lives in exactly one place.
+
+The quiz tests this directly. An address capture sub-journey is used in three different parent OmniScripts. The right design is to build the address capture once as a child OmniScript and invoke it from each parent. Duplicating the address Steps in each parent is the maintenance burden the child exists to remove. A FlexCard does not capture an address, and a Formula computes a value, it does not collect one. When the same sub-journey is reused by multiple parents, you build it once and invoke it from each, and that is the answer.
+
+### The child talks to the parent through a contract
+
+Here is where a lot of real projects go sideways. The child OmniScript does not magically know what the parent wants. It communicates through a data contract. The parent passes data in, the child runs, and the child's result is merged back into the parent's data JSON. If the two sides do not agree on the shape of that data, the flow breaks, and it breaks in the annoying way that only shows up at runtime.
+
+Salesforce's docs spell out the sharp edges. A reusable Omniscript cannot contain another reusable Omniscript. No element in a reusable Omniscript can have the same name as an element in the parent script. And each embedded Omniscript must define unique element name JSON nodes in its Set Values elements, because if two child Omniscripts of the same parent set values for the same JSON nodes, only the values from the first child are set.[^1] That last one is a silent data killer. Two children write to the same node, and the second one's data just vanishes.
+
+A worked example makes the contract concrete. A checkout parent passes the customer's account ID to a payment child. The parent writes it to the data JSON under the name accountId, and the child expects to read it under the same name. The child collects the payment details and writes them back under cardNumber, cardExpiry, and cardCvv. The parent's save mapping expects exactly those three names, so the payment saves correctly. Now imagine the parent had passed the account ID under customerId while the child read accountId. The child sees an empty value, and the payment step fails for no reason you can spot by staring at either script alone. The contract, agreed before the child was built, is what keeps the two sides honest.
+
+So define the input and output contract explicitly, and name the child's elements deliberately. Keep them unique. Confirm the parent is not reusing the same names for different meanings. A mismatch found after the child is built is expensive to fix; a contract agreed up front is cheap.
+
+### Build a child only when the reuse is real
+
+Now the judgment call the exam loves. Use a child OmniScript when the same sub-journey is genuinely reused. The decision rule is reuse: build a child when two or more parents need the same sub-journey, and keep it inline when it is used once.
+
+If a sub-journey appears in a single parent, a child adds an indirection layer without benefit. You have introduced a second OmniScript to maintain, a second activation to manage, and a data contract to keep in sync, all for a journey that appears once. That is structure without payoff. The child earns its place only when the reuse is real, because then it turns a repeated build into a single build that every parent references.
+
+This is the same cost discipline we hit with LWCs in day 29. Custom components and child OmniScripts both add structure, and both are worth it only when they remove real duplication or add real capability. A child used once is overhead. A child used three times pays for itself on the second use.
+
+### What a FlexCard is
+
+A FlexCard is a display component that renders data, often from a Data Source, in a branded card layout. Salesforce describes them as customer-centric, industry-specific UI components built on the Salesforce platform that display Salesforce object information along with distinct, clickable actions that change according to the context in which they appear and based on the information they contain.[^2] You build one in the Flexcard Designer, a declarative tool with a drag interface and WYSIWYG editing, and you style individual elements to match the corporate look.
+
+Use FlexCards to present information in a consistent, branded way. A summary of the account. A confirmation of the order. A snapshot of the case. These are display tasks. The user sees the data, understands the state, and moves on. A FlexCard renders that data clearly, and it maintains corporate branding through its styling, so the information looks like part of the product rather than a generic table bolted onto the page.
+
+The quiz tests this directly. An OmniScript must show the user a branded summary of their order before they confirm, and the user does not edit anything on this screen. The right component is a FlexCard that renders the order summary in a branded layout. The user only needs to see the order summary, so a FlexCard that renders the data in a branded layout is correct. A child OmniScript is for interactive sub-journeys that capture data, and the user is not capturing anything here. An LWC is for custom interactions, and a repeatable Block is for collecting lists. The FlexCard is the answer.
+
+### Child OmniScript versus FlexCard
+
+The exam tests this distinction hard, so let us make it stick. A child OmniScript is an interactive sub-journey that captures data. A FlexCard is a display that shows data. Choose based on whether the user must interact or just see information. Confusing the two leads to a display where an interaction is needed, or an interaction where a display suffices, and both are wrong.
+
+The quiz tests this with a payment step. A consultant is deciding between a child OmniScript and a FlexCard for a step where the user must enter payment details. The correct choice is a child OmniScript, because the user must interact and capture data. Entering payment details is an interaction that captures data, so a child OmniScript, or the parent's own Steps, is correct. A FlexCard only displays data and cannot capture the payment. A Formula computes a value, and a read-only Input cannot accept the entry. The child OmniScript is the answer.
+
+The decision rule is a single question you can ask about any ambiguous case: does the user interact, or does the user only view? If the user enters data, selects options, or confirms a choice, you need an interactive journey, which is a child OmniScript or the parent's own Steps. If the user only needs to see information, a FlexCard renders it in a branded layout. Apply the question, and the choice becomes mechanical.
+
+### Branding lives in the design system
+
+Branding is maintained through consistent use of the org's design system across child OmniScripts, FlexCards, and custom components. A child OmniScript inherits the parent's styling, so it looks consistent with the rest of the journey by default. A FlexCard is styled to match the corporate look through the Flexcard Designer, where you set colors, spacing, and type to match the product. Keep the visual language consistent so the whole journey feels like one product.
+
+The branding check is simple to apply. When a child OmniScript or FlexCard renders, ask whether a user who knows the product would recognize it as part of the same system. A child inherits the parent's styling, so it does by default. A FlexCard uses the org's design tokens, so it does when it is styled correctly. A FlexCard that introduces a different palette or layout breaks the corporate look, and the user notices the mismatch even if they cannot name it.
+
+This connects back to the branding principle from day 29. Standard elements inherit the styling for free, and custom components have to opt in to the design tokens. A FlexCard is a display component you style, so the styling is part of the build, not an afterthought. Keep the visual language consistent across the child, the FlexCard, and the parent, and the whole journey feels like one product.
+
+### Reuse and branding work together
+
+Reuse and branding work together in a well-designed journey. A child OmniScript removes duplication, and a FlexCard presents data consistently. Used together, they let you build a journey that is both efficient to maintain and consistent to look at. The child captures the data once and reuses it, and the FlexCard presents the result in a branded layout.
+
+A worked example ties it together. A checkout journey has three parents: a web checkout, a phone order, and a returns flow. All three need an address capture, so you build it once as a child OmniScript and invoke it from each parent. After the address is captured, each parent shows a branded summary of the order before the user confirms. That summary is a FlexCard, styled to match the corporate look, rendering the order data from the data JSON. The child handles the interaction, the FlexCard handles the display, and the whole journey looks and behaves consistently across all three channels.
+
+The exam rewards this integrated view. A consultant who reaches for a child OmniScript for reuse and a FlexCard for branded display, and who can tell the two apart by asking whether the user interacts or only views, has mastered the requirement. The two tools are complementary, not interchangeable, and knowing which one each situation calls for is the skill the exam measures.
+
+## Config Walkthrough
+
+Reuse a sub-journey and present data in a branded card in four steps.
+
+1. To reuse a sub-journey, create the child OmniScript once, then add a Child OmniScript element in each parent and define the data passed in and the result merged back. In the child, mark the OmniScript as Reusable in Setup and activate it, then drag it into each parent from the Omniscripts section of the elements panel.[^1]
+2. Define the child's input and output contract explicitly, and test the child both standalone and from each parent to confirm the data flows correctly. Confirm the element names are unique so the child's JSON nodes do not collide with the parent's or with another child's.
+3. To present data in a branded card, add a FlexCard element and configure its Data Source and layout so it renders the data consistently with the corporate look. Style the card's elements to match the org's design tokens.
+4. Decide between a child OmniScript and a FlexCard by asking whether the user must interact, which calls for a child, or just see information, which calls for a FlexCard.
+
+## Exam Traps
+
+Three traps account for most misses on this objective.
+
+First, building a child OmniScript for a sub-journey used in only one place. A child adds an indirection layer without benefit. Build a child only when two or more parents reuse the same sub-journey, and keep a single-use sub-journey inline.
+
+Second, mismatching the parent's input to the child's expected input. The parent passes data in, so if the shape does not match, the child breaks. Define the contract explicitly, agree on the names before building, and confirm the child's element names are unique so they do not collide with the parent's JSON nodes.
+
+Third, using a FlexCard where the user must interact, or a child OmniScript where a display suffices. A FlexCard shows data; a child OmniScript captures it. Choose by whether interaction is needed, and apply the single question: does the user interact, or does the user only view?
+
+## What's Next
+
+The next lesson, lesson 31, is Validation Rules and Error Messages in OmniScripts, requirement r-16a. That lesson covers how to prescribe solid validation rules and error messages that guide users and manage unexpected outcomes, building on the journey structure this lesson established.
+
+[^1]: Salesforce Help, "Embed an Omniscript in Another Omniscript," https://help.salesforce.com/s/articleView?id=xcloud.os_embed_an_omniscript_in_another_omniscript_20581.htm&language=en_US&type=5
+[^2]: Salesforce Help, "Flexcards (Managed Package)," https://help.salesforce.com/s/articleView?id=xcloud.os_flexcards.htm&language=en_US&type=5

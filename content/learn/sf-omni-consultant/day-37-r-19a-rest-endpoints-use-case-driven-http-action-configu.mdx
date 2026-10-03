@@ -1,0 +1,106 @@
+---
+title: "R-19a: REST Endpoints: Use-Case-Driven HTTP Action Configuration and Auth"
+slug: day-37-r-19a-rest-endpoints-use-case-driven-http-action-configu
+series: sf-omni-consultant
+lesson: 37
+excerpt: "Lesson 37 of the Salesforce OmniStudio Consultant Certification course applies the HTTP Action to REST endpoints, where the use case drives the method, the request surface, and the authentication. You learn to read an endpoint contract, choose GET versus POST, and place data in query parameters or the body. This lesson is part of the Integration Procedures domain, worth 17% of the exam."
+date: "October 02, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [OmniStudio, Integration Procedures, REST, HTTP Actions]
+---
+
+Requirement r-19a shifts the emphasis from the high-level mechanism to the use case. The exam wants you to explain, dependent upon the customer's use case, how an HTTP Action is configured and managed for a REST endpoint. That means the configuration is a consequence of what the client component needs and what the endpoint exposes, not a set of defaults you apply uniformly. In the Integration Procedures domain, worth 17% of the exam, the questions reward consultants who can read a scenario, identify the operation the customer needs, and map that operation onto the correct method, request surface, and authentication. This lesson builds that decision process for REST.
+
+## Deep Dive
+
+### REST is the default, but the endpoint decides
+
+REST endpoints are the default choice for most modern integrations because they are resource-oriented, use standard HTTP methods, and return JSON [^1]. The consultant's first decision is not which protocol to prefer, but whether the customer's external system actually exposes a REST API. The choice between REST and SOAP is dictated by what the endpoint offers, not by preference. If the system exposes a REST API, you configure a REST call. If it exposes only SOAP, you configure a SOAP call, which is the subject of the next lesson.
+
+The resource-oriented model is what makes REST convenient. A REST API treats data as resources, each identified by a URL, and the standard HTTP methods act on those resources. Reading a resource is a GET, creating one is a POST, updating is a PUT or PATCH, and removing is a DELETE. The consultant maps the customer's need onto this model. When the customer needs to read a single account record by its ID, the operation is a GET and the identifier belongs in the resource path or a query parameter [^2]. POST creates, DELETE removes, and PUT updates, so none of those fit a read operation.
+
+The exam tests this mapping directly. A customer needs to read a single account record from an external REST API by its ID. The correct configuration is GET with the ID in the resource path or query parameter. POST with the ID in the body, DELETE with the ID in the body, and PUT with the ID in the header all describe operations that do not match a read [^2].
+
+### The HTTP method is driven by the use case
+
+The HTTP method is the first decision, and it is driven entirely by the use case. GET reads a resource, POST creates one, PUT or PATCH updates one, and DELETE removes one. Choosing the wrong method against a REST contract produces a 405, or worse, a side effect the customer did not intend [^1]. A consultant who uses POST for a read operation, because they are unsure of the method, can create a resource or trigger a side effect instead of returning data, and that violates the REST contract.
+
+The discipline is to confirm the method against the endpoint documentation before configuring the action. The documentation states what each method does for each resource, and the consultant matches the customer's need to that statement. If the customer wants to read, the method is GET. If the customer wants to create, the method is POST. The method is never a guess, because the cost of a wrong guess is either a rejected call or an unintended change to the external system.
+
+The exam trap is the consultant who reaches for POST because they are unsure. POST for a read operation can create a resource or trigger a side effect instead of returning data, and it violates the REST contract. The correct behavior is to read the documentation and use the method that matches the operation.
+
+### Request configuration: path, query parameters, headers, and body
+
+REST request configuration includes the resource path, the query parameters, the headers, and the body. The consultant maps IP input variables into these surfaces [^1]. For a GET, the data travels in query parameters. For a POST or PUT, it travels in the body. Mapping the data to the wrong surface is a common cause of a 400.
+
+The distinction between query parameters and body is where many integrations fail. A GET request carries its identifying and filtering data in the resource path and query parameters. A body on a GET is ignored or rejected, so the endpoint never receives the data. When a consultant configures a GET call and the external system returns a 400 because the filter never reaches the endpoint, the most likely cause is that the filter was placed in the request body instead of query parameters [^2]. The named credential, the response mapping, and the timeout would not cause this specific failure, because the request was sent but the data was in the wrong surface.
+
+The exam tests this directly. A consultant configures a GET call but the external system returns a 400 and the filter never reaches the endpoint. The filter was placed in the request body instead of query parameters, and that is the most likely cause. GET requests carry data in query parameters, not the body, and a body on a GET is ignored or rejected [^2].
+
+### Authentication for REST: OAuth 2.0 or an API key
+
+Authentication for REST endpoints is usually OAuth 2.0 or an API key, and the named credential holds the flow while the HTTP Action applies it [^3]. For OAuth 2.0, the credential holds the client ID, the client secret, the token endpoint, and the scopes, and the platform handles the token exchange and refresh. For API-key style authentication, the key is often sent as a header, and the consultant must confirm whether the external system expects the key in a header, a query parameter, or a body field.
+
+The placement of the API key is a contract detail that must come from the documentation. Some endpoints expect the key in an Authorization header, some in a custom header, some in a query parameter, and some in a body field. The named credential is where the authentication details are configured, including an API key sent as a header, and the HTTP Action applies it to the request [^3]. The request body carries data, not authentication, and the output variables and the Data Mapper handle response data, not request authentication.
+
+The exam tests this directly. A REST endpoint authenticates with an API key that the documentation says must be sent in a header. In the named credential, so the header is applied to the request, the consultant configures the key. The request body carries data, not auth, and the output variables and the Data Mapper handle response data, not request auth [^3].
+
+### Response handling is JSON-first
+
+Response handling for REST is JSON-first. The consultant maps the JSON response into output variables, often through a Data Mapper Transform to flatten or rename fields [^4]. The mapping must account for the actual response shape, including arrays and nested objects, not the shape the consultant assumes.
+
+The discipline is to read the actual payload before designing the mapping. A field that is nested or named differently than assumed produces empty output that looks like a mapping bug but is a contract mismatch. The Data Mapper Transform is the tool for reshaping the response, flattening nested structures and renaming fields into the flat output variables the client component expects [^4]. The mapping is driven by what the client component needs, not by what the external system happens to return.
+
+### Use-case-driven configuration follows the data need
+
+Use-case-driven configuration means the consultant asks what the client component needs before configuring the call [^1]. If the client needs a filtered list, the filter belongs in the request query parameters. If it needs a single record, the call should target the record's resource path. The configuration follows the data need.
+
+This is the organizing principle of the whole requirement. The method, the request surface, the authentication, and the response mapping are all consequences of the use case. A client that needs a filtered list of accounts drives a GET with the filter in the query parameters. A client that needs a single account drives a GET against the account's resource path. A client that needs to create a record drives a POST with the record data in the body. The consultant does not start from a preferred configuration and adapt the use case to it; the consultant starts from the use case and derives the configuration.
+
+### A worked example: a filtered account list
+
+Put the pieces together with a concrete scenario. A customer wants an Omniscript to display a list of accounts from an external REST API, filtered by a region the user selects. The consultant starts by reading the endpoint documentation. The API exposes a GET on the accounts resource, and the documentation says the filter is a query parameter named `region`. The consultant confirms the API authenticates with an API key sent in a header named `X-API-Key` [^3].
+
+The consultant creates a named credential for the API, enters the base URL, and configures the API key so it is sent as the header the documentation specifies. The HTTP Action applies the header automatically. Next, the consultant adds an HTTP Action with a GET method and maps the IP input variable that holds the selected region into the `region` query parameter. Because the data travels in a query parameter, not the body, the endpoint receives the filter and returns only the matching accounts [^2].
+
+On the response side, the API returns a JSON array of account objects, each with fields the Omniscript does not need. The consultant adds a Data Mapper Transform action to select the fields the client component needs, rename them to the output variable names, and shape the array so the component can render it. The client receives a clean list, filtered at the source and reshaped for display [^4].
+
+The use case drove every decision. The read operation drove the GET method. The filter need drove the query parameter. The API's authentication contract drove the named credential. The client's display need drove the response mapping. None of it was a preference; each choice followed from the customer's need and the endpoint's contract.
+
+Try it yourself. In a sandbox, configure an HTTP Action against a public REST API that supports a query parameter filter, map a filter value from an IP input variable, and confirm from the debug log that the request carried the filter in the query string and that the response was reshaped for the client.
+
+## Config Walkthrough
+
+The use-case-driven REST configuration flow maps onto four concrete steps.
+
+1. Confirm the external system exposes a REST API and read the endpoint documentation to capture the resource path, the method, and the expected request shape. The documentation is the source of truth for the contract [^1].
+
+2. Create a named credential with the REST endpoint and configure OAuth 2.0 or the API-key header the endpoint requires. The credential holds the authentication details, and the HTTP Action applies them [^3].
+
+3. Add an HTTP Action, select the method that matches the use case, and map IP input variables into query parameters or the request body. For a GET, put the data in query parameters; for a POST or PUT, put it in the body [^2].
+
+4. Map the JSON response into output variables, adding a Data Mapper Transform if the response needs flattening or renaming. Design the mapping against the actual response shape, including arrays and nested objects [^4].
+
+Test the IP from the Preview tab with a real payload and inspect the debug log to confirm the request reached the endpoint and the output variables received the expected values before you activate the version.
+
+## Exam Traps
+
+Three traps dominate this requirement, and each is a specific, avoidable mistake.
+
+**Choosing POST for a read operation because the consultant is unsure of the method.** This can create a resource or trigger a side effect instead of returning data, and it violates the REST contract. Confirm the method against the documentation and use the method that matches the operation [^1].
+
+**Sending data in the body for a GET request.** GET carries data in query parameters, and a body on a GET is ignored or rejected, so the endpoint never receives the filter. Place the data in the query parameters for a GET [^2].
+
+**Assuming the response shape instead of reading the actual payload.** A field that is nested or named differently than assumed produces empty output that looks like a mapping bug but is a contract mismatch. Read the real payload and design the mapping against it [^4].
+
+The exam tip that ties these together: let the endpoint documentation and the client's data need drive the method, the request surface, and the auth. The configuration is a consequence of the use case, not a preference.
+
+## What's Next
+
+This lesson applied the HTTP Action to REST endpoints, where the use case drives the method, the request surface, and the authentication. Lesson 38, SOAP Endpoints and Advanced Authentication Scenarios, covers the other side of the protocol decision: how to configure an HTTP Action against a SOAP endpoint, including the XML envelope and WS-Security. That is the next scheduled lesson in the Integration Procedures domain.
+
+[^1]: Salesforce, "Salesforce Certified OmniStudio Consultant Exam Guide": https://help.salesforce.com/s/articleView?id=005298970&language=en_US&type=1
+[^2]: Salesforce, "Build Simple Integration Procedures" (Trailhead module): https://trailhead.salesforce.com/content/learn/modules/omnistudio-integration-procedures/build-simple-integration-procedures
+[^3]: Salesforce, "Create Named Credentials and External Credentials": https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.nc_named_creds_and_ext_creds.htm&type=5
+[^4]: Salesforce, "Integration Procedure Actions": https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_integration_procedure_actions_50165.htm&type=5

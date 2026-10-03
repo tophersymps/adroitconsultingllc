@@ -1,0 +1,89 @@
+---
+title: "R-13b: Fetch, Transform, and Save: Data Flow Architecture in OmniScripts"
+slug: day-26-r-13b-fetch-transform-and-save-data-flow-architecture-in
+series: sf-omni-consultant
+lesson: 26
+excerpt: "Requirement r-13b in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) treats the whole journey as a data pipeline. Lesson 26 of the Salesforce OmniStudio Consultant Certification course defines the fetch, transform, and save stages, shows how the data JSON is the contract between them, and covers the error handling that keeps a failing journey honest."
+date: "October 02, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [OmniStudio, OmniScripts, Data Flow, Data JSON]
+---
+
+You watch the journey run end to end, and somewhere in the middle a field comes back empty. Not because the user skipped it. Not because Salesforce lost it. Because nobody defined the shape of the data before the stages were built, and the fetch wrote to one name while the save went looking for another. That is the failure this lesson exists to stop.
+
+Requirement r-13b, part of the OmniScripts domain worth 17% of the Salesforce OmniStudio Consultant exam, asks you to zoom out and design the whole journey as a data flow. Here is the idea underneath it. Every OmniScript, no matter how complex, moves data through the same three stages. Fetch brings data in. Transform reshapes it. Save writes it out. The exam wants you to design that flow as a pipeline, where each stage reads from and writes to the data JSON, and the shape of the JSON is the contract that holds the stages together.
+
+## Deep Dive
+
+### The pipeline: fetch, transform, save
+
+Think of the OmniScript as a pipeline with three named stops. The fetch stage brings data in. It might read a Salesforce record by ID, call an external service, or pull a list of options for a picklist. Whatever the source, the output of the fetch is data written into the data JSON. The transform stage reshapes that data. It might compute a total, flatten a nested structure, or prepare a payload for a target system. The save stage writes the data out, either to a Salesforce object through a Data Mapper load or to an external system through an Integration Procedure.
+
+The data JSON is the connective tissue. Every stage reads from it and writes to it, and the shape of the JSON is the contract between stages. The fetch stage promises to produce certain nodes. The transform stage promises to consume those nodes and produce others. The save stage promises to consume the final shape. Break any of those promises and the next stage reads a missing or differently named value, and the journey fails in a way that is miserable to trace.
+
+That is why the contract comes first. Salesforce's Omniscript best practices make the same point from the naming side: use unique names for elements and response nodes, and outline the whole OmniScript before building it, so the data flow is visible before any element exists.[^1] Name the nodes, draw the flow, then build. When you can see the contract on paper, you catch the mismatch before it ever costs a user a blank field.
+
+### Fetch should be lazy and targeted
+
+The fetch stage has a discipline attached to it: fetch only what the journey needs, and fetch it when the journey needs it. Do not pull the entire object up front just because you can. A fetch that returns a huge object the user never sees wastes a round trip and slows the OmniScript, and it drags data into the JSON that no later stage uses. The targeted fetch pulls just the fields the journey displays or acts on, and it stores them under a stable name so later Steps and conditions reference that single copy.
+
+The quiz tests this directly. One question describes an OmniScript that fetches an account but only displays the account name and status. The better fetch design is to fetch only the name and status fields the journey needs, and store them under a stable name. Fetching the entire account object wastes a round trip. Fetching nothing and letting the user type the data loses real data that should come from the system of record. Fetching the account in every Step is redundant and multiplies latency. The targeted fetch wins because it pulls only what the journey needs, when it needs it, and stores it once.
+
+The Trailhead material on Data Mapper integration shows the mechanics: an OmniScript uses a Data Mapper extract action to find Salesforce objects using information from the OmniScript, such as a record ID or a search term.[^2] The extract is the fetch, and it is driven by the specific identifier the journey already has, not by a blanket read of everything.
+
+A concrete example makes the discipline real. A service-repair journey starts with a case number the user types. The fetch stage should read that case number, pull the case status, the account name, and the technician assigned, and store those three values in the data JSON under names like caseStatus, accountName, and assignedTech. The journey never needs the case description, the full account record, or the history of every status change, so the fetch does not pull them. Later Steps show the three stored values, and a condition that checks whether the technician is assigned reads the stored node instead of calling the service again. The journey stays fast because it fetched only what it uses, and it stays consistent because every Step reads the same stored copy.
+
+### Transform as close to the consumer as makes sense
+
+The transform stage has a rule about ownership: transform as close to the consumer as makes sense, and pick one owner per transform. Data meant for display inside the OmniScript should be reshaped in the OmniScript's formula and display logic, where it is computed for the user. Data meant for a target system should be reshaped in the Data Mapper that prepares the save, where it is computed for the record or the payload.
+
+The trap is doing the same transform in two places. If you compute a value in the OmniScript and also compute it in the Data Mapper, you now have two owners for one value, and they drift. Someone changes the formula and forgets the mapper, or vice versa, and the two produce different results. The rule is to pick one owner per transform and let the other side reference it. If the value is needed for display, compute it in the OmniScript and pass it to the save. If it is needed in the saved record, compute it in the Data Mapper and let the display read the stored result. One owner, one source of truth.
+
+### Save must handle the full data JSON
+
+The save stage is the write path, and it has a completeness requirement. Whether it is a Data Mapper that maps the data JSON to a Salesforce object or an Integration Procedure that orchestrates a multi-object or multi-system write, the save must handle the full data JSON, including every field captured on every branch of the journey.
+
+This is where branches silently drop data. A journey with conditional branches can capture a field on one branch and skip it on another. If the save mapping was written before that branch existed, the new field is not in the mapping, and the save stage does not know about it. The field is silently dropped: the user entered it, the data JSON holds it, and the saved record does not.
+
+The quiz tests this exact scenario. A consultant adds a new branch to an OmniScript that captures a preferred contact time field, and the save uses a Data Mapper. The consultant must update the Data Mapper's save mapping to include the new field. A Data Mapper does not automatically pick up new fields, adding a new Integration Procedure does not address the missing mapping, and removing the branch throws away the feature. The save mapping must include every field captured on every branch, or the field is silently dropped.
+
+The discipline is to keep the save mapping in sync with every branch. When you add a branch that captures new fields, update the save mapping in the same change. Review the save mapping against the full set of branches before you deploy, and confirm that every field a user can enter has a destination in the saved record.
+
+### Error handling belongs in the flow
+
+A data flow that cannot fail is a fiction. The fetch can fail when an external service is down. The transform can produce unexpected output when a field is empty. The save can reject a record when a validation fails. The design question is not whether these happen, but what the journey does when they do. The answer is that error handling belongs in the flow, not off to the side.
+
+The fetch and save stages should return a status the OmniScript can read, and failures should route to a message the user understands or to a log. The quiz tests this with a fetch that can fail when the external service is down. The correct design is to read the returned status and route the failure to a user-facing message or a log. Letting it fail silently and continue hides the problem and leaves the user staring at a blank field. Retrying forever until it succeeds blocks the user indefinitely. Skipping the fetch and using empty data produces wrong results that look correct. The honest design surfaces the failure, tells the user what happened, and gives them a path forward.
+
+### The data JSON is the audit trail
+
+Because every element writes to the data JSON, the JSON at the end of a run is a record of what the user entered and what the flow computed. That makes it an audit trail, and it is worth keeping readable. Element names that are stable and meaningful produce a JSON that a reviewer can read and that the save logic can trust. A messy JSON contract, with cryptic names and collisions, makes every downstream stage fragile and makes debugging a nightmare.
+
+This is the same guidance Salesforce gives about naming. Use unique names for Omniscript elements and Data Mapper response nodes, and build an outline of the entire OmniScript so the data flow is explicit before you build.[^1] The outline is where you see that a node named accountName is referenced by three Steps and the save mapping, and that renaming it would break all of them. Name deliberately, keep names stable, and the JSON becomes a readable record of the journey.
+
+## Config Walkthrough
+
+Apply the pipeline design in four steps.
+
+1. Map the fetch, transform, and save stages on paper first. Name the data JSON keys each stage reads and writes, and confirm the contract is consistent across stages before you build anything. This is the outline step, and it is where mismatches are cheapest to fix.
+2. Add a Data Mapper or Integration Procedure element for the fetch. Store the result in the data JSON under a stable name, and reference that stored value in later conditions instead of re-fetching. Verify that later Steps read the stored node.
+3. Add a Data Mapper or Integration Procedure element for the save. Map every field captured on every branch so no branch silently drops data, and review the mapping against the full set of branches before deploying.
+4. Add error handling to the fetch and save stages. Read the returned status and route failures to a user-facing message or a log, so a downed service or a rejected record surfaces instead of failing silently.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, fetching the full object up front when the journey only needs a few fields. This wastes a round trip and slows the OmniScript. Fetch only what the journey needs, when it needs it, and store the result under a stable name.
+
+Second, performing the same transform in both the OmniScript and the Data Mapper. Two owners for one transform means they drift and produce different results. Pick one owner per transform, based on where the value is consumed, and let the other side reference it.
+
+Third, adding a branch that captures new fields without updating the save mapping. The new fields are silently dropped because the save stage does not know about them. Keep the save mapping in sync with every branch, and review it against the full set of branches before you deploy.
+
+## What's Next
+
+The next lesson, lesson 27, is OmniScript Element Selection: Steps, Blocks, and Inputs, requirement r-14a. That lesson moves from the data flow to the user-facing structure, teaching you to choose the right element for what the user is doing at each point in the journey.
+
+[^1]: Salesforce Help, "Omniscript Best Practices," https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_omniscript_best_practices_8368.htm&type=5
+[^2]: Trailhead, "Use Data Mappers with Other Omnistudio Components: Explore Data Mapper Integration Within Omnistudio," https://trailhead.salesforce.com/content/learn/modules/omnistudio-data-mapper-fundamentals/explore-data-mapper-integration-within-omnistudio

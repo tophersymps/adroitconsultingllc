@@ -1,0 +1,119 @@
+---
+title: "R-25a: Data Mapper Loads: Salesforce ID Mapping and Upsert Logic"
+slug: day-49-r-25a-data-mapper-loads-salesforce-id-mapping-and-upsert
+series: sf-omni-consultant
+lesson: 49
+excerpt: "Lesson 49 of the Salesforce OmniStudio Consultant Certification course covers Data Mapper Loads. You learn how a Load writes data into Salesforce, how it maps incoming data to the correct record, and how the upsert key decides whether a record is inserted or updated. This lesson is part of the Data Mappers domain, worth 17% of the exam."
+date: "October 02, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [OmniStudio, Data Mappers, Loads, Upsert]
+---
+
+Requirement r-25a sits in the Data Mappers domain, worth 17% of the exam [^3], and it asks you to explain how Data Mapper Loads handle Salesforce ID mapping, upsert logic, and error management during data creation or updates. This lesson covers the ID mapping and upsert half of that requirement. Error management gets its own lesson next. A Load is the Data Mapper type that writes data into Salesforce, and the central concern is how it identifies the records it writes. Salesforce records are identified by their record ID, but the data coming into a Load often does not carry that ID. ID mapping is the act of connecting the incoming data to the correct Salesforce record, and it is the difference between a correct write and a duplicate or a failure.
+
+## Deep Dive
+
+### A Load writes data into Salesforce
+
+A Load writes data into Salesforce. Data Mapper Loads accept data in JSON, XML, or custom input formats and write the data to Salesforce objects, and formulas and attributes are supported [^1]. The Load is the write side of the Data Mapper family, the counterpart to the Extract that reads. Where an Extract pulls data out of Salesforce, a Load pushes data in [^1].
+
+The input to a Load can come from several places. It can be the data JSON from an Omniscript or an Integration Procedure, an interface object, a call to the Data Mapper API, or a call from Apex code [^1]. Whatever the source, the Load takes the incoming data, maps it to the target object's fields, and writes the result to Salesforce [^1].
+
+The Load maps input fields to the object's fields, and the mapping definition is the contract between the incoming data and the target object. The consultant defines which input field becomes which object field, and the Load uses that mapping to build the records it writes [^1].
+
+### ID mapping connects incoming data to the correct record
+
+ID mapping is the act of connecting the incoming data to the correct Salesforce record. Salesforce records are identified by their record ID, but the data coming into a Load often does not carry that ID. The Load must figure out which record the incoming data refers to, and ID mapping is how it does that [^1].
+
+The problem is that the incoming data and the Salesforce record live in different worlds. The external system that produced the data knows its own identifiers, not Salesforce record IDs. The Load has to bridge that gap, connecting the incoming data to the correct Salesforce record so the write lands in the right place [^1].
+
+ID mapping is the difference between a correct write and a duplicate or a failure. If the Load connects the incoming data to the right record, the write succeeds. If it connects to the wrong record, the write corrupts data. If it cannot connect at all, the write fails. The consultant who controls ID mapping controls the outcome of every write [^1].
+
+### Inserts create new records and need the required fields
+
+For inserts, the Load creates new records and Salesforce assigns the IDs. The incoming data does not need an ID, because the record does not exist yet. The Load maps the input fields to the object's fields, and the result is new records [^1].
+
+The exam tests this directly. A Load must create new records in Salesforce. What does the incoming data need? The required fields for the object are what the incoming data needs. An insert creates new records and needs the required fields, and Salesforce assigns the IDs. A record ID is for updates, an external ID is for upsert, and a lookup is not needed for a pure insert [^1].
+
+The consultant must ensure the input contains all required fields, or the insert fails. If a required field is missing, Salesforce rejects the record, and the Load reports the failure. The consultant who checks the required fields before the Load runs avoids the failure [^1].
+
+### Updates must resolve the target record
+
+For updates, the Load must know which existing record to change. The incoming data must carry the Salesforce record ID, or the Load must resolve the record through a lookup. If the ID is missing or wrong, the update targets the wrong record or fails [^1].
+
+The exam tests this directly. A Load must update existing records and the incoming data does not carry the Salesforce record ID. What must the consultant do? The answer is to resolve the target record through a lookup. An update must resolve the target record, and a lookup does that when the ID is absent. Inserting creates duplicates, skipping loses the update, and a Transform does not write [^1].
+
+ID mapping for updates is about resolving the target record reliably. The Load cannot change a record it cannot find, so the consultant must give it a way to find the record. A record ID in the input is the direct way. A lookup that matches the incoming data to an existing record is the indirect way. Either way, the Load must resolve the target before it can update [^1].
+
+### Upsert inserts or updates based on a key field
+
+Upsert is the operation that inserts or updates based on a key field. The Load uses an external ID field to decide whether a record already exists: if a record with that key value exists, it updates; if not, it inserts. This is the standard way to keep an external system's data in sync with Salesforce without manual ID management [^1][^2].
+
+The exam tests this directly. A Load uses upsert to keep external data in sync with Salesforce. What determines whether a record is inserted or updated? The value of the external ID key field is what determines the outcome. Upsert uses the external ID key to decide: a matching key updates, a new key inserts. The record ID, order, and field count do not drive the upsert decision [^1][^2].
+
+The upsert logic is simple to state. The Load takes the external ID key value from the incoming data and looks for a record with that value. If it finds one, the record exists, and the Load updates it. If it does not find one, the record is new, and the Load inserts it. The key value is the whole decision [^1][^2].
+
+### The upsert key must be unique and populated
+
+The upsert key must be a field that uniquely identifies the record, typically an external ID field on the object. The consultant must ensure the key field is populated and unique, because a duplicate key or a missing key breaks the upsert logic. Choosing the right key is a design decision that determines whether upsert works at all [^1][^2].
+
+The Salesforce documentation is explicit about what happens when the key is not unique. When the designated key field is null across all input records, the Data Mapper treats every record as identical, and each subsequent record overwrites the previous one, resulting in a single record being created or updated instead of multiple inserts [^2]. A null key collapses the data into one record, and a duplicate key produces the same collapse [^2].
+
+The ID field itself functions as an implicit upsert key in Salesforce. If a non-null ID value is present in the input JSON passed to the Data Mapper Load, the operation will upsert that record even if the Upsert Key option is unchecked [^2]. For new record insertion, the consultant should rely on an external ID field or another unique field as the Upsert Key [^2].
+
+The exam tip is direct: for upsert, the external ID key is the whole decision. Make it unique, populated, and stable, and the Load keeps external data in sync cleanly [^1][^2].
+
+### ID mapping and upsert are where Loads differ most from reads
+
+ID mapping and upsert logic are where Loads differ most from reads. A read never changes data, so it has no ID concerns. A Load must resolve targets, handle keys, and manage the outcome of every write. The consultant who understands how a Load identifies records can design writes that are correct and repeatable [^1].
+
+A read is safe by default. It pulls data out of Salesforce and changes nothing, so it does not need to worry about which record it is touching. A write is the opposite. It changes data, so it must be certain about which record it is changing. That certainty comes from ID mapping and upsert logic [^1].
+
+The consultant who understands the difference can design writes that are correct and repeatable. An insert that has the required fields creates clean records. An update that resolves its target changes the right record. An upsert with a unique, populated key keeps external data in sync. Each is a write that does what it is supposed to do, every time [^1].
+
+### A worked example: syncing an external customer feed
+
+Put the pieces together with a concrete scenario. A client has an external system that sends a nightly feed of customer records, and the feed must stay in sync with Salesforce. Some customers already exist, and some are new. The consultant needs a Load that handles both [^1][^2].
+
+The consultant chooses an upsert. The external system has a customer number that uniquely identifies each customer, and the consultant maps that number to an external ID field on the target object. The upsert key is the external ID field, and the incoming key value is the customer number [^1][^2].
+
+For a customer that already exists, the Load finds the record with the matching customer number and updates it. For a new customer, the Load finds no match and inserts a new record. The feed stays in sync, and the consultant did not have to manage Salesforce record IDs manually [^1][^2].
+
+The consultant also verifies the key. Every customer number is populated and unique, so the upsert logic works. If a customer number were missing or duplicated, the Load would collapse records or fail, so the consultant checks the key before the Load runs [^1][^2].
+
+Try it yourself. In a sandbox, build a Data Mapper Load that upserts customer records using an external ID field as the key. Run it with a mix of existing and new customers, and confirm the existing ones update and the new ones insert.
+
+## Config Walkthrough
+
+The Load flow maps onto four concrete steps.
+
+1. For an insert, map the input fields to the target object's fields and ensure all required fields are present, so the Load can create the record. Salesforce assigns the IDs [^1].
+
+2. For an update, provide the Salesforce record ID in the input or resolve the target record through a lookup, so the Load changes the correct record. An update must resolve its target [^1].
+
+3. For an upsert, select an external ID field as the key and map the incoming key value, so the Load inserts when the key is new and updates when it exists [^1][^2].
+
+4. Verify the key field is populated and unique across the data, because a missing or duplicate key breaks the upsert logic. A null key collapses records into one [^1][^2].
+
+Test the Load from the Preview tab with a sample payload and confirm the records are created, updated, or upserted as expected before you activate the version.
+
+## Exam Traps
+
+Three traps dominate this requirement, and each is a specific, avoidable mistake.
+
+**Running an upsert without a unique, populated key field.** If the key is missing or duplicated, the Load cannot decide between insert and update, and the write fails or corrupts data. A null key collapses all records into one [^1][^2].
+
+**Using an update without resolving the target record.** If the incoming data lacks the record ID or a reliable lookup, the update targets the wrong record or fails. Resolve the target record through a lookup when the ID is absent [^1].
+
+**Treating an insert like an update.** An insert creates a new record and does not need an ID, while an update must resolve an existing record. Mixing the two produces duplicates or failures. An insert needs the required fields for the object [^1].
+
+The exam tip that ties these together: name the operation, then give the Load what it needs. An insert needs required fields, an update needs a resolved target, and an upsert needs a unique, populated external ID key.
+
+## What's Next
+
+This lesson covered how Data Mapper Loads handle Salesforce ID mapping and upsert logic. Lesson 50, Data Mapper Load Error Management During Create and Update, is the next scheduled lesson in the Data Mappers domain. It takes the writes from this lesson and shows what happens when they fail, covering how a Load reports errors during data creation and updates and how the consultant handles them.
+
+[^1]: Salesforce, "Omnistudio Data Mapper Load Overview (Managed Package)": https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_dataraptor_load_overview.htm&type=5
+[^2]: Salesforce, "Upsert Key on ID Field in Data Mapper Loads": https://help.salesforce.com/s/articleView?id=000699090&language=en_US&type=1
+[^3]: Salesforce, "Salesforce Certified OmniStudio Consultant Exam Guide": https://help.salesforce.com/s/articleView?id=005298970&language=en_US&type=1

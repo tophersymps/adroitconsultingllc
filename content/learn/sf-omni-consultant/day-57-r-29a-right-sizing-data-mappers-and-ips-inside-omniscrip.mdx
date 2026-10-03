@@ -1,0 +1,87 @@
+---
+title: "R-29a: Right-Sizing Data Mappers and IPs Inside OmniScripts: The Architecture View"
+slug: day-57-r-29a-right-sizing-data-mappers-and-ips-inside-omniscrip
+series: sf-omni-consultant
+lesson: 57
+excerpt: "Requirement r-29a in the Best Fit Solutions domain (15% of the Salesforce OmniStudio Consultant exam) is about choosing the right tool for each data operation. Lesson 57 of the Salesforce OmniStudio Consultant Certification course teaches you to name the business outcome first, then pick a Data Raptor for direct reads and writes or an Integration Procedure for orchestration and shared logic."
+date: "October 02, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [OmniStudio, Data Mappers, Integration Procedures, Architecture]
+---
+
+You reach for an Integration Procedure for every data operation because it is more powerful. Then you end up with a server round trip for a simple read, an extra layer nobody wants to test, and a solution that is harder to maintain than the problem it solved. The tool was never the question. The business outcome was, and you skipped it.
+
+That is the trap this lesson exists to break. Requirement r-29a, part of the Best Fit Solutions domain worth 15% of the Salesforce OmniStudio Consultant exam, asks you to provide guidance on the appropriate Data Mappers and Integration Procedures to use within an OmniScript to efficiently fetch, transform, and save data to meet specific business outcomes. The exam wants you to right-size the tool to the work, and the way to do that is to name the outcome before you pick the tool.
+
+## Deep Dive
+
+### Data Mappers and Integration Procedures are not interchangeable
+
+Data Mappers and Integration Procedures are not interchangeable; they serve different layers. A Data Raptor, whether a load or a save, moves data between Salesforce and the OmniScript's JSON with simple mapping and transformation. An Integration Procedure runs server-side, orchestrates multiple steps, calls external systems, and returns a result to the OmniScript.
+
+The architect chooses a Data Raptor when the work is a direct read or write, and an IP when the work needs orchestration, external calls, or transformation that should not run in the browser. Salesforce's guidance on when to use each frames the choice around the work. Use a single Data Mapper if you read data from SObjects or write data to SObjects but not both, if the SObjects have a defined relationship, or if you only have to work with JSON or XML data.[^1] Use an Integration Procedure if you must both read from and write to one or more SObjects, if the SObjects have no defined relationship, if transforming the data cannot be done with formulas alone, or if you read from or write to multiple data source types such as SObjects, CSV files, external objects, Apex classes, or REST APIs.[^1]
+
+### Right-sizing starts with the business outcome
+
+Right-sizing starts with the business outcome, not the tool. For each data operation the OmniScript performs, the architect should ask what the outcome is, what data is needed, and where that data lives. A simple load of a record from an ID is a Data Raptor. A multi-source aggregation that calls an external system and combines the results is an Integration Procedure.
+
+Naming the outcome first prevents the common mistake of reaching for an IP for every operation. The quiz tests this directly. One question describes an OmniScript that needs to load a single account record by ID and display a few fields, and asks for the best fit. The answer is a Data Raptor that loads the account by ID. An Integration Procedure that calls an external system adds a server round trip for a simple local read. A FlexCard that queries the account is a display component, not a data source for an OmniScript. A scheduled Apex job that caches the account is for background work, not an on-demand load. A Data Raptor is the direct, light way to load a single record by ID into the OmniScript's JSON.
+
+### The fetch side should be as narrow as the business allows
+
+The fetch side should be as narrow as the business allows. A Data Raptor or IP should return only the fields the OmniScript displays or uses, filtered to the specific records needed. Returning a wide result set or an unbounded list forces the OmniScript to carry data it does not use and risks hitting query row limits.
+
+The architect should design the fetch to return the minimum that satisfies the outcome. Salesforce's Data Mapper best practices make the same point: create targeted Data Mappers that only extract or load the data needed for one operation, and use relationship notation to pull data from related SObjects instead of adding extra extract steps.[^2] A fetch that returns a wide result set bloats the JSON, and the query risks hitting row limits as the data grows.
+
+A concrete example makes the discipline real. A service-repair journey needs the case number, the account name, and the assigned technician. The fetch should return exactly those three fields for the one case the user opened, filtered by the case ID. It should not return the full case object, the entire account record, or every case the account has ever filed. The narrow fetch keeps the JSON small, the query selective, and the journey fast. The wide fetch, by contrast, drags in data the journey never displays and risks a query that returns more rows than the limit allows.
+
+### The transform side belongs where it is cheapest and most maintainable
+
+The transform side belongs where the transformation is cheapest and most maintainable. Simple field mapping and light transformation can happen in a Data Raptor or in the OmniScript's JSON. Complex transformation, aggregation, or logic that must be consistent across multiple OmniScripts belongs in an Integration Procedure, where it is written once and reused.
+
+The architect should avoid duplicating transformation logic across scripts, because the copies drift. The quiz tests this directly. One question describes the same multi-source aggregation needed by three OmniScripts and a FlexCard, and asks where the logic should live. The answer is in a single shared Integration Procedure. Duplicating it inside each OmniScript creates drift. A Data Raptor inside one script is not shared. A custom setting that stores the result is wrong, because a custom setting stores configuration, not a live aggregation result. A single shared Integration Procedure centralizes the aggregation so all consumers reuse one tested artifact.
+
+Here is the drift in action. Three OmniScripts each compute a customer's total outstanding balance with their own copy of the formula. Someone changes the discount logic in one script and forgets the other two. Now the same customer sees three different balances depending on which journey they open, and nobody can say which is right. Move that aggregation into one shared Integration Procedure and the change is made once, in one place, and all three scripts pick it up. The shared IP is the single source of truth for the transform, and it is worth its complexity precisely because it is shared.
+
+### The save side must be transactional and correct
+
+The save side must be transactional and correct. A save Data Raptor writes to Salesforce under the user's context, and the architect must confirm the object, the fields, and the sharing model before the write. When a save involves multiple records or multiple objects that must succeed together, the architect should consider an Integration Procedure that handles the orchestration and error handling, so a partial write does not leave the data inconsistent.
+
+The quiz tests this directly. One question describes an OmniScript that must save a parent record and several child records that must all succeed together, and asks for the best approach. The answer is an Integration Procedure that orchestrates the multi-record save with error handling. A save Data Raptor that writes the parent only loses the children. A separate Data Raptor for each record with no coordination risks partial writes. A FlexCard that submits the records is a display component and does not orchestrate saves. An Integration Procedure can orchestrate the multi-record save and handle errors so a partial write does not leave the data inconsistent.
+
+The partial write is the danger. A journey saves an order header and three order lines. If the header saves and the third line fails, you now have an order with missing lines, and the data is inconsistent in a way that is hard to detect and harder to fix. An Integration Procedure orchestrates the whole save, and its error handling decides what happens when a step fails: roll back, retry, or surface a clear message. The save is transactional in the sense that matters, which is that a failure in one part does not leave the rest of the data in a broken state.
+
+### Reusability is the tiebreaker
+
+Reusability is the tiebreaker. If the same fetch, transform, or save is needed by more than one OmniScript, a FlexCard, or a future integration, it belongs in a shared Integration Procedure. If it is used once inside a single script, a Data Raptor is the lighter and simpler choice.
+
+The architect should count the consumers before deciding, because a shared IP is only worth its complexity when it is actually shared. A shared IP is written and tested once, and every consumer reuses the same tested artifact. A Data Raptor used once inside a single script is the lighter choice, with no extra server round trip and no extra layer to maintain. Count the consumers, then decide.
+
+The count is the deciding number. One OmniScript needs a single record loaded by ID. That is one consumer, and a Data Raptor is the right tool. Four OmniScripts and a FlexCard all need the same multi-source aggregation. That is five consumers, and a shared Integration Procedure is the right tool. The same logic applies to a save: one script writing one record is a Data Raptor, while a save that must coordinate a parent and its children, and that other journeys will reuse, belongs in an IP. Count the consumers, and the tool choice stops being a guess.
+
+## Config Walkthrough
+
+Apply the right-sizing discipline in four steps.
+
+1. For each data operation, write the business outcome, the data needed, and where the data lives. Then choose a Data Raptor for direct reads and writes, and an Integration Procedure for orchestration, external calls, or shared transformation. Name the outcome before you pick the tool.
+2. Narrow every fetch. Return only the fields the OmniScript uses, filter to the specific records needed, and add a row limit where the business allows. A narrow fetch keeps the JSON small and the query inside the limits.
+3. Place transformation where it is cheapest and most maintainable. Keep light mapping in the Data Raptor or the JSON, and put complex or shared logic in a single reusable Integration Procedure. Do not duplicate the same transform across scripts.
+4. Design the save for correctness. Confirm the object, fields, and sharing model, and use an Integration Procedure for multi-record or multi-object saves that must succeed together, so a partial write does not leave the data inconsistent.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, using an Integration Procedure for every data operation because it is more powerful. A simple read or write becomes a server round trip with no benefit, and the extra layer is harder to test and maintain. Name the outcome first, and use a Data Raptor for direct reads and writes.
+
+Second, returning wide result sets from a fetch. The OmniScript carries data it never uses, the JSON is bloated, and the query risks hitting row limits as the data grows. Return only the fields the OmniScript uses, filtered to the specific records needed.
+
+Third, duplicating the same transformation inside several OmniScripts instead of sharing an Integration Procedure. The copies drift, and a change to the logic must be made in multiple places. Put shared transformation in a single reusable Integration Procedure.
+
+## What's Next
+
+The next lesson, lesson 58, is Efficient Fetch, Transform, and Save at the Solution Level, requirement r-29b. That lesson takes the tool choices you just made and connects them into a whole-solution pattern, teaching you to trace every data element from source to destination and cut anything that is fetched but never used.
+
+[^1]: Salesforce Help, "When to Use Omnistudio Data Mappers and Integration Procedures," https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_or_integration_procedure_8166.htm&language=en_US&type=5
+[^2]: Salesforce Help, "Omnistudio Data Mapper Best Practices," https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_dataraptor_best_practices_47412.htm&type=5

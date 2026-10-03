@@ -1,0 +1,101 @@
+---
+title: "R-12b: Branching OmniScript Design and Multi-Language Support"
+slug: day-24-r-12b-branching-omniscript-design-and-multi-language-sup
+series: sf-omni-consultant
+lesson: 24
+excerpt: "Requirement r-12b in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) asks you to recommend effective branched OmniScript designs that align with business processes and user journeys, including multi-language support. Lesson 24 of the Salesforce OmniStudio Consultant Certification course covers the two branching mechanisms, how to drive branches from the data JSON, and how multi-language support interacts with every branch."
+date: "October 02, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [OmniStudio, OmniScripts, Branching, Multi-Language]
+---
+
+Picture two customers starting the same flow. One is a business, one is a consumer. They share the first screen, and then their needs diverge completely. If you built this as a single linear OmniScript, you would either force both of them through every screen or bury the differences in a tangle of conditions. Neither is good. Branching is the answer, and this lesson is about choosing it well.
+
+A linear OmniScript walks every user down the same path. A branched OmniScript lets different users take different paths based on their data, which is what most real business processes need. Requirement r-12b from the OmniScripts domain, worth 17% of the Salesforce OmniStudio Consultant exam, asks you to recommend effective branched OmniScript designs that align with defined business processes and user journeys, including multi-language support. The exam tests whether you can choose the right branching mechanism, drive branches from the data JSON correctly, and keep every branch complete, including its translations.
+
+The core idea is that branching is a design decision with two mechanisms, and the choice between them is about granularity. A conditional Step hides or shows an entire Step, which is right when a whole phase of the journey does not apply. A conditional Element hides a single field or block, which is right when only part of a Step varies. Choose the coarser mechanism that still matches the journey, because too many fine-grained conditions are hard to maintain.
+
+## Deep Dive
+
+### The two branching mechanisms: conditional Steps and conditional Elements
+
+Branching means the OmniScript takes different paths through its Steps based on data. The two mechanisms are conditional Steps and conditional Elements. Salesforce's guidance on conditional display covers both: with the Conditional View property, you can hide an element or a group of elements in a block or step based on certain conditions, and every step, block, or element supports at least one conditional view.[^1]
+
+A conditional Step hides or shows an entire Step. This is right when a whole phase of the journey does not apply to a particular user. If a business customer and a consumer customer have entirely different journeys after a shared first Step, then the business phase and the consumer phase are each a conditional Step, gated on the choice value.
+
+A conditional Element hides a single field or block. This is right when only part of a Step varies. If most of a Step applies to everyone but one field only applies to some users, that field is a conditional Element, and the rest of the Step stays visible.
+
+The exam tests the granularity choice directly. The quiz describes an OmniScript with a business or consumer choice in the first Step, where the rest of the flow differs entirely between the two, and asks what the cleanest branching design is. The answer is to make the two divergent phases conditional Steps, each gated on the choice value. When an entire phase differs, a conditional Step is the right granularity: one condition hides or shows the whole Step. Making every Element conditional creates many hard-to-maintain conditions, duplicating the OmniScript doubles maintenance, and a Data Mapper does not control UI branching.
+
+The lesson is to choose the coarser mechanism that still matches the journey. If a whole phase differs, hide the whole Step with one condition. If only part of a Step varies, hide the individual Element. The trap is using a conditional Element where a conditional Step is the right granularity, which means hiding ten fields one by one with ten conditions when one condition on the whole Step would do.
+
+### Branches are driven by the data JSON
+
+Branches are driven by the data JSON, so the branch condition must reference a value that exists before the branch point. Design the decision data to be captured early. For example, if a business versus consumer choice determines the rest of the flow, capture that choice in the first Step so every later branch can read it. A branch that depends on data captured later in the flow is a design error.
+
+The reason is timing. Conditions evaluate against the data JSON at render time. If the source field is captured in a Step that comes after the branch point, it is still empty when the condition evaluates, so the branch never triggers. The fix is to capture the decision value before the branch point.
+
+The quiz tests this failure directly. It describes a branch condition that references a field captured in a Step that comes after the branch point, and asks what the result is. The answer is that the branch never triggers because the field is empty when the condition evaluates. Conditions evaluate against the data JSON at render time. If the source field is captured later, it is still empty when the condition evaluates, so the branch never triggers. The fix is to capture the decision value before the branch point.
+
+The lesson is that the decision data that drives a branch has to be captured early, before any branch that depends on it. When you design a branched OmniScript, identify every decision value, and make sure each one is captured in a Step that comes before the branches that read it. The first Step is often the right home for the decision that drives the rest of the flow.
+
+### Every branch must converge or terminate cleanly
+
+Every branch must converge or terminate cleanly. A user who takes the business path and a user who takes the consumer path should both reach a defined end state, and the data JSON should reflect the path taken so downstream save logic knows what happened. Plan the terminal Step and the final data shape for each branch, not just the happy path.
+
+The reason is that a branch is not complete until it ends. A consultant who designs the happy path and forgets the other branches ships an OmniScript that works for one type of user and breaks for everyone else. Each branch needs a defined end state, and the data JSON needs to record which path was taken, so the save logic can act on the right data.
+
+The lesson is to plan every branch's end before you build. For each branch, name the terminal Step and the final data shape. Confirm the data JSON reflects the path taken, so downstream logic knows what happened. A branch that does not converge or terminate cleanly is a defect, even if the happy path works.
+
+### Multi-language support interacts with branching
+
+Multi-language support interacts with branching: translated labels must exist for every Element on every branch. A branch that only exists in one locale's journey is a defect. Keep the translation set complete across all branches, and test each branch in each supported language, because a missing translation on a rarely used branch is easy to miss.
+
+The quiz tests this directly. It describes a consultant who adds a new branch for a rarely used customer type, and asks what must be done for multi-language support. The answer is to add a translation for every Element on the new branch for every supported locale. Multi-language support is per Element, so every Element on the new branch needs a translation for every supported locale. There is no branch-level translation and no inheritance that covers new Elements.
+
+The lesson is that multi-language support is per Element, and branching multiplies the translation surface. Every Element on every branch needs a translation for every supported locale. A rarely used branch with a missing translation leaks a hardcoded label to users in other locales, and because the branch is rarely used, the gap is easy to miss. Test each branch in each supported language to catch it.
+
+### Avoid deep nesting
+
+Avoid deep nesting. A chain of five nested conditions is hard to read, hard to test, and hard to explain to a reviewer. Prefer flattening the decision into an early captured value and using a small number of well-named conditions. If the logic is genuinely complex, consider whether a child OmniScript or an Integration Procedure should own part of the decision instead of the OmniScript UI.
+
+The reason is maintainability. A deeply nested set of conditions is a place where bugs hide, because the behavior of the whole depends on the interaction of many conditions. Flattening the decision into an early captured value means the branches are driven by a small number of well-named conditions, each of which is easy to read and test.
+
+The lesson is that complexity belongs in the right layer. If the branching logic is genuinely complex, the OmniScript UI is not the right home for all of it. A child OmniScript can own a sub-journey, and an Integration Procedure can own server-side decision logic. Keep the OmniScript UI's branching simple, and push genuine complexity to the layer built to hold it.
+
+### Test every branch with representative data
+
+Test every branch with representative data. Branching bugs surface only when a specific combination of values is present, so build a test matrix that covers each branch, each branch boundary, and the empty-data case. A branch that works for the happy path but breaks on a boundary value is a common production failure.
+
+The reason is that a branch is only exercised when its condition is true, and a condition is only true for specific data. The happy path exercises one branch. The other branches are only exercised when the right combination of values is present, which means they are easy to skip and easy to break. A test matrix forces you to run each branch with representative data, including the boundary values and the empty-data case.
+
+The lesson is that branching requires deliberate testing. Build a test matrix that runs the OmniScript once per branch with representative data, including boundary values and empty data, and confirm each branch reaches its intended end state. A branch that works for the happy path but breaks on a boundary value is a common production failure, and the test matrix is what catches it.
+
+## Config Walkthrough
+
+Apply the branching design with these four steps.
+
+1. To make a Step conditional, select the Step, open its properties, and add a Condition that references a data JSON value captured earlier in the flow. Confirm the value exists before the branch point, because a condition on a field captured later never triggers. Use a conditional Step when a whole phase of the journey does not apply.
+
+2. To make a single Element conditional, select the Element and add a Condition the same way, so only that Element hides while the rest of the Step stays visible. Use a conditional Element when only part of a Step varies. Choose the coarser mechanism that still matches the journey, and avoid hiding ten fields one by one when one condition on the whole Step would do.
+
+3. Add translations for every Element on every branch. Open each Element's language settings and add the translated label for each supported locale, then verify no branch is missing a translation. Because multi-language support is per Element, every Element on every branch needs a translation for every supported locale, and there is no branch-level translation or inheritance.
+
+4. Build a test matrix that runs the OmniScript once per branch with representative data, including boundary values and empty data, and confirm each branch reaches its intended end state. Confirm the data JSON reflects the path taken so downstream save logic knows what happened.
+
+## Exam Traps
+
+Three traps account for most misses on this objective.
+
+First, using a conditional Element where a conditional Step is the right granularity. Hiding ten fields one by one with ten conditions is harder to maintain than hiding the whole Step with one condition. The exam will describe a scenario where an entire phase differs and expect a conditional Step, not a set of conditional Elements. Choose the coarser mechanism that matches the journey.
+
+Second, branching on data captured later in the flow. The branch condition evaluates before the source field is populated, so the branch never triggers. The exam will describe a branch that references a field captured after the branch point, and the correct answer is that the branch never triggers because the field is empty when the condition evaluates. Capture the decision value early, before the branch point.
+
+Third, adding a branch without a translation for every Element on it. A rarely used branch with a missing translation leaks a hardcoded label to users in other locales. The exam will describe a new branch and expect a translation for every Element on it for every supported locale. Keep the translation set complete across all branches.
+
+## What's Next
+
+The next lesson, lesson 25, is Selecting Data Mappers and Integration Procedures Inside an OmniScript, requirement r-13a. That lesson moves from how the OmniScript is structured to how it moves data, covering when a Data Mapper is enough and when an Integration Procedure is required, and how to choose the right server-side tool for the work the journey has to do.
+
+[^1]: Salesforce Help, "Conditionally Display Omniscript Elements," https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_conditionally_display_elements_using_the_conditional_view_property_19389.htm&type=5

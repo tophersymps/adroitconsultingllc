@@ -1,0 +1,112 @@
+---
+title: "R-19b: SOAP Endpoints and Advanced Authentication Scenarios"
+slug: day-38-r-19b-soap-endpoints-and-advanced-authentication-scenari
+series: sf-omni-consultant
+lesson: 38
+excerpt: "Lesson 38 of the Salesforce OmniStudio Consultant Certification course covers the SOAP side of the protocol decision. You learn how an HTTP Action sends a SOAP envelope as a POST body, how WS-Security places credentials inside the envelope, and why mapping a SOAP response is harder than mapping JSON. This lesson is part of the Integration Procedures domain, worth 17% of the exam."
+date: "October 02, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [OmniStudio, Integration Procedures, SOAP, WS-Security]
+---
+
+Lesson 37 covered REST, where the use case drives the method and the request surface. Requirement r-19b asks you to explain the same configuration and management for SOAP endpoints and for advanced authentication scenarios. SOAP is the legacy counterpart to REST, and it is still common in enterprise systems such as older ERP and banking platforms. The exam wants you to know when SOAP is the right choice, how an HTTP Action sends a SOAP call, where WS-Security credentials live, and why mapping a SOAP response is harder than mapping JSON. This is still the Integration Procedures domain, worth 17% of the exam.
+
+## Deep Dive
+
+### SOAP is XML-based, operation-oriented, and chosen only when the endpoint requires it
+
+SOAP endpoints are XML-based and operation-oriented, and they are still common in legacy enterprise systems such as older ERP and banking platforms [^1]. The consultant chooses SOAP only when the external system exposes a SOAP API and not a REST one, because SOAP is heavier and harder to map than REST. The protocol decision is dictated by what the endpoint offers, not by preference.
+
+The operation-oriented model is what distinguishes SOAP from REST. Where REST treats data as resources acted on by standard HTTP methods, SOAP treats the call as an operation with a name and parameters. The operation is defined in the endpoint's WSDL, the Web Services Description Language document that describes the service, its operations, and the structure of the messages. The consultant reads the WSDL to identify the operation name and the envelope structure before configuring the call [^2].
+
+The exam frames this as a use-case decision. A customer's legacy system exposes only a SOAP API, so the consultant configures the HTTP Action to match the SOAP contract. That means a POST with an XML SOAP envelope as the request body. GET, DELETE, and PUT do not match the SOAP contract, and the body must be XML, not JSON or form-encoded [^1].
+
+### A SOAP call is a POST whose body is an XML envelope
+
+A SOAP call is a single HTTP POST whose body is an XML envelope containing the operation and its parameters [^1]. The HTTP Action sends the SOAP envelope as the request body, and the response is an XML envelope that must be parsed and mapped into the IP's output variables.
+
+The envelope is the defining structure of SOAP. It wraps the operation in a SOAP body, and it can carry a SOAP header for metadata such as security. The consultant builds the envelope to match the WSDL, including the operation name, the namespace, and the parameters the operation expects. Because the envelope is XML, the request body must be XML, and the Content-Type must reflect that. Treating a SOAP endpoint like a REST endpoint, using GET or a JSON body, is rejected by the endpoint because it does not match the SOAP contract [^1].
+
+The exam tests this directly. A customer's legacy system exposes only a SOAP API, and the consultant must configure the HTTP Action. Use POST with an XML SOAP envelope as the request body, and nothing else. GET, DELETE, and PUT do not match the SOAP contract, and the body must be XML, not JSON or form-encoded [^1].
+
+### SOAP authentication: WS-Security and basic auth over HTTPS
+
+SOAP authentication is often WS-Security, which embeds a username token or a security header inside the SOAP envelope, or it can use basic auth over HTTPS [^3]. The consultant must confirm which mechanism the endpoint expects, because the token may need to live inside the XML body rather than in an HTTP header.
+
+WS-Security is the distinguishing case. It places the credentials in a security header inside the SOAP envelope, which is part of the request body. The consultant must place the credentials there, not in an HTTP header, not in a query parameter, and not in the output variables. An HTTP header, a query parameter, or an output variable would not satisfy the endpoint's expectation, because the endpoint reads the credentials from the security header inside the envelope [^3].
+
+The exam tests this directly. A SOAP endpoint expects WS-Security credentials inside the envelope. The consultant must place the credentials inside the SOAP envelope's security header in the request body. Inside the SOAP envelope's security header in the request body is where the endpoint reads them. An HTTP header, a query parameter, or an output variable would not satisfy the endpoint's expectation [^3].
+
+### Mapping SOAP responses is harder than mapping JSON
+
+Mapping SOAP responses is harder than mapping JSON because the XML is verbose and namespaced [^4]. The consultant uses a Data Mapper Transform to extract the relevant values from the envelope, strip namespaces, and convert the result into the output variables the client component needs.
+
+The verbosity and the namespaces are what make SOAP mapping harder. A SOAP response wraps the actual data in envelope and body elements, and every element carries namespace prefixes. The consultant cannot map the raw envelope directly to output variables, because the namespaced, verbose XML does not match the client's expected structure. The data must be extracted and reshaped first, which is exactly what the Data Mapper Transform does [^4].
+
+The exam tests this directly. Mapping a SOAP response is typically harder than mapping a REST JSON response because SOAP responses are verbose, namespaced XML that must be extracted and reshaped. REST JSON is more compact and maps more directly. The other options misstate the nature of SOAP responses: they are not smaller, they do not use binary encoding, and they do have structure [^4].
+
+### Advanced authentication scenarios
+
+Advanced authentication scenarios go beyond the standard named credential flows. They include OAuth 2.0 with custom scopes, client credentials with a custom token endpoint, and multi-step flows where a token must be fetched before the data call [^3]. The named credential handles the standard flows, but a custom flow may require a separate call to obtain the token and then pass it to the data call.
+
+The multi-step flow is the important case. Some external systems require a token to be obtained from a token endpoint before the data call can be made, and the token must then be passed to the data call, often as a header. In an Integration Procedure, this can mean an HTTP Action that calls the token endpoint, followed by logic that captures the token from the response, followed by the data call that uses it. The named credential handles the standard OAuth flows automatically, but a custom flow with a non-standard token endpoint or a non-standard grant may need the explicit two-call pattern [^3].
+
+The consultant's job is to recognize when the standard flow is enough and when it is not. If the external system's developer portal describes a standard OAuth 2.0 flow, the named credential handles it. If the flow is custom, such as a token that must be fetched and then passed manually, the IP must implement the multi-step pattern. The decision is driven by the external system's contract, not by preference.
+
+### The use case determines the approach
+
+The use case determines the approach. A modern cloud API is almost always REST with OAuth, while a legacy on-premise system is often SOAP with WS-Security or basic auth [^1]. The consultant's guidance is to match the endpoint's native protocol rather than force a REST-style call onto a SOAP system.
+
+This is the organizing principle of the requirement. The consultant does not choose SOAP because it is familiar or REST because it is modern. The consultant reads the endpoint's contract, identifies the native protocol, and configures the HTTP Action to match it. A SOAP system gets a POST with an XML envelope and WS-Security; a REST system gets resource methods with OAuth. Forcing one style onto the other is the fastest way to a failed integration [^1].
+
+Error handling deserves the same attention for SOAP as it does for REST. A SOAP call can fail at the transport level, with an HTTP error code, or at the application level, with a SOAP fault embedded in the response envelope. A SOAP fault is a structured error inside the XML, and it carries a fault code and a fault string that describe what went wrong. The consultant should route both kinds of failure to an error path in the IP, so a transport failure and a SOAP fault are distinguishable. A call that returns a SOAP fault is not a network problem; it is the endpoint telling you the request was understood but rejected, and the fault string is the diagnostic. Planning this error path at design time means a failed SOAP call surfaces with the detail needed to fix it, rather than as a generic IP failure [^1].
+
+### A worked example: a legacy banking lookup
+
+Put the pieces together with a concrete scenario. A customer wants an Omniscript to look up a customer's balance from a legacy banking platform that exposes only a SOAP API. The consultant starts by obtaining the WSDL and reading it to identify the operation name, the namespace, and the parameters the operation expects. The WSDL shows an operation named `getBalance` that takes a customer identifier and returns a balance [^2].
+
+The consultant creates a named credential for the SOAP endpoint and configures the authentication the platform expects. The platform uses WS-Security, so the credentials must be embedded in a security header inside the SOAP envelope, not in an HTTP header. The named credential holds the endpoint and the identity details, and the consultant confirms the credentials will be placed inside the envelope where the platform reads them [^3].
+
+Next, the consultant adds an HTTP Action with a POST method and builds the SOAP envelope as the request body. The envelope includes the operation name, the namespace, and the customer identifier mapped from the IP input variable. Because the call is SOAP, the body is XML and the Content-Type reflects that. The consultant maps the customer identifier into the envelope's parameter element, matching the WSDL [^1].
+
+On the response side, the platform returns a SOAP envelope with the balance wrapped in verbose, namespaced XML. The consultant adds a Data Mapper Transform action to parse the envelope, strip the namespaces, and extract the balance value into the output variable the Omniscript expects. Without the transform, the client component would receive the raw envelope and could not read the balance [^4].
+
+The use case determined the approach. The platform exposed only SOAP, so the call is a POST with an XML envelope. The platform used WS-Security, so the credentials live inside the envelope. The response is verbose XML, so a Data Mapper Transform reshapes it. Each decision followed from the endpoint's native protocol, not from a preference for one style over another.
+
+Try it yourself. In a sandbox, obtain a public SOAP service's WSDL, configure an HTTP Action with a POST and an XML envelope, and use a Data Mapper Transform to extract a value from the response. Confirm from the debug log that the request carried the envelope and that the output variable received the extracted value.
+
+## Config Walkthrough
+
+The SOAP configuration flow maps onto four concrete steps.
+
+1. Confirm the external system exposes a SOAP API and obtain the WSDL to identify the operation name and the envelope structure. The WSDL is the source of truth for the operation and the message shape [^2].
+
+2. Create a named credential for the SOAP endpoint and configure the authentication the endpoint expects, such as basic auth or WS-Security. Confirm whether the credentials belong in an HTTP header or inside the envelope [^3].
+
+3. Add an HTTP Action with a POST method and build the SOAP envelope as the request body, including the operation and its parameters. Match the namespace and the Content-Type to the WSDL [^1].
+
+4. Add a Data Mapper Transform action to parse the XML response, strip namespaces, and map the values into the output variables. Extract the relevant values from the envelope before the data reaches the client component [^4].
+
+Test the IP from the Preview tab with a real payload and inspect the debug log to confirm the request reached the endpoint and the output variables received the expected values before you activate the version.
+
+## Exam Traps
+
+Three traps dominate this requirement, and each is a specific, avoidable mistake.
+
+**Treating a SOAP endpoint like a REST endpoint and using GET or a JSON body.** SOAP requires a POST with an XML envelope, and anything else is rejected by the endpoint. Match the SOAP contract exactly [^1].
+
+**Placing WS-Security credentials in an HTTP header when the endpoint expects them inside the SOAP envelope.** The call authenticates against the wrong surface and fails with an auth error. Place the credentials inside the envelope's security header in the request body [^3].
+
+**Mapping the raw XML envelope directly to output variables.** The namespaced, verbose XML does not match the client's expected structure, so the data must be extracted and reshaped first. Use a Data Mapper Transform to parse and reshape the response [^4].
+
+The exam tip that ties these together: match the endpoint's native protocol. A SOAP system gets a POST with an XML envelope and WS-Security; a REST system gets resource methods with OAuth. Forcing one style onto the other is the fastest way to a failed integration.
+
+## What's Next
+
+This lesson covered SOAP endpoints and advanced authentication scenarios. Lesson 39, Data Mapper Transform and Set Values Actions in an IP, moves from the external call to the data shaping that happens around it, showing how to transform, filter, and structure data before it reaches the client-side component. That is the next scheduled lesson in the Integration Procedures domain.
+
+[^1]: Salesforce, "Salesforce Certified OmniStudio Consultant Exam Guide": https://help.salesforce.com/s/articleView?id=005298970&language=en_US&type=1
+[^2]: Salesforce, "SOAP Services: Defining a Class from a WSDL Document" (Apex Developer Guide): https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_callouts_wsdl2apex.htm
+[^3]: Salesforce, "Create Named Credentials and External Credentials": https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.nc_named_creds_and_ext_creds.htm&type=5
+[^4]: Salesforce, "Integration Procedure Actions": https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_integration_procedure_actions_50165.htm&type=5

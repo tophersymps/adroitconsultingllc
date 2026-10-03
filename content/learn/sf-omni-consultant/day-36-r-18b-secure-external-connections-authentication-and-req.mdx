@@ -1,0 +1,105 @@
+---
+title: "R-18b: Secure External Connections: Authentication and Request/Response Mapping"
+slug: day-36-r-18b-secure-external-connections-authentication-and-req
+series: sf-omni-consultant
+lesson: 36
+excerpt: "Lesson 36 of the Salesforce OmniStudio Consultant Certification course goes deeper into how an Integration Procedure connects securely to an external system. You learn how named credentials hold OAuth 2.0 and basic authentication, and how request and response mapping shape the call to match an external contract. This lesson is part of the Integration Procedures domain, worth 17% of the exam."
+date: "October 02, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [OmniStudio, Integration Procedures, Named Credentials, OAuth 2.0]
+---
+
+Lesson 35 gave you the high-level shape of the HTTP Action. Requirement r-18b asks you to go one level deeper and explain how that action connects securely, which means understanding named credentials as the security boundary, the authentication protocols they hold, and the request and response mapping that turns a raw call into data a client component can read. This is still the Integration Procedures domain, worth 17% of the exam, and the questions here reward consultants who can say not just what to configure but why the configuration is secure. The recurring theme is that security is decided in the named credential, and data shape is decided in the mapping, and the two never mix.
+
+## Deep Dive
+
+### Named credentials are the security boundary for external calls
+
+A named credential is the security boundary for an external call. It stores the endpoint, the authentication protocol, and the tokens, and it keeps secrets out of the IP and out of the org's Apex and Flow code [^1]. The HTTP Action binds to a named credential, so the credential is the single place where connection security is defined. When the IP runs, the platform uses the credential to authenticate the call, and the IP itself never sees the secret.
+
+The reason this matters for security is that it removes the secret from every place it could leak. If a client secret lived in the IP, it would be part of the IP definition, visible to anyone who could read the IP and exportable with the metadata. If it lived in a custom setting, it would sit in a second location that could be exported or logged. The named credential centralizes the secret, and the platform manages the token exchange and refresh on the org's behalf [^2]. This is the same boundary that protects Apex callouts, where a named credential as the callout endpoint means the code does not handle authentication at all [^3].
+
+The exam draws a hard line here. The client ID and client secret for an OAuth 2.0 client credentials grant belong in the named credential, not in the request body, not in a custom label, and not in the output variables. The request body carries data, custom labels are for user-facing text, and output variables hold results. The named credential is the security boundary that holds the client ID, the client secret, the token endpoint, and the scopes, and it handles the token exchange [^1].
+
+### OAuth 2.0 is the standard flow for external REST endpoints
+
+OAuth 2.0 is the most common authentication flow for external REST endpoints, and the named credential is where it is configured. The credential holds the client ID, the client secret, the token endpoint, and the scopes, and the platform handles the token exchange and refresh [^1]. The consultant's job is to configure the flow correctly and to understand which grant type the external system expects.
+
+The grant type matters because it changes what the credential must hold and how the token is obtained. A client credentials grant is used when the integration acts as a service, exchanging its own client ID and secret for a token with no user involved. An authorization code grant involves a user and a redirect, which is heavier and used when the call must act on behalf of a specific user. The external system's developer portal tells you which grant it supports, and the named credential is configured to match. Getting the grant wrong means the token exchange fails before the data call is ever made.
+
+The security advantage of OAuth 2.0 is that the raw credentials are exchanged for a token, and that token is what travels with the request. The token is refreshed by the platform, so the client secret is not sent on every call. This is the strongest choice when an endpoint offers both OAuth 2.0 and basic authentication, because basic authentication sends the username and password with every request and is therefore more exposed [^1]. The exam tests this directly: when an endpoint offers both, the strongest choice is OAuth 2.0, because it uses token exchange and refresh instead of sending credentials on every call.
+
+### Basic authentication is simpler but more exposed
+
+Basic authentication sends a username and password with each request. It is simpler than OAuth 2.0 because there is no token exchange, but it exposes the credentials on every call, so it should only be used when the external system requires it and the transport is HTTPS [^1]. The named credential still stores the credentials, so they are not in the IP, but the exposure profile is different from OAuth.
+
+The consultant's guidance is to prefer OAuth 2.0 when the endpoint offers it, and to fall back to basic only when the endpoint requires it. The reason is not that basic is broken, but that it is more exposed. Every request carries the credentials, so a compromised request or a misconfigured log can leak them. OAuth limits the exposure to the token exchange and refreshes the token, so the raw credentials are not in the request path. When the endpoint is internal and offers no authentication, that is a different conversation about whether the call should be allowed at all, not a reason to skip authentication on a call that needs it.
+
+### Request mapping shapes the outgoing call to the external contract
+
+Request mapping shapes the outgoing call. It decides the HTTP method, the headers, the query parameters, and the body structure, and it must match the external contract exactly [^4]. A mismatch in the content type or a field name produces a 400, or worse, a silent data loss where the endpoint accepts the call but ignores the data.
+
+The consultant maps the IP input variables onto the request surfaces. For a GET, the data travels in query parameters. For a POST or PUT, it travels in the body. The Content-Type header must match what the endpoint expects, because an endpoint that expects JSON will reject or misread a form-encoded body. The field names in the body must match the contract, because the endpoint reads them by name. Every one of these decisions is driven by the external system's documentation, not by what is convenient in the IP.
+
+The exam trap here is subtle. A GET call that returns a 400 because the filter never reaches the endpoint is almost always a request-mapping problem: the filter was placed in the request body instead of query parameters. GET carries data in query parameters, and a body on a GET is ignored or rejected, so the endpoint never sees the filter. The named credential, the response mapping, and the timeout would not cause this specific failure, because the request was sent but the data was in the wrong surface [^4].
+
+### Response mapping shapes the incoming payload for the client
+
+Response mapping shapes the incoming payload into the IP's output variables. This often requires a Data Mapper Transform action to flatten nested JSON, rename fields, or convert types before the data reaches the client-side component [^5]. The mapping is driven by what the client component actually needs, not by what the external system happens to return.
+
+The classic failure is mapping a nested JSON response directly into flat output variables. The client component then receives a structure it cannot read, and the failure appears only at render time, when the fields show up empty. The fix is to add a Data Mapper Transform action to reshape the response, flattening the nested structure and renaming the fields into the flat output variables the component expects [^5]. The HTTP method, the timeout, and the authentication protocol have nothing to do with how the response is structured, so none of them fix the problem.
+
+The exam tests this directly. A consultant maps a nested JSON response directly into flat output variables and the client component shows empty fields. Add a Data Mapper Transform action to reshape the response, not to change the HTTP method, increase the timeout, or switch to basic authentication [^5].
+
+### Security best practices for the mapping layer
+
+The mapping layer has its own security rules. Never log the full request or response when it contains tokens or personally identifiable information. Never pass secrets through output variables. Always validate that the response schema matches the contract before relying on a field, because a field that is absent in a real response is a runtime failure, not a mapping error [^4].
+
+These rules protect against the two ways integrations leak data. The first is logging: a debug log that captures the full request body can capture a token or a customer's personal data, and that log is then stored where it can be read. The second is over-exposure: passing a secret through an output variable sends it to the client component, where it is no longer protected by the server boundary. The third rule is about resilience: a response that omits a field you assumed was always present fails at runtime, and the failure looks like a mapping bug when it is really a contract mismatch. Validating the schema, or handling the absent field explicitly, turns that silent failure into a handled one.
+
+### A worked example: connecting to a customer data platform
+
+Put the pieces together with a concrete scenario. A customer wants an Omniscript to look up a customer's profile from an external customer data platform, and the platform exposes a REST endpoint that authenticates with OAuth 2.0 using a client credentials grant. The consultant starts by creating a named credential. In the external credential, they select OAuth 2.0 as the authentication protocol. In the named credential, they enter the platform's base URL, the client ID, the client secret, the token endpoint, and the scopes the platform requires. The platform handles the token exchange and refresh, so the IP never sees the token [^1].
+
+Next, the consultant adds an HTTP Action to the IP and selects the named credential. The action applies the authentication automatically, so the request carries the token without any configuration in the action itself. The consultant maps the IP input variable that holds the customer identifier into the request, matching the field name and the query parameter the platform's documentation specifies. On the response side, the platform returns a nested JSON object with the customer's profile. The consultant adds a Data Mapper Transform action after the HTTP Action to flatten the nested object and rename the fields into the flat output variables the Omniscript expects [^5].
+
+The result is a secure, readable integration. The secret lives only in the named credential, the request matches the contract, and the response is reshaped before it reaches the client. If the platform later changes its base URL or rotates its client secret, the change happens in the named credential, and the IP keeps working without an edit.
+
+Try it yourself. In a sandbox, create a named credential against a public API that supports OAuth 2.0, add an HTTP Action that calls it, and map the response through a Data Mapper Transform. Confirm from the debug log that the request carried the token and that the output variables received the reshaped data.
+
+## Config Walkthrough
+
+The secure connection flow maps onto four concrete steps.
+
+1. Create a named credential with the external endpoint and select OAuth 2.0, then enter the client ID, the client secret, the token endpoint, and the scopes from the external system's developer portal. Define the external credential that names the protocol, then the named credential that references it and supplies the endpoint and identity details [^1].
+
+2. In the HTTP Action, select the named credential and confirm the authentication protocol is applied to the request automatically. The action does not re-implement authentication; it delegates to the credential, so the token exchange and refresh happen on the platform [^2].
+
+3. Map the request body and headers to match the external contract, including the Content-Type header the endpoint expects. Match the field names and the data surface, query parameters for a GET and the body for a POST or PUT, to what the endpoint documentation specifies [^4].
+
+4. Add a Data Mapper Transform action after the HTTP Action to reshape the response into the output variables the client component expects. Flatten nested structures, rename fields, and convert types so the component receives data it can read [^5].
+
+Test the IP from the Preview tab with a real payload and inspect the debug log to confirm the request reached the endpoint and the output variables received the expected values before you activate the version.
+
+## Exam Traps
+
+Three traps dominate this requirement, and each is a specific, avoidable mistake.
+
+**Using basic authentication when the external system supports OAuth 2.0.** Basic auth sends credentials on every call and is more exposed. OAuth with token refresh is the stronger choice when the endpoint offers it, because the raw credentials are exchanged for a token and are not sent on every request [^1].
+
+**Storing the client secret in the IP or in a custom setting instead of the named credential.** The secret then lives in multiple places and can leak through logs or exports. The named credential is the single security boundary, and the secret belongs there and nowhere else [^1].
+
+**Mapping the response directly to output variables without a transform when the payload is nested.** The client component receives a structure it cannot read, and the failure appears only at render time. Add a Data Mapper Transform to reshape the response before it reaches the output variables [^5].
+
+The exam tip that ties these together: match the external contract exactly on the request side and reshape on the response side. The request must be what the endpoint expects; the response must be what your client component can read.
+
+## What's Next
+
+This lesson covered the security boundary and the mapping surfaces of an external call. Lesson 37, REST Endpoints: Use-Case-Driven HTTP Action Configuration and Auth, applies that foundation to REST specifically, showing how the use case drives the method, the request surface, and the authentication for a REST endpoint. That is the next scheduled lesson in the Integration Procedures domain.
+
+[^1]: Salesforce, "Create Named Credentials and External Credentials": https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.nc_named_creds_and_ext_creds.htm&type=5
+[^2]: Salesforce, "Create or Edit an External Credential": https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.nc_create_edit_external_credential.htm&type=5
+[^3]: Salesforce, "Named Credentials as Callout Endpoints" (Apex Developer Guide): https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_callouts_named_credentials.htm
+[^4]: Salesforce, "Build Simple Integration Procedures" (Trailhead module): https://trailhead.salesforce.com/content/learn/modules/omnistudio-integration-procedures/build-simple-integration-procedures
+[^5]: Salesforce, "Salesforce Certified OmniStudio Consultant Exam Guide": https://help.salesforce.com/s/articleView?id=005298970&language=en_US&type=1

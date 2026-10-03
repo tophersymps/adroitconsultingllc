@@ -3005,9 +3005,754 @@ export const learnSeries: LearningSeries[] = [
           "Console"
         ],
         "status": "published"
+      },
+      {
+        "slug": "day-20-r-10b-placement-strategy-for-user-enablement-goals",
+        "title": "R-10b: Placement Strategy for User Enablement Goals",
+        "series": "sf-omni-consultant",
+        "lesson": 20,
+        "excerpt": "Requirement r-10b in the FlexCards domain (18% of the Salesforce OmniStudio Consultant exam) tests your ability to prescribe where a FlexCard should live so it actually helps the user. Lesson 20 of the Salesforce OmniStudio Consultant Certification course walks through the placement decision as a strategy that starts with the enablement goal, not the card.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "FlexCards",
+          "Placement",
+          "User Enablement"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-21-r-11a-flexcard-best-practices-design-data-and-performanc",
+        "title": "R-11a: FlexCard Best Practices: Design, Data, and Performance",
+        "series": "sf-omni-consultant",
+        "lesson": 21,
+        "excerpt": "Requirement r-11a in the FlexCards domain (18% of the Salesforce OmniStudio Consultant exam) asks you to discuss best practices for FlexCards. Lesson 21 of the Salesforce OmniStudio Consultant Certification course covers the practices that separate a card that performs from a card that drags, from matching the data source to the need to testing in the real placement.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "FlexCards",
+          "Best Practices",
+          "Performance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-22-r-11b-flexcard-best-practices-applied-scenario-walkthrou",
+        "title": "R-11b: FlexCard Best Practices Applied: Scenario Walkthroughs",
+        "series": "sf-omni-consultant",
+        "lesson": 22,
+        "excerpt": "Requirement r-11b in the FlexCards domain (18% of the Salesforce OmniStudio Consultant exam) asks you to discuss best practices for FlexCards, and the best way to learn them is to apply them. Lesson 22 of the Salesforce OmniStudio Consultant Certification course walks five real scenarios end to end, from a record-centric card to a console card, showing how each decision follows from the one before.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "FlexCards",
+          "Best Practices",
+          "Scenarios"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-23-r-12a-multi-step-and-conditional-omniscript-design-align",
+        "title": "R-12a: Multi-Step and Conditional OmniScript Design: Aligning to User Journeys",
+        "series": "sf-omni-consultant",
+        "lesson": 23,
+        "excerpt": "Requirement r-12a in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) asks you to recommend effective multi-step, conditional, and branched OmniScript designs that align with business processes and user journeys. Lesson 23 of the Salesforce OmniStudio Consultant Certification course covers how to decompose a journey into Steps, make Elements conditional, and keep the data JSON as the single source of truth.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "OmniScripts",
+          "Multi-Step",
+          "Conditional Design"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-24-r-12b-branching-omniscript-design-and-multi-language-sup",
+        "title": "R-12b: Branching OmniScript Design and Multi-Language Support",
+        "series": "sf-omni-consultant",
+        "lesson": 24,
+        "excerpt": "Requirement r-12b in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) asks you to recommend effective branched OmniScript designs that align with business processes and user journeys, including multi-language support. Lesson 24 of the Salesforce OmniStudio Consultant Certification course covers the two branching mechanisms, how to drive branches from the data JSON, and how multi-language support interacts with every branch.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "OmniScripts",
+          "Branching",
+          "Multi-Language"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-25-r-13a-selecting-data-mappers-and-integration-procedures",
+        "title": "R-13a: Selecting Data Mappers and Integration Procedures Inside an OmniScript",
+        "series": "sf-omni-consultant",
+        "lesson": 25,
+        "excerpt": "Requirement r-13a in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) tests your ability to choose the right server-side tool for the job. Lesson 25 of the Salesforce OmniStudio Consultant Certification course walks through when a Data Mapper is enough and when you need an Integration Procedure, then sharpens the save-strategy decision that trips up many consultants.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "OmniScripts",
+          "Data Mappers",
+          "Integration Procedures"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-26-r-13b-fetch-transform-and-save-data-flow-architecture-in",
+        "title": "R-13b: Fetch, Transform, and Save: Data Flow Architecture in OmniScripts",
+        "series": "sf-omni-consultant",
+        "lesson": 26,
+        "excerpt": "Requirement r-13b in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) treats the whole journey as a data pipeline. Lesson 26 of the Salesforce OmniStudio Consultant Certification course defines the fetch, transform, and save stages, shows how the data JSON is the contract between them, and covers the error handling that keeps a failing journey honest.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "OmniScripts",
+          "Data Flow",
+          "Data JSON"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-27-r-14a-omniscript-element-selection-steps-blocks-and-inpu",
+        "title": "R-14a: OmniScript Element Selection: Steps, Blocks, and Inputs",
+        "series": "sf-omni-consultant",
+        "lesson": 27,
+        "excerpt": "Requirement r-14a in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) asks you to recommend the right components for a business need. Lesson 27 of the Salesforce OmniStudio Consultant Certification course teaches the Step, Block, and Input hierarchy, when to make a Block repeatable, and why the data JSON name of an Input is a contract you must not break.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "OmniScripts",
+          "Elements",
+          "Blocks"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-28-r-14b-display-functions-formulas-and-presentation-elemen",
+        "title": "R-14b: Display Functions, Formulas, and Presentation Elements",
+        "series": "sf-omni-consultant",
+        "lesson": 28,
+        "excerpt": "Requirement r-14b in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) covers the elements that compute values and the elements that control how a journey looks. Lesson 28 of the Salesforce OmniStudio Consultant Certification course teaches Formulas, Display Functions, and presentation elements, and the rule that every value is computed in exactly one place.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "OmniScripts",
+          "Formulas",
+          "Display Functions"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-29-r-15a-lwc-embeds-and-custom-standard-components-in-omnis",
+        "title": "R-15a: LWC Embeds and Custom/Standard Components in OmniScripts",
+        "series": "sf-omni-consultant",
+        "lesson": 29,
+        "excerpt": "Requirement r-15a in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) covers Lightning Web Component embeds and custom components inside OmniScripts. Lesson 29 of the Salesforce OmniStudio Consultant Certification course teaches when a custom LWC is worth the cost, how to define its data contract, and how to keep the journey consistent with corporate branding.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "OmniScripts",
+          "LWC",
+          "Lightning Web Components"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-30-r-15b-child-omniscripts-for-reuse-and-branding-with-flex",
+        "title": "R-15b: Child OmniScripts for Reuse and Branding with FlexCards",
+        "series": "sf-omni-consultant",
+        "lesson": 30,
+        "excerpt": "Requirement r-15b in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) covers child OmniScripts for reuse and FlexCards for branded display. Lesson 30 of the Salesforce OmniStudio Consultant Certification course teaches when a child OmniScript earns its place, how to define its data contract, and how to tell a child from a FlexCard by asking one question: does the user interact, or just look?",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "OmniScripts",
+          "FlexCards",
+          "Reuse"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-31-r-16a-validation-rules-and-error-messages-in-omniscripts",
+        "title": "R-16a: Validation Rules and Error Messages in OmniScripts",
+        "series": "sf-omni-consultant",
+        "lesson": 31,
+        "excerpt": "Requirement r-16a in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) covers validation rules, error messages, and conditional steps that guide users and manage unexpected outcomes. Lesson 31 of the Salesforce OmniStudio Consultant Certification course teaches where validation belongs, how to write an error message a user can actually act on, and how to handle the cases the happy path never covers.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "OmniScripts",
+          "Validation",
+          "Error Handling"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-32-r-16b-conditional-steps-and-handling-unexpected-outcomes",
+        "title": "R-16b: Conditional Steps and Handling Unexpected Outcomes and Data Inconsistencies",
+        "series": "sf-omni-consultant",
+        "lesson": 32,
+        "excerpt": "Requirement r-16b in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) covers conditional steps and handling unexpected outcomes and data inconsistencies. Lesson 32 of the Salesforce OmniStudio Consultant Certification course teaches how to gate steps on data, how to design the failure paths, and how to surface a data conflict instead of letting the last write silently win.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "OmniScripts",
+          "Conditional Steps",
+          "Error Handling"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-33-r-17a-omniscript-best-practices-design-and-performance",
+        "title": "R-17a: OmniScript Best Practices: Design and Performance",
+        "series": "sf-omni-consultant",
+        "lesson": 33,
+        "excerpt": "Requirement r-17a in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) covers best practices for OmniScript design and performance. Lesson 33 of the Salesforce OmniStudio Consultant Certification course teaches the data JSON contract, fetch-once-and-reuse, matching the tool to the scope, and testing every branch and failure path.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "OmniScripts",
+          "Best Practices",
+          "Performance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-34-r-17b-omniscript-best-practices-applied-scenario-walkthr",
+        "title": "R-17b: OmniScript Best Practices Applied: Scenario Walkthroughs",
+        "series": "sf-omni-consultant",
+        "lesson": 34,
+        "excerpt": "Requirement r-17b in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) covers applying OmniScript best practices through scenario walkthroughs. Lesson 34 of the Salesforce OmniStudio Consultant Certification course walks a case resolution journey through the design decisions, from mapping user intents to naming the elements to ending with a test matrix.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "OmniScripts",
+          "Best Practices",
+          "Scenario Walkthrough"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-35-r-18a-http-actions-in-integration-procedures-configurati",
+        "title": "R-18a: HTTP Actions in Integration Procedures: Configuration and Management",
+        "series": "sf-omni-consultant",
+        "lesson": 35,
+        "excerpt": "In lesson 35 of the Salesforce OmniStudio Consultant Certification course, you learn how an HTTP Action connects an Integration Procedure to an external REST or SOAP system. This lesson walks the high-level configuration flow: the named credential, the request and response phases, and the error path that turns a failed call into something diagnosable. It belongs to the Integration Procedures domain, worth 17% of the exam.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration Procedures",
+          "HTTP Actions",
+          "Named Credentials"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-36-r-18b-secure-external-connections-authentication-and-req",
+        "title": "R-18b: Secure External Connections: Authentication and Request/Response Mapping",
+        "series": "sf-omni-consultant",
+        "lesson": 36,
+        "excerpt": "Lesson 36 of the Salesforce OmniStudio Consultant Certification course goes deeper into how an Integration Procedure connects securely to an external system. You learn how named credentials hold OAuth 2.0 and basic authentication, and how request and response mapping shape the call to match an external contract. This lesson is part of the Integration Procedures domain, worth 17% of the exam.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration Procedures",
+          "Named Credentials",
+          "OAuth 2.0"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-37-r-19a-rest-endpoints-use-case-driven-http-action-configu",
+        "title": "R-19a: REST Endpoints: Use-Case-Driven HTTP Action Configuration and Auth",
+        "series": "sf-omni-consultant",
+        "lesson": 37,
+        "excerpt": "Lesson 37 of the Salesforce OmniStudio Consultant Certification course applies the HTTP Action to REST endpoints, where the use case drives the method, the request surface, and the authentication. You learn to read an endpoint contract, choose GET versus POST, and place data in query parameters or the body. This lesson is part of the Integration Procedures domain, worth 17% of the exam.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration Procedures",
+          "REST",
+          "HTTP Actions"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-38-r-19b-soap-endpoints-and-advanced-authentication-scenari",
+        "title": "R-19b: SOAP Endpoints and Advanced Authentication Scenarios",
+        "series": "sf-omni-consultant",
+        "lesson": 38,
+        "excerpt": "Lesson 38 of the Salesforce OmniStudio Consultant Certification course covers the SOAP side of the protocol decision. You learn how an HTTP Action sends a SOAP envelope as a POST body, how WS-Security places credentials inside the envelope, and why mapping a SOAP response is harder than mapping JSON. This lesson is part of the Integration Procedures domain, worth 17% of the exam.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration Procedures",
+          "SOAP",
+          "WS-Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-39-r-20a-data-mapper-transform-and-set-values-actions-in-an",
+        "title": "R-20a: Data Mapper Transform and Set Values Actions in an IP",
+        "series": "sf-omni-consultant",
+        "lesson": 39,
+        "excerpt": "Lesson 39 of the Salesforce OmniStudio Consultant Certification course covers the data shaping actions inside an Integration Procedure. You learn when to use a Data Mapper Transform to reshape existing data and when to use Set Values to create or default a value, and why both belong before the Response action. This lesson is part of the Integration Procedures domain, worth 17% of the exam.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration Procedures",
+          "Data Mapper",
+          "Set Values"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-40-r-20b-response-actions-structuring-data-for-the-client-s",
+        "title": "R-20b: Response Actions: Structuring Data for the Client-Side Component",
+        "series": "sf-omni-consultant",
+        "lesson": 40,
+        "excerpt": "Lesson 40 of the Salesforce OmniStudio Consultant Certification course covers the Response action, the final step of an Integration Procedure. You learn why the Response action assembles already-shaped data instead of reshaping it, how to match the client component's contract including cardinality, and how to design an error path that returns a structured error object. This lesson is part of the Integration Procedures domain, worth 17% of the exam.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration Procedures",
+          "Response Action",
+          "Data Mapper"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-41-r-21a-integration-procedure-best-practices-security-perf",
+        "title": "R-21a: Integration Procedure Best Practices: Security, Performance, and Error Handling",
+        "series": "sf-omni-consultant",
+        "lesson": 41,
+        "excerpt": "Lesson 41 of the Salesforce OmniStudio Consultant Certification course covers the best practices that separate a well-built Integration Procedure from a fragile one. You learn to centralize secrets in named credentials, filter at the source and request only needed fields for performance, design error paths before testing the happy path, and set timeouts and retries per operation. This lesson is part of the Integration Procedures domain, worth 17% of the exam.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration Procedures",
+          "Named Credentials",
+          "Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-42-r-21b-integration-procedure-best-practices-applied-scena",
+        "title": "R-21b: Integration Procedure Best Practices Applied: Scenario Walkthroughs",
+        "series": "sf-omni-consultant",
+        "lesson": 42,
+        "excerpt": "Lesson 42 of the Salesforce OmniStudio Consultant Certification course applies the Integration Procedure best practices to real scenarios. You walk through a read, a write, a SOAP call, a multi-step token flow, and an error scenario, and you see how the same best practices hold across all of them. This lesson is part of the Integration Procedures domain, worth 17% of the exam.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Integration Procedures",
+          "REST",
+          "SOAP"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-43-r-22a-data-mapper-types-extract-vs-turbo-extract-vs-load",
+        "title": "R-22a: Data Mapper Types: Extract vs Turbo Extract vs Load vs Transform",
+        "series": "sf-omni-consultant",
+        "lesson": 43,
+        "excerpt": "Lesson 43 of the Salesforce OmniStudio Consultant Certification course covers the four Data Mapper types: Extract, Turbo Extract, Load, and Transform. You learn what each type does, when to use it, and how to tell them apart, including the performance difference between Extract and Turbo Extract. This lesson is part of the Data Mappers domain, worth 17% of the exam.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Data Mapper",
+          "Extract",
+          "Turbo Extract",
+          "Load",
+          "Transform"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-44-r-22b-recommending-the-correct-data-mapper-type-per-busi",
+        "title": "R-22b: Recommending the Correct Data Mapper Type per Business Need",
+        "series": "sf-omni-consultant",
+        "lesson": 44,
+        "excerpt": "Lesson 44 of the Salesforce OmniStudio Consultant Certification course covers how to recommend the correct Data Mapper type when the business need is ambiguous. You learn to identify the operation the need requires, weigh performance against feature needs, and choose between Extract, Turbo Extract, Load, and Transform. This lesson is part of the Data Mappers domain, worth 17% of the exam.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Data Mapper",
+          "Extract",
+          "Turbo Extract",
+          "Load",
+          "Transform"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-45-r-23a-complex-mapping-and-filtering-in-data-mappers",
+        "title": "R-23a: Complex Mapping and Filtering in Data Mappers",
+        "series": "sf-omni-consultant",
+        "lesson": 45,
+        "excerpt": "Lesson 45 of the Salesforce OmniStudio Consultant Certification course covers complex mapping and filtering inside Data Mappers. You learn how to move data between structures that do not line up one-to-one, where to filter so only the records you need cross the boundary, and how to standardize inconsistent source data as it flows through. This lesson is part of the Data Mappers domain, worth 17% of the exam.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Data Mappers",
+          "Complex Mapping",
+          "Filtering"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-46-r-23b-functions-and-formulas-for-data-manipulation-accur",
+        "title": "R-23b: Functions and Formulas for Data Manipulation, Accuracy, and Standardization",
+        "series": "sf-omni-consultant",
+        "lesson": 46,
+        "excerpt": "Lesson 46 of the Salesforce OmniStudio Consultant Certification course covers functions and formulas inside Data Mappers. You learn how string, date, and number functions and conditional formulas compute, transform, and standardize data as it flows through a mapping, so the output is accurate and consistent. This lesson is part of the Data Mappers domain, worth 17% of the exam.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Data Mappers",
+          "Functions",
+          "Formulas"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-47-r-24a-data-mapper-performance-reducing-queries-and-effic",
+        "title": "R-24a: Data Mapper Performance: Reducing Queries and Efficient Filtering",
+        "series": "sf-omni-consultant",
+        "lesson": 47,
+        "excerpt": "Lesson 47 of the Salesforce OmniStudio Consultant Certification course covers Data Mapper performance. You learn how to reduce the number of queries, filter efficiently at the source, and reuse data already in context so a Data Mapper stays fast at scale. This lesson is part of the Data Mappers domain, worth 17% of the exam.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Data Mappers",
+          "Performance",
+          "Filtering"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-48-r-24b-relationship-queries-caching-and-avoiding-unnecess",
+        "title": "R-24b: Relationship Queries, Caching, and Avoiding Unnecessary Mapping",
+        "series": "sf-omni-consultant",
+        "lesson": 48,
+        "excerpt": "Lesson 48 of the Salesforce OmniStudio Consultant Certification course completes the Data Mapper performance picture. You learn how relationship queries read parent and child records in one call, how caching lets a flow reuse reference data without re-querying, and how to avoid mapping data you do not need. This lesson is part of the Data Mappers domain, worth 17% of the exam.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Data Mappers",
+          "Relationship Queries",
+          "Caching"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-49-r-25a-data-mapper-loads-salesforce-id-mapping-and-upsert",
+        "title": "R-25a: Data Mapper Loads: Salesforce ID Mapping and Upsert Logic",
+        "series": "sf-omni-consultant",
+        "lesson": 49,
+        "excerpt": "Lesson 49 of the Salesforce OmniStudio Consultant Certification course covers Data Mapper Loads. You learn how a Load writes data into Salesforce, how it maps incoming data to the correct record, and how the upsert key decides whether a record is inserted or updated. This lesson is part of the Data Mappers domain, worth 17% of the exam.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Data Mappers",
+          "Loads",
+          "Upsert"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-50-r-25b-data-mapper-load-error-management-during-create-an",
+        "title": "R-25b: Data Mapper Load Error Management During Create and Update",
+        "series": "sf-omni-consultant",
+        "lesson": 50,
+        "excerpt": "Lesson 50 of the Salesforce OmniStudio Consultant Certification course covers how a Data Mapper Load reports the outcome of every record it writes, how the flow branches on those outcomes, and how to keep a partial failure from taking down the whole process. You learn to validate before the write and to keep upsert keys unique and populated. This lesson is part of the Data Mappers domain, worth 17% of the exam.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Data Mapper",
+          "Load",
+          "Error Management",
+          "Upsert"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-51-r-26a-data-mapper-best-practices-extraction-load-and-tra",
+        "title": "R-26a: Data Mapper Best Practices: Extraction, Load, and Transform",
+        "series": "sf-omni-consultant",
+        "lesson": 51,
+        "excerpt": "Lesson 51 of the Salesforce OmniStudio Consultant Certification course covers the habits that keep every Data Mapper correct and fast: choosing the right type for the operation, reading and mapping only what you need, being explicit about the write, and reusing instead of duplicating. This lesson is part of the Data Mappers domain, worth 17% of the exam.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Data Mapper",
+          "Best Practices",
+          "Extract",
+          "Load",
+          "Transform"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-52-r-26b-data-mapper-best-practices-applied-scenario-walkth",
+        "title": "R-26b: Data Mapper Best Practices Applied: Scenario Walkthroughs",
+        "series": "sf-omni-consultant",
+        "lesson": 52,
+        "excerpt": "Lesson 52 of the Salesforce OmniStudio Consultant Certification course walks the Data Mapper best practices through real read, reshape, and write scenarios. You learn to name the operation at each step, pick the matching Data Mapper type, and apply that step's best practice so the whole flow is fast, accurate, and reliable. This lesson is part of the Data Mappers domain, worth 17% of the exam.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Data Mapper",
+          "Best Practices",
+          "Scenario",
+          "Extract",
+          "Load",
+          "Transform"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-53-r-27a-architectural-choices-fitting-omnistudio-into-the",
+        "title": "R-27a: Architectural Choices: Fitting OmniStudio into the Enterprise Landscape",
+        "series": "sf-omni-consultant",
+        "lesson": 53,
+        "excerpt": "Lesson 53 of the Salesforce OmniStudio Consultant Certification course covers how to place each OmniStudio component on the right layer of the stack, decide where the source of truth lives, and document the security context for every component. You learn to make recommendations that name the layer a component serves and the artifact it displaces. This lesson is part of the Best Fit Solutions domain, worth 15% of the exam.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "OmniStudio",
+          "Architecture",
+          "Best Fit Solutions",
+          "OmniScript",
+          "FlexCard",
+          "Integration Procedure"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-54-r-27b-when-omnistudio-is-and-is-not-the-right-fit-in-the",
+        "title": "R-27b: When OmniStudio Is and Is Not the Right Fit in the System Landscape",
+        "series": "sf-omni-consultant",
+        "lesson": 54,
+        "excerpt": "Lesson 54 of the Salesforce OmniStudio Consultant Certification course covers the right-fit test: classifying an interaction by its shape before choosing a component. You learn when a guided, stateful journey belongs in OmniStudio and when a simple read, a background process, or an event consumer belongs elsewhere. This lesson is part of the Best Fit Solutions domain, worth 15% of the exam.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "OmniStudio",
+          "Best Fit Solutions",
+          "Architecture",
+          "OmniScript",
+          "Integration Procedure",
+          "Data Mapper"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-55-r-28a-cross-component-performance-optimization-omniscrip",
+        "title": "R-28a: Cross-Component Performance Optimization: OmniScript Load Time, IP Execution, Data Mapper Queries",
+        "series": "sf-omni-consultant",
+        "lesson": 55,
+        "excerpt": "Requirement r-28a in the Best Fit Solutions domain (15% of the Salesforce OmniStudio Consultant exam) treats performance as a property of the whole journey, not of any single component. Lesson 55 of the Salesforce OmniStudio Consultant Certification course shows you how to profile the full path from first click to final save, then fix the slowest leg first.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Performance",
+          "OmniScripts",
+          "Integration Procedures"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-56-r-28b-scalability-and-efficiency-performance-strategy-in",
+        "title": "R-28b: Scalability and Efficiency: Performance Strategy in Practice",
+        "series": "sf-omni-consultant",
+        "lesson": 56,
+        "excerpt": "Requirement r-28b in the Best Fit Solutions domain (15% of the Salesforce OmniStudio Consultant exam) separates a fast demo from a scalable solution. Lesson 56 of the Salesforce OmniStudio Consultant Certification course turns the cross-component view into a layered efficiency strategy, with asynchronous processing as the tool that keeps heavy work out of the user's way.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Scalability",
+          "Performance",
+          "Asynchronous Processing"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-57-r-29a-right-sizing-data-mappers-and-ips-inside-omniscrip",
+        "title": "R-29a: Right-Sizing Data Mappers and IPs Inside OmniScripts: The Architecture View",
+        "series": "sf-omni-consultant",
+        "lesson": 57,
+        "excerpt": "Requirement r-29a in the Best Fit Solutions domain (15% of the Salesforce OmniStudio Consultant exam) is about choosing the right tool for each data operation. Lesson 57 of the Salesforce OmniStudio Consultant Certification course teaches you to name the business outcome first, then pick a Data Raptor for direct reads and writes or an Integration Procedure for orchestration and shared logic.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Data Mappers",
+          "Integration Procedures",
+          "Architecture"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-58-r-29b-efficient-fetch-transform-and-save-at-the-solution",
+        "title": "R-29b: Efficient Fetch, Transform, and Save at the Solution Level",
+        "series": "sf-omni-consultant",
+        "lesson": 58,
+        "excerpt": "Requirement r-29b in the Best Fit Solutions domain (15% of the Salesforce OmniStudio Consultant exam) treats fetch, transform, and save as one pattern, not three separate steps. Lesson 58 of the Salesforce OmniStudio Consultant Certification course shows you how to trace every data element from source to destination and cut the waste that slows the whole journey.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Data Flow",
+          "Fetch Transform Save",
+          "Efficiency"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-59-r-30a-omnistudio-governance-development-testing-and-depl",
+        "title": "R-30a: OmniStudio Governance: Development, Testing, and Deployment Processes",
+        "series": "sf-omni-consultant",
+        "lesson": 59,
+        "excerpt": "Requirement r-30a in the Best Fit Solutions domain (15% of the Salesforce OmniStudio Consultant exam) treats OmniStudio artifacts as production code, even though they are built declaratively. Lesson 59 of the Salesforce OmniStudio Consultant Certification course covers the governance model: a controlled environment strategy, a test plan per artifact, a deployment gate, and version control as the foundation.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Governance",
+          "Testing",
+          "Deployment"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-60-r-30b-change-management-and-documentation-standards-for",
+        "title": "R-30b: Change Management and Documentation Standards for OmniStudio Artifacts",
+        "series": "sf-omni-consultant",
+        "lesson": 60,
+        "excerpt": "Requirement r-30b in the Best Fit Solutions domain (15% of the Salesforce OmniStudio Consultant exam) asks you to recommend practices for establishing an effective governance model, including change management and documentation standards for OmniStudio artifacts. Lesson 60 of the Salesforce OmniStudio Consultant Certification course covers the change process, risk classification, and the documentation template that keeps artifacts understandable and auditable.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Change Management",
+          "Documentation",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-61-r-31a-conceptual-logical-and-physical-modeling-for-the-b",
+        "title": "R-31a: Conceptual, Logical, and Physical Modeling for the Business Solution",
+        "series": "sf-omni-consultant",
+        "lesson": 61,
+        "excerpt": "Requirement r-31a in the Best Fit Solutions domain (15% of the Salesforce OmniStudio Consultant exam) asks you to guide the creation of a Conceptual Model, Logical Model, and Physical Model to support the business solution. Lesson 61 of the Salesforce OmniStudio Consultant Certification course covers the three levels of abstraction, how they stay aligned, and why they are the foundation for every OmniStudio artifact.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Data Modeling",
+          "Conceptual Model",
+          "Logical Model"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-62-r-31b-optimal-object-design-standard-vs-custom-objects-s",
+        "title": "R-31b: Optimal Object Design: Standard vs Custom Objects Supporting OmniStudio Artifacts",
+        "series": "sf-omni-consultant",
+        "lesson": 62,
+        "excerpt": "Requirement r-31b in the Best Fit Solutions domain (15% of the Salesforce OmniStudio Consultant exam) asks you to recommend optimal object design, standard vs custom, to support OmniStudio artifacts. Lesson 62 of the Salesforce OmniStudio Consultant Certification course covers the standard-versus-custom trade-off, validating the design against the artifacts, and choosing relationships deliberately.",
+        "date": "October 02, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "OmniStudio",
+          "Object Design",
+          "Standard Objects",
+          "Custom Objects"
+        ],
+        "status": "published"
       }
     ],
-    "totalLessons": 19,
+    "totalLessons": 62,
     "curriculumLessons": 62
   },
   {
@@ -5845,6 +6590,751 @@ export const learnLessons: LearnLesson[] = [
       "Lightning Page",
       "Record Page",
       "Console"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-20-r-10b-placement-strategy-for-user-enablement-goals",
+    "title": "R-10b: Placement Strategy for User Enablement Goals",
+    "series": "sf-omni-consultant",
+    "lesson": 20,
+    "excerpt": "Requirement r-10b in the FlexCards domain (18% of the Salesforce OmniStudio Consultant exam) tests your ability to prescribe where a FlexCard should live so it actually helps the user. Lesson 20 of the Salesforce OmniStudio Consultant Certification course walks through the placement decision as a strategy that starts with the enablement goal, not the card.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "FlexCards",
+      "Placement",
+      "User Enablement"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-21-r-11a-flexcard-best-practices-design-data-and-performanc",
+    "title": "R-11a: FlexCard Best Practices: Design, Data, and Performance",
+    "series": "sf-omni-consultant",
+    "lesson": 21,
+    "excerpt": "Requirement r-11a in the FlexCards domain (18% of the Salesforce OmniStudio Consultant exam) asks you to discuss best practices for FlexCards. Lesson 21 of the Salesforce OmniStudio Consultant Certification course covers the practices that separate a card that performs from a card that drags, from matching the data source to the need to testing in the real placement.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "FlexCards",
+      "Best Practices",
+      "Performance"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-22-r-11b-flexcard-best-practices-applied-scenario-walkthrou",
+    "title": "R-11b: FlexCard Best Practices Applied: Scenario Walkthroughs",
+    "series": "sf-omni-consultant",
+    "lesson": 22,
+    "excerpt": "Requirement r-11b in the FlexCards domain (18% of the Salesforce OmniStudio Consultant exam) asks you to discuss best practices for FlexCards, and the best way to learn them is to apply them. Lesson 22 of the Salesforce OmniStudio Consultant Certification course walks five real scenarios end to end, from a record-centric card to a console card, showing how each decision follows from the one before.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "FlexCards",
+      "Best Practices",
+      "Scenarios"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-23-r-12a-multi-step-and-conditional-omniscript-design-align",
+    "title": "R-12a: Multi-Step and Conditional OmniScript Design: Aligning to User Journeys",
+    "series": "sf-omni-consultant",
+    "lesson": 23,
+    "excerpt": "Requirement r-12a in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) asks you to recommend effective multi-step, conditional, and branched OmniScript designs that align with business processes and user journeys. Lesson 23 of the Salesforce OmniStudio Consultant Certification course covers how to decompose a journey into Steps, make Elements conditional, and keep the data JSON as the single source of truth.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "OmniScripts",
+      "Multi-Step",
+      "Conditional Design"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-24-r-12b-branching-omniscript-design-and-multi-language-sup",
+    "title": "R-12b: Branching OmniScript Design and Multi-Language Support",
+    "series": "sf-omni-consultant",
+    "lesson": 24,
+    "excerpt": "Requirement r-12b in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) asks you to recommend effective branched OmniScript designs that align with business processes and user journeys, including multi-language support. Lesson 24 of the Salesforce OmniStudio Consultant Certification course covers the two branching mechanisms, how to drive branches from the data JSON, and how multi-language support interacts with every branch.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "OmniScripts",
+      "Branching",
+      "Multi-Language"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-25-r-13a-selecting-data-mappers-and-integration-procedures",
+    "title": "R-13a: Selecting Data Mappers and Integration Procedures Inside an OmniScript",
+    "series": "sf-omni-consultant",
+    "lesson": 25,
+    "excerpt": "Requirement r-13a in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) tests your ability to choose the right server-side tool for the job. Lesson 25 of the Salesforce OmniStudio Consultant Certification course walks through when a Data Mapper is enough and when you need an Integration Procedure, then sharpens the save-strategy decision that trips up many consultants.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "OmniScripts",
+      "Data Mappers",
+      "Integration Procedures"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-26-r-13b-fetch-transform-and-save-data-flow-architecture-in",
+    "title": "R-13b: Fetch, Transform, and Save: Data Flow Architecture in OmniScripts",
+    "series": "sf-omni-consultant",
+    "lesson": 26,
+    "excerpt": "Requirement r-13b in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) treats the whole journey as a data pipeline. Lesson 26 of the Salesforce OmniStudio Consultant Certification course defines the fetch, transform, and save stages, shows how the data JSON is the contract between them, and covers the error handling that keeps a failing journey honest.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "OmniScripts",
+      "Data Flow",
+      "Data JSON"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-27-r-14a-omniscript-element-selection-steps-blocks-and-inpu",
+    "title": "R-14a: OmniScript Element Selection: Steps, Blocks, and Inputs",
+    "series": "sf-omni-consultant",
+    "lesson": 27,
+    "excerpt": "Requirement r-14a in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) asks you to recommend the right components for a business need. Lesson 27 of the Salesforce OmniStudio Consultant Certification course teaches the Step, Block, and Input hierarchy, when to make a Block repeatable, and why the data JSON name of an Input is a contract you must not break.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "OmniScripts",
+      "Elements",
+      "Blocks"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-28-r-14b-display-functions-formulas-and-presentation-elemen",
+    "title": "R-14b: Display Functions, Formulas, and Presentation Elements",
+    "series": "sf-omni-consultant",
+    "lesson": 28,
+    "excerpt": "Requirement r-14b in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) covers the elements that compute values and the elements that control how a journey looks. Lesson 28 of the Salesforce OmniStudio Consultant Certification course teaches Formulas, Display Functions, and presentation elements, and the rule that every value is computed in exactly one place.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "OmniScripts",
+      "Formulas",
+      "Display Functions"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-29-r-15a-lwc-embeds-and-custom-standard-components-in-omnis",
+    "title": "R-15a: LWC Embeds and Custom/Standard Components in OmniScripts",
+    "series": "sf-omni-consultant",
+    "lesson": 29,
+    "excerpt": "Requirement r-15a in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) covers Lightning Web Component embeds and custom components inside OmniScripts. Lesson 29 of the Salesforce OmniStudio Consultant Certification course teaches when a custom LWC is worth the cost, how to define its data contract, and how to keep the journey consistent with corporate branding.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "OmniScripts",
+      "LWC",
+      "Lightning Web Components"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-30-r-15b-child-omniscripts-for-reuse-and-branding-with-flex",
+    "title": "R-15b: Child OmniScripts for Reuse and Branding with FlexCards",
+    "series": "sf-omni-consultant",
+    "lesson": 30,
+    "excerpt": "Requirement r-15b in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) covers child OmniScripts for reuse and FlexCards for branded display. Lesson 30 of the Salesforce OmniStudio Consultant Certification course teaches when a child OmniScript earns its place, how to define its data contract, and how to tell a child from a FlexCard by asking one question: does the user interact, or just look?",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "OmniScripts",
+      "FlexCards",
+      "Reuse"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-31-r-16a-validation-rules-and-error-messages-in-omniscripts",
+    "title": "R-16a: Validation Rules and Error Messages in OmniScripts",
+    "series": "sf-omni-consultant",
+    "lesson": 31,
+    "excerpt": "Requirement r-16a in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) covers validation rules, error messages, and conditional steps that guide users and manage unexpected outcomes. Lesson 31 of the Salesforce OmniStudio Consultant Certification course teaches where validation belongs, how to write an error message a user can actually act on, and how to handle the cases the happy path never covers.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "OmniScripts",
+      "Validation",
+      "Error Handling"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-32-r-16b-conditional-steps-and-handling-unexpected-outcomes",
+    "title": "R-16b: Conditional Steps and Handling Unexpected Outcomes and Data Inconsistencies",
+    "series": "sf-omni-consultant",
+    "lesson": 32,
+    "excerpt": "Requirement r-16b in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) covers conditional steps and handling unexpected outcomes and data inconsistencies. Lesson 32 of the Salesforce OmniStudio Consultant Certification course teaches how to gate steps on data, how to design the failure paths, and how to surface a data conflict instead of letting the last write silently win.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "OmniScripts",
+      "Conditional Steps",
+      "Error Handling"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-33-r-17a-omniscript-best-practices-design-and-performance",
+    "title": "R-17a: OmniScript Best Practices: Design and Performance",
+    "series": "sf-omni-consultant",
+    "lesson": 33,
+    "excerpt": "Requirement r-17a in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) covers best practices for OmniScript design and performance. Lesson 33 of the Salesforce OmniStudio Consultant Certification course teaches the data JSON contract, fetch-once-and-reuse, matching the tool to the scope, and testing every branch and failure path.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "OmniScripts",
+      "Best Practices",
+      "Performance"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-34-r-17b-omniscript-best-practices-applied-scenario-walkthr",
+    "title": "R-17b: OmniScript Best Practices Applied: Scenario Walkthroughs",
+    "series": "sf-omni-consultant",
+    "lesson": 34,
+    "excerpt": "Requirement r-17b in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) covers applying OmniScript best practices through scenario walkthroughs. Lesson 34 of the Salesforce OmniStudio Consultant Certification course walks a case resolution journey through the design decisions, from mapping user intents to naming the elements to ending with a test matrix.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "OmniScripts",
+      "Best Practices",
+      "Scenario Walkthrough"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-35-r-18a-http-actions-in-integration-procedures-configurati",
+    "title": "R-18a: HTTP Actions in Integration Procedures: Configuration and Management",
+    "series": "sf-omni-consultant",
+    "lesson": 35,
+    "excerpt": "In lesson 35 of the Salesforce OmniStudio Consultant Certification course, you learn how an HTTP Action connects an Integration Procedure to an external REST or SOAP system. This lesson walks the high-level configuration flow: the named credential, the request and response phases, and the error path that turns a failed call into something diagnosable. It belongs to the Integration Procedures domain, worth 17% of the exam.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "Integration Procedures",
+      "HTTP Actions",
+      "Named Credentials"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-36-r-18b-secure-external-connections-authentication-and-req",
+    "title": "R-18b: Secure External Connections: Authentication and Request/Response Mapping",
+    "series": "sf-omni-consultant",
+    "lesson": 36,
+    "excerpt": "Lesson 36 of the Salesforce OmniStudio Consultant Certification course goes deeper into how an Integration Procedure connects securely to an external system. You learn how named credentials hold OAuth 2.0 and basic authentication, and how request and response mapping shape the call to match an external contract. This lesson is part of the Integration Procedures domain, worth 17% of the exam.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "Integration Procedures",
+      "Named Credentials",
+      "OAuth 2.0"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-37-r-19a-rest-endpoints-use-case-driven-http-action-configu",
+    "title": "R-19a: REST Endpoints: Use-Case-Driven HTTP Action Configuration and Auth",
+    "series": "sf-omni-consultant",
+    "lesson": 37,
+    "excerpt": "Lesson 37 of the Salesforce OmniStudio Consultant Certification course applies the HTTP Action to REST endpoints, where the use case drives the method, the request surface, and the authentication. You learn to read an endpoint contract, choose GET versus POST, and place data in query parameters or the body. This lesson is part of the Integration Procedures domain, worth 17% of the exam.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "Integration Procedures",
+      "REST",
+      "HTTP Actions"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-38-r-19b-soap-endpoints-and-advanced-authentication-scenari",
+    "title": "R-19b: SOAP Endpoints and Advanced Authentication Scenarios",
+    "series": "sf-omni-consultant",
+    "lesson": 38,
+    "excerpt": "Lesson 38 of the Salesforce OmniStudio Consultant Certification course covers the SOAP side of the protocol decision. You learn how an HTTP Action sends a SOAP envelope as a POST body, how WS-Security places credentials inside the envelope, and why mapping a SOAP response is harder than mapping JSON. This lesson is part of the Integration Procedures domain, worth 17% of the exam.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "Integration Procedures",
+      "SOAP",
+      "WS-Security"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-39-r-20a-data-mapper-transform-and-set-values-actions-in-an",
+    "title": "R-20a: Data Mapper Transform and Set Values Actions in an IP",
+    "series": "sf-omni-consultant",
+    "lesson": 39,
+    "excerpt": "Lesson 39 of the Salesforce OmniStudio Consultant Certification course covers the data shaping actions inside an Integration Procedure. You learn when to use a Data Mapper Transform to reshape existing data and when to use Set Values to create or default a value, and why both belong before the Response action. This lesson is part of the Integration Procedures domain, worth 17% of the exam.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "Integration Procedures",
+      "Data Mapper",
+      "Set Values"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-40-r-20b-response-actions-structuring-data-for-the-client-s",
+    "title": "R-20b: Response Actions: Structuring Data for the Client-Side Component",
+    "series": "sf-omni-consultant",
+    "lesson": 40,
+    "excerpt": "Lesson 40 of the Salesforce OmniStudio Consultant Certification course covers the Response action, the final step of an Integration Procedure. You learn why the Response action assembles already-shaped data instead of reshaping it, how to match the client component's contract including cardinality, and how to design an error path that returns a structured error object. This lesson is part of the Integration Procedures domain, worth 17% of the exam.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "Integration Procedures",
+      "Response Action",
+      "Data Mapper"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-41-r-21a-integration-procedure-best-practices-security-perf",
+    "title": "R-21a: Integration Procedure Best Practices: Security, Performance, and Error Handling",
+    "series": "sf-omni-consultant",
+    "lesson": 41,
+    "excerpt": "Lesson 41 of the Salesforce OmniStudio Consultant Certification course covers the best practices that separate a well-built Integration Procedure from a fragile one. You learn to centralize secrets in named credentials, filter at the source and request only needed fields for performance, design error paths before testing the happy path, and set timeouts and retries per operation. This lesson is part of the Integration Procedures domain, worth 17% of the exam.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "Integration Procedures",
+      "Named Credentials",
+      "Security"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-42-r-21b-integration-procedure-best-practices-applied-scena",
+    "title": "R-21b: Integration Procedure Best Practices Applied: Scenario Walkthroughs",
+    "series": "sf-omni-consultant",
+    "lesson": 42,
+    "excerpt": "Lesson 42 of the Salesforce OmniStudio Consultant Certification course applies the Integration Procedure best practices to real scenarios. You walk through a read, a write, a SOAP call, a multi-step token flow, and an error scenario, and you see how the same best practices hold across all of them. This lesson is part of the Integration Procedures domain, worth 17% of the exam.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "Integration Procedures",
+      "REST",
+      "SOAP"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-43-r-22a-data-mapper-types-extract-vs-turbo-extract-vs-load",
+    "title": "R-22a: Data Mapper Types: Extract vs Turbo Extract vs Load vs Transform",
+    "series": "sf-omni-consultant",
+    "lesson": 43,
+    "excerpt": "Lesson 43 of the Salesforce OmniStudio Consultant Certification course covers the four Data Mapper types: Extract, Turbo Extract, Load, and Transform. You learn what each type does, when to use it, and how to tell them apart, including the performance difference between Extract and Turbo Extract. This lesson is part of the Data Mappers domain, worth 17% of the exam.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "Data Mapper",
+      "Extract",
+      "Turbo Extract",
+      "Load",
+      "Transform"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-44-r-22b-recommending-the-correct-data-mapper-type-per-busi",
+    "title": "R-22b: Recommending the Correct Data Mapper Type per Business Need",
+    "series": "sf-omni-consultant",
+    "lesson": 44,
+    "excerpt": "Lesson 44 of the Salesforce OmniStudio Consultant Certification course covers how to recommend the correct Data Mapper type when the business need is ambiguous. You learn to identify the operation the need requires, weigh performance against feature needs, and choose between Extract, Turbo Extract, Load, and Transform. This lesson is part of the Data Mappers domain, worth 17% of the exam.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "Data Mapper",
+      "Extract",
+      "Turbo Extract",
+      "Load",
+      "Transform"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-45-r-23a-complex-mapping-and-filtering-in-data-mappers",
+    "title": "R-23a: Complex Mapping and Filtering in Data Mappers",
+    "series": "sf-omni-consultant",
+    "lesson": 45,
+    "excerpt": "Lesson 45 of the Salesforce OmniStudio Consultant Certification course covers complex mapping and filtering inside Data Mappers. You learn how to move data between structures that do not line up one-to-one, where to filter so only the records you need cross the boundary, and how to standardize inconsistent source data as it flows through. This lesson is part of the Data Mappers domain, worth 17% of the exam.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "Data Mappers",
+      "Complex Mapping",
+      "Filtering"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-46-r-23b-functions-and-formulas-for-data-manipulation-accur",
+    "title": "R-23b: Functions and Formulas for Data Manipulation, Accuracy, and Standardization",
+    "series": "sf-omni-consultant",
+    "lesson": 46,
+    "excerpt": "Lesson 46 of the Salesforce OmniStudio Consultant Certification course covers functions and formulas inside Data Mappers. You learn how string, date, and number functions and conditional formulas compute, transform, and standardize data as it flows through a mapping, so the output is accurate and consistent. This lesson is part of the Data Mappers domain, worth 17% of the exam.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "Data Mappers",
+      "Functions",
+      "Formulas"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-47-r-24a-data-mapper-performance-reducing-queries-and-effic",
+    "title": "R-24a: Data Mapper Performance: Reducing Queries and Efficient Filtering",
+    "series": "sf-omni-consultant",
+    "lesson": 47,
+    "excerpt": "Lesson 47 of the Salesforce OmniStudio Consultant Certification course covers Data Mapper performance. You learn how to reduce the number of queries, filter efficiently at the source, and reuse data already in context so a Data Mapper stays fast at scale. This lesson is part of the Data Mappers domain, worth 17% of the exam.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "Data Mappers",
+      "Performance",
+      "Filtering"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-48-r-24b-relationship-queries-caching-and-avoiding-unnecess",
+    "title": "R-24b: Relationship Queries, Caching, and Avoiding Unnecessary Mapping",
+    "series": "sf-omni-consultant",
+    "lesson": 48,
+    "excerpt": "Lesson 48 of the Salesforce OmniStudio Consultant Certification course completes the Data Mapper performance picture. You learn how relationship queries read parent and child records in one call, how caching lets a flow reuse reference data without re-querying, and how to avoid mapping data you do not need. This lesson is part of the Data Mappers domain, worth 17% of the exam.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "Data Mappers",
+      "Relationship Queries",
+      "Caching"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-49-r-25a-data-mapper-loads-salesforce-id-mapping-and-upsert",
+    "title": "R-25a: Data Mapper Loads: Salesforce ID Mapping and Upsert Logic",
+    "series": "sf-omni-consultant",
+    "lesson": 49,
+    "excerpt": "Lesson 49 of the Salesforce OmniStudio Consultant Certification course covers Data Mapper Loads. You learn how a Load writes data into Salesforce, how it maps incoming data to the correct record, and how the upsert key decides whether a record is inserted or updated. This lesson is part of the Data Mappers domain, worth 17% of the exam.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "Data Mappers",
+      "Loads",
+      "Upsert"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-50-r-25b-data-mapper-load-error-management-during-create-an",
+    "title": "R-25b: Data Mapper Load Error Management During Create and Update",
+    "series": "sf-omni-consultant",
+    "lesson": 50,
+    "excerpt": "Lesson 50 of the Salesforce OmniStudio Consultant Certification course covers how a Data Mapper Load reports the outcome of every record it writes, how the flow branches on those outcomes, and how to keep a partial failure from taking down the whole process. You learn to validate before the write and to keep upsert keys unique and populated. This lesson is part of the Data Mappers domain, worth 17% of the exam.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "Data Mapper",
+      "Load",
+      "Error Management",
+      "Upsert"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-51-r-26a-data-mapper-best-practices-extraction-load-and-tra",
+    "title": "R-26a: Data Mapper Best Practices: Extraction, Load, and Transform",
+    "series": "sf-omni-consultant",
+    "lesson": 51,
+    "excerpt": "Lesson 51 of the Salesforce OmniStudio Consultant Certification course covers the habits that keep every Data Mapper correct and fast: choosing the right type for the operation, reading and mapping only what you need, being explicit about the write, and reusing instead of duplicating. This lesson is part of the Data Mappers domain, worth 17% of the exam.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "Data Mapper",
+      "Best Practices",
+      "Extract",
+      "Load",
+      "Transform"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-52-r-26b-data-mapper-best-practices-applied-scenario-walkth",
+    "title": "R-26b: Data Mapper Best Practices Applied: Scenario Walkthroughs",
+    "series": "sf-omni-consultant",
+    "lesson": 52,
+    "excerpt": "Lesson 52 of the Salesforce OmniStudio Consultant Certification course walks the Data Mapper best practices through real read, reshape, and write scenarios. You learn to name the operation at each step, pick the matching Data Mapper type, and apply that step's best practice so the whole flow is fast, accurate, and reliable. This lesson is part of the Data Mappers domain, worth 17% of the exam.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "Data Mapper",
+      "Best Practices",
+      "Scenario",
+      "Extract",
+      "Load",
+      "Transform"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-53-r-27a-architectural-choices-fitting-omnistudio-into-the",
+    "title": "R-27a: Architectural Choices: Fitting OmniStudio into the Enterprise Landscape",
+    "series": "sf-omni-consultant",
+    "lesson": 53,
+    "excerpt": "Lesson 53 of the Salesforce OmniStudio Consultant Certification course covers how to place each OmniStudio component on the right layer of the stack, decide where the source of truth lives, and document the security context for every component. You learn to make recommendations that name the layer a component serves and the artifact it displaces. This lesson is part of the Best Fit Solutions domain, worth 15% of the exam.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "15 min read",
+    "tags": [
+      "OmniStudio",
+      "Architecture",
+      "Best Fit Solutions",
+      "OmniScript",
+      "FlexCard",
+      "Integration Procedure"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-54-r-27b-when-omnistudio-is-and-is-not-the-right-fit-in-the",
+    "title": "R-27b: When OmniStudio Is and Is Not the Right Fit in the System Landscape",
+    "series": "sf-omni-consultant",
+    "lesson": 54,
+    "excerpt": "Lesson 54 of the Salesforce OmniStudio Consultant Certification course covers the right-fit test: classifying an interaction by its shape before choosing a component. You learn when a guided, stateful journey belongs in OmniStudio and when a simple read, a background process, or an event consumer belongs elsewhere. This lesson is part of the Best Fit Solutions domain, worth 15% of the exam.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "15 min read",
+    "tags": [
+      "OmniStudio",
+      "Best Fit Solutions",
+      "Architecture",
+      "OmniScript",
+      "Integration Procedure",
+      "Data Mapper"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-55-r-28a-cross-component-performance-optimization-omniscrip",
+    "title": "R-28a: Cross-Component Performance Optimization: OmniScript Load Time, IP Execution, Data Mapper Queries",
+    "series": "sf-omni-consultant",
+    "lesson": 55,
+    "excerpt": "Requirement r-28a in the Best Fit Solutions domain (15% of the Salesforce OmniStudio Consultant exam) treats performance as a property of the whole journey, not of any single component. Lesson 55 of the Salesforce OmniStudio Consultant Certification course shows you how to profile the full path from first click to final save, then fix the slowest leg first.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "Performance",
+      "OmniScripts",
+      "Integration Procedures"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-56-r-28b-scalability-and-efficiency-performance-strategy-in",
+    "title": "R-28b: Scalability and Efficiency: Performance Strategy in Practice",
+    "series": "sf-omni-consultant",
+    "lesson": 56,
+    "excerpt": "Requirement r-28b in the Best Fit Solutions domain (15% of the Salesforce OmniStudio Consultant exam) separates a fast demo from a scalable solution. Lesson 56 of the Salesforce OmniStudio Consultant Certification course turns the cross-component view into a layered efficiency strategy, with asynchronous processing as the tool that keeps heavy work out of the user's way.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "Scalability",
+      "Performance",
+      "Asynchronous Processing"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-57-r-29a-right-sizing-data-mappers-and-ips-inside-omniscrip",
+    "title": "R-29a: Right-Sizing Data Mappers and IPs Inside OmniScripts: The Architecture View",
+    "series": "sf-omni-consultant",
+    "lesson": 57,
+    "excerpt": "Requirement r-29a in the Best Fit Solutions domain (15% of the Salesforce OmniStudio Consultant exam) is about choosing the right tool for each data operation. Lesson 57 of the Salesforce OmniStudio Consultant Certification course teaches you to name the business outcome first, then pick a Data Raptor for direct reads and writes or an Integration Procedure for orchestration and shared logic.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "Data Mappers",
+      "Integration Procedures",
+      "Architecture"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-58-r-29b-efficient-fetch-transform-and-save-at-the-solution",
+    "title": "R-29b: Efficient Fetch, Transform, and Save at the Solution Level",
+    "series": "sf-omni-consultant",
+    "lesson": 58,
+    "excerpt": "Requirement r-29b in the Best Fit Solutions domain (15% of the Salesforce OmniStudio Consultant exam) treats fetch, transform, and save as one pattern, not three separate steps. Lesson 58 of the Salesforce OmniStudio Consultant Certification course shows you how to trace every data element from source to destination and cut the waste that slows the whole journey.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "Data Flow",
+      "Fetch Transform Save",
+      "Efficiency"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-59-r-30a-omnistudio-governance-development-testing-and-depl",
+    "title": "R-30a: OmniStudio Governance: Development, Testing, and Deployment Processes",
+    "series": "sf-omni-consultant",
+    "lesson": 59,
+    "excerpt": "Requirement r-30a in the Best Fit Solutions domain (15% of the Salesforce OmniStudio Consultant exam) treats OmniStudio artifacts as production code, even though they are built declaratively. Lesson 59 of the Salesforce OmniStudio Consultant Certification course covers the governance model: a controlled environment strategy, a test plan per artifact, a deployment gate, and version control as the foundation.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "Governance",
+      "Testing",
+      "Deployment"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-60-r-30b-change-management-and-documentation-standards-for",
+    "title": "R-30b: Change Management and Documentation Standards for OmniStudio Artifacts",
+    "series": "sf-omni-consultant",
+    "lesson": 60,
+    "excerpt": "Requirement r-30b in the Best Fit Solutions domain (15% of the Salesforce OmniStudio Consultant exam) asks you to recommend practices for establishing an effective governance model, including change management and documentation standards for OmniStudio artifacts. Lesson 60 of the Salesforce OmniStudio Consultant Certification course covers the change process, risk classification, and the documentation template that keeps artifacts understandable and auditable.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "Change Management",
+      "Documentation",
+      "Governance"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-61-r-31a-conceptual-logical-and-physical-modeling-for-the-b",
+    "title": "R-31a: Conceptual, Logical, and Physical Modeling for the Business Solution",
+    "series": "sf-omni-consultant",
+    "lesson": 61,
+    "excerpt": "Requirement r-31a in the Best Fit Solutions domain (15% of the Salesforce OmniStudio Consultant exam) asks you to guide the creation of a Conceptual Model, Logical Model, and Physical Model to support the business solution. Lesson 61 of the Salesforce OmniStudio Consultant Certification course covers the three levels of abstraction, how they stay aligned, and why they are the foundation for every OmniStudio artifact.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "Data Modeling",
+      "Conceptual Model",
+      "Logical Model"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-62-r-31b-optimal-object-design-standard-vs-custom-objects-s",
+    "title": "R-31b: Optimal Object Design: Standard vs Custom Objects Supporting OmniStudio Artifacts",
+    "series": "sf-omni-consultant",
+    "lesson": 62,
+    "excerpt": "Requirement r-31b in the Best Fit Solutions domain (15% of the Salesforce OmniStudio Consultant exam) asks you to recommend optimal object design, standard vs custom, to support OmniStudio artifacts. Lesson 62 of the Salesforce OmniStudio Consultant Certification course covers the standard-versus-custom trade-off, validating the design against the artifacts, and choosing relationships deliberately.",
+    "date": "October 02, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "OmniStudio",
+      "Object Design",
+      "Standard Objects",
+      "Custom Objects"
     ],
     "status": "published"
   },

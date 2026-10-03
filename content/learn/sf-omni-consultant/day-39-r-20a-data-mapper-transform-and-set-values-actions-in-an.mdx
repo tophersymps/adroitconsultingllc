@@ -1,0 +1,113 @@
+---
+title: "R-20a: Data Mapper Transform and Set Values Actions in an IP"
+slug: day-39-r-20a-data-mapper-transform-and-set-values-actions-in-an
+series: sf-omni-consultant
+lesson: 39
+excerpt: "Lesson 39 of the Salesforce OmniStudio Consultant Certification course covers the data shaping actions inside an Integration Procedure. You learn when to use a Data Mapper Transform to reshape existing data and when to use Set Values to create or default a value, and why both belong before the Response action. This lesson is part of the Integration Procedures domain, worth 17% of the exam."
+date: "October 02, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [OmniStudio, Integration Procedures, Data Mapper, Set Values]
+---
+
+The last several lessons were about getting data into and out of an external system. Requirement r-20a is about what happens to that data inside the Integration Procedure before it reaches the client-side component. The exam wants you to recommend approaches for strategically using the Data Mapper Transform, Set Values, and Response actions to transform, filter, and structure data. In the Integration Procedures domain, worth 17% of the exam, the questions reward consultants who can assign each action its one job and place them in the right order. The organizing idea is simple: reshape with the Data Mapper, create and default with Set Values, and assemble with the Response action.
+
+## Deep Dive
+
+### The Data Mapper Transform reshapes data between two shapes
+
+The Data Mapper Transform action reshapes data between the external system's shape and the client component's shape [^1]. It maps source fields to target fields, renames them, converts types, and flattens or nests structures. It is the strategic tool for making an external payload usable by the client without changing the external system.
+
+The key word is reshape. The Data Mapper Transform takes data that already exists and changes its structure. A nested JSON response becomes a flat set of output variables. A field named `customerName` in the external system becomes a field named `name` in the output. A string that the external system returns becomes a number the client component expects. None of this changes the external system; it changes how the data is presented to the client [^1].
+
+The exam tests this directly. An external response returns nested JSON that the client component cannot read. Use a Data Mapper Transform to flatten and rename the fields into the output structure, and that is the strategic approach. Set Values assigns values and is not suited to structural reshaping, sending the raw JSON to the client does not fix the structure, and changing the HTTP method has nothing to do with the response shape [^1].
+
+### Set Values assigns literal and computed values
+
+Set Values is the action for assigning literal values, formulas, and constants to variables in the IP [^2]. It is used to set defaults, compute derived values, and prepare fields that the external system or the client component expects but that do not come from the source data.
+
+The distinction from the Data Mapper is the source of the value. The Data Mapper reshapes data that exists. Set Values creates a value that does not exist in the source, or assigns a default when the source is silent. A default status value that the client component expects but the external system does not return is a Set Values job, because the value is created, not reshaped [^2].
+
+The exam tests this directly. A consultant needs to assign a default status value to a field that the client component expects but the external system does not return. The correct action is Set Values, which assigns literal and computed values to variables. The Data Mapper reshapes existing data, the HTTP Action makes the external call, and the Response Action assembles the final output [^2].
+
+### The strategic split between the two actions
+
+The strategic split is: use Data Mapper Transform when the data exists but needs reshaping, and use Set Values when a value must be created or defaulted [^1][^2]. Trying to force a computed value through a pure field mapping, or reshaping through Set Values, produces brittle IPs that are hard to read and maintain.
+
+Each action has one job, and keeping them separate makes the IP readable and testable. When a consultant uses Set Values to reshape nested data, the result is a brittle, hard-to-read IP, because Set Values assigns values and is not built for structural reshaping. When a consultant uses the Data Mapper Transform to compute a value that should be a Set Values formula, the result is equally wrong, because the transform maps existing fields and a derived value belongs in Set Values, where the formula is explicit [^1][^2].
+
+The exam tests this split directly. Using Set Values to copy nested fields is wrong because Set Values assigns values and is not suited to structural reshaping; the Data Mapper Transform is built to reshape data, including flattening nested structures and renaming fields [^1]. And a derived value, such as a computed total or a default status, belongs in Set Values, where the formula is explicit [^2].
+
+### Filtering happens before or during the transform
+
+Filtering happens before or during the transform. The consultant decides whether to filter at the source, in the external query, in the Data Mapper, or in a later action [^1]. Filtering at the source is most efficient, but when the external system cannot filter, the Data Mapper or a subsequent action must do it.
+
+The efficiency argument is straightforward. Filtering at the source means the external system returns only the records the client needs, so less data crosses the network and less data flows through the IP. When the external system supports filtering, in a query parameter or a filter expression, that is the best place to do it. When it does not, the IP must filter the returned data itself, either in the Data Mapper Transform or in a later action that drops the records the client does not need [^1].
+
+The strategic point is to filter as early as possible. The earlier the filter, the less data the rest of the IP has to carry. The consultant weighs what the external system supports against what the client needs and places the filter at the earliest point that works.
+
+### Design the transform against the actual response shape
+
+The transform should be designed against the actual response shape, including arrays and optional fields [^1]. A transform that assumes a field is always present fails at runtime when the field is absent, so the consultant must handle optional and null values explicitly.
+
+The failure mode is a runtime error that looks like a mapping bug. A field that is absent or null in production causes a runtime failure, and the consultant spends time debugging a mapping that is actually correct for the data that exists. The fix is to design the transform against the real payload, not an assumed one, and to handle optional and null fields explicitly so the IP does not fail when a field is absent [^1].
+
+The exam tests this directly. Designing the transform against an assumed response shape instead of the real payload is a trap, because a field that is absent or null in production causes a runtime failure that looks like a mapping bug. The consultant reads the actual payload and handles optional and null values explicitly [^1].
+
+### Order matters: transform and set values before the Response action
+
+Order matters. Transform and set values before the Response action, so the client component receives a clean, final structure [^3]. The Response action should only assemble the already-shaped data, not do last-minute reshaping, because reshaping in the Response action is harder to test and maintain.
+
+The Response action is the last step, the one that sends the final output to the client-side component. If the Data Mapper Transform and Set Values run after the Response action, the client already received the data before it was shaped, which defeats the purpose. The transform and value assignments must run before the Response action so the client receives the final structure [^3].
+
+The exam tests this directly. The Data Mapper Transform and Set Values actions should be placed before the Response action, so the client receives a final clean structure. Before the Response action, so the client receives a final clean structure, is where they belong. Placing them after the Response means the client already got the data, and the HTTP Action and the named credential are not the place for data shaping [^3].
+
+Testing the transform is where the strategy is validated. The IP's Preview tab and debug log let you inspect the input and output of each action, so you can see exactly what the Data Mapper produced and what Set Values assigned before the Response action assembled the result. Test with a real payload, not a tidy sample, because the transform only reveals its problems when actual field names, types, and optional fields are present. A transform that works against a sample response can fail the moment a real response omits an optional field or returns a null where the sample had a value. Running the IP from the Preview tab and reading the debug log for each action is the reliable way to confirm the client component receives the final, clean structure [^3].
+
+### A worked example: shaping a customer profile for the client
+
+Put the pieces together with a concrete scenario. A customer wants an Omniscript to display a customer profile that comes from an external system. The external system returns a nested JSON object with the customer's name, address, and a list of recent orders, but the client component expects a flat set of fields plus a default status. The consultant starts by reading the actual response payload to see the real shape, including the nested address and the orders array [^1].
+
+The consultant adds a Data Mapper Transform action after the HTTP Action. The transform maps the nested address fields into flat output variables, renames the external field names to the names the client component expects, and converts the orders array into the structure the component can render. The transform also handles the optional fields explicitly, so the IP does not fail when a real response omits a field that the sample response included [^1].
+
+Next, the consultant adds a Set Values action to assign the values that do not come from the source. The client component expects a status field, but the external system does not return one, so the consultant sets a default status value. The consultant also computes a derived value, such as a formatted display name, using a formula in Set Values. These are created values, not reshaped ones, so they belong in Set Values rather than the Data Mapper [^2].
+
+Finally, the consultant places both actions before the Response action. The Response action assembles the already-shaped data into the final structure the client component receives. Because the transform and the value assignments ran first, the client gets a clean, final structure with the flat fields, the default status, and the derived value, all ready to render [^3].
+
+The strategy is visible in the ordering. The Data Mapper reshaped what existed, Set Values created what was missing, and the Response action assembled the result. Each action did one job, and the IP is readable and testable because the jobs are separate.
+
+Try it yourself. In a sandbox, build an IP that calls an external system, add a Data Mapper Transform to flatten a nested response, add a Set Values action to assign a default and a computed value, and place both before the Response action. Confirm from the debug log that the client component received the final, clean structure.
+
+## Config Walkthrough
+
+The data shaping flow maps onto four concrete steps.
+
+1. Add a Data Mapper Transform action after the HTTP Action and map the source response fields to the target output fields, renaming and converting types as needed. Flatten nested structures so the output matches what the client component expects [^1].
+
+2. Add a Set Values action to assign literal defaults and computed values to variables that do not come from the source data. Use it for default statuses, derived totals, and constants the client expects [^2].
+
+3. Handle optional and null fields in the transform so the IP does not fail when a field is absent in a real response. Design the mapping against the actual payload, not an assumed one [^1].
+
+4. Place the transform and Set Values actions before the Response action so the client component receives a final, clean structure. The Response action assembles the already-shaped data [^3].
+
+Test the IP from the Preview tab with a real payload and inspect the debug log to confirm the output variables received the expected values before you activate the version.
+
+## Exam Traps
+
+Three traps dominate this requirement, and each is a specific, avoidable mistake.
+
+**Using Set Values to reshape nested data instead of the Data Mapper Transform.** Set Values assigns values; it is not built for structural reshaping, and the result is a brittle, hard-to-read IP. Use the Data Mapper Transform to reshape [^1].
+
+**Using the Data Mapper Transform to compute a value that should be a Set Values formula.** The transform maps existing fields; a derived value belongs in Set Values, where the formula is explicit. Keep the two jobs separate [^2].
+
+**Designing the transform against an assumed response shape instead of the real payload.** A field that is absent or null in production causes a runtime failure that looks like a mapping bug. Read the actual payload and handle optional and null values explicitly [^1].
+
+The exam tip that ties these together: reshape with the Data Mapper, create and default with Set Values, and assemble with the Response action. Each action has one job, and keeping them separate makes the IP readable and testable.
+
+## What's Next
+
+This lesson covered the data shaping actions inside an Integration Procedure. Lesson 40, Response Actions: Structuring Data for the Client-Side Component, focuses on the final step, showing how the Response action assembles the shaped data into the structure the client component receives. That is the next scheduled lesson in the Integration Procedures domain.
+
+[^1]: Salesforce, "Integration Procedure Actions": https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_integration_procedure_actions_50165.htm&type=5
+[^2]: Salesforce, "Salesforce Certified OmniStudio Consultant Exam Guide": https://help.salesforce.com/s/articleView?id=005298970&language=en_US&type=1
+[^3]: Salesforce, "Build Simple Integration Procedures" (Trailhead module): https://trailhead.salesforce.com/content/learn/modules/omnistudio-integration-procedures/build-simple-integration-procedures

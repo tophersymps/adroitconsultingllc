@@ -1,0 +1,87 @@
+---
+title: "R-13a: Selecting Data Mappers and Integration Procedures Inside an OmniScript"
+slug: day-25-r-13a-selecting-data-mappers-and-integration-procedures
+series: sf-omni-consultant
+lesson: 25
+excerpt: "Requirement r-13a in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) tests your ability to choose the right server-side tool for the job. Lesson 25 of the Salesforce OmniStudio Consultant Certification course walks through when a Data Mapper is enough and when you need an Integration Procedure, then sharpens the save-strategy decision that trips up many consultants."
+date: "October 02, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [OmniStudio, OmniScripts, Data Mappers, Integration Procedures]
+---
+
+Every OmniScript eventually has to do something with data. Read an account. Reshape a payload. Write a record. Requirement r-13a from the OmniScripts domain, worth 17% of the Salesforce OmniStudio Consultant exam, asks you to give guidance on the appropriate Data Mappers and Integration Procedures to use inside an OmniScript to fetch, transform, and save data toward a specific business outcome. Here is the thing the exam actually cares about: it does not test whether you can click through the builder. It tests the reasoning that happens before you click. Given a description of the work, which tool is right, and why. Get that decision right and the OmniScript stays simple, fast, and maintainable. Get it wrong and you bolt logic onto the wrong layer, add server round trips that do not belong, and ship a journey nobody can debug.
+
+The two tools you are weighing are the Data Mapper and the Integration Procedure, often shortened to IP. Both run server-side. Both are configured declaratively. Both get invoked from elements inside the OmniScript. The difference is the scope of the work each is built to handle, and that scope is the entire exam question.
+
+## Deep Dive
+
+### What a Data Mapper does
+
+A Data Mapper transforms data between one structure and another. In an OmniScript it almost always sits between the OmniScript's data JSON and a target structure, either a Salesforce object you want to save or the request body of an external service you want to call. The work it performs is field-to-field mapping with light transformation: renaming a field, flattening nested JSON into a flat record, assembling a JSON request body from several input nodes, or splitting one value into several.
+
+Think of the Data Mapper as the tool for deterministic, declarative transformation work. Deterministic means the same input always produces the same output. There is no branching, no looping over external results, no orchestration of side effects. Declarative means a business analyst can read the mapping as a list of rules: this data JSON field goes to that object field, this nested array gets flattened, this value gets renamed. Because it is declarative, it is easy to review, easy to change, and easy to prove correct against a test payload.
+
+The OmniScript talks to a Data Mapper through a specific element. Inside the OmniScript builder you add a Data Mapper element, pick which mapper to run, and define how the data JSON feeds into the mapper's expected input. The Trailhead module on Data Mapper integration explains the pattern plainly: an OmniScript can use a Data Mapper extract action to pull Salesforce data in, a Data Mapper transform action to modify it, and a Data Mapper load action to write it back out. Each of those actions is a mapping from one shape to another, which is precisely the Data Mapper's lane.[^1]
+
+### What an Integration Procedure does
+
+An Integration Procedure is a different animal. It orchestrates multiple operations in sequence. A single IP can call a Data Mapper, invoke an external REST service, run an Apex class, loop over a collection, branch on a condition, and combine the results of all of those into one response. That response is returned to the OmniScript, which consumes it as data.
+
+So the IP is the right tool when the work is multi-step, spans external systems, or needs logic that a plain mapping cannot express. Fetching an order from a warehouse API, transforming that payload with a Data Mapper, then joining it with account data from Salesforce is orchestration. It has sequence, it has external dependencies, and it produces a single merged result. That is an Integration Procedure's job, and it is how the Trailhead material frames IPs: integration procedures can process many steps in sequence, branch conditionally, call external services, and work with data from Salesforce and beyond. They can even call Data Mappers internally, sequencing extract, transform, and load actions so the OmniScript stays focused on the user interaction.[^1]
+
+The OmniScript invokes the IP through an Integration Procedure element. You add the element, select the IP, and map the data JSON to the IP's input parameters. The IP executes server-side and returns a result that lands back in the data JSON for later Steps and conditions to read.
+
+### The decision rule is scope of work
+
+Everything in this lesson reduces to one rule: match the tool to the scope of the work. A single object save with a few field renames is a Data Mapper. There is one target, the transformation is light, and nothing else has to happen. A fetch that calls a REST service, transforms the response, and merges it with Salesforce data is an Integration Procedure. It is multi-step and multi-system, and the IP is built to hold that orchestration.
+
+The failure modes come from reversing the rule. If you press a Data Mapper into service for a multi-system orchestration, you discover that a mapper has no way to call the external service in the first place. It transforms one structure into another; it does not reach out to a REST endpoint or coordinate two systems. To make it work you end up bolting the missing orchestration onto the OmniScript, which bloats the journey you are supposed to keep lean. If you press an Integration Procedure into service for a trivial single-object rename, you add a server round trip and a layer of configuration to work a Data Mapper handles declaratively in a mapping that is easy to read. The exam rewards the consultant who can look at a scenario and name the tool by the scope, not by which tool they happen to know best.
+
+The quiz tests this exact split. One question describes an OmniScript that must save a single Account record, renaming a few fields from the data JSON to the Account object. The appropriate tool is a Data Mapper that maps the data JSON fields to the Account object, because a single-object save with field renames is deterministic, declarative transformation work. The distractors are each wrong for a reason you should be able to state: an Integration Procedure that calls a REST service is orchestration you do not need, a child OmniScript is for reusing a sub-journey, and a FlexCard is a display component, not a data tool. Another question describes a fetch from an external REST service that must transform the response and merge it with Salesforce data before showing it to the user. There the correct answer is an Integration Procedure that orchestrates the REST call, transform, and merge, because the work is multi-step and multi-system. A Data Mapper only transforms one structure into another, a formula computes a value, and a validation rule checks input.
+
+### The element passes the data JSON in, so define the contract
+
+Whether you choose a Data Mapper or an Integration Procedure, the element that invokes it passes the OmniScript's data JSON in and receives the result back. That means the mapping between the shape of the data JSON and the expected input of the mapper or IP must be defined before anything runs. The data JSON is the OmniScript's living record of every value the journey has touched. Later Steps, conditions, and save logic all read from it. If the element's input mapping does not line up with what the mapper or IP expects, the call fails outright or returns empty, and the failure shows up downstream as a blank field or a dropped record.
+
+The way to prevent this is to name things deliberately and test with sample data. When you configure a Data Mapper element, map the data JSON fields to the mapper's expected input and run it against a sample payload. When you configure an Integration Procedure element, confirm the IP's response lands in the data JSON under the names later Steps expect. A mismatch between the data JSON shape and the mapper or IP input is one of the most common integration failures in OmniStudio, and it is almost always an up-front naming problem. Agree on the contract and the failure disappears.
+
+### Efficiency means doing the work in the right place
+
+Efficiency in an OmniScript is mostly about where and when you move data. Fetching should happen as early in the journey as the journey needs it, and the result should be stored in the data JSON so later Steps and conditions can read it without another call. The anti-pattern is to re-fetch the same data in every Step. Each fetch is a round trip, and repeating it multiplies latency and risks inconsistency between one fetch and the next, because the underlying data could have changed or the service could degrade mid-journey. Fetch once, store the result in the data JSON under a stable name, and reference that stored value everywhere it is needed later.
+
+This mirrors the Omniscript best practices around naming and outlining. Salesforce's own guidance is to use unique names for Omniscript elements and Data Mapper response nodes, and to identify reusable elements by building an outline of the entire OmniScript before you build it.[^2] The outline is where you spot that a fetch is needed once and can feed three different Steps. Plan where data enters, store it once, and let every later element read that single copy.
+
+### Save strategy decides atomicity versus resilience
+
+The last decision in this lesson is the save strategy, and it is a business decision before it is a technical one. You choose whether the OmniScript saves incrementally, after one Step at a time, or once at the end of the journey. Both are legitimate; the right one depends on the business outcome the journey is meant to produce.
+
+An incremental save writes partial records as the user works. Its strength is resilience. If the user abandons the journey midway, the work they already entered exists as a partial record instead of vanishing. Its weakness is that it creates partial records, and a partially saved record may be useless or even misleading to the business if the journey is abandoned halfway through. A single end-of-journey save keeps the record atomic, meaning the write happens as one complete unit. Its strength is that you never leave a half-finished record. Its weakness is that an abandonment before the final save loses everything the user typed.
+
+The exam frames the choice through the business outcome, and it does so with a memorable scenario: the journey is long and users frequently abandon mid-way. In that scenario the better choice is to save incrementally per Step, because it protects against losing all work on abandonment. Incremental saves protect the work already entered, so a partial record exists even if the user leaves. A single end save risks losing everything on abandonment. For a short journey where abandonment is rare and a partial record is worse than none, saving once at the end is the cleaner call. You are trading atomicity against resilience, and which side you favor is set by what the business needs from the record.
+
+## Config Walkthrough
+
+Follow these steps inside the OmniScript builder to apply the decision rule.
+
+1. Add a Data Mapper element and select the Data Mapper to run. In the element's properties, define the input mapping so the correct data JSON fields feed the mapper's expected input. Save the configuration and test it with a sample data JSON payload before wiring anything else to it.
+2. To run an Integration Procedure, add an Integration Procedure element, select the IP you want to invoke, and map the data JSON to the IP's input parameters. Once it runs, confirm the IP's response lands in the data JSON under the names your later Steps and conditions expect, and adjust the mapping if it does not.
+3. For a fetch, place the Data Mapper or Integration Procedure element early in the journey. Store the result in the data JSON and reference that stored value in later conditions and Elements instead of repeating the fetch. Verify that later Steps read the stored node, not a fresh call.
+4. Decide the save strategy. For a long journey, configure incremental saves per Step so abandonment does not wipe out entered work. For a short journey, configure a single save at the end to keep the record atomic. Confirm the resulting records match the business outcome before you call the journey done.
+
+## Exam Traps
+
+Three traps account for most misses on this objective.
+
+First, using a Data Mapper for a multi-system orchestration. A mapper transforms one structure into another; it does not call external services and it does not coordinate multiple operations. That is an Integration Procedure's job. If the scenario mentions an external system or multiple steps, check the orchestration option, not the mapping option.
+
+Second, using an Integration Procedure for a trivial single-object rename. The IP adds a server round trip and configuration complexity for work a Data Mapper does declaratively in a mapping that reads like a list of rules. Match the tool to the scope of work: a mapper for a single deterministic transform, an IP for multi-step or multi-system orchestration.
+
+Third, mismatching the data JSON shape to the mapper or IP input. The element passes the data JSON in, so if the JSON structure does not match the expected input, the call fails or returns empty. Define the mapping up front, test with sample data, and confirm the result lands under the names your logic expects. Most stray blanks trace back to this one mistake.
+
+## What's Next
+
+The next lesson, lesson 26, is Fetch, Transform, and Save: Data Flow Architecture in OmniScripts, requirement r-13b. That lesson steps back from the individual tool choice and treats the whole journey as a pipeline, defining the fetch stage, the transform stage, and the save stage as one data flow whose contract is the data JSON.
+
+[^1]: Trailhead, "Use Data Mappers with Other Omnistudio Components: Explore Data Mapper Integration Within Omnistudio," https://trailhead.salesforce.com/content/learn/modules/omnistudio-data-mapper-fundamentals/explore-data-mapper-integration-within-omnistudio
+[^2]: Salesforce Help, "Omniscript Best Practices," https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_omniscript_best_practices_8368.htm&type=5

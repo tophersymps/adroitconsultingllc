@@ -1,0 +1,85 @@
+---
+title: "R-14a: OmniScript Element Selection: Steps, Blocks, and Inputs"
+slug: day-27-r-14a-omniscript-element-selection-steps-blocks-and-inpu
+series: sf-omni-consultant
+lesson: 27
+excerpt: "Requirement r-14a in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) asks you to recommend the right components for a business need. Lesson 27 of the Salesforce OmniStudio Consultant Certification course teaches the Step, Block, and Input hierarchy, when to make a Block repeatable, and why the data JSON name of an Input is a contract you must not break."
+date: "October 02, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [OmniStudio, OmniScripts, Elements, Blocks]
+---
+
+Ask a user to type the same thing twice and watch what happens. They hesitate, they second-guess, and somewhere a row of fields collapses into a single blob of free text. Usually the form is not the problem. The element is. You reached for the wrong building block for what the user is actually doing, and the whole journey pays for it.
+
+Requirement r-14a from the OmniScripts domain, worth 17% of the Salesforce OmniStudio Consultant exam, asks you to recommend the proper components to respond to business needs: Steps, Blocks, Inputs, Display Functions, Formulas, and the rest. The exam does not test whether you can drag an element onto a canvas. It tests whether you can look at what the user is doing and choose the element that matches. The OmniScript element hierarchy is a ladder: a Step is a page in the journey, a Block groups related Elements within a Step, and an Input is a single data-capture field. Choose the level that matches the structure of the data and the shape of the user's task, and the journey stays fast to complete and clean to maintain.
+
+## Deep Dive
+
+### The hierarchy: Step, Block, Input
+
+The OmniScript element hierarchy has three levels you will use constantly. A Step is a page in the journey. It is the unit the user advances through, and it typically corresponds to one logical chunk of the task, such as entering account details or reviewing a summary. A Block groups related Elements within a Step. It collects fields that belong together visually and logically, and it can be repeated to capture multiple instances of a group. An Input is a single data-capture field, the smallest unit, the thing the user actually types into or selects from.
+
+The Salesforce documentation on group elements describes Blocks precisely: Blocks help to group information to create nested JSON data, they are contained within Steps, and they can be repeated to capture an array of data.[^1] That last point is the key. A Block is not just a visual container. Because it creates nested JSON and can repeat, it is the structural tool for data that comes in groups.
+
+### A Block is for grouping and repetition
+
+A Block is the right choice when several fields form a repeating unit. The canonical example is a list of line items, where each line item has a product, a quantity, and a price. That is a group of fields that repeats, and a repeatable Block is the structure that captures it. Each instance the user adds writes to its own node in the data JSON, so the JSON ends up as an array of line items, one node per instance, each holding product, quantity, and price.
+
+The quiz tests this directly. An OmniScript must collect a list of line items, each with a product, quantity, and price. The correct element structure is a repeatable Block containing product, quantity, and price Inputs. A single Step with one text Input for the whole list cannot hold structured line items; it would be one blob of text. Three separate Steps, one per field, fragment a single task across three pages and make the list impossible to repeat. A read-only Input cannot capture data at all. The repeatable Block is the answer because a list of line items is a repeating group, and each instance writes to its own data JSON node.
+
+The corollary is not to force repetition by duplicating individual Inputs. If you need five line items and you copy the product, quantity, and price Inputs five times, you get fifteen Inputs that collide in the data JSON and are a maintenance nightmare. The repeatable Block gives you one definition that produces as many instances as the user needs. Use a Block for grouping and repetition, and do not hand-roll repetition with duplicated Inputs.
+
+A second example shows the same structure for a different domain. A mortgage application collects multiple addresses: the current home, a previous home, and a mailing address. Each address has a street, a city, a state, and a postal code, so the four fields form a repeating unit. A repeatable Block named addresses holds the four Inputs, and the user adds one instance per address. The data JSON ends up as an array of address objects, each with its own street, city, state, and postal code, and the save mapping can iterate the array to write each address to its own record. If the consultant had instead created four separate street, city, state, and postal code Inputs, the JSON would be a flat mess of colliding names and the save logic could not tell which address was which. The repeatable Block keeps the group intact and the JSON structured.
+
+### Input types must match the data
+
+An Input is not just a field; it has a type, and the type must match the data it captures. A text input for a number, a picklist for a fixed set of choices, a checkbox for a boolean, a date input for a date. The type is a constraint on what the user can enter, and it is also a signal to the user about what kind of answer is expected.
+
+Choosing the wrong input type has real costs. A text input for a fixed set of choices invites free text, which means the user can type anything, and you then have to validate and clean that free text. A picklist constrains the answer to the valid set, which makes the data cleaner and the validation easier. The rule is to match the input type to the data type and to how the user will answer. If the answer is one of a known set, use a picklist. If it is a yes or no, use a checkbox. If it is a date, use a date input. The right type makes the journey faster to complete and the data cleaner to consume.
+
+A worked example ties the type to the data. A journey asks for a customer's preferred contact method, which is one of phone, email, or text. That is a fixed set of choices, so the Input is a picklist with those three options. The user picks one, and the data JSON stores the exact value, so the save logic never has to clean up a typo. If the same field were a text Input, the user could type anything, and the journey would need validation and cleanup to turn free text into a usable value. The picklist does that work up front by constraining the answer. The same reasoning applies to a boolean like a consent flag, which is a checkbox, and to a date like a preferred appointment date, which is a date input. Match the type to the data, and the journey captures clean values the first time.
+
+### The data JSON name is the contract
+
+Every Input has a data JSON name, and that name is its contract. It is the key under which the value is stored in the data JSON, and it is what every downstream element, condition, and save mapping uses to find the value. Two Inputs with the same name collide and overwrite each other. A name that does not match the downstream mapper or IP input breaks the flow. The name is load-bearing, and it must be deliberate and stable.
+
+The quiz tests the collision directly. Two Inputs in an OmniScript are accidentally given the same data JSON name. The result is that the two Inputs collide and one overwrites the other in the data JSON. The OmniScript does not fail to deploy; it deploys fine and then silently corrupts the data. The values are not stored in an array; one overwrites the other. The second Input is not ignored silently; it actively clobbers the first. The collision corrupts the data the downstream logic reads, so names must be unique and deliberate.
+
+This is the same guidance Salesforce gives in its Omniscript best practices: use unique names for Omniscript elements and Data Mapper response nodes, and build an outline of the entire OmniScript before you build it.[^2] The outline is where you catch a duplicate name before it becomes a silent data bug. Name Inputs deliberately, keep the name stable across the journey, and confirm that conditions and save logic reference the right value.
+
+### Read-only Inputs for context
+
+Not every field on a Step is something the user should edit. Some fields exist to give the user context, and those belong in read-only Inputs. A read-only Input displays a value from the data JSON without allowing edits. The classic use is confirming a fetched account before the user acts on it: the journey fetches the account, shows the name and status as read-only, and the user confirms they are looking at the right record.
+
+The quiz tests this use case. A consultant needs to show a fetched account name to the user for confirmation, but the user should not edit it. The correct element is a read-only Input that displays the value from the data JSON. An editable text Input invites changes, which defeats the confirmation purpose. A repeatable Block is for lists, not for a single confirmation value. A picklist is for a fixed set of choices. The read-only Input is the answer because it shows the value without allowing edits, which is exactly the confirmation use case. Use read-only inputs for context, and reserve editable inputs for data the user must provide.
+
+### Element selection is a business decision
+
+The last point is the framing that ties the lesson together. Element selection is a business decision, not a style choice. The right element makes the journey faster to complete and the data cleaner. The wrong element makes the user fight the form and leaves the data messy. Before you choose, ask what the user is doing at that point: answering a question, confirming a value, or providing a list. The answer selects the element. Answering a question gets an Input of the matching type. Confirming a value gets a read-only Input. Providing a list gets a repeatable Block. The element follows the task, and the journey reads as a clear sequence the user can move through without guessing.
+
+## Config Walkthrough
+
+Build the structure in four steps.
+
+1. In the OmniScript builder, add a Step, then add a Block inside it to group related fields. Give the Block a stable name that matches the data structure it represents, so the nested JSON it creates is readable.
+2. To collect multiple instances of a group, make the Block repeatable so the user can add several instances, each writing to its own data JSON node. Confirm the resulting JSON is an array of instances, not a set of colliding fields.
+3. Add Inputs inside the Block and set each Input's type to match the data: text, picklist, checkbox, date, and so on. Set the data JSON name deliberately and keep it stable, and confirm no two Inputs share a name.
+4. For context the user should not edit, add a read-only Input that displays a value from the data JSON instead of an editable field. Reserve editable inputs for data the user must provide.
+
+## Exam Traps
+
+Three traps account for most misses on this objective.
+
+First, using a Block for a single field. A Block groups related fields; a lone field in a Block adds nesting without benefit. Use a Block for grouping or repetition, not as a default container for every field.
+
+Second, forcing repetition by duplicating individual Inputs instead of using a repeatable Block. Duplicated Inputs collide in the data JSON and are hard to maintain. Use a repeatable Block for lists, and let it produce as many instances as the user needs.
+
+Third, choosing an input type that does not match the data, such as a text input for a fixed set of choices. This invites free text and makes validation harder. Match the input type to the data and to how the user answers, and the data stays clean.
+
+## What's Next
+
+The next lesson, lesson 28, is Display Functions, Formulas, and Presentation Elements, requirement r-14b. That lesson covers the elements that compute values for the user and the elements that control how the journey looks, and it teaches you where each computation belongs.
+
+[^1]: Salesforce Help, "Omniscript Group Elements," https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_omniscript_group_elements_13946.htm&type=5
+[^2]: Salesforce Help, "Omniscript Best Practices," https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_omniscript_best_practices_8368.htm&type=5

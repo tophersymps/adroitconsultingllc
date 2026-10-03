@@ -1,0 +1,117 @@
+---
+title: "R-25b: Data Mapper Load Error Management During Create and Update"
+slug: day-50-r-25b-data-mapper-load-error-management-during-create-an
+series: sf-omni-consultant
+lesson: 50
+excerpt: "Lesson 50 of the Salesforce OmniStudio Consultant Certification course covers how a Data Mapper Load reports the outcome of every record it writes, how the flow branches on those outcomes, and how to keep a partial failure from taking down the whole process. You learn to validate before the write and to keep upsert keys unique and populated. This lesson is part of the Data Mappers domain, worth 17% of the exam."
+date: "October 02, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [OmniStudio, Data Mapper, Load, Error Management, Upsert]
+---
+
+A Data Mapper Load that writes data can fail. That sentence sounds obvious, but most consultants design the happy path and treat the failure as an afterthought. Requirement r-25b is about the other half of the job: how the Load reports what happened to each record, and how the flow reacts when some of those records fail. In the Data Mappers domain, worth 17% of the exam, the questions reward consultants who treat errors as expected, not exceptional [^3]. The organizing idea is simple: map the outcomes, branch on the failures, and validate before the write so the flow survives real data.
+
+## Deep Dive
+
+### A Load that writes data can fail, and error management is how you handle it
+
+A Data Mapper Load is the component that writes data into Salesforce, creating or updating records from the JSON that flows through the OmniScript or Integration Procedure [^1]. The write is the point where everything upstream finally touches the database, and that is exactly where things go wrong. Errors come from missing required fields, invalid values, duplicate keys, or records that fail validation. A record that violates a required field, a picklist value, or a validation rule is rejected by Salesforce, and the Load reports the specific error [^1].
+
+The key word is reports. The Load does not fail silently. It surfaces the outcome of each record it processes, and that is the foundation of error management. A successful write returns the record ID, and a failed write returns an error that describes why it failed. The consultant maps these outcomes into the output so downstream steps can see which records succeeded and which failed [^1].
+
+Why does this matter for the exam? Because the whole point of error management is that the flow can react. If the Load reports outcomes, the flow can branch on them. If it does not, a failed write is invisible and the data is left in an unknown state. The consultant who maps the Load's output to include the outcome of each record gives the flow the information it needs to respond.
+
+### The Load reports the outcome of each record it processes
+
+The Load reports the outcome of each record it processes. A successful write returns the record ID, and a failed write returns an error that describes why it failed [^1]. The consultant maps these outcomes into the output so downstream steps can see which records succeeded and which failed.
+
+This is a per-record contract, not a whole-batch one. A Load can succeed on some records and fail on others. That is the normal case under real data, where some records will always be dirty. The consultant designs the Load to report outcomes, the flow to branch on errors, and the data to be validated before the write. That combination is what makes Loads reliable under real data [^1].
+
+The exam tests this directly. When a Load processes many records and some fail validation, the flow should handle the failures while keeping the successful writes. A Load can succeed on some records and fail on others, so the flow should handle the failures without discarding the successes. Aborting loses good writes, and ignoring or re-running does not fix the failures.
+
+### Error handling is a branch in the flow
+
+Error handling is often a branch in the flow. When a Load returns errors, the flow can retry, log the failure, or surface a message to the user [^1]. The consultant designs this branch so a partial failure does not take down the whole flow and so the user knows what needs attention.
+
+Think about what the branch actually does. If the Load writes ten records and two fail, the flow should not roll back the eight that succeeded. It should let the successes stand, capture the two failures, and decide what to do with them. Retry is for transient problems. Logging is for records that need a human to look at them. Surfacing a message is for the user who needs to know that their submission partially failed and which parts need attention.
+
+The exam tests this directly. A Load can succeed on some records and fail on others, so the flow should handle the failures without discarding the successes. Aborting loses good writes, and ignoring or re-running does not fix the failures.
+
+### Validation errors are the most common Load failure
+
+Validation errors are the most common Load failure. A record that violates a required field, a picklist value, or a validation rule is rejected by Salesforce, and the Load reports the specific error [^1]. The consultant should validate data before the Load where possible, so bad records are caught early rather than failing at write time.
+
+The cost argument is simple. Catching a bad record before the Load is cheaper and cleaner than letting it fail at write time. A validation error at write time means the record has already traveled through the whole flow, consumed resources, and now needs to be handled by the error branch. Catching it early means the flow can correct it, skip it, or tell the user before the write ever happens.
+
+The exam tests this directly. A consultant who wants to catch bad records before they reach the Load should validate the data before the write. Validating before the Load catches missing required fields and invalid values early. Letting the Load fail is reactive, skipping validation invites errors, and a Transform after the Load does not prevent the write failure.
+
+### Upsert errors deserve special attention because the key logic can fail
+
+Upsert errors deserve special attention because the key logic can fail. A duplicate key, a missing key, or a key that matches multiple records breaks the upsert, and the Load reports it [^1]. The consultant must ensure the key is unique and populated to avoid these failures.
+
+The upsert key is the field the Load uses to decide whether it updates an existing record or inserts a new one [^1]. If the key is not unique, the Load cannot tell records apart. If the key is missing, the Load has nothing to match on. If the key matches multiple records, the upsert logic breaks because the Load does not know which record to update.
+
+There is a specific failure mode worth knowing. When the ID field is configured as the upsert key and the input records contain null ID values, the Data Mapper treats every record as identical, and each subsequent record overwrites the previous one, resulting in a single record being created or updated instead of multiple inserts [^2]. This behavior applies to any field used as an upsert key that contains null values, but it is most commonly encountered with ID because developers may assume it is required for upsert operations [^2].
+
+The fix is to choose the upsert key correctly. Remove the ID field as the upsert key when IDs are null at insert time, select an alternative field that holds a unique, non-null value for every record, and verify that the chosen key field contains unique values before the Load executes [^2]. The ID field functions as an implicit upsert key in Salesforce, so if a non-null ID is present in the input, the operation will upsert that record even if the upsert key option is unchecked [^2].
+
+The exam tests this directly. An upsert that fails because the key field matches multiple records is most likely caused by a key field that is not unique. An upsert key that matches multiple records means the key field is not unique, which breaks the upsert logic. The other options do not describe a duplicate-key failure.
+
+### Error management is a design concern, not an afterthought
+
+Error management is a design concern, not an afterthought. The consultant designs the Load to report outcomes, the flow to branch on errors, and the data to be validated before the write [^1]. This makes Loads reliable under real data, where some records will always fail and the flow must handle them gracefully.
+
+The design has three parts, and each is deliberate. First, the Load's output includes the outcome of each record, so the flow can see which writes succeeded and which failed. Second, the flow has a branch that handles Load errors, such as retrying, logging, or surfacing a message to the user. Third, the data is validated before the Load where possible, catching missing required fields and invalid values before they reach the write [^1].
+
+The exam tip that ties this together: treat Load errors as expected, not exceptional. Map the outcomes, branch on failures, and validate before the write so the flow survives real data.
+
+### A worked example: a batch of policy endorsements
+
+Put the pieces together with a concrete scenario. A consultant builds an OmniScript that lets an agent submit a batch of policy endorsements. Each endorsement is a record that must be written to Salesforce. The consultant knows that some endorsements will fail: a policy number that does not exist, a coverage code that is not in the picklist, a required field left blank.
+
+The consultant starts by mapping the Load's output to include the outcome of each record. The output carries, for each endorsement, whether the write succeeded and, if it failed, the error that describes why. This gives the flow the information it needs to react [^1].
+
+Next, the consultant adds a branch in the flow that handles Load errors. When the Load returns failures, the flow does not abort. It lets the successful writes stand, logs the failed endorsements, and surfaces a message to the agent telling them which endorsements need attention and why [^1].
+
+Before the write, the consultant validates the data. The flow checks that each endorsement has a policy number, a valid coverage code, and the required fields populated. Bad records are caught early, so they never reach the write and never trigger a validation error at write time [^1].
+
+For the upsert, the consultant verifies the key. The endorsements use an external reference number as the upsert key, not the Salesforce ID, because the records are new and do not have IDs yet. The consultant confirms the key is unique and populated for every record, so the upsert logic does not break on a duplicate or missing key [^2].
+
+The result is a flow that survives real data. Some endorsements fail, the flow handles them, the agent knows what needs attention, and the successful writes are preserved. That is error management as a design concern, not an afterthought.
+
+Try it yourself. In a sandbox, build a Data Mapper Load that writes a batch of records, map the output to include the outcome of each record, add a branch that handles failures, and validate the data before the write. Then feed it a batch with a few bad records and confirm the flow preserves the successes and reports the failures.
+
+## Config Walkthrough
+
+The error management design maps onto four concrete steps.
+
+1. Map the Load's output to include the outcome of each record, so the flow can see which writes succeeded and which failed. A successful write returns the record ID, and a failed write returns an error that describes why it failed [^1].
+
+2. Add a branch in the flow that handles Load errors, such as retrying, logging, or surfacing a message to the user. Design the branch so a partial failure does not take down the whole flow [^1].
+
+3. Validate data before the Load where possible, catching missing required fields and invalid values before they reach the write. This is cheaper and cleaner than letting bad records fail at write time [^1].
+
+4. For upsert, verify the key field is unique and populated to avoid the duplicate and missing key errors that break the upsert logic. Choose a key that holds a unique, non-null value for every record, and do not use the ID field as the upsert key when IDs are null at insert time [^2].
+
+Test the flow with a batch that includes a few bad records and confirm the successful writes are preserved and the failures are reported before you activate the version.
+
+## Exam Traps
+
+Three traps dominate this requirement, and each is a specific, avoidable mistake.
+
+**Ignoring the Load's error output.** If the flow does not read the outcomes, a failed write is invisible and the data is left in an unknown state. Map the Load's output to include the outcome of each record so the flow can react [^1].
+
+**Letting a partial failure take down the whole flow.** A Load can succeed on some records and fail on others, and the flow must handle the failures without aborting the successes. Aborting loses good writes [^1].
+
+**Skipping validation before the write.** Bad records fail at write time with validation errors; catching them before the Load is cheaper and cleaner. Validate the data before the write [^1].
+
+The exam tip that ties these together: treat Load errors as expected, not exceptional. Map the outcomes, branch on failures, and validate before the write so the flow survives real data.
+
+## What's Next
+
+This lesson covered how a Data Mapper Load reports the outcome of every record it writes and how the flow branches on those outcomes. Lesson 51, Data Mapper Best Practices: Extraction, Load, and Transform, is the next scheduled lesson in the Data Mappers domain. It steps back from the failure case and covers the habits that keep every Data Mapper correct and fast: choosing the right type for the operation, reading and mapping only what you need, and reusing instead of duplicating.
+
+[^1]: Salesforce, "Configure an OmniStudio Data Mapper Load": https://help.salesforce.com/s/articleView?id=xcloud.os_object_field_mapping_47137.htm&type=5
+[^2]: Salesforce, "OmniStudio Data Mapper Load: Upsert Key on ID Field Inserts Only One Record": https://help.salesforce.com/s/articleView?id=000699090&language=en_US&type=1
+[^3]: Salesforce, "Salesforce Certified OmniStudio Consultant Exam Guide": https://help.salesforce.com/s/articleView?id=005298970&language=en_US&type=1

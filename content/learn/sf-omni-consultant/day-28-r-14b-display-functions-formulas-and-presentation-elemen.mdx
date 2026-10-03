@@ -1,0 +1,85 @@
+---
+title: "R-14b: Display Functions, Formulas, and Presentation Elements"
+slug: day-28-r-14b-display-functions-formulas-and-presentation-elemen
+series: sf-omni-consultant
+lesson: 28
+excerpt: "Requirement r-14b in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) covers the elements that compute values and the elements that control how a journey looks. Lesson 28 of the Salesforce OmniStudio Consultant Certification course teaches Formulas, Display Functions, and presentation elements, and the rule that every value is computed in exactly one place."
+date: "October 02, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [OmniStudio, OmniScripts, Formulas, Display Functions]
+---
+
+The total says 41. The saved record says 39. Two, and nobody remembers where the split happened, because the total was worked out in two different places and the two copies drifted apart. That is the disease this lesson treats. It is almost never a math error. It is a computation with more than one owner.
+
+Requirement r-14b from the OmniScripts domain, worth 17% of the Salesforce OmniStudio Consultant exam, asks you to recommend the proper components to respond to business needs, and this lesson covers the ones that compute and present rather than capture. Display Functions and Formulas compute values for the user without storing new data. A Formula computes a value from other data JSON values, such as a total from line items or a derived status. A Display Function renders a value or a message. Presentation elements control how the journey looks: headings, text blocks, images, and layout. The exam wants you to know what each one is for, and it wants you to know where a computed value belongs.
+
+## Deep Dive
+
+### What a Formula does
+
+A Formula computes a value from other data JSON values. It reads from the data JSON, applies an expression, and writes its result back to the data JSON under its own name. Because the result is a computed value stored in the JSON, it can be referenced by later conditions, by display logic, and by save mappings. The Salesforce documentation on creating a formula in an OmniScript describes the mechanics: you drag a Formula or Aggregate element onto the script structure and, in the properties panel under Expression, add Omniscript functions to build the calculation.[^1]
+
+The running total is the canonical example. An OmniScript collects line items, and the user wants to see the total as they add them. A Formula reads the line items from the data JSON, sums the price times quantity for each, and writes the total back to the data JSON under a name like totalAmount. The user sees the running total, and because the total is in the data JSON, a later Step or the save mapping can reference it too.
+
+A worked example makes the mechanics concrete. The data JSON holds an array of line items, each with a quantity and a unit price. The Formula iterates the array, multiplies each quantity by its unit price, and adds the products into a running sum. It writes that sum to the data JSON under the name totalAmount. When the user adds a fifth line item, the Formula runs again, reads the updated array, and writes a new total. Because the Formula is the single owner of the total, the displayed number and any later use of totalAmount always agree. If the consultant had instead computed the total in the save Data Mapper, the user would not see a running total while they worked, because the mapper runs only at save time. The Formula is the right owner because the value is consumed for display inside the journey.
+
+The quiz tests this directly. An OmniScript must show a running total of line items to the user as they add them. The total should be computed in a Formula element that reads the line items from the data JSON. The Data Mapper that saves the record computes for the saved record, not for live display. A read-only Input displays a stored value; it does not compute. A validation rule checks input; it does not compute a total. The Formula is the answer because the total is needed for display inside the OmniScript, and a Formula reads the line items and writes the result to the data JSON.
+
+### Formulas must be deterministic and defensive
+
+A Formula is a computation, and a computation should be deterministic: the same inputs must produce the same output. It should also handle empty or missing inputs gracefully. A formula that assumes a field is always present breaks when the field is empty, and empty fields are exactly what happens on branches that skip the source field.
+
+The quiz tests this risk. A Formula references a field that is only populated on one branch of the OmniScript. On the other branch the field is empty. The risk is that the formula breaks or returns an unexpected value on the branch where the field is empty. The formula does not always work; it fails exactly where the data is missing. The OmniScript does not fail to deploy; it deploys and then misbehaves at runtime. The field is not auto-populated. The formula must handle empty and missing inputs explicitly, and it should be tested against the empty case. Design formulas to be deterministic, handle empty inputs, and test each one against empty, boundary, and populated inputs.
+
+### What a Display Function does
+
+A Display Function renders a value or a message to the user. Where a Formula computes and stores, a Display Function presents. It is the element you use to show computed context without storing new data, such as a message that changes based on a condition or a value that is rendered for the user to read. It gives the user context, and it does not add a new node to the data JSON.
+
+The distinction matters for the exam. A Display Function only renders; it does not compute a value that downstream logic can reference, and it does not store data. If you need a value that later conditions or the save mapping will read, you need a Formula, not a Display Function. If you need to show a message or a value to the user and nothing downstream needs it, a Display Function is the lighter, correct choice.
+
+A worked example separates the two. A journey shows a message that changes with the customer's tier: gold customers see one message, silver customers see another. The tier is already a value in the data JSON, and the message is only for the user to read, so a Display Function renders the right message based on the tier. Nothing downstream needs the message as a node, so no Formula is required. Contrast that with the running total, which the save mapping reads, and which therefore must be a Formula that writes totalAmount to the data JSON. The rule is consistent: if the value is consumed downstream, compute it with a Formula; if it is only presented, render it with a Display Function.
+
+### Presentation elements control the look
+
+Presentation elements are the ones that carry no data and exist to guide the user: headings, text blocks, images, and layout. They set context, explain a Step, or brand the journey. A heading at the top of a Step tells the user what this page is about. A text block explains a requirement or a consequence. An image can show a product or a diagram. None of them captures or computes data; they exist to make the journey understandable.
+
+The discipline with presentation elements is restraint. Do not overload a Step with presentation elements that crowd out the actual inputs. A wall of headings and text buries the fields the user must fill, and the user loses track of what to do next. Keep presentation minimal and purposeful: enough to set context, not so much that it buries the task. A Step should read as a clear sequence of context, inputs, and computed feedback, and the user should always know what to do next.
+
+A concrete example shows the balance. A Step that collects a customer's contact details might open with a short heading that names the purpose, and a single text block that explains why the information is needed, such as a note that the phone number is used for appointment reminders. Then come the inputs: name, phone, and email. A computed feedback line, such as a Display Function that confirms the phone format is valid, sits below the inputs. That is context, inputs, and feedback in a clean sequence. The overloaded version of the same Step stacks three headings, two explanatory paragraphs, an image, and a disclaimer block before the inputs even appear, and the user has to scroll past a wall of text to reach the fields they must fill. The restrained version guides the user; the overloaded version buries the task. Keep presentation minimal and purposeful, and the journey reads clearly.
+
+### Formula versus Data Mapper: where the value is consumed
+
+The choice between a Formula and a Data Mapper transform is about where the value is needed. If the value is needed for display or for a condition inside the OmniScript, compute it with a Formula. If the value is needed in the saved record or in a payload for an external system, compute it in the Data Mapper. The location of the consumer decides the owner.
+
+The quiz tests this with a value needed both for display in the OmniScript and in the saved record. The correct approach is to compute it once, in the place that owns the value, and reference it from the other. Computing it in both a Formula and a Data Mapper is a maintenance hazard because the two can drift. Computing it in a Display Function only is wrong because a Display Function only renders; it does not produce a value the save can read. Hardcoding the value is not a real solution. Compute it once in the owner location and reference it from the other, and the two consumers always agree.
+
+### Keep presentation and computation separate from data capture
+
+The final point is structural. Keep presentation and computation separate from data capture. A Step should read as a clear sequence: context, inputs, computed feedback. Mixing a wall of formulas and display text with the inputs buries the fields the user must fill. Structure the Step so the user always knows what to do next. Context at the top, inputs in the middle, computed feedback where it helps, and nothing that competes with the fields for the user's attention.
+
+## Config Walkthrough
+
+Apply these elements in four steps.
+
+1. To compute a value for display, add a Formula element, write the expression against the data JSON, and give the result a stable name in the data JSON so later conditions and save mappings can reference it.
+2. To show computed context without storing data, add a Display Function that renders the value or message to the user. Confirm nothing downstream needs the value as a data JSON node; if it does, use a Formula instead.
+3. Add a heading or text block to set context at the top of a Step, and keep presentation elements minimal so the inputs stay prominent. Review the Step to confirm the user always knows what to do next.
+4. Test each Formula with empty, boundary, and populated inputs, especially on branches that may skip the source field. Confirm the formula handles a missing field without breaking or returning garbage.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, computing the same value in both a Formula and a Data Mapper. Two owners for one computation drift and produce different results. Pick one owner based on where the value is consumed, and let the other side reference it.
+
+Second, writing a Formula that assumes a field is always present. On a branch that skips the field, the formula breaks or returns garbage. Handle empty and missing inputs explicitly, and test the formula against the empty case.
+
+Third, overloading a Step with presentation elements. A wall of headings and text crowds out the inputs the user must fill. Keep presentation minimal and purposeful, and structure the Step as context, inputs, and computed feedback.
+
+## What's Next
+
+The next lesson, lesson 29, is LWC Embeds and Custom/Standard Components in OmniScripts, requirement r-15a. That lesson moves beyond the standard elements to custom Lightning Web Components, and it teaches when a custom component is worth the cost and how to keep it consistent with the org's branding.
+
+[^1]: Salesforce Help, "Create a Formula or Aggregate in an Omniscript," https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_create_a_formula_or_aggregate_in_an_omniscript_23115.htm&type=5
+[^2]: Salesforce Help, "Access Omniscript Data JSON with Merge Fields," https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_access_omniscript_data_json_with_merge_fields_22053.htm&type=5

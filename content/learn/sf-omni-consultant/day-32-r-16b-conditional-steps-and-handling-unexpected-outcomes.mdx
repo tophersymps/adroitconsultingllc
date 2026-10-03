@@ -1,0 +1,102 @@
+---
+title: "R-16b: Conditional Steps and Handling Unexpected Outcomes and Data Inconsistencies"
+slug: day-32-r-16b-conditional-steps-and-handling-unexpected-outcomes
+series: sf-omni-consultant
+lesson: 32
+excerpt: "Requirement r-16b in the OmniScripts domain (17% of the Salesforce OmniStudio Consultant exam) covers conditional steps and handling unexpected outcomes and data inconsistencies. Lesson 32 of the Salesforce OmniStudio Consultant Certification course teaches how to gate steps on data, how to design the failure paths, and how to surface a data conflict instead of letting the last write silently win."
+date: "October 02, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [OmniStudio, OmniScripts, Conditional Steps, Error Handling]
+---
+
+Requirement r-16b from the OmniScripts domain, worth 17% of the Salesforce OmniStudio Consultant exam, is the second half of the validation story we started in lesson 31. Where lesson 31 was about keeping bad data out, this one is about what happens when things go wrong anyway: a fetch returns nothing, a save rejects, or the data the user entered conflicts with what the system holds.
+
+The exam wants you to think about the failure paths, not just the happy path. A journey that works when everything succeeds but breaks when a fetch returns empty is not dependable. And when data conflicts, the flow should detect it and decide explicitly, not let the last write silently win. That last point is the one that separates a thoughtful design from a fragile one.
+
+## Deep Dive
+
+### Conditional steps guide the user
+
+Conditional steps guide the user by showing only the steps that apply to their situation. A conditional step is gated on a data JSON value, so a user who does not need a phase never sees it. This keeps the journey short and focused, and it is the primary mechanism for adapting the flow to the user's data.
+
+Think about a journey where a user selects their account type. If they select "business," they need a business tax ID step. If they select "individual," they do not. A conditional step gated on the account type value shows the tax ID step only for business users. The individual user never sees it, the journey stays short, and the flow adapts to the data.
+
+Salesforce's docs describe the mechanism. With the Conditional View property, you can hide an element or a group of elements in a block or step based on certain conditions, and every step, block, or element supports at least one conditional view.[^1] The condition is evaluated against the data JSON, and the element renders only if the condition is true.
+
+The quiz tests this directly. A conditional step should appear only for users who selected "business" in an earlier Step. The correct configuration is to make the Step conditional on the 'business' value in the data JSON. A conditional step is gated on a data JSON value, so it only appears when the value matches. Hiding with CSS is not a data-driven condition, duplicating the OmniScript doubles maintenance, and a FlexCard is a display component. The data JSON condition is the answer.
+
+### How a conditional step is configured
+
+A conditional step is configured with the Conditional View property, and the configuration is the same mechanism you use for any element. Salesforce's docs describe it: with the Conditional View property, you can hide an element or a group of elements in a block or step based on certain conditions, and every step, block, or element supports at least one conditional view.[^1] You pick a condition type, choose a logical operator for the group, add a condition, and enter the element name and the value it is compared against.
+
+The condition type matters. For a step, the relevant type is Show Element if True, which renders the element only if the conditional is true, and hides it from the UI if the conditional is false.[^1] That is the gate that keeps a step out of the journey until the data says it applies. The condition is evaluated against the data JSON, so the step appears only when the value matches.
+
+A worked example makes the configuration concrete. A journey asks the user to select their account type, and the selection is stored in the data JSON under the name accountType. A business tax ID step is gated with a Show Element if True condition on accountType equals business. When the user selects business, the step appears. When the user selects individual, the step stays hidden. The journey adapts to the data, and the user never sees a step that does not apply to them.
+
+### Unexpected outcomes are the cases the happy path does not cover
+
+Unexpected outcomes are the cases the happy path does not cover: a fetch that returns nothing, a save that rejects, an integration that times out. Design for these explicitly. Each external interaction should return a status the OmniScript reads, and the flow should route each failure to a message the user understands and a path forward.
+
+The quiz tests this with a save stage. A save stage in an OmniScript rejects a record because of a downstream rule. The correct design is to read the rejection status, show a clear message about the rule, and route the user to a corrective path. An unexpected outcome must surface in a way the user can act on: read the status, explain the rule, and route to a corrective path. A generic error gives no guidance, silent retry may loop, and ignoring the rejection loses the data. The read-the-status-and-route approach is the answer.
+
+This is the discipline from lesson 31, applied to the whole journey. Every external interaction returns a status. The OmniScript reads it. If the status is a failure, the flow routes to a clear message and a path forward. The user is never left staring at a generic error with no idea what happened or what to do next.
+
+### Data inconsistencies are conflicts between what the user entered and what the system holds
+
+Data inconsistencies are conflicts between what the user entered and what the system holds. An account that was updated elsewhere, a value that violates a downstream rule, a fetched value that no longer matches reality. The OmniScript should detect the inconsistency, tell the user what changed, and offer a corrective action, rather than silently overwriting or failing.
+
+The quiz tests this directly. An OmniScript fetches an account, but the account was updated in another system after the fetch. The user then edits a field. The correct handling is to detect the conflict, tell the user the account changed, and offer a corrective action. A data inconsistency should be detected and surfaced: tell the user the account changed and offer a corrective action, rather than silently overwriting or failing. Silently overwriting loses the other system's change, blocking traps the user, and ignoring the fetched value is not a real resolution. The detect-and-surface approach is the answer.
+
+Why does this matter so much? Because the alternative is silent data loss. The user edits a field, the save overwrites the fetched value, and the change the other system made is gone. Nobody is told, nobody can fix it, and the data is wrong. Detecting the conflict and telling the user gives them the chance to decide which value should win. That is the difference between losing data and managing it.
+
+A worked example makes the inconsistency concrete. An OmniScript fetches an account at the start of the journey, and the fetched value is stored in the data JSON under the name accountName. While the user is working, another system updates the account's name to a new value. The user then edits a different field and tries to save. The flow compares the fetched accountName with the current value in the system, sees that they differ, and surfaces the conflict. The user is told the account changed, and a conditional corrective step offers a choice: keep the fetched value or accept the new one. The decision is explicit, made by the user, not silent, made by whichever write happened last.
+
+### Conditional steps and error handling combine to manage inconsistency
+
+Conditional steps and error handling combine to manage inconsistency. When a validation fails or an unexpected outcome occurs, a conditional step can route the user to a corrective path, such as a step that asks for the missing data or confirms an override. Design the corrective path as part of the journey, not as an afterthought.
+
+This is where the two halves of the requirement come together. Validation and conditional steps are not separate features; they are one design. Validation catches the problem, and a conditional step gives the user a way out. When a save rejects because of a downstream rule, a conditional step appears that explains the rule and asks the user to correct the data or confirm an override. The user is guided to a valid state, not trapped.
+
+The corrective path has to be designed in, not bolted on. If you design only the happy path and add error handling later, the corrective path is an afterthought and it shows. Design the failure paths as part of the journey, and the user always has a way forward.
+
+### The data JSON is where inconsistencies surface
+
+The data JSON is where inconsistencies surface. Because every element writes to it, a conflict between a fetched value and a user-entered value is visible in the JSON. Design the flow to compare the two and decide which wins, and make that decision explicit rather than letting the last write silently win.
+
+This is the mechanism behind the detect-and-surface approach. The fetched value and the user-entered value both live in the data JSON. The flow can compare them, see that they differ, and decide which should win. The decision is explicit, made by the design, not accidental, made by whichever write happened last.
+
+The trap is letting the last write silently win. The user edits a field, the save writes it, and the fetched value is overwritten without anyone noticing. The conflict is never detected, the decision is never made, and the data is wrong. Design the flow to compare the two values and decide explicitly, and the conflict becomes a managed event instead of silent data loss.
+
+### Test the failure paths, not just the happy path
+
+Test the failure paths, not just the happy path. A journey that works when everything succeeds but breaks when a fetch returns empty or a save rejects is not dependable. Build a test matrix that covers each unexpected outcome and each inconsistency, and confirm the user is guided to a valid state.
+
+This is the practical payoff of everything above. You can design the failure paths, but if you never test them, you do not know they work. Build a test matrix that covers each unexpected outcome and each inconsistency. For each one, confirm the user is guided to a valid state. A journey that survives production is one that has been tested on the paths that break, not just the path that works.
+
+The test matrix is the deliverable that proves the design. It lists each failure case, the expected behavior, and the result. When a fetch returns empty, the user sees a clear message and a corrective path. When a save rejects, the user sees the rule and a way forward. When data conflicts, the user is told and offered a corrective action. Each case is tested, and each one guides the user to a valid state.
+
+## Config Walkthrough
+
+Guide the user and manage unexpected outcomes in four steps.
+
+1. To guide the user, make a Step conditional on a data JSON value so it only appears when it applies, keeping the journey short and focused. Use the Conditional View property to gate the step on the value.
+2. Add status handling to each fetch and save stage: read the returned status and route failures to a clear message and a path forward. Never leave the user staring at a generic error.
+3. To manage an inconsistency, add a conditional corrective step that appears when the conflict is detected, asking for the missing data or confirming an override. Compare the fetched value and the user-entered value in the data JSON and decide explicitly which wins.
+4. Build a test matrix that covers each unexpected outcome and inconsistency, and confirm the user is guided to a valid state on every path. Test the failure paths, not just the happy path.
+
+## Exam Traps
+
+Three traps account for most misses on this objective.
+
+First, designing only the happy path. A journey that breaks when a fetch returns empty or a save rejects is not dependable. Design and test the failure paths explicitly.
+
+Second, letting the last write silently win on a data conflict. When a fetched value and a user-entered value conflict, the flow should detect it and decide explicitly, not let the last write overwrite silently.
+
+Third, blocking the user with no corrective path when validation fails. A conditional corrective step that asks for the missing data or confirms an override guides the user to a valid state instead of trapping them.
+
+## What's Next
+
+The next lesson, lesson 33, is OmniScript Best Practices: Design and Performance, requirement r-17a. That lesson steps back from the individual mechanics and covers the practices that make an OmniScript fast and maintainable, starting with the data JSON contract you define before you build.
+
+[^1]: Salesforce Help, "Conditionally Display Omniscript Elements," https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_conditionally_display_elements_using_the_conditional_view_property_19389.htm&type=5

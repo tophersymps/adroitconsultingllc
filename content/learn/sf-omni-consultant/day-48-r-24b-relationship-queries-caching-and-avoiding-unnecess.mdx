@@ -1,0 +1,110 @@
+---
+title: "R-24b: Relationship Queries, Caching, and Avoiding Unnecessary Mapping"
+slug: day-48-r-24b-relationship-queries-caching-and-avoiding-unnecess
+series: sf-omni-consultant
+lesson: 48
+excerpt: "Lesson 48 of the Salesforce OmniStudio Consultant Certification course completes the Data Mapper performance picture. You learn how relationship queries read parent and child records in one call, how caching lets a flow reuse reference data without re-querying, and how to avoid mapping data you do not need. This lesson is part of the Data Mappers domain, worth 17% of the exam."
+date: "October 02, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [OmniStudio, Data Mappers, Relationship Queries, Caching]
+---
+
+Requirement r-24b sits in the Data Mappers domain, worth 17% of the exam [^4], and it asks you to describe the techniques to optimize Data Mapper performance, such as reducing the number of queries, efficient filtering, relationship queries, caching, and avoiding unnecessary data mapping. Lesson 47 covered reducing queries and efficient filtering. This lesson covers the other three: relationship queries that read parent and child records in one call, caching that lets a flow reuse reference data without re-querying, and avoiding data mapping that does not need to happen. Together they complete the performance picture, and the exam tests all of them.
+
+## Deep Dive
+
+### Relationship queries read parent and child records in one call
+
+Relationship queries read a parent record and its related child records in a single call. Instead of querying the parent, then querying each child separately, a relationship query traverses the relationship and returns the related records together. This reduces the number of queries, and fewer queries means a faster Data Mapper [^1].
+
+The exam tests this directly. A Data Mapper must read a parent record and its related child records. The most efficient approach is to use a relationship query that traverses the relationship in one call. Querying the parent, then querying each child separately adds reads, a Load writes instead of reading, and querying only the children misses the parent [^1].
+
+The reason a relationship query is faster is that it replaces many queries with one. Querying a parent and then each child separately means one query for the parent plus one query per child. A relationship query reads the parent and all its children in one call, so the number of queries drops from many to one [^1].
+
+The Salesforce documentation makes the trade-off explicit. It compares relationship notation with multiple extract steps, and it explains when each approach is the right one [^1]. Relationship notation is the way to read related records in one call, and it is the approach the exam expects for a parent and its children [^1].
+
+A relationship query is the right tool when the flow needs related records together. The consultant who needs an account and its contacts, an order and its line items, or a case and its comments should use a relationship query to read them in one call. The alternative, querying the parent and then querying each child separately, multiplies the number of queries by the number of children, and on a large dataset that multiplication is expensive. The relationship query collapses all of it into a single call, and the flow gets faster for it [^1].
+
+### Extract supports the full relationship traversal
+
+Extract supports the full SOQL feature set, including relationship traversal. When a consultant needs to read data across related objects, the Extract is the Data Mapper type that supports the traversal. It reads Salesforce data and returns results, and it can follow relationships to pull related records [^1].
+
+The exam tests this directly. A consultant needs to read data across related objects. The Data Mapper type that supports the relationship traversal is the Extract. The Turbo Extract has a narrower feature set, the Load writes instead of reading, and the Transform does not query at all [^1][^2].
+
+The distinction between Extract and Turbo Extract matters here. The Extract supports the full SOQL feature set, so it can traverse relationships and pull related records [^1]. The Turbo Extract retrieves data from a single Salesforce object type, with support for fields from related objects, but it does not have the full feature set of the Extract [^2]. When the requirement is relationship traversal, the Extract is the tool [^1].
+
+### Caching reuses reference data without re-querying
+
+Caching stores the result of a read so later steps can reuse it instead of re-querying. When the same reference data is needed multiple times in a flow and changes rarely, caching the first read lets every later step use the cached result. The repeated query disappears, and the flow gets faster [^3].
+
+The exam tests this directly. The same reference data is needed multiple times in a flow and changes rarely. The best optimization is to cache the result of the first read and reuse it. Re-querying it each time repeats the cost, mapping it into every output does not avoid the repeated read, and using a Load to store it does not help [^3].
+
+Caching is a deliberate configuration, not a default. To configure top-level caching for a Data Mapper, you go to the Procedure Configuration and set the Salesforce Platform Cache Type and Time To Live In Minutes properties [^3]. The cache type and the time to live are the two settings that control how caching behaves [^3].
+
+### Cache type and time to live control the behavior
+
+Cache type and time to live control how caching behaves. The Salesforce Platform Cache Type is set to one of three values: None for no caching, Session Cache for data related to users and their login sessions, and Org Cache for all other types of data [^3]. The Time To Live In Minutes determines how long data remains in the cache [^3].
+
+The two cache types have different limits. Session Cache has a default of 5 minutes and a maximum of 480 minutes, which is 8 hours, and the cache is cleared when the user's session expires regardless of the value [^3]. Org Cache has a default of 1440 minutes, which is 24 hours, and a maximum of 2880 minutes, which is 48 hours [^3].
+
+The security guidance is explicit. The documentation warns not to cache when working with confidential or regulated information unless security settings are enforced, and it says to use Org Cache only for non-sensitive data [^3]. The consultant who caches reference data must respect those limits, because caching the wrong data is a security problem, not just a performance one [^3].
+
+Caching is worth it when the same data is read repeatedly and does not change often. Reference data is the classic case: a list of countries, a set of product categories, a table of tax rates. The flow reads the same list over and over, and the list changes rarely, so caching the result of the first read and reusing it saves a query every time. Caching is not worth it when the data changes constantly, because the cached copy goes stale and the flow uses outdated values. The consultant judges the data, not the technique, and caches only what is safe to reuse. That judgment is exactly what the exam tests: given a flow that reads the same reference data repeatedly, the consultant configures caching, and given data that changes constantly, the consultant leaves it uncached [^3].
+
+### Avoiding unnecessary data mapping keeps the flow lean
+
+Avoiding unnecessary data mapping keeps the flow lean. A Data Mapper that maps data nobody uses is doing work that does not need to happen. The consultant should map only the data the business actually needs, and skip the rest [^1].
+
+The principle is the same one from lesson 47, applied to the mapping itself. Every field you map is data that has to be read, carried, and processed. A field you map but never use is pure waste. The consultant who maps only what the business needs keeps the Data Mapper fast and the output clean [^1].
+
+Avoiding unnecessary mapping also means not creating Data Mappers that duplicate work. If the data is already available in context, a new Data Mapper that reads it again is unnecessary. The consultant should reuse the data that is already there instead of mapping it again [^1].
+
+The three techniques in this lesson work together, and the consultant who uses all of them gets the fastest flow. A relationship query reduces the number of reads. Caching removes repeated reads of the same reference data. Avoiding unnecessary mapping removes the fields and the Data Mappers that do no work. Each technique attacks a different cost, and together they cover the whole performance picture. The exam tests them as a set, and the consultant who can name all three and say when to use each one is the consultant who passes [^1][^3].
+
+### A worked example: reading an account and its contacts
+
+Put the pieces together with a concrete scenario. A client needs a Data Mapper that reads an account and all of its contacts, and the flow also needs a reference value that is used several times. The consultant has three clear moves [^1][^3].
+
+First, the consultant uses a relationship query to read the account and its contacts in one call, instead of querying the account and then each contact separately. Second, the consultant configures caching for the reference value, so the flow reads it once and reuses the cached result instead of re-querying. Third, the consultant maps only the fields the business needs, and skips the rest [^1][^3].
+
+The result is a Data Mapper that reads related records in one call, reuses reference data without re-querying, and maps only what the business needs. The flow is fast, and the consultant made it fast with deliberate choices [^1][^3].
+
+The same three moves apply to any flow that reads related records and repeats reference data. When a flow feels slow, the consultant asks whether related records are being read one at a time, whether the same reference data is being read more than once, and whether the mapping carries fields nobody uses. The answers point to the fix: a relationship query, caching, and a leaner mapping. The consultant who asks those questions on every slow flow keeps every Data Mapper fast, not just the obvious ones [^1][^3].
+
+Try it yourself. In a sandbox, build a Data Mapper that reads an account and its contacts with a relationship query, configure caching for a reference value, and map only the fields the business needs. Run it and confirm the related records come back in one call and the cached value is reused.
+
+## Config Walkthrough
+
+The relationship and caching flow maps onto four concrete steps.
+
+1. In the Data Mapper builder, use a relationship query to read a parent record and its related child records in one call, instead of querying each record separately. The Extract supports the full relationship traversal [^1].
+
+2. For a reference value that is needed multiple times and changes rarely, configure caching. Go to the Procedure Configuration and set the Salesforce Platform Cache Type and Time To Live In Minutes properties [^3].
+
+3. Choose the cache type to match the data. Use Session Cache for data related to users and their login sessions, and Org Cache for all other types of data. Use Org Cache only for non-sensitive data [^3].
+
+4. Map only the fields the business needs, and skip the rest. Test the Data Mapper from the Preview tab and confirm the relationship query returns the related records and the cached value is reused [^1][^3].
+
+Activate the version only after the preview confirms the relationship query and caching behave as expected.
+
+## Exam Traps
+
+Three traps dominate this requirement, and each is a specific, avoidable mistake.
+
+**Querying a parent and then each child separately.** That is many queries where one would do. Use a relationship query that traverses the relationship in one call, so the parent and its children come back together [^1].
+
+**Reaching for the wrong Data Mapper type for relationship traversal.** The Turbo Extract has a narrower feature set, the Load writes, and the Transform does not query. The Extract supports the full SOQL feature set, including relationship traversal [^1][^2].
+
+**Re-querying reference data that changes rarely.** Re-querying repeats the cost every time. Cache the result of the first read and reuse it, and the repeated query disappears [^3].
+
+The exam tip that ties these together: read related records in one call, cache what you reuse, and map only what you need. Each choice removes a cost, and together they keep a Data Mapper fast.
+
+## What's Next
+
+This lesson completed the Data Mapper performance picture with relationship queries, caching, and avoiding unnecessary mapping. Lesson 49, Data Mapper Loads: Salesforce ID Mapping and Upsert, is the next scheduled lesson in the Data Mappers domain. It shifts from reading data to writing it, showing how a Load maps input data to Salesforce objects and how the upsert key controls whether a record is inserted or updated.
+
+[^1]: Salesforce, "Omnistudio Data Mapper Extract Overview (Managed Package)": https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_extract_overview.htm&language=en_US&type=5
+[^2]: Salesforce, "Omnistudio Data Mapper Turbo Extract Overview (Managed Package)": https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_dataraptor_turbo_extract_overview.htm&type=5
+[^3]: Salesforce, "Configure Caching for a Data Mapper": https://help.salesforce.com/s/articleView?id=xcloud.os_configure_caching_for_data_mappers.htm&language=en_US&type=5
+[^4]: Salesforce, "Salesforce Certified OmniStudio Consultant Exam Guide": https://help.salesforce.com/s/articleView?id=005298970&language=en_US&type=1

@@ -1,0 +1,114 @@
+---
+title: "R-23a: Complex Mapping and Filtering in Data Mappers"
+slug: day-45-r-23a-complex-mapping-and-filtering-in-data-mappers
+series: sf-omni-consultant
+lesson: 45
+excerpt: "Lesson 45 of the Salesforce OmniStudio Consultant Certification course covers complex mapping and filtering inside Data Mappers. You learn how to move data between structures that do not line up one-to-one, where to filter so only the records you need cross the boundary, and how to standardize inconsistent source data as it flows through. This lesson is part of the Data Mappers domain, worth 17% of the exam."
+date: "October 02, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [OmniStudio, Data Mappers, Complex Mapping, Filtering]
+---
+
+Requirement r-23a sits in the Data Mappers domain, worth 17% of the exam [^4], and it asks you to explain the possibilities of complex mapping, filtering, and data manipulation rules, using functions and formulas to ensure data accuracy and standardization. That is a dense sentence, so let me unpack it the way the exam actually tests it. The Data Mapper is not a copy machine. It is a translation layer between two shapes of data, and the consultant who controls that layer decides what lands where, what gets filtered out, and what gets normalized before a downstream consumer ever sees it. The exam rewards the consultant who can look at a messy source payload and say exactly which field maps to which target, where the filter belongs, and what happens when a value is missing.
+
+## Deep Dive
+
+### Complex mapping moves data between shapes that do not line up
+
+Complex mapping is the act of moving data between structures that do not line up one-to-one. A source field may need to become a different target field, a value may need transformation before it lands, and a single source value may feed multiple target fields. The Data Mapper expresses this mapping explicitly, and the consultant controls every field that flows through [^1].
+
+Think about what "does not line up" actually means in practice. Your source system calls a field `customerName`, and your target object calls it `Name`. That is a rename, and a rename is the simplest form of complex mapping. But the source might also send a full address as one nested object while the target expects three flat fields, `Street`, `City`, and `Zip`. Now you are flattening a structure, and flattening is a structural change, not a rename. Or the source might send a date as a string in one format while the target expects a date in another, and now you are transforming a value, not just moving it. All three of these are complex mapping, and all three happen inside the same Data Mapper [^1].
+
+The Data Mapper Transform action is the tool that reshapes data between two shapes. It maps source fields to target fields, renames them, converts types, and flattens or nests structures [^3]. The key word is reshape. The transform takes data that already exists and changes its structure, and it does this without changing the external system that produced the data. A nested JSON response becomes a flat set of output fields. A field named `customerName` becomes a field named `Name`. A string becomes a number. None of this touches the source; it changes how the data is presented to the target [^3].
+
+The exam tests this directly. A consultant is mapping data where a source field must be renamed and its value transformed before it lands in the target. The correct approach is to map the field explicitly and apply the needed transformation. A direct copy by name ignores the transformation, skipping the field and letting the target default produces no value at all, and reading the field in a separate Data Mapper splits work that belongs in one mapping [^1][^3].
+
+### Filtering happens at two levels
+
+Filtering happens at two levels, and the exam wants you to keep them straight. In an Extract or Turbo Extract, the SOQL WHERE clause filters which records are read, so only the needed rows cross the boundary. In a Transform, filtering can drop fields from the output or conditionally include data based on a rule [^1][^2].
+
+The distinction matters because it is a performance decision as much as a correctness one. Filtering early reduces the data volume that later steps must process. When you filter in the query, the database returns only the records you need, and nothing wasted crosses the boundary. When you filter after the read, in the mapping or in a downstream step, you have already pulled the full dataset and you are throwing away work you paid for [^1].
+
+The Extract overview makes the first level explicit. A Data Mapper Extract reads Salesforce data and returns results in JSON, XML, or custom formats, and you can filter the data and select the fields to return [^1]. The filter lives in the query definition, and it is the earliest place a filter can run. The Turbo Extract works the same way at the read level, pulling from a single Salesforce object type with support for fields from related objects [^2].
+
+The exam tests this directly. A Data Mapper reads a large dataset but only a subset of records is needed. In the SOQL WHERE clause of the query is where the filter belongs. Filtering in the output mapping still only pulls the full dataset, the target object definition does not filter the read at all, and a separate Transform after the read filters data that was already fetched [^1][^2].
+
+### Field-level mapping is the contract between two shapes
+
+Field-level mapping can rename, reorder, and restructure data. A source field named `customerName` can map to a target field named `Name`, and nested source objects can flatten into a flat target or vice versa. The mapping definition is the contract between the source shape and the target shape, and getting it wrong produces nulls or misplaced values downstream [^1].
+
+The word contract is doing real work here. When you define a mapping, you are making a promise about what the target will receive. If the source sends `customerName` and you map it to `Name`, the target gets the value it expects. If you forget the mapping, the target field stays empty, and the empty value flows downstream where it surfaces as a null in a report or a missing value in a client component. The mapping is the place where that promise is either kept or broken [^1].
+
+The same logic applies to structure. A nested source object can flatten into a flat target, and a flat source can nest into a structured target. The Data Mapper handles both directions, and the consultant chooses the direction that matches what the downstream consumer expects. The mapping definition is where that choice is recorded, and it is the single source of truth for how the two shapes connect [^1].
+
+### Conditional mapping applies a rule to decide what lands
+
+Conditional mapping applies a rule to decide what lands in a field. A field may take one source value when a condition is true and another when it is false, or a field may be omitted entirely under certain conditions. This is how a single mapping handles multiple data shapes without separate Data Mappers [^1].
+
+Picture a field that must show a customer's preferred language. The source sends a language code, but only for customers who have set a preference. For everyone else, the field should show a default. A conditional mapping says: if the source has a language code, use it; otherwise, use the default. One mapping, one rule, and the field behaves correctly for both kinds of records [^1].
+
+The value of conditional mapping is that it keeps the Data Mapper count down. Without it, you would need one Data Mapper for records that have the value and another for records that do not. With it, a single mapping branches on the data and produces the right result for every shape. The exam rewards the consultant who reaches for a rule inside the mapping instead of multiplying Data Mappers [^1].
+
+### Data accuracy depends on being explicit about nulls and defaults
+
+Data accuracy depends on the mapping being explicit about nulls and defaults. A missing source value can be left null, replaced with a default, or skipped, and the consultant must decide which behavior the business needs. Silent nulls are a common source of downstream errors, so the mapping should state what happens when a source field is absent [^1].
+
+The failure mode is a null that nobody decided on. The source omits a field, the mapping does not say what to do, and the target receives a null. Downstream, a report breaks, a client component renders a blank, or a calculation produces a wrong total. The null was not a deliberate choice; it was the default behavior of a mapping that never stated its intent [^1].
+
+The fix is to make the decision explicit. When you define the mapping, decide what a missing value means for each field. Leave it null if the business can tolerate a null. Replace it with a default if the target needs a value. Skip the field if the target should not receive it at all. The mapping states what happens to every value, and the result is accurate data instead of silent surprises [^1].
+
+### Standardization is where mapping earns its value
+
+Standardization is where mapping earns its value. Source systems use inconsistent formats, and the mapping normalizes them: date formats, case, units, and code values all get standardized as data flows through. The consultant builds these rules into the mapping so downstream consumers receive consistent, predictable data regardless of the source [^1].
+
+Consider a company that pulls customer data from three source systems. One sends dates as `MM/DD/YYYY`, another sends them as `YYYY-MM-DD`, and a third sends them as a Unix timestamp. The target expects one format. If the mapping passes each date through unchanged, the target receives three different formats and every downstream consumer has to guess. If the mapping applies a standardization function, every date arrives in the same format, and the downstream consumers can trust the data [^1].
+
+The exam tests this directly. A source system sends dates in an inconsistent format and the target requires a standard format. Apply a standardization function in the mapping, and every date arrives in the same format. Passing the dates through unchanged keeps the inconsistency, rejecting records with nonstandard dates throws away data, and storing the raw value to fix later just defers the problem [^1].
+
+Standardization is not limited to dates. Case is a common one: one source sends `NEW YORK` and another sends `New York`, and the mapping normalizes both to a single case. Units are another: one source sends weight in pounds and another in kilograms, and the mapping converts to the target's unit. Code values are a third: one source sends `NY` and another sends `New York`, and the mapping maps both to the same code. Every one of these is a standardization rule built into the mapping, and every one makes the output consistent [^1].
+
+### A worked example: standardizing a customer feed
+
+Put the pieces together with a concrete scenario. A client has a nightly feed of customer records from an external system, and the feed arrives in a shape that does not match the target object. The source sends a nested object with `customerName`, a nested address, and a date in an inconsistent format. The target expects flat fields, a standard date, and a default for customers who have no language preference [^1].
+
+The consultant starts by defining the source structure and the target structure, then maps each source field to its target field explicitly. The nested `customerName` maps to the target `Name` field. The nested address flattens into `Street`, `City`, and `Zip`. The date field gets a standardization function that converts every incoming format to the target format. The language field gets a conditional mapping that uses the source value when present and a default when absent [^1].
+
+The consultant also decides what happens to nulls. A customer with no address leaves the address fields null, which the business accepts. A customer with no language gets the default, which the business requires. Every field has a stated behavior, and the mapping produces accurate, standardized data for every record in the feed [^1].
+
+Try it yourself. In a sandbox, build a Data Mapper that reads a source with a nested object and a nonstandard date, map the nested fields to flat targets, apply a standardization function to the date, and add a conditional mapping for a field that needs a default. Run it against a sample payload and confirm the output is flat, standardized, and complete.
+
+## Config Walkthrough
+
+The complex mapping flow maps onto four concrete steps.
+
+1. In the Data Mapper builder, define the source structure and the target structure, then map each source field to its target field explicitly. Rename fields, flatten nested objects, and convert types so the target receives the shape it expects [^1].
+
+2. Add a filter to the query for an Extract or Turbo Extract to limit which records are read, using the WHERE clause to match the business need. Filter at the source so only the needed records cross the boundary [^1][^2].
+
+3. For conditional mapping, add a rule that selects the source value or a default based on a condition, so the field behaves correctly across data shapes. One mapping handles multiple shapes without separate Data Mappers [^1].
+
+4. Apply standardization functions to fields that need normalization, such as date format or case conversion, so the output is consistent. State what happens to nulls and defaults for every field [^1].
+
+Test the Data Mapper from the Preview tab with a real payload and confirm the output fields received the expected values before you activate the version.
+
+## Exam Traps
+
+Three traps dominate this requirement, and each is a specific, avoidable mistake.
+
+**Mapping fields by name and assuming the values are compatible.** A source value may need transformation, and a direct copy can produce a type mismatch or a value the target rejects. Map the field explicitly and apply the needed transformation instead of copying by name [^1].
+
+**Filtering only at the output instead of in the query.** Filtering in the WHERE clause reduces the data read, while output filtering still pulls the full dataset and wastes processing. Put the filter in the SOQL WHERE clause of the query [^1][^2].
+
+**Leaving null handling implicit.** If the mapping does not state what happens to a missing source value, the result is a silent null that surfaces as a downstream error instead of a deliberate default. Decide for every field whether a missing value becomes null, a default, or a skip [^1].
+
+The exam tip that ties these together: make every field mapping explicit, including nulls and defaults. A mapping that states what happens to every value produces accurate, standardized data instead of silent surprises.
+
+## What's Next
+
+This lesson covered complex mapping and filtering inside Data Mappers. Lesson 46, Functions and Formulas for Data Manipulation, Accuracy, and Standardization, is the next scheduled lesson in the Data Mappers domain. It takes the standardization idea from this lesson and goes deeper into the manipulation engine, showing how string, date, and number functions and conditional formulas compute, transform, and standardize data rather than just copy it.
+
+[^1]: Salesforce, "Omnistudio Data Mapper Extract Overview (Managed Package)": https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_extract_overview.htm&language=en_US&type=5
+[^2]: Salesforce, "Omnistudio Data Mapper Turbo Extract Overview (Managed Package)": https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_dataraptor_turbo_extract_overview.htm&type=5
+[^3]: Salesforce, "Omnistudio Data Mapper Transform Action (Managed Package)": https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_transform_action.htm&type=5
+[^4]: Salesforce, "Salesforce Certified OmniStudio Consultant Exam Guide": https://help.salesforce.com/s/articleView?id=005298970&language=en_US&type=1

@@ -1,0 +1,101 @@
+---
+title: "R-18a: HTTP Actions in Integration Procedures: Configuration and Management"
+slug: day-35-r-18a-http-actions-in-integration-procedures-configurati
+series: sf-omni-consultant
+lesson: 35
+excerpt: "In lesson 35 of the Salesforce OmniStudio Consultant Certification course, you learn how an HTTP Action connects an Integration Procedure to an external REST or SOAP system. This lesson walks the high-level configuration flow: the named credential, the request and response phases, and the error path that turns a failed call into something diagnosable. It belongs to the Integration Procedures domain, worth 17% of the exam."
+date: "October 02, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [OmniStudio, Integration Procedures, HTTP Actions, Named Credentials]
+---
+
+The Integration Procedures domain is worth 17% of the OmniStudio Consultant exam, and one question keeps coming back: how does an Integration Procedure, an IP for short, actually talk to a system outside Salesforce? In nearly every case, the answer is the HTTP Action. Requirement r-18a asks you to give high-level guidance on how that action is configured and managed, so the exam wants you to reason about the whole mechanism, not just one field. You need to know what the HTTP Action is for, how a named credential keeps connection details in one place, why you should keep the request phase and the response phase separate in your head, and why the error path you build at design time decides whether a production failure teaches you anything at all. This lesson builds the mental model. The next several lessons add the detail.
+
+## Deep Dive
+
+### The HTTP Action is the bridge between the IP and the outside world
+
+An Integration Procedure is a sequence of actions that run on the server. Most of those actions move data inside Salesforce, using a Data Mapper to read or write records. The one action that reaches outside the org is the HTTP Action. It is the bridge between the IP and an external system. Configured on the IP canvas, it defines everything needed to make a call: the endpoint, the HTTP method, the headers, the request body, and the authentication mechanism. When the IP runs, the HTTP Action assembles that definition into a real request, sends it over the network, and hands the returned payload back for further processing [^1].
+
+Here is the framing that matters for the exam: the HTTP Action is a declarative representation of an HTTP callout. In older Apex integrations, a developer wrote code to construct an `HttpRequest`, set the method, the endpoint, and the headers, sent it with `Http`, and parsed the `HttpResponse`. The HTTP Action does the same job without code. It is the low-code equivalent of that callout, which is why the Salesforce documentation groups it with the rest of the Integration Procedure actions [^2]. So when you think about the HTTP Action, think about what a hand-written callout has to do, and you will know what the action has to let you configure.
+
+At a high level, your job as a consultant is to decide what the external call must accomplish, then translate that decision into the mappings the action exposes. If the IP needs a single account's data from a customer data platform, the call must identify that account. If the IP needs to create a case in a ticketing system, the call must carry the fields that system requires. Every decision upstream, about how the IP input variables are shaped and what the client component needs on the way out, drives how the action is configured. Nothing about the HTTP Action is a preference. It is a consequence of both the external contract and the client's data need.
+
+### The request phase and the response phase are two separate surfaces
+
+The single most useful mental model for this requirement is that the HTTP Action has two distinct phases. In the request phase, the IP assembles the outgoing call and sends it. In the response phase, the IP reads the returned payload. Each phase has its own mapping surface, and confusing the two is the most common source of the "the call works but the data is empty" bug [^3].
+
+The request phase maps the IP's input variables onto the surfaces the endpoint expects. For a GET, that is usually query parameters or a resource path. For a POST or PUT, it is the request body. The phase also covers headers, including the Content-Type that tells the endpoint how to interpret the body. The response phase is the mirror image. It maps the fields of the returned payload into the IP's output variables, often passing the raw payload through a Data Mapper Transform first so it fits the shape the client component expects.
+
+Keeping the phases separate in your head changes how you debug. When a call appears to succeed but the output is empty, the temptation is to suspect the network or the credentials. The correct reaction is to check the response mapping, because a 200 status with a payload means the request phase succeeded and the failure lives entirely in how the response was read back. The exam tests this reasoning directly: an HTTP Action returns a 200 with a payload, the IP output is empty, and the answer is that the response mapping was not configured, not that the credential or the method is at fault [^3]. The response mapping was not configured, so the fields returned by the endpoint were never mapped into the IP output variables.
+
+The quiz tests this directly. If the external system responds with a 200 and a payload but the IP returns nothing, the request worked and the credential, method, and timeout were fine. The empty output points to the response phase: the response mapping was not configured, so the fields returned by the endpoint were never mapped into the IP output variables.
+
+### Authentication is configured at the HTTP Action level, through a named credential
+
+Authentication is not something the HTTP Action does on its own. The action references a named credential, and the named credential holds the endpoint URL, the authentication protocol such as OAuth 2.0 or basic, and the stored tokens [^4]. This separation is the heart of the security story. The IP itself never hard-codes a URL or a secret. The credential is the single place where connection details live, which means changing the endpoint or refreshing credentials happens in one place, and one place only [^5].
+
+This is why the exam asks where the authentication protocol is configured. It is not in the request body, not in a Data Mapper, and not in the output variables. The request body carries data, the Data Mapper transforms data, and the output variables hold results. The authentication protocol lives in the named credential that the HTTP Action references, so the correct answer is that it is configured in the named credential referenced by the HTTP Action. In the named credential referenced by the HTTP Action, the authentication protocol is configured, and nowhere else [^5]. Similarly, the endpoint URL is a property of the named credential, not of the IP. If you want the endpoint to be changeable without editing the IP, the correct approach is to store the URL in a named credential and reference it from the HTTP Action. Store the URL in a named credential and reference it from the HTTP Action, and a single change updates every consumer. Hard-coding the URL inside the action forces an edit in every IP that uses it, which is exactly the maintenance burden named credentials exist to eliminate [^4].
+
+The practical consequence is that a shift in the external provider, such as a new base URL or a rotated client secret, becomes an admin task rather than a rebuild of the integration. The HTTP Action continues to point at the same named credential, and the credential is updated once. This is the "single source of truth" principle that runs through the whole OmniStudio security model, and the exam rewards consultants who reach for it instead of embedding values in the IP.
+
+### Request and response mapping are driven by the external contract
+
+With credentials in place, the work of the HTTP Action is mapping. Request mapping decides how the outgoing call is shaped: the method, the headers, the query parameters, and the body. Response mapping decides how the incoming payload becomes usable data. Both are done either directly inside the HTTP Action, by mapping fields, or through a Data Mapper Transform action that runs after the call [^6].
+
+The choice between direct mapping and a Data Mapper is driven by the external contract, not by preference. When the external system returns a flat object whose field names already match what the client needs, direct mapping is enough. When the payload is nested JSON, or the field names from the external system differ from the names the client component expects, a Data Mapper Transform reshapes it before it ever reaches the response [^6]. The consultant must also decide what format the external system expects the body in, JSON, XML, or form-encoded, because sending the wrong format produces a 400 before the endpoint even looks at the content.
+
+The design principle is that the external system does not adapt to your mapping; your mapping adapts to the external system. Every field name, every type, and every level of nesting in the request must match what the endpoint's documentation says it accepts. Every field you rely on in the response must actually exist in the shape the endpoint returns. The mapping surface only reveals its problems when real field names and real types are present, which is why test payloads matter so much, a point the next section develops.
+
+### Managing HTTP Actions: versioning, error handling, and observability
+
+Managing HTTP Actions is broader than configuring the initial call. It includes versioning, error handling, and observability, and each one affects how the integration behaves in production. Because the IP is versioned as a whole, activating a new version is how a change to the HTTP Action or the surrounding mapping reaches the users. The Integration Procedure supports activating a specific version, so changes are deployed deliberately rather than overwriting the running definition [^7].
+
+Error handling is where most IPs fail forward, or fail silently. An HTTP Action can define timeout behavior and can route a failure to an error path inside the IP. That error path is what lets a failed external call become something identifiable: a status code, a message, or a polite fallback, instead of a generic IP failure. The directive is blunt on this point: plan the error path at design time, because a failed external call that is not handled surfaces as a generic IP failure with little diagnostic value [^3]. If the endpoint is down, the auth failed, or the payload was malformed, the error path is the only thing that tells you which one it was.
+
+Observability is the third leg. The IP's Preview tab and its debug log let you inspect the input and output of each element, including the HTTP Action, so you can see exactly what the call sent and what came back [^7]. That tooling is only useful if the IP is structured to surface failures where you can see them. A consultant who routes error responses into a well-mapped error branch, and who tests with a real payload, knows precisely which phase of the call failed. A consultant who skips the error path gets an opaque failure and has to guess. The same effort produces completely different outcomes, which is the difference the exam draws.
+
+### The high-level configuration flow
+
+Pulled together, the high-level flow for putting an HTTP Action into an IP is: create the named credential, define the HTTP Action against it, map the request, map the response, add error handling, then test with a real payload [^1]. Each step has a reason. The credential must come first so the action has something to reference. The request mapping must match the contract so the endpoint accepts the call. The response mapping must put the data where the client can read it. The error path must exist before production, and the real-payload test is the only reliable way to confirm the mapping surface matches reality.
+
+Testing with a real payload is not a nicety. A mapping that works against a tidy sample response can fail the moment the real response includes an optional field that is absent, or an array where the sample had a single object, or a date in a different format. The mapping surface only reveals its problems when actual field names and types are present, so the test belongs before you consider the IP complete [^1].
+
+## Config Walkthrough
+
+The high-level configuration flow maps onto four concrete steps.
+
+1. Create a named credential in Setup that stores the external endpoint URL and the authentication protocol. Define an external credential that names the protocol, then the named credential that references it and supplies the endpoint and identity details, so the HTTP Action references the credential instead of a hard-coded URL [^4].
+
+2. Add an HTTP Action to the IP canvas and select the named credential, the HTTP method, and the resource path that the external system expects. The method and path come from the tool that defines the contract, the IP input variables supply the values for any path segments, and the named credential supplies the base URL and the authentication [^1][^2].
+
+3. Map the IP input variables into the request body or query parameters using the HTTP Action's request mapping surface. Match the field names and the content type exactly to what the endpoint expects for the chosen method and resource [^3].
+
+4. Map the response fields into the IP output variables, then add an error path that captures HTTP error codes and timeout failures. Route non-2xx responses and timeout errors to a branch that produces a readable outcome instead of a generic failure [^3].
+
+Run the IP from the Preview tab with a real payload and inspect the debug log for each element. Confirm that the request reached the endpoint correctly and that the output variables received the values the client component expects before you activate the version [^7].
+
+## Exam Traps
+
+Three traps dominate this requirement, and each one is a specific, avoidable mistake.
+
+**Hard-coding the endpoint URL inside the HTTP Action instead of using a named credential.** When the endpoint URL is embedded in the action, the credential is not the single source of truth for connection details, and moving the endpoint forces an edit in every IP that carries the URL. Store the URL in the named credential and reference it, so a single change updates every consumer [^4].
+
+**Mapping only the request and forgetting the response mapping.** The call succeeds, the endpoint returns a payload, and the IP returns empty output. Consultants waste time debugging a call that was never the problem. The fix is to remember that the response phase is a separate surface that must be mapped, even when the request phase is correct [^3].
+
+**Skipping the error path.** A failed external call becomes a generic IP failure with no detail, and the consultant cannot tell whether the endpoint was down, the authentication failed, or the payload was malformed. Build the error path at design time so failures carry the information needed to diagnose them in production [^3].
+
+The exam tip that ties these together: design the error path before you test the happy path. A working call is easy; a failed call that tells you why is what saves you in production.
+
+## What's Next
+
+This lesson established the high-level mechanics of the HTTP Action. Lesson 36, Secure External Connections: Authentication and Request/Response Mapping, goes one level deeper into exactly how a named credential holds OAuth 2.0 and basic authentication, and how request and response mapping are shaped to match an external contract. That is the next scheduled lesson in the Integration Procedures domain.
+
+[^1]: Salesforce, "Integration Procedures (Managed Package)": https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_integration_procedures.htm&type=5
+[^2]: Salesforce, "Integration Procedure Actions": https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_integration_procedure_actions_50165.htm&type=5
+[^3]: Salesforce, "Build Simple Integration Procedures" (Trailhead module): https://trailhead.salesforce.com/content/learn/modules/omnistudio-integration-procedures/build-simple-integration-procedures
+[^4]: Salesforce, "Create Named Credentials and External Credentials": https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.nc_named_creds_and_ext_creds.htm&type=5
+[^5]: Salesforce, "Named Credentials as Callout Endpoints" (Apex Developer Guide): https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_callouts_named_credentials.htm
+[^6]: Salesforce, "Salesforce Certified OmniStudio Consultant Exam Guide": https://help.salesforce.com/s/articleView?id=005298970&language=en_US&type=1
+[^7]: Salesforce, "Create the Integration Procedure with the HTTP Action": https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_create_the_integration_procedure_with_the_http_action_53207.htm&type=5

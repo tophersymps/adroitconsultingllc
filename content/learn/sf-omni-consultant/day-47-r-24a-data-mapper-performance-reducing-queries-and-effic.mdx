@@ -1,0 +1,109 @@
+---
+title: "R-24a: Data Mapper Performance: Reducing Queries and Efficient Filtering"
+slug: day-47-r-24a-data-mapper-performance-reducing-queries-and-effic
+series: sf-omni-consultant
+lesson: 47
+excerpt: "Lesson 47 of the Salesforce OmniStudio Consultant Certification course covers Data Mapper performance. You learn how to reduce the number of queries, filter efficiently at the source, and reuse data already in context so a Data Mapper stays fast at scale. This lesson is part of the Data Mappers domain, worth 17% of the exam."
+date: "October 02, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [OmniStudio, Data Mappers, Performance, Filtering]
+---
+
+Requirement r-24a sits in the Data Mappers domain, worth 17% of the exam [^3], and it asks you to describe the techniques to optimize Data Mapper performance, such as reducing the number of queries, efficient filtering, relationship queries, caching, and avoiding unnecessary data mapping. This lesson covers the first two of those techniques: reducing queries and filtering efficiently. The other two, relationship queries and caching, get their own lesson next. The exam frames performance as a set of deliberate choices, and the consultant who makes those choices well keeps a Data Mapper fast even when the underlying dataset is large.
+
+## Deep Dive
+
+### Performance is a set of deliberate choices
+
+Performance is a set of deliberate choices, not an accident. Every Data Mapper reads data, processes it, and produces output, and each of those steps has a cost. The consultant controls that cost by deciding what to read, how much to read, and whether to read it again. The exam rewards the consultant who can look at a Data Mapper and name the choices that make it fast [^1].
+
+The cost model is simple to state. Reading data is the most expensive step, because it hits the database and pulls records across the boundary. Processing data costs less, but it still takes time for every record. Producing output costs the least, but a large output still has to be built and passed along. The fastest Data Mapper is the one that reads the least, processes the least, and outputs the least [^1].
+
+That model drives every performance technique in this requirement. Reduce the number of queries, and you reduce the most expensive step. Filter efficiently, and you reduce how much data each query returns. Reuse data already in context, and you eliminate a query entirely. Each technique attacks a specific cost, and together they keep a Data Mapper fast [^1].
+
+### Filtering in the query reduces the data read
+
+Filtering in the query reduces the data read at the source. A Data Mapper Extract reads Salesforce data and returns results, and you can filter the data and select the fields to return [^1]. The filter lives in the query definition, and it is the earliest place a filter can run. When you filter in the query, the database returns only the records you need, and nothing wasted crosses the boundary [^1].
+
+The exam tests this directly. A Data Mapper reads a large dataset but only a few records are needed. The most effective performance optimization is to filter in the SOQL WHERE clause. Filtering in the output mapping still pulls the full dataset, reading all records and discarding extras wastes the read, and using a Load instead of an Extract does not reduce the read at all [^1].
+
+The reason the WHERE clause is the right place is that it reduces the data at the database. The query returns only the records that match the filter, so the Data Mapper never sees the records it does not need. Filtering anywhere later means the full dataset was already read, and the wasted read is the cost you were trying to avoid [^1].
+
+The Turbo Extract works the same way at the read level. It retrieves data from a single Salesforce object type, with support for fields from related objects, and it is built for high-volume reads [^2]. Filtering in the query keeps even a high-volume read small, because the database returns only the matching records [^1][^2].
+
+### Selecting only the fields you use shrinks the payload
+
+Selecting only the fields you use shrinks the payload and the processing time. A Data Mapper Extract lets you select the fields to return, and the consultant should select only the fields the mapping actually uses [^1]. Every field you return is data that has to be read, carried, and processed, and fields you do not use are pure waste [^1].
+
+The exam tests this directly. A Data Mapper returns every field on an object but the mapping uses only three fields. Select only the three fields used, and the payload shrinks. Keeping all fields wastes resources, adding more filters does not address the field selection, and switching to a Load does not help [^1].
+
+The field selection is a quiet performance lever. It is easy to leave the default of returning every field, because the Data Mapper works either way. But every extra field is data that crosses the boundary, and on a large dataset the extra fields add up. Selecting only the fields the mapping uses keeps the payload small and the processing fast [^1].
+
+Carrying unneeded data has a cost that compounds. Every extra field is data that has to be read from Salesforce, serialized into the payload, carried across the boundary, and processed by the mapping. On a single record the cost is invisible. On a dataset of thousands of records, the extra fields multiply the payload size and slow every step. The consultant who selects only the fields the mapping uses removes that cost at the source, before the data ever crosses the boundary [^1].
+
+### Reusing data in context eliminates duplicate reads
+
+Reusing data already in context eliminates a duplicate read. When two Data Mappers in a flow read the same records, the second read is redundant, because the data is already available. The consultant should reuse the data from the first read instead of re-querying [^1].
+
+The exam tests this directly. Two Data Mappers in a flow read the same records. The best performance improvement is to reuse the data from the first read instead of re-querying. Keeping both reads wastes resources, adding more fields to both makes it worse, and using a Transform between them does not remove the redundancy [^1].
+
+The principle is that a query is a cost, and a query you can avoid is a cost you should avoid. If the data is already in context from an earlier step, the second Data Mapper does not need to read it again. It can use the data that is already there, and the duplicate read disappears [^1].
+
+This is where the Data Mapper count matters. A flow with two Data Mappers that read the same records has one redundant read. A flow with three has two. The consultant who consolidates the reads, or who passes the data from the first read to the steps that need it, removes the redundancy and keeps the flow fast [^1].
+
+### Reducing the number of queries is the highest-leverage move
+
+Reducing the number of queries is the highest-leverage performance move, because a query is the most expensive step a Data Mapper performs. Every query hits the database, and every query returns data that has to be carried and processed. The consultant who reduces the number of queries reduces the most expensive work in the flow [^1].
+
+The ways to reduce queries are the techniques in this requirement. Filter in the query so each query returns less. Select only the fields you use so each query carries less. Reuse data in context so you do not query again. Each of these reduces either the number of queries or the cost of each query, and together they keep a Data Mapper fast [^1].
+
+The exam frames this as a judgment call. Given a flow with redundant reads, the consultant should consolidate them. Given a read that returns too much, the consultant should filter and select. Given a read that repeats, the consultant should reuse. The consultant who makes these calls keeps the flow fast, and the exam rewards that judgment [^1].
+
+Performance matters because a slow Data Mapper is a slow business process. The Data Mapper sits inside an Omniscript or an Integration Procedure, and the user waits for it to finish. A Data Mapper that reads too much, carries too much, and queries too often makes the whole flow slow, and a slow flow is a poor user experience and a poor integration. The consultant who optimizes the Data Mapper is not just satisfying the exam; they are making the business process faster for the people who use it. That is why the exam tests performance as a set of deliberate choices, because the choices have a real cost and a real payoff [^1].
+
+### A worked example: trimming a slow Data Mapper
+
+Put the pieces together with a concrete scenario. A client has a Data Mapper that reads a large object and returns every field, and the flow is slow. The mapping uses only a handful of fields, and a later step reads the same records again. The consultant has three clear moves [^1].
+
+First, the consultant adds a filter to the query so the Data Mapper reads only the records the business needs, instead of the full object. Second, the consultant selects only the fields the mapping uses, so the payload shrinks. Third, the consultant reuses the data from the first read in the later step, so the duplicate query disappears [^1].
+
+The result is a Data Mapper that reads less, carries less, and queries fewer times. The flow is faster, and the consultant made the performance happen with deliberate choices instead of hoping the Data Mapper was fast enough [^1].
+
+The same three moves apply to any slow Data Mapper. When a flow feels slow, the consultant starts by asking what the Data Mapper reads, how much it returns, and whether it reads the same data twice. The answers point to the fix: filter the query, narrow the fields, and reuse what is already in context. The consultant who asks those questions on every slow flow keeps every Data Mapper fast, not just the obvious ones [^1].
+
+Try it yourself. In a sandbox, build a Data Mapper that reads a large object and returns every field, then add a filter to the query and select only the fields the mapping uses. Run it before and after and compare the result. The filtered, narrowed version is the one you want in production.
+
+## Config Walkthrough
+
+The performance flow maps onto four concrete steps.
+
+1. In the Data Mapper builder, add a filter to the query so the Data Mapper reads only the records the business needs. Filter in the SOQL WHERE clause so the database returns only the matching records [^1].
+
+2. Select only the fields the mapping actually uses, so the payload and the processing time shrink. Every field you do not use is wasted work [^1].
+
+3. Review the flow for duplicate reads. If a later step reads the same records as an earlier one, reuse the data from the first read instead of re-querying [^1].
+
+4. Test the Data Mapper from the Preview tab and confirm the filtered, narrowed version returns the correct records and fields before you activate it [^1].
+
+Activate the version only after the preview confirms the performance changes did not change the output.
+
+## Exam Traps
+
+Three traps dominate this requirement, and each is a specific, avoidable mistake.
+
+**Filtering after the read instead of in the query.** Filtering in the output mapping still pulls the full dataset, so the wasted read is the cost you were trying to avoid. Put the filter in the SOQL WHERE clause so the database returns only the records you need [^1].
+
+**Returning every field when the mapping uses a few.** Every extra field is data that crosses the boundary and gets processed. Select only the fields the mapping uses to shrink the payload and the processing time [^1].
+
+**Re-querying data that is already in context.** A second read of the same records is a redundant query. Reuse the data from the first read instead of re-querying, and the duplicate read disappears [^1].
+
+The exam tip that ties these together: every query is a cost, and every byte you do not read is a byte you do not pay for. Filter at the source, select only what you use, and reuse what you already have.
+
+## What's Next
+
+This lesson covered reducing queries and efficient filtering. Lesson 48, Relationship Queries, Caching, and Avoiding Unnecessary Mapping, is the next scheduled lesson in the Data Mappers domain. It completes the performance picture with the two techniques this lesson set aside: relationship queries that read parent and child records in one call, and caching that lets a flow reuse reference data without re-querying.
+
+[^1]: Salesforce, "Omnistudio Data Mapper Extract Overview (Managed Package)": https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_extract_overview.htm&language=en_US&type=5
+[^2]: Salesforce, "Omnistudio Data Mapper Turbo Extract Overview (Managed Package)": https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_dataraptor_turbo_extract_overview.htm&type=5
+[^3]: Salesforce, "Salesforce Certified OmniStudio Consultant Exam Guide": https://help.salesforce.com/s/articleView?id=005298970&language=en_US&type=1

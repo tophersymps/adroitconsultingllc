@@ -1,0 +1,117 @@
+---
+title: "R-21b: Integration Procedure Best Practices Applied: Scenario Walkthroughs"
+slug: day-42-r-21b-integration-procedure-best-practices-applied-scena
+series: sf-omni-consultant
+lesson: 42
+excerpt: "Lesson 42 of the Salesforce OmniStudio Consultant Certification course applies the Integration Procedure best practices to real scenarios. You walk through a read, a write, a SOAP call, a multi-step token flow, and an error scenario, and you see how the same best practices hold across all of them. This lesson is part of the Integration Procedures domain, worth 17% of the exam."
+date: "October 02, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [OmniStudio, Integration Procedures, REST, SOAP]
+---
+
+Requirement r-21b is where the best practices from the last lesson stop being a list and start being a way of working. The exam wants you to discuss best practices for Integration Procedures, and the way to discuss them is to walk through scenarios. In the Integration Procedures domain, worth 17% of the exam, the questions hand you a use case and ask which configuration serves it [^3]. The organizing idea is simple: the configuration follows the use case, and the same best practices, named credentials for security, source-side filtering for performance, designed error paths for resilience, hold across every scenario.
+
+## Deep Dive
+
+### A read scenario: filtered list from a REST endpoint
+
+Start with a read scenario. The client needs a filtered list of records from a REST endpoint. The consultant filters in the request query parameters, maps the JSON response through a Data Mapper Transform to flatten it, and returns a collection through the Response action. Each decision follows the client's data need [^1].
+
+The exam tests this directly. In a read scenario, the client needs a filtered list from a REST endpoint. Where should the filter be applied for best performance? In the request query parameters so the endpoint returns only matching records. Filtering in the request query parameters lets the endpoint return only the matching records, minimizing payload and latency. Filtering in the client wastes bandwidth, and the Response action and named credential are not for filtering [^1].
+
+Picture the concrete flow. The client needs a list of open service orders for a customer. The consultant builds an HTTP Action that calls the REST endpoint with a query parameter for open orders only. The endpoint returns only the matching records, so the IP never carries the closed orders across the network. A Data Mapper Transform flattens the JSON response into the flat fields the client expects, and the Response action returns a collection, because the client iterates over the list [^1].
+
+Each decision follows the client's data need. The client needs a filtered list, so the filter goes in the request. The client needs flat fields, so the transform flattens. The client iterates, so the response is a collection. The configuration is not arbitrary; it is the client's need expressed in IP actions.
+
+### A write scenario: creating a record in an external system
+
+Now a write scenario. The client submits a record that the IP must create in an external system. The consultant uses a POST, maps the input into the request body, and handles the response to confirm success. Because the operation is non-idempotent, the error path must not blindly retry [^1].
+
+The exam tests this directly. A consultant is designing a write scenario where the IP creates a record in an external system. Why must the error path avoid blindly retrying the call? Because the first call may have succeeded, so a retry can create a duplicate record. A write is non-idempotent, so if the first call succeeded but the response was lost, a retry creates a duplicate. The error path must handle this per operation rather than retry blindly [^1].
+
+Here is the concrete flow. The client submits a new service order. The IP maps the input into the request body of a POST and sends it to the external system. The external system creates the record and sends back a response. The IP handles the response to confirm success and returns the created record's identifier to the client.
+
+Now the failure. The POST times out. The external system may have created the record and lost the response, or it may never have received the call. If the IP blindly retries, and the first call succeeded, the retry creates a second record. The error path must handle this carefully, perhaps by checking whether the record already exists before retrying, so the business does not end up with duplicates [^1].
+
+### A SOAP scenario: legacy system with WS-Security
+
+Now a SOAP scenario. The client needs data from a legacy system that exposes only SOAP. The consultant builds the XML envelope, applies WS-Security through the named credential, and uses a Data Mapper Transform to extract values from the namespaced response before the Response action [^1].
+
+SOAP is the older, XML-based web service protocol, and some legacy systems expose only SOAP. The consultant builds the XML envelope that the SOAP endpoint expects, including the operation and the parameters. The named credential applies WS-Security, the standard that authenticates SOAP calls, so the IP does not handle the security headers itself [^2].
+
+The response comes back as namespaced XML, which is not the shape the client expects. A Data Mapper Transform extracts the values from the namespaced response and maps them into the flat fields the client needs, before the Response action assembles the result [^1].
+
+The lesson is that the configuration follows the protocol. A SOAP call needs an XML envelope and WS-Security, where a REST call needs a JSON body and a query parameter. The consultant does not apply the REST configuration to a SOAP call; the use case dictates the method, the request surface, and the response handling.
+
+### A multi-step scenario: token, then data
+
+Now a multi-step scenario. The IP must fetch a token, then call the data endpoint with that token. The consultant runs a first HTTP Action to obtain the token, stores it in a variable, and passes it to the second HTTP Action. The named credential handles standard flows, but a custom flow needs this explicit two-step design [^1].
+
+The exam tests this directly. In a multi-step scenario, the IP must fetch a token and then call a data endpoint with it. What is the correct design? Run a first HTTP Action to obtain the token, store it in a variable, and pass it to a second HTTP Action. A custom multi-step flow needs a first HTTP Action to obtain the token, a variable to hold it, and a second HTTP Action that passes it to the data call. One action cannot do both, and the named credential handles standard flows, not this custom sequence [^1].
+
+Here is the concrete flow. The external system uses a custom token flow, not a standard OAuth flow that the named credential can handle. The consultant runs a first HTTP Action that calls the token endpoint and receives a token. The token is stored in a variable in the IP. A second HTTP Action calls the data endpoint, passing the token in the request header. The data endpoint returns the records, and the IP processes them [^1].
+
+The trap is trying to do it in one action. One HTTP Action cannot both obtain the token and use it, because the token does not exist until the first call completes. The two-step design is the only way to make a custom token flow work.
+
+### An error scenario: the endpoint is down
+
+Now an error scenario. The external endpoint is down. The IP's error path captures the failure, returns a structured error object with a code and message, and the client displays a meaningful message instead of a blank screen. The walkthrough shows why the error path is designed, not added later [^1].
+
+Here is the concrete flow. The client requests data, the IP calls the external endpoint, and the endpoint is down. The HTTP Action's error path captures the failure, recording the error code and the timeout. The IP returns a structured error object with a code and message to the client. The client displays a meaningful message, telling the user the data is temporarily unavailable, instead of a blank screen [^1].
+
+The walkthrough shows why the error path is designed, not added later. If the error path were added after the fact, the client would receive an empty payload or a raw error body, and the user would have no idea what happened. Because the error path was designed up front, the client can distinguish a real failure from missing data and respond gracefully.
+
+### The best practices hold across all scenarios
+
+Across all scenarios, the same best practices hold: named credentials for security, source-side filtering and minimal payloads for performance, designed error paths for resilience, and the Data Mapper, Set Values, and Response actions each doing one job so the IP stays readable and testable [^1].
+
+The read scenario used source-side filtering and a Data Mapper Transform. The write scenario used a designed error path that respects idempotency. The SOAP scenario used a named credential for WS-Security. The multi-step scenario used a designed sequence of HTTP Actions. The error scenario used a designed error path. Every scenario is different, and every scenario applies the same best practices.
+
+The exam tests this directly. Applying the same configuration to every scenario is a trap, because a read, a write, a SOAP call, and a multi-step flow each need different methods, request surfaces, and error handling, so the configuration must follow the use case [^1]. The best practices are constant; the configuration is not.
+
+### A worked example: a complete multi-scenario IP
+
+Put the pieces together with a concrete scenario. A consultant builds an IP that a field service app uses. The app needs to read open work orders, create a new work order, and handle the case where the work order system is down.
+
+For the read, the consultant filters in the request query parameters so the endpoint returns only open work orders, flattens the response with a Data Mapper Transform, and returns a collection through the Response action [^1].
+
+For the write, the consultant uses a POST, maps the app's input into the request body, and handles the response to confirm success. Because the write is non-idempotent, the error path does not blindly retry; it checks whether the work order already exists before retrying [^1].
+
+For the failure, the consultant designs an error path that captures the error code and timeout, returns a structured error object, and lets the app display a meaningful message instead of a blank screen [^1].
+
+The result is an IP that reads, writes, and fails gracefully, with each scenario applying the same best practices. The IP is secure, because the endpoint and token live in a named credential, fast, because it filters at the source, and resilient, because the error path is designed.
+
+Try it yourself. In a sandbox, build an IP that reads a filtered list, writes a record, and handles a failure. Filter in the request, map the response through a Data Mapper Transform, use a POST for the write, and design an error path that returns a structured error. Test each scenario with a real payload and a real error condition.
+
+## Config Walkthrough
+
+The scenario walkthroughs map onto four concrete steps.
+
+1. Walk through a read scenario: filter in the request, flatten the response with a Data Mapper Transform, and return a collection through the Response action. Filter in the request query parameters so the endpoint returns only matching records [^1].
+
+2. Walk through a write scenario: use a POST, map input into the request body, and design the error path so a non-idempotent call is not blindly retried. A write that succeeded but lost its response creates a duplicate when retried [^1].
+
+3. Walk through a SOAP scenario: build the XML envelope, apply WS-Security through the named credential, and extract values with a Data Mapper Transform. The configuration follows the protocol [^1].
+
+4. Walk through a multi-step scenario: run a first HTTP Action to obtain a token, store it in a variable, and pass it to the data call. One action cannot do both, and the named credential handles standard flows, not this custom sequence [^1].
+
+## Exam Traps
+
+Three traps dominate this requirement, and each is a specific, avoidable mistake.
+
+**Applying the same configuration to every scenario.** A read, a write, a SOAP call, and a multi-step flow each need different methods, request surfaces, and error handling, so the configuration must follow the use case [^1]. The best practices are constant; the configuration is not.
+
+**Retrying a write operation on failure without checking idempotency.** A POST that succeeded but lost its response creates a duplicate when retried [^1]. A write is non-idempotent, so the error path must handle it per operation rather than retry blindly.
+
+**Returning the raw external response to the client in every scenario.** The client expects a specific structure, so the response must be shaped by the Data Mapper and Response actions, not passed through untouched [^1]. A raw SOAP fault or REST error body does not match the client's expected shape.
+
+The exam tip that ties these together: run the scenario walkthroughs with real payloads and real error conditions. The best practices only prove themselves when a read, a write, a SOAP call, and a failure each behave as designed.
+
+## What's Next
+
+This lesson applied the Integration Procedure best practices to read, write, SOAP, multi-step, and error scenarios. Lesson 43, Data Mapper Types: Extract vs Turbo Extract vs Load vs Transform, shifts to the Data Mappers domain, showing how the four Data Mapper types each serve a different operation and how to choose the right one for the business need. That is the next scheduled lesson in the course.
+
+[^1]: Salesforce, "HTTP Action for Integration Procedures": https://help.salesforce.com/s/articleView?id=xcloud.os_http_action_for_integration_procedures_53002.htm&language=en_US&type=5
+[^2]: Salesforce, "Named Credentials and External Credentials": https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.nc_named_creds_and_ext_creds.htm&type=5
+[^3]: Salesforce, "Salesforce Certified OmniStudio Consultant Exam Guide": https://help.salesforce.com/s/articleView?id=005298970&language=en_US&type=1
