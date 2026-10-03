@@ -1,0 +1,95 @@
+---
+title: "Too Many Connections: The Pooling Fix That Works"
+slug: postgres-connection-pooling-serverless-2026
+excerpt: "Too many connections in a serverless app is rarely about traffic. It is how many Postgres connections each warm instance holds. Here is the pooling fix."
+category: "React & Web Dev"
+categoryColor: react
+categoryGradient: "from-emerald to-emerald-dark"
+date: "October 3, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: 12
+tags: [PostgreSQL, Supabase, Serverless, Connection Pooling, Supavisor, Next.js, Backend, Web Development]
+bannerImage: "/banners/postgres-connection-pooling-serverless-2026.png"
+---
+
+The "too many connections for database" error shows up at the least helpful moment: the app is serving a hundred users, not a hundred thousand. Restart the database and it clears, only to come back an hour later. Most teams read this as a capacity problem and spend money on a bigger instance. It is not a capacity problem. It is a connection-counting problem, and on a serverless stack it is nearly always self-inflicted: your function instances are each holding a database pool sized for a server that anyone would agree has too many connections.
+
+This article is the pooling model that makes the error stop feeling random. You will understand why Postgres caps connections at all, what the two layers of pooling actually do, when transaction mode beats session mode and how, and where a serverless app leaks connections without anyone noticing. Every limit and driver setting below traces to the Supabase and Vercel documentation, fetched live, because the whole point is that a wrong number here is what produces the false alarm.
+
+## The symptom is not the bug
+
+Postgres does not give out connections like most databases hand out threads. For every direct connection it spawns a separate operating-system process, not a thread. That design buys isolation, but it means every new connection pays a startup penalty and consumes real memory, and the constant creation and teardown of processes strains Postgres's internal schedulers.[^4] The finite result is a hard ceiling on how many connections the instance can sustain.
+
+A serverless function makes this arithmetic worse in both directions. It opens connections aggressively for tiny queries, and it scales horizontally without telling you. One Next.js route on Vercel does not open one connection for the whole request; a pool lives per warm function instance, and the platform decides how many warm instances exist at any moment.[^7] You do not control that number. Multiply a modest per-instance pool by an unannounced instance count and you cross the ceiling with zero "traffic."
+
+![Direct connections reserve one database connection per serverless instance, while a pooler shares a small set of backend connections across many instances.](</diagrams/postgres-connection-pooling-serverless-2026/1-direct-vs-pooled.png>)
+
+Here is what actually counts. Supabase publishes a direct-connection limit and a pooler-connection limit per compute size: a free or Micro project allows 60 direct connections and 200 pooler connections; Small allows 90 and 400; Medium 120 and 600; Large 160 and 800; and the pooler number climbs to 12,000 on the largest 16XL size.[^3] Those are the walls. Your goal is to keep the sum of every connection from every source below them, with headroom for the services Supabase runs itself: Auth, Storage, PostgREST, and the health checker all hold their own connections out of the same total.[^2]
+
+## Postgres caps connections on purpose
+
+Raising the limit is the wrong first move because the limit is not arbitrary. Supabase's own guidance is blunt: each direct connection is a running process that consumes active memory, and raising the count without a real excess of idle memory forces the database to displace its cache, which turns fast cached reads into slow disk reads, or worse, into thrashing.[^3] There is a calculation in the same troubleshooting guide that estimates how many connections your instance's memory can actually support. The defaults are not a jail; they are tuned to the memory of each compute size.
+
+That is why the fix is almost never "connect directly but increase max connections." Even a technically functional ceiling is a poor lever, because it does not change how many connections your app asks for, it only changes how many the database will grudgingly accept. The pooler changes the question. A pooler lets many clients share a small set of backend connections, so the count that matters stops being "number of clients" and becomes "number of backend connections the pooler keeps open."[^2]
+
+## The two poolers work as one
+
+There are two kinds of pooler, and treating them as alternatives is where most teams misread the docs. An application-side pooler is built into your connection library, Prisma, SQLAlchemy, Postgres.js, and every serious driver has one. It keeps a handful of connections open inside your app and reuses them. On a persistent backend, a long-running container or VM, that app-side pool is enough on its own.[^2]
+
+A server-side pooler, Supabase's Supavisor or the dedicated PgBouncer, sits between your app and the database and multiplexes many client connections over a small set of backend connections.[^2] It is the layer that lets an auto-scaling fleet of serverless functions share a database without each instance reopening connections and blowing the ceiling. The two are not competing tools; the app-side pool is what your driver owns, and the server-side pool is what protects the database. You want both, sized correctly.
+
+![An application-side pooler reuses connections inside the app, and a server-side pooler like Supavisor or PgBouncer multiplexes many apps over a small set of backend connections to Postgres.](</diagrams/postgres-connection-pooling-serverless-2026/2-two-poolers.png>)
+
+Supabase ships two server-side poolers. The shared pooler, Supavisor, is multi-tenant, available on every project, and reachable only over IPv4. The dedicated pooler, PgBouncer, runs on paid plans on the same machine as your database for lower latency, and sits on IPv6 (or IPv4 with the add-on), like a direct connection does.[^2] In most cases you pick one, and you keep direct connections for genuinely long-lived sessions.
+
+## Transaction mode versus session mode
+
+The server-side pooler has two operating modes, and the choice between them is the single most consequential setting most teams get wrong.
+
+In session mode, once the pooler assigns a direct connection to a client, that connection stays with the client until it is voluntarily released. That mirrors a direct connection, which means a client that connects and sits idle can hold a backend connection hostage while other clients wait.[^4] Supavisor will queue waiting clients for up to a minute, which is better than a hard rejection, but you are still wasting a scarce backend connection on an idle holder.
+
+In transaction mode, the pooler returns a connection to the shared pool as soon as the current query or transaction finishes. One backend connection can service many clients in sequence, which is exactly what an HTTP or REST-style workload needs, because each request opens a connection, runs a query, and closes.[^4] Supabase's own Supavisor team demonstrated the ceiling this buys: one million client connections triaged onto just 400 backend connections, with no client waiting long enough to time out. That only works in transaction mode; in session mode the first 400 clients could hold all the connections idle and starve the other 999,600.[^4]
+
+![Transaction mode returns each backend connection to the pool after a query, so one connection serves many clients; session mode pins a connection to one client for its whole session even while idle.](</diagrams/postgres-connection-pooling-serverless-2026/3-transaction-vs-session.png>)
+
+The rule the current docs land on: transaction mode is for serverless and [edge functions](/blog/supabase-edge-functions-2026), which open many short-lived connections, and for anything doing HTTP-style request traffic.[^1] Session mode earns its place when you need a persistent, long-lived session, typically a persistent backend over IPv4, or a tool like a BI client or database GUI that expects prepared statements and a stable session.[^1]
+
+## Where a serverless app actually leaks
+
+The quiet leak is not the server-side pool. It is the application-side pool default being sized for a server that does not exist. Postgres.js defaults to 10 connections per pool, and the Supabase client docs call that out directly: 10 connections for every warm instance of your function, and the number of warm instances is not something you control.[^5] A few dozen warm instances is enough to exhaust even a generous pool before a single "real" user shows up.
+
+The documented serverless configuration is small and specific. Create the client once at module scope, not per request, so it is shared by every invocation on a warm instance. Set the pool to one connection, because that caps the instance rather than the request. Turn off prepared statements, which transaction mode does not support. And set SSL to require so the driver refuses to talk without encryption.[^5]
+
+For a real-time Supabase app, keep the division of labour straight: browser subscription traffic is handled by the Realtime layer, while the API routes and background workers in this article are what draw from your Postgres connection budget. That realtime write path has its own concurrency hazards, which we cover separately in [realtime write conflicts](/blog/realtime-write-conflicts-supabase-2026); here the whole budget belongs to server-side pools.
+
+![On the left, a pool default of 10 connections times many warm instances exceeds the 60-connection limit. On the right, capping the pool to 1 per instance keeps the same fleet well under the ceiling.](</diagrams/postgres-connection-pooling-serverless-2026/4-serverless-pool-math.png>)
+
+There is one nuance worth naming so you do not over-correct in the other direction. Vercel's guidance for its Fluid Compute model, where functions stay warm and reuse global state, says a pool of exactly one is not a magic reducer of total connections and can hurt concurrency when concurrent requests hit the same warm instance; it recommends keeping the minimum pool size at one and letting the pool grow to what concurrency needs.[^7] The reconciliation is not mysterious. Your per-instance pool size is a product of the concurrency per warm instance times the number of warm instances, and the server-side pooler in transaction mode is the safety net that lets that product stay small relative to the database ceiling. Set the app-side pool to the smallest number your actual per-instance concurrency requires, and use transaction mode so the server-side pool absorbs the variance.
+
+Prepared statements deserve their own sentence because they are the most common way a correct-looking switch to transaction mode breaks. Transaction mode returns your connection to the pool after each transaction, so anything that depends on session state does not survive. Prepared statements are among the four things that break, along with cursors outliving a single transaction, session-level state like `listen` and `notify` or temporary tables, and query pipelining.[^1] Each driver disables them differently: `prepare: false` for Postgres.js and Drizzle, `pgbouncer=true` on the connection string for Prisma, `statement_cache_size=0` for asyncpg, `prepareThreshold=0` for JDBC.[^5] Get this wrong and you get spurious "prepared statement does not exist" errors that look like a database fault but are a mode misconfiguration.
+
+## Pick the connection string by where the code runs
+
+The correct connection method is a function of where your code executes, and the official table makes the decision mechanical. A frontend app talks to the Data API over REST or GraphQL, which needs no Postgres client at all and requires row-level security, the wire boundary our [full-stack type-safety guide](/blog/fullstack-type-safety-2026) maps. A serverless or edge function opens many short-lived connections, so it uses the shared pooler in transaction mode on port 6543. A persistent backend on IPv6, or with the IPv4 add-on, can use a direct connection on port 5432. A persistent backend on an IPv4-only network uses the shared pooler in session mode, still port 5432. Migrations, `pg_dump`, backup, and replication use direct connections, because those are single sessions running native Postgres commands.[^1]
+
+The ports encode the mode: 5432 reaches Postgres for a direct connection and Supavisor for session mode, and 6543 reaches PgBouncer for the dedicated pooler or Supavisor for shared transaction mode.[^1] The pooler host cannot be composed from your region, and the username differs: direct and dedicated-pooler connections use `postgres`, while shared-pooler connections use `postgres.[PROJECT-REF]`.[^1] Copy the string from the dashboard's Connect dialog rather than reconstructing it by hand; the label on the wrong mode produces exactly the silent waste this article is about.
+
+![A decision tree mapping where code runs to the right connection method: frontend to Data API, serverless to transaction mode on 6543, persistent IPv6 to direct on 5432, persistent IPv4 to session mode on 5432, and migrations to direct.](</diagrams/postgres-connection-pooling-serverless-2026/5-connection-method-decision.png>)
+
+## Size the pool to the whole chain, then watch it
+
+Once the modes are right, the remaining discipline is sizing for the whole chain rather than one pool. There are two limits that both apply to each pooler independently: client connections, how many clients can connect to the pooler at once, and backend connections, how many active connections the pooler opens to Postgres, which is what the pool-size setting on the dashboard controls.[^2] The invariant to respect is that direct connections plus Supavisor backend connections plus PgBouncer backend connections stay below the Postgres max for your compute, with headroom for the services Supabase itself runs.[^2] Running both poolers at once only raises your total client capacity while raising the risk of hitting the database ceiling, so do it deliberately, not by accident.
+
+Watch, do not guess. The dashboard's Observability section shows total active connections by role plus dedicated and shared pooler client counts, with the caveat that those reports are not real-time.[^2] For up-to-the-second data, query `pg_stat_activity` in the SQL editor and group by `usename` and `application_name` so you can see which role is holding the others out.[^2] If you are about to scale something that opens connections, check the count first and then decide, the same way you would check memory before sizing a cache.
+
+Here is the honest first-party version of the pattern, kept at the level of the lesson rather than our internals. The automation we run to deliver client work is Postgres-backed and runs as a set of long-lived worker processes on a small compute tier. It hit connection exhaustion not from user traffic but because several long-running workers each held a library-default pool open while mostly idle. The fix was exactly what the docs prescribe: cap the app-side pool to what each worker's concurrency actually needs, and route the short, query-shaped work through a server-side pooler in transaction mode so idle holders stopped reserving scarce connections. Once we changed where the connection count was being spent, the same hardware absorbed far more real load without a single error. Reaching for a bigger instance would have papered over the real bug.
+
+The takeaway is that the error message is doing its job; it is telling you the sum of your connections crossed a wall. The wall is real and worth respecting. But the fix is almost always on the client side of it, in a pool size you thought you did not set, on a mode you did not realize you were in. Set the app-side pool to the smallest number your per-instance concurrency needs, put short-lived query work in transaction mode behind a server-side pooler, keep prepared statements off in that mode, and size the whole chain below the ceiling. Then the error is gone, and it was never about traffic.
+
+[^1]: Supabase, "Connect to your database": connection methods by runtime (Data API for frontends, transaction mode for serverless, direct for persistent IPv6, session mode for persistent IPv4 and BI tools), the 5432/6543 port mapping, the shared-pooler `postgres.[PROJECT-REF]` username, and the four transaction-mode limitations (prepared statements, cursors, session state, pipelining) with per-driver settings. [supabase.com](https://supabase.com/docs/guides/database/connecting-to-postgres)
+[^2]: Supabase, "Connection pooling and limits": how pooling works, application-side vs server-side poolers, the shared (Supavisor) vs dedicated (PgBouncer) poolers, and the client-connections vs backend-connections limits with the invariant that all connections stay below the Postgres max. [supabase.com](https://supabase.com/docs/guides/database/connecting-to-postgres/pooling-and-limits)
+[^3]: Supabase, "How to change max database connections": the compute-size table (Nano/Micro 60 direct and 200 pooler, up to 16XL 500 and 12,000) and the warning that each direct connection is a running process consuming active memory. [supabase.com](https://supabase.com/docs/guides/troubleshooting/how-to-change-max-database-connections-_BQ8P5)
+[^4]: Supabase, "Supavisor FAQ": why Postgres spawns a process per connection, application-side pool defaults, transaction vs session mode behavior including the one-minute session queue, pool size, the user-plus-database-plus-mode combination, and the one-million-clients-on-400-connections demonstration that only works in transaction mode. [supabase.com](https://supabase.com/docs/guides/troubleshooting/supavisor-faq-YyP5tI)
+[^5]: Supabase, "Connect to your database, Configure your client": the module-scope client, pool size 1, prepared statements off, and SSL require settings for serverless, plus Postgres.js's default of 10 and the per-driver prepared-statement settings. [supabase.com](https://supabase.com/docs/guides/database/connecting-to-postgres#configure-your-client)
+[^7]: Vercel, "Connection Pooling with Vercel Functions": Fluid Compute pooling, `attachDatabasePool` to close idle connections before suspension, the suspension connection-leak problem, and the guidance to avoid a max pool size of 1 while keeping the minimum pool size at 1. [vercel.com](https://vercel.com/kb/guide/connection-pooling-with-functions)

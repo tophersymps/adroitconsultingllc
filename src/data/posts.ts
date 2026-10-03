@@ -2,6 +2,31 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "postgres-connection-pooling-serverless-2026",
+    "title": "Too Many Connections: The Pooling Fix That Works",
+    "excerpt": "Too many connections in a serverless app is rarely about traffic. It is how many Postgres connections each warm instance holds. Here is the pooling fix.",
+    "category": "React & Web Dev",
+    "categoryColor": "react",
+    "categoryGradient": "from-emerald to-emerald-dark",
+    "date": "October 3, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12",
+    "featured": false,
+    "tags": [
+      "PostgreSQL",
+      "Supabase",
+      "Serverless",
+      "Connection Pooling",
+      "Supavisor",
+      "Next.js",
+      "Backend",
+      "Web Development"
+    ],
+    "bannerImage": "/banners/postgres-connection-pooling-serverless-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "test-time-compute-inference-scaling-2026",
     "title": "Test-Time Compute Is a Knob, Not a Fix",
     "excerpt": "Reasoning models spend more compute at the moment you ask. Turn it on everywhere and it becomes a latency and billing trap. The discipline is routing.",
