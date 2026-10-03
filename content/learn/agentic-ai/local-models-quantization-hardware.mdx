@@ -1,0 +1,81 @@
+---
+title: "Lesson 58: Local Models: Running Open Weights, Quantization, and Hardware"
+slug: local-models-quantization-hardware
+series: "agentic-ai"
+lesson: 58
+excerpt: "Lesson 57 ran agents on serverless platforms that call hosted models. This lesson shows the other lever: running a model on hardware you control. It defines open-weight models and quantization, shows why a 4-bit build can cut memory by about four times versus the full-precision version, and works a concrete example of sizing a 7-billion-parameter model against a GPU's VRAM and a Mac's unified memory. It covers the formats you will actually meet (GGUF, GPTQ, AWQ), the tools (llama.cpp, Ollama, vLLM, MLX), and a numbered pattern for standing up a local endpoint behind an OpenAI-compatible API. A try-it prompt has you pull a small open model and measure its speed yourself."
+date: "October 3, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [LLMs, AI Agents, Local Models, Open Weights, Quantization, GGUF, llama.cpp, Ollama, vLLM, VRAM]
+---
+
+Running your own model is the most direct way to take control of inference. The last two lessons route agent calls to hosted platforms. Local serving is a different trade, and it changes what you measure first: not request latency or API cost, but whether the weights even fit in memory.
+
+A local model is one you run on hardware you own or rent, rather than through a hosted API. The model is an open-weight model, meaning the trained numbers are published so anyone can download and run them. Any serious decision to run one starts with the same two questions: what model, and can your hardware hold it while it answers. The answer to the second question almost always involves quantization, so that is where this lesson spends its time.
+
+## The two numbers that decide everything: bytes per parameter and VRAM
+
+A language model is a big pile of numbers called parameters. A 7-billion-parameter model has about 7 billion of them. Each parameter must sit somewhere in fast memory while the model runs, because inference reads the whole weight set on every single token it produces.
+
+The default way these numbers are stored is 16-bit floating point, which is two bytes per parameter. That makes the arithmetic trivial to estimate:
+
+> 7 billion parameters × 2 bytes = 14 GB of weights.
+
+Fourteen gigabytes does not fit in a midrange GPU's 8 GB of VRAM, and it strains laptops. That is where quantization enters. Quantization stores each weight in fewer bits, trading a little accuracy for a lot of memory. Store the same 7 billion parameters at 4 bits (half a byte each, minus real-world overhead) and the weight footprint drops to roughly 4 GB, about four times smaller.[^2] The Hugging Face documentation puts it plainly: quantization saves a significant amount of memory.[^2]
+
+This is the single most useful rule of thumb in local inference: at 4-bit quantization, budget roughly 0.6 GB of memory per billion parameters. A 7B model needs about 4.2 GB. A 70B model needs about 42 GB. Those are not the theoretical minimum, they are the practical figure after real quantized file sizes and overhead.[^8] Add a gigabyte or two of headroom for the context window and the runtime, and you have your hardware requirement.
+
+Quantization is not free. Compressing weights loses information, and a heavily quantized model is measurably worse at hard tasks than its full-precision original. The skill is choosing the coarsest quantization that still passes your quality bar, then spending the saved capacity on a larger or more capable model. A 4-bit 14B model is frequently better than an 8-bit 7B model for the same memory budget. That trade is what makes the whole exercise interesting.
+
+## The formats and engines you will actually meet
+
+You rarely download a raw model and run it. The ecosystem has standardized on a few file formats and a few engines, and matching them matters.
+
+GGUF is a single-file format designed for efficient local inference, popularized by the llama.cpp project. It packs the model metadata and its tensors into one file, and it supports many quantized data types so you can pick the memory/speed/quality point you want.[^2] llama.cpp itself is an inference engine written in C and C++ that runs GGUF models on CPU, and on Metal, CUDA, and other backends where available.[^1] It is the workhorse behind most local serving on commodity hardware, and it ships an OpenAI-compatible server so existing agent code can point at it without changing its model client.
+
+Ollama wraps this into an even simpler experience. You pull a model by name and tag, and it runs a GGUF build locally behind an OpenAI-compatible API, which is why it is the fastest way to prototype a local model.[^7] Its model names carry the tag convention, so the exact current tag always comes from the Ollama library rather than from memory.
+
+GPTQ and AWQ are the GPU-native quantization methods you will see on NVIDIA hardware, especially for larger models. GPTQ quantizes each row of the weight matrix independently to minimize error, keeps the weights at int4, and restores them to fp16 on the fly in a fused kernel, which both saves memory and speeds inference because fewer bits take less time to communicate.[^4] AWQ, activation-aware weight quantization, takes a different route: it preserves a small fraction of the weights that matter most for quality, then compresses the rest to 4 bits.[^5] Both publish ready-quantized models on the Hub, so in practice you download an existing GPTQ or AWQ build rather than quantizing yourself.
+
+For enterprise serving at higher concurrency, vLLM is the engine of choice on NVIDIA GPUs. It contributes PagedAttention, which manages the key-value cache like virtual memory to cut fragmentation, and continuous batching, which lets the GPU stay busy across requests of different lengths instead of draining one batch at a time.[^6] Those optimizations are why a single GPU can serve many concurrent agent calls, not just one at a time. On Apple silicon, MLX is an array framework built for the Metal hardware, which is how models that target iPhones, Macs, and MacBook memory budgets get their tuned kernels.[^3]
+
+## Worked example: standing up a 7B model, start to finish
+
+Take a concrete case: you want a private, offline drafting agent that summarizes internal documents, and you have a laptop with 8 GB of unified memory. No way that machine holds a 14 GB fp16 model. With a 4-bit build it is different.
+
+1. Choose a 7B model you trust and can license, and pull its 4-bit GGUF build. A 7B at Q4 lands around 4.2 GB of weights.[^8]
+2. Add the context budget. The key-value cache, the working memory for the tokens in the current window, grows with context length and concurrency, not with model size, so a short window keeps it small. Budget roughly 1 to 2 GB for it plus the runtime.
+3. Check the ceiling. About 5 to 6 GB total against 8 GB of unified memory is tight but workable for a single user. The same model is comfortable on a 16 GB machine at a long context.
+4. Run it. With Ollama, `ollama pull <model>:<tag>` fetches the build and `ollama run <model>:<tag>` starts it, with the exact tag from the current library listing.[^7]
+5. Point your agent at it. The local server exposes an OpenAI-compatible endpoint, so you change one base URL in the agent's model client and reuse everything else.
+6. Measure. Single-stream speed for one user is bounded by how fast the machine moves weights from memory into the compute units, roughly tokens per second equals memory bandwidth divided by bytes of model. That is why a big model shrunk by quantization feels snappier: fewer bytes per token to move.
+
+If that 8 GB machine were instead serving many concurrent users, the calculus changes. Continuous batching and PagedAttention let one GPU carry the load far better than a laptop can, which is why the same model on a rented GPU with vLLM is the scaled answer.[^6] Local does not always mean tiny. It means you own the hardware and the weights, and you size them to the workload.
+
+## When local serving is the right call, and when it is not
+
+Local models earn their place on four axes: privacy, because the tokens never leave the machine; cost, because a GPU you already own stops accruing per-token fees; latency, because a prompt avoids a network round trip; and control, because no provider can change the model or its terms under you. For a regulated client with documents that cannot leave the building, those axes decide the architecture.
+
+They also lose cleanly. The strongest frontier models still outclass anything a single desk GPU can run, so a local model is rarely the best answer for a hard reasoning task. A local model is a decision you make deliberately, not a default. The pattern that matters for building agents is not "local or cloud," it is knowing which requests each should handle, and that is precisely the subject of the next lesson.
+
+## Summary
+
+An open-weight model is any model whose trained weights are downloadable. Running one locally means loading those weights into fast memory and answering with an inference engine, and the first constraint is always memory. Quantization stores weights in fewer bits, cutting a model's footprint by about four times at 4-bit versus 16-bit, at the cost of some quality. Budget roughly 0.6 GB per billion parameters at 4-bit, plus context headroom, and you can size hardware before you buy it. GGUF, GPTQ, and AWQ are the formats you will meet; llama.cpp, Ollama, and vLLM are the engines that run them. A single-user local build is a simple "pull, run, point an OpenAI-compatible client at it" flow, while multi-user serving needs the batching and memory tricks in vLLM. The deciding question is which model fits your memory, your quality bar, and your concurrency.
+
+## Try it
+
+Pull a small open model that your hardware can hold, run it, and time it. Start with `ollama list` to see what is already there, check the Ollama library for the current tag of an 8B-or-smaller Llama, Mistral, or Qwen build, then `ollama pull` and `ollama run` it. Ask it the same question twice, once with a short prompt and once with a long document pasted in, and note how the tokens-per-second figure changes. Then open the OpenAI compatibility endpoint and send it a request from a small script so you have seen the model send one token stream to real client code.
+
+## What's next
+
+Running a model locally is one end of a spectrum. The next lesson, Lesson 59, tackles model routing: deciding when a small cheap-fast model is good enough, when a request must escalate to a larger model, and how cascades balance cost against quality across the whole agent. You just learned how to make a specific model fit your hardware. The next step is choosing which model a given request deserves at all.
+
+[^1]: Georgi Gerganov and contributors, llama.cpp, "LLM inference in C/C++" (CPUs plus Metal, CUDA, OpenVINO, and other backends): https://github.com/ggml-org/llama.cpp
+[^2]: Hugging Face Transformers documentation, "GGUF": https://huggingface.co/docs/transformers/en/quantization/gguf
+[^3]: MLX community, "MLX: An array framework for Apple silicon": https://github.com/ml-explore/mlx
+[^4]: Hugging Face Transformers documentation, "GPTQ", including its 4x memory-savings and Marlin kernel notes: https://huggingface.co/docs/transformers/en/quantization/gptq
+[^5]: Hugging Face Transformers documentation, "AWQ": https://huggingface.co/docs/transformers/en/quantization/awq
+[^6]: vLLM, official documentation and project repo, covering PagedAttention, continuous batching, chunked prefill, and prefix caching: https://docs.vllm.ai/ and https://github.com/vllm-project/vllm
+[^7]: Ollama documentation index, covering model pulling, the OpenAI-compatible API, and the library tags: https://docs.ollama.com/
+[^8]: PromptQuorum, "How Much VRAM for Local LLM? 7B to 70B Charts," for the 0.6 GB-per-billion-at-4-bit rule of thumb and real Q4 file sizes: https://www.promptquorum.com/local-llms/how-much-vram-local-llm
