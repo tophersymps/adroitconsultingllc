@@ -22,6 +22,8 @@ Here is the idea underneath the whole objective. An OmniScript's perceived speed
 
 The architect's job is to profile the whole path, from the first click to the final save, and treat the slowest leg as the target. That sounds obvious, but it is exactly what most tuning misses. People optimize the component they are looking at, not the component the user is waiting on. The exam tests this directly. One question describes an OmniScript that feels slow on the first step even though the server is fast, and asks which change is most likely to help. The answer is to defer data loading to the step that needs it and load only displayed fields. Adding more Data Raptors to the first step makes it slower. Increasing row limits returns more data and worsens the problem. Moving all logic into a single Integration Procedure does not address the load-time queries and may add a round trip. The fix targets the leg the user actually perceives, which is the first render.
 
+![Perceived speed is the whole journey: the load time, Data Raptors, Integration Procedures, and rendering all add up, and the slowest leg, here the Integration Procedure, is the bottleneck the user waits on](</diagrams/day-55-r-28a-cross-component-performance-optimization-omniscrip/1-whole-journey.png>)
+
 ### OmniScript load time is a tax on first impressions
 
 The load time of an OmniScript is dominated by two things: what the script fetches on load, and how much metadata it carries. A script that fires several Data Raptors on the first step, each returning large result sets, will feel slow no matter how fast the server is. The user is waiting on data they do not even see until a later step.
@@ -31,6 +33,8 @@ The fix is to defer data loading to the step that needs it, load only the fields
 A concrete example makes it real. A claims journey starts with a policy number the user types. The first step should fetch the policy holder's name and status, and nothing else. It should not pull the full policy object, the claim history, or the list of every document attached. Those belong on later steps, fetched when the user reaches them. The first render stays light, and the user gets a fast first impression instead of a spinner.
 
 Now watch what happens when you ignore this. The same claims journey fires four Data Raptors on the first step: one for the policy, one for the account, one for the claim history, and one for the document list. The server answers each one quickly, but the user still stares at a spinner while all four round trips complete, and the JSON fills with data the first step never shows. The server was never the bottleneck. The design was. Deferring those three extra fetches to the steps that display them turns a four-round-trip first render into a one-round-trip first render, and the user feels the difference immediately.
+
+![Deferring data loading in the claims journey: firing all four Data Raptors on the first step makes the user wait through four round trips, while loading only the policy holder's name and status cuts the first render to one round trip](</diagrams/day-55-r-28a-cross-component-performance-optimization-omniscrip/2-defer-data-loading.png>)
 
 ### Integration Procedure execution cost is round trips and payloads
 
@@ -61,6 +65,8 @@ Caching and reuse are the highest-leverage optimizations available. Data that do
 Salesforce offers two user-configurable caching types for Data Mappers and Integration Procedures: Org Cache and Session Cache, both part of the Salesforce Platform Cache.[^4] Org Cache is shared among all users in the same org and is recommended only for non-sensitive, non-user-specific data, with a maximum time to live of 48 hours. Session Cache stores user-specific data, is limited to active user sessions, and is safer for personalized data, with a maximum time to live of 8 hours.[^4] The architect should identify the read-mostly data in the solution and move it out of the per-request path, because eliminating a query is always faster than tuning one.
 
 A product catalog is the classic candidate. Every user who opens a quote journey needs the same list of products, prices, and descriptions, and that list changes rarely. Query it on every load and you pay the same cost a thousand times a day. Cache it in Org Cache and the first user pays the query, and everyone after reads from the cache until it expires. The same logic applies to an Integration Procedure whose result is identical for many users: cache the top-level response so the external call happens once, not once per user. The rule of thumb is simple. If the data is the same for everyone and changes rarely, it belongs in the cache, not in the per-request path.
+
+![Choosing between Org Cache and Session Cache: Org Cache is shared across all users for non-sensitive data with a 48 hour time to live, while Session Cache holds user-specific data for active sessions with an 8 hour time to live](</diagrams/day-55-r-28a-cross-component-performance-optimization-omniscrip/3-cache-types.png>)
 
 ## Config Walkthrough
 
