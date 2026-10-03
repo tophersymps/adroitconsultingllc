@@ -28,6 +28,8 @@ The Load reports the outcome of each record it processes. A successful write ret
 
 This is a per-record contract, not a whole-batch one. A Load can succeed on some records and fail on others. That is the normal case under real data, where some records will always be dirty. The consultant designs the Load to report outcomes, the flow to branch on errors, and the data to be validated before the write. That combination is what makes Loads reliable under real data [^1].
 
+![The Load reports the outcome of each record it processes: a successful write returns the record ID, and a failed write returns the error that describes why it failed](</diagrams/day-50-r-25b-data-mapper-load-error-management-during-create-an/1-per-record-outcome.png>)
+
 The exam tests this directly. When a Load processes many records and some fail validation, the flow should handle the failures while keeping the successful writes. A Load can succeed on some records and fail on others, so the flow should handle the failures without discarding the successes. Aborting loses good writes, and ignoring or re-running does not fix the failures.
 
 ### Error handling is a branch in the flow
@@ -35,6 +37,8 @@ The exam tests this directly. When a Load processes many records and some fail v
 Error handling is often a branch in the flow. When a Load returns errors, the flow can retry, log the failure, or surface a message to the user [^1]. The consultant designs this branch so a partial failure does not take down the whole flow and so the user knows what needs attention.
 
 Think about what the branch actually does. If the Load writes ten records and two fail, the flow should not roll back the eight that succeeded. It should let the successes stand, capture the two failures, and decide what to do with them. Retry is for transient problems. Logging is for records that need a human to look at them. Surfacing a message is for the user who needs to know that their submission partially failed and which parts need attention.
+
+![Error handling is a branch in the flow: the successes stand while the failures are retried, logged, or surfaced to the user](</diagrams/day-50-r-25b-data-mapper-load-error-management-during-create-an/2-error-branch.png>)
 
 The exam tests this directly. A Load can succeed on some records and fail on others, so the flow should handle the failures without discarding the successes. Aborting loses good writes, and ignoring or re-running does not fix the failures.
 
@@ -53,6 +57,8 @@ Upsert errors deserve special attention because the key logic can fail. A duplic
 The upsert key is the field the Load uses to decide whether it updates an existing record or inserts a new one [^1]. If the key is not unique, the Load cannot tell records apart. If the key is missing, the Load has nothing to match on. If the key matches multiple records, the upsert logic breaks because the Load does not know which record to update.
 
 There is a specific failure mode worth knowing. When the ID field is configured as the upsert key and the input records contain null ID values, the Data Mapper treats every record as identical, and each subsequent record overwrites the previous one, resulting in a single record being created or updated instead of multiple inserts [^2]. This behavior applies to any field used as an upsert key that contains null values, but it is most commonly encountered with ID because developers may assume it is required for upsert operations [^2].
+
+![Upsert key on ID with null values collapses the batch: every record is treated as identical, so each one overwrites the previous and only one record is created or updated](</diagrams/day-50-r-25b-data-mapper-load-error-management-during-create-an/3-upsert-null-key-collapse.png>)
 
 The fix is to choose the upsert key correctly. Remove the ID field as the upsert key when IDs are null at insert time, select an alternative field that holds a unique, non-null value for every record, and verify that the chosen key field contains unique values before the Load executes [^2]. The ID field functions as an implicit upsert key in Salesforce, so if a non-null ID is present in the input, the operation will upsert that record even if the upsert key option is unchecked [^2].
 
