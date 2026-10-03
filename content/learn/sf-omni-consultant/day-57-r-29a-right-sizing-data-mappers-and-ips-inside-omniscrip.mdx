@@ -28,6 +28,8 @@ Right-sizing starts with the business outcome, not the tool. For each data opera
 
 Naming the outcome first prevents the common mistake of reaching for an IP for every operation. The quiz tests this directly. One question describes an OmniScript that needs to load a single account record by ID and display a few fields, and asks for the best fit. The answer is a Data Raptor that loads the account by ID. An Integration Procedure that calls an external system adds a server round trip for a simple local read. A FlexCard that queries the account is a display component, not a data source for an OmniScript. A scheduled Apex job that caches the account is for background work, not an on-demand load. A Data Raptor is the direct, light way to load a single record by ID into the OmniScript's JSON.
 
+![Right-sizing decision flow: name the business outcome first, then choose a Data Raptor for a direct read or write or an Integration Procedure for orchestration, external calls, and shared transformation](</diagrams/day-57-r-29a-right-sizing-data-mappers-and-ips-inside-omniscrip/1-right-sizing-decision.png>)
+
 ### The fetch side should be as narrow as the business allows
 
 The fetch side should be as narrow as the business allows. A Data Raptor or IP should return only the fields the OmniScript displays or uses, filtered to the specific records needed. Returning a wide result set or an unbounded list forces the OmniScript to carry data it does not use and risks hitting query row limits.
@@ -35,6 +37,8 @@ The fetch side should be as narrow as the business allows. A Data Raptor or IP s
 The architect should design the fetch to return the minimum that satisfies the outcome. Salesforce's Data Mapper best practices make the same point: create targeted Data Mappers that only extract or load the data needed for one operation, and use relationship notation to pull data from related SObjects instead of adding extra extract steps.[^2] A fetch that returns a wide result set bloats the JSON, and the query risks hitting row limits as the data grows.
 
 A concrete example makes the discipline real. A service-repair journey needs the case number, the account name, and the assigned technician. The fetch should return exactly those three fields for the one case the user opened, filtered by the case ID. It should not return the full case object, the entire account record, or every case the account has ever filed. The narrow fetch keeps the JSON small, the query selective, and the journey fast. The wide fetch, by contrast, drags in data the journey never displays and risks a query that returns more rows than the limit allows.
+
+![Narrow fetch vs wide fetch: a service-repair journey returns only the case number, account name, and assigned technician for the one case, while a wide fetch drags in the full case object, the entire account record, and every case the account filed](</diagrams/day-57-r-29a-right-sizing-data-mappers-and-ips-inside-omniscrip/2-narrow-vs-wide-fetch.png>)
 
 ### The transform side belongs where it is cheapest and most maintainable
 
@@ -51,6 +55,8 @@ The save side must be transactional and correct. A save Data Raptor writes to Sa
 The quiz tests this directly. One question describes an OmniScript that must save a parent record and several child records that must all succeed together, and asks for the best approach. The answer is an Integration Procedure that orchestrates the multi-record save with error handling. A save Data Raptor that writes the parent only loses the children. A separate Data Raptor for each record with no coordination risks partial writes. A FlexCard that submits the records is a display component and does not orchestrate saves. An Integration Procedure can orchestrate the multi-record save and handle errors so a partial write does not leave the data inconsistent.
 
 The partial write is the danger. A journey saves an order header and three order lines. If the header saves and the third line fails, you now have an order with missing lines, and the data is inconsistent in a way that is hard to detect and harder to fix. An Integration Procedure orchestrates the whole save, and its error handling decides what happens when a step fails: roll back, retry, or surface a clear message. The save is transactional in the sense that matters, which is that a failure in one part does not leave the rest of the data in a broken state.
+
+![Transactional save orchestration: an Integration Procedure coordinates an order header and three order lines so a failure in one line does not leave a partial write with missing data](</diagrams/day-57-r-29a-right-sizing-data-mappers-and-ips-inside-omniscrip/3-transactional-save.png>)
 
 ### Reusability is the tiebreaker
 
