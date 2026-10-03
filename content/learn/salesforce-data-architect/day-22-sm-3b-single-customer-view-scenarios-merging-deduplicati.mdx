@@ -1,0 +1,180 @@
+---
+title: "Data Architect SM-3b: Single-Customer-View Scenarios: Merging and Deduplication"
+slug: day-22-sm-3b-single-customer-view-scenarios-merging-deduplicati
+series: salesforce-data-architect
+lesson: 22
+excerpt: "What to do when the single view is already broken: how merging consolidates duplicate Accounts, Contacts, and Leads into one surviving record, how it reparents related records and deletes the losers, why it is not reversible, how bulk deduplication finds duplicates with reports and merges them with native or third-party tooling, why prevention with duplicate and matching rules beats cleanup, and how to propagate the surviving record's ID downstream so the view does not fragment again. Includes a worked household scenario, a numbered configuration walkthrough, the three exam traps, and a try-it exercise."
+date: "October 3, 2026"
+author: "Adroit Consulting"
+readTime: "21 min read"
+tags: [Salesforce, Data Architecture, Data Management, Certification]
+---
+
+Lesson 21 built the coherent single view: shared identity, per-attribute system of record, Change Data Capture to keep systems in sync. That lesson assumed the customer was mostly clean and you were keeping it that way. Requirement sm-3b asks the harder question: what do you do when the view is already wrong, because the same customer exists as three records in one org, each holding a piece of the truth and none of them agreeing?
+
+That is the world most architects actually inherit. Duplicate Accounts for the same company, multiple Contacts for the same person, Leads that were never merged after conversion. The single view exists on paper but not in the data, and the exam wants you to know how to make it real. The requirement frames it as: given a scenario representing a single view of the customer, recommend techniques such as merging duplicate records and ongoing deduplication to maintain one authoritative customer record on the platform.[^1]
+
+The core idea is the authoritative record. One customer, one record that everyone treats as the source of truth, and a mechanism that finds the duplicates and folds them into it. This lesson gives you that mechanism: what merging actually does, why you cannot undo it, how to deduplicate at scale, and why prevention beats cleanup.
+
+## What merging actually is
+
+Merging is the operation that consolidates duplicate Accounts, Contacts, or Leads into one surviving record. You pick a master, and Salesforce reparents the related records to it, keeps the surviving record's Id, and deletes the losers.
+
+That last word matters. A merge does not just combine two records into a richer one while keeping both around. It produces exactly one record, the survivor, and it deletes the others. The records that lose the merge go to the Recycle Bin, not to some archive where the single view can keep reading them. When you merge `ACME East` and `ACME West` into `ACME`, the org is left with one Account named `ACME`, and the two that lost are gone from the working data.[^2]
+
+The reason this matters for the single view is that unmerged duplicates fragment it. If the same customer exists as `ACME East`, `ACME West`, and `ACME Corp`, then a support agent looking up the customer might open any one of them, see only a third of the history, and make a decision on partial truth. The opportunities live under one record, the cases under another, and the open invoices under the third, so nobody ever sees the whole customer. Merging is how you fold those fragments back into one authoritative record.
+
+## What a merge does to the records around it
+
+A merge is never just about the two records in front of you. It cascades. And the way it cascades is a large part of what the exam tests.
+
+For Accounts, when you merge two Accounts, the related records reparent to the surviving account. Contacts, Opportunities, and Cases that pointed at the loser record are moved so they point at the survivor instead. Their record links update, and the history follows. That is why the survivor ends up with the richer view: it inherits not just the typed-in fields but the entire set of children that were scattered across the duplicates.[^2]
+
+For Contacts, the same principle applies to the records tied to that person, their activities, cases, and other references move to the surviving Contact. For Leads, the merge is a way to collapse duplicate leads before conversion, so the queue holds one record per prospective person rather than several.[^3]
+
+There is a subtlety the exam expects you to know. Some fields on the losing record are carried into the survivor, but which ones is your decision. The merge interface lets you select field values from each record to keep. You choose the master record, then you choose, per field, which of the two values survives. Any value you do not select does not make it into the survivor. It is not merged intelligently. If the billing address on the loser is correct and you forget to select it, that correct value is lost when the loser is deleted. This is why the deep-dive instruction says to capture the field values before you merge, because the merge only keeps what you explicitly pick.[^2]
+
+## Merge is not reversible
+
+Here is the trap that separates the careful architect from the careless one, and it is big enough to be its own exam trap. A merge is not a reversible operation. The losing records are deleted. They are not merged in a way that can be split back apart later.
+
+The only recovery window is the Recycle Bin. When the loser records are deleted by the merge, they sit in the Recycle Bin, from which an administrator can restore them before the window expires. After that, or once the Recycle Bin is purged, they are gone permanently. The Recycle Bin is not an archive you can rely on; it is a short, purgable buffer.[^4]
+
+The implication is that you back up before you merge, and you treat merging high-risk entities as a controlled operation, not a fire-and-forget bulk action. For a customer record with years of opportunity history, a merge gone wrong on a field you forgot to preserve is a real loss. You take a backup of the candidate records, you review the merge selections, and you run it as a deliberate step. Prefer controlled merges over bulk automation for high-value entities, because a bad bulk merge is a bad bulk deletion you cannot unwind.[^2]
+
+## Deduplication at scale: find, then merge
+
+Merging one pair of duplicates with the native interface is easy. The hard part is finding the thousands of duplicates that predate your merge policy and folding them all in, and that is bulk deduplication.
+
+The finding step uses duplicate reports. You run duplicate jobs to detect records that match across your rules, and you share the results as reports so the duplicates surface as a list rather than a hope.[^5] Duplicate reports let you see, for example, every Account that matches another Account on the standard matching rule, so you can prioritize which pairs to merge first.
+
+The merging step, though, is where the scale problem appears, and this is a fact the exam wants you to be clear about. Native merge is a UI-driven operation, and it is generally not a high-volume batch feature. You can merge a handful of Accounts from the record page, and you can merge from within a duplicate record set, but you do not run a native batch that folds 10,000 duplicates in one pass. Native merge is built for controlled, human-reviewed merges, not bulk cleanup.
+
+So for a large deduplication project, you adopt a dedicated tool. Third-party deduplication apps on AppExchange, or a purpose-built deduplication platform, handle the finding, the matching, the survivorship decisions, and the merge at a volume the native interface is not designed for. The architect's job is to know when to reach for which: native merge for the handful of controlled cases, a deduplication tool for the backlog.[^2]
+
+This is the exam distinction in Q2 of the lesson quiz: mass merge at high volume is not a native batch feature. If a scenario hands you a 40,000-record duplicate backlog and expects you to fold it with the native merge button, that is the wrong answer. You bring in bulk tooling.
+
+## Prevention beats cleanup
+
+Deduping a backlog is necessary, but it is an admission that the entry path is broken. The permanent answer is to stop the duplicates from being created in the first place, and that is what duplicate rules and matching rules do.
+
+Matching rules decide which records are candidates for being duplicates. They define the criteria, such as "Email, Exact Match" for Contact, or "Account Name, Fuzzy Match" for Accounts. They are the detection layer.
+
+Duplicate rules decide what happens when a candidate is found. They pair with matching rules and take an action on create and on edit: either Alert, which warns the user that a potential duplicate exists, or Block, which prevents the record from being saved at all. You can include up to three matching rules in each duplicate rule, and up to five active matching rules per object.[^6]
+
+The reason this is the backbone of the single view is simple: cleanup without prevention just delays recurrence. You dedupe the backlog, and then the next new record, entered by a sales rep who did not search first, re-creates the duplicate. The match rules catch it at entry and either warn or block, so the single view stays clean going forward. A dedupe project that does not also harden the entry rules is a project the org will have to run again next quarter.[^7]
+
+The exam frames this as ongoing deduplication. The requirement is not "clean it once"; it is "maintain one authoritative customer record." That is a system you run continuously: prevention rules at the entry point to keep new duplicates out, plus scheduled detection to catch what slips through.
+
+## The hard part: matching distinct people
+
+Here is where deduplication gets genuinely risky, and it is the concept behind Q3 of the lesson quiz.
+
+A merchant sells to households: a family of four all share one email address, `smithfamily@gmail.com`. Four Contacts in the system, four real people, one shared email. If your match rule treats that shared email as proof of identity and merges them all into one Contact, you have collapsed four distinct people into one record. The single view is now a lie in the opposite direction: instead of two records for one person, you have one record for four.
+
+The opposite failure is just as real. If your matching is too cautious, the duplicate pair that genuinely is the same person stays unmerged, and the fragmenting continues.
+
+This is the core difficulty with person-level matching: shared attributes. A shared email or a shared home address is evidence of a household, not proof of identity. Over-aggressive matching merges distinct people; under-aggressive matching leaves duplicates. Both are wrong.
+
+The answer is not a single, hard match threshold. If you set the email match to "must be exact and unique," the household case either over-merges (all four people collide) or you blunt the rule so much that the real duplicates pass. The safer design is a review band: a threshold range where records are flagged as probable duplicates, and a human steward adjudicates the ambiguous cases. Values clearly inside the band merge automatically; values in the gray zone go to a queue for a person to decide; values clearly outside stay separate.
+
+That review band is what Q3 of the lesson quiz tests: a single, hard threshold is risky because it cannot distinguish a household from an individual. It either over-merges distinct people or under-merges real duplicates, so a review band, where a steward adjudicates the ambiguous cases, is safer. The lesson is that matching at the person level is a judgment problem wearing a rules problem's costume, and you tune it with a band and a human in the loop, not a single number.
+
+## Propagate the surviving ID downstream
+
+The single view does not stop at the org boundary. This is the concept Q1 of the lesson quiz tests, and it is the one that makes a successful merge stay successful.
+
+Picture the scenario from Q1. A team merges 40 duplicate Accounts. In Salesforce, the org is now clean: one Account per customer, each with the stated Id. But the ERP downstream still has the old IDs, the ones that used to belong to the records that lost the merge. The ERP keeps writing and reading by those old keys, so from the ERP's point of view nothing changed. The next time the ERP pushes an update keyed on a lost Id, it either fails to match, or it re-creates the view fragment.
+
+A cross-system single view requires that merges in Salesforce be reflected in downstream systems. The surviving record's external ID must propagate outward, so the ERP, the billing platform, and the warehouse all learn that "this is the account that used to be `ACME East`" and update their references to the surviving key.
+
+The propagation mechanism is the event-driven layer you built in lesson 21. You enable Change Data Capture on the object that holds the surviving external ID, subscribe the downstream systems to the change event channel, and when a merge lands, the change event carries the new identity so each consumer updates its mapping.[^8] A merge notification, or a CDC-driven sync, is what keeps the systems aligned after the merge.
+
+Without that propagation, the merge is cosmetic. Salesforce is clean, and everywhere else the customer is still split, because the external systems still hold the old IDs. This is Q1's answer: the missing piece was propagation of the surviving external ID to downstream systems, not more duplicate rules. Duplicate rules prevent future duplicates, but they do not sync a completed merge. A merge that is not propagated downstream does not produce a single view; it produces a Salesforce-only view.
+
+## Governance: who can merge, and who watches
+
+Because merge is destructive and irreversible, it is a governance problem as much as a data problem. The exam wants you to think about control.
+
+First, define who can merge. Merge permission is gated, and you restrict it to users who have the merge permission and the profile or permission set access. Not everyone who can view a record should be able to fold two Accounts together. You grant merge rights to the data stewards and admins who understand the consequences.
+
+Second, require a review step for high-value accounts. A merge that combines two enterprise customers with hundreds of opportunities each deserves a human confirming the field selections before it runs. You do not let a bulk tool or a careless user fold them without scrutiny.
+
+Third, log merges so the single view is auditable. When a merge happens, you record who did it, which records were involved, and which survived, so that if a downstream question comes up, you can trace the consolidation. A merge log turns an opaque destructive operation into a governed, reviewable one.
+
+These three controls, permission, review, and logging, are what make a destructive operation safe to run at the center of a customer view.
+
+## Worked scenario: the household email
+
+Put the decision framework together with a concrete case.
+
+A mid-size services company has 12,000 Contacts, and a data audit finds 1,300 duplicate pairs. The pattern is consistent: the import from an old marketing system created a new Contact every time an email campaign re-added a name, and the CRM never matched them because no duplicate rules were active.
+
+Step one, prevent recurrence. The team activates the standard Account, Contact, and Lead matching and duplicate rules, and adds a custom Contact match on email with fuzzy name matching, so new duplicates trigger an alert at entry.[^6]
+
+Step two, find the backlog. They run duplicate jobs and generate duplicate reports, which surface the 1,300 pairs as a prioritized list, ranked by how confidently the rules matched them.[^5] They export the candidate records before merging, so they hold a backup of every field value that might not carry into a survivor.
+
+Step three, adjudicate the gray zone. Of the 1,300 pairs, about 1,100 are confident matches: same name, same email, same company, merged with native merge on the record pages by a data steward who reviews the field selections. The other 200 are ambiguous, often the household case, a shared family email where the names differ. Those 200 go to a review queue, not to an automated merge, and a steward resolves each one by hand because a hard threshold would have either collapsed a family into one person or left real duplicates standing.
+
+Step four, propagate. After each Account merge, the external ID for the surviving account is published through Change Data Capture, and the downstream billing platform and the marketing platform update their mappings to the surviving key, so the single view holds everywhere, not just in Salesforce.[^8]
+
+Step five, govern. Merge permission is restricted to the data steward role, high-value accounts require a second review before merge, and a merge log records every consolidation.
+
+That whole sequence is the ongoing deduplication the requirement names: prevent at entry, find with reports, adjudicate the ambiguous, merge the confident, propagate the survivor, and log the operation.
+
+## Configuration walkthrough, numbered
+
+Here is the setup in the order you would build it.
+
+1. Configure matching rules and duplicate rules to prevent new duplicates at entry. In Setup, search for Matching Rules, and create or activate the standard rules for Account, Contact, and Lead. Then open Duplicate Rules, pair each matching rule with a duplicate rule, and set the action for create and edit to Alert or Block. When you write these via the API, you deploy the same metadata: the matching rule, the duplicate rule, and the action definitions. Up to three matching rules can feed one duplicate rule, and up to five active matching rules are allowed per object.[^6]
+
+2. Run standard duplicate reports to identify existing duplicates, and export or back up the candidate records before merging. In Setup, open Duplicate Management, run duplicate jobs to detect matches, and share the results as duplicate reports.[^5] Before you merge anything, export the matched records so you hold a copy of every field value, because a merge only keeps the values you select and deletes the rest.
+
+3. Use native merge for controlled cases, and adopt a deduplication app for bulk projects. For a handful of Accounts, Contacts, or Leads, open the record, click View Duplicates, select the master, choose the field values to keep, and merge.[^2] For the 40,000-record backlog, install a dedicated deduplication tool, because native merge is not a high-volume batch feature.
+
+4. Restrict merge permission and require a review step for high-value accounts. Grant merge access only to the steward and admin roles with a permission set, and add a manual review to the merge workflow for any account above a value threshold, so the field selections for a high-value customer are confirmed before the losers are deleted.
+
+5. Propagate the surviving record's external ID to downstream systems so they stay aligned. Enable Change Data Capture on the object that holds the surviving external ID, and subscribe the downstream systems to the change event channel, so that when a merge lands, the change event carries the new identity and each consumer updates its mapping.[^8] A merge notification serves the same purpose where CDC is not available.
+
+## The three exam traps, avoided
+
+Trap one, treating merge as reversible. The losing records are deleted. They are not combined in a way that can be split apart, and the only recovery is the Recycle Bin before it is purged. Prevention: back up before you merge, capture the field values you need, and treat merge as a one-way door, not an undoable combine.[^4]
+
+Trap two, doing cleanup without prevention. You dedupe the backlog, and the next record entered without a match check re-creates the duplicate, because nothing stopped it at entry. Prevention: pair every cleanup with active duplicate and matching rules so new duplicates are blocked or alerted before they land. Cleanup without prevention just delays recurrence.[^7]
+
+Trap three, merging aggressively on a shared attribute and collapsing distinct people. A household email or a shared address is evidence of a family, not proof of a single person. Over-aggressive matching merges distinct people into one record. Prevention: tune matching with a review band, and let a human steward adjudicate the ambiguous cases instead of trusting a single hard threshold.
+
+## Try it for yourself
+
+In a sandbox, create two identical Contact records for the same person. Open one, click View Duplicates, select it as the master, merge, and then inspect the surviving record. Confirm the related records reparent to the survivor and the losing Contact lands in the Recycle Bin. Then attempt the reverse: restore the losing Contact from the Recycle Bin and see that you now have two records again, which is the only way a merge is ever undone.[^4]
+
+Then reproduce trap three. Create three Contacts that share one email address but have different names, a simulated household. Configure a Contact duplicate rule that matches on email as exact, and watch what an aggressive rule would do. Then reconfigure matching to use a review band and confirm the household is flagged for review rather than auto-merged, and a steward can keep the distinct people separate while still catching the real duplicate.
+
+Finally, reproduce the propagation lesson from Q1. Merge two Accounts, and before you propagate, try to match the downstream system on the losing Account's old Id and see it fail. Then enable Change Data Capture, emit the change event for the surviving external ID, and confirm the downstream mapping updates to the survivor, so the view does not fragment again.[^8]
+
+## What's next
+
+You can now repair a single view that is already broken: fold duplicate Accounts, Contacts, and Leads into one surviving record with merge, deduplicate the backlog with reports and bulk tooling, harden the entry path with matching and duplicate rules so the duplicates stop, tune person-level matching with a review band for shared household attributes, and propagate the surviving external ID downstream so the fix holds everywhere. Lesson 23 moves up from fixing records to fixing whole orgs: consolidating and leveraging multiple Salesforce instances. It covers org consolidation, org-to-org integration, and Data Pipelines and Data Connect for moving data between environments (sm-4a). Where lesson 22 merged records, lesson 23 merges environments.
+
+## Related Requirements
+
+- Lesson 23 of 42 (sm-4a): Consolidating and leveraging multiple Salesforce instances
+- Lesson 21 of 42 (sm-3a): Single view of the customer across systems
+
+## References
+
+[^1]: Platform Data Architect exam guide, Salesforce. Outlines the Salesforce Data Management domain and the objective to recommend techniques that maintain a single view of the customer, including merging duplicate records and ongoing deduplication to maintain one authoritative customer record on the platform. [trailhead.salesforce.com](https://trailhead.salesforce.com/en/credentials/platformdataarchitect/)
+
+[^2]: Merge Duplicate Accounts in Lightning Experience, Salesforce Help. Documents that merging selects one account as the principal, reparents related records to the survivor, keeps field values you select while losing values you do not, and deletes the losing records. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sales.account_merge_lex.htm&type=5)
+
+[^3]: Merge Duplicate Contacts in Lightning Experience, Salesforce Help. Documents that contact merges choose one contact as the principal, select the field values to keep, and fold duplicate contacts into the survivor. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sales.contacts_merge_lex.htm&type=5)
+
+[^4]: Recycle Bin in Lightning Experience, Salesforce Help, and Recover Merged Salesforce Contacts knowledge article. Documents that the losing records from a merge go to the Recycle Bin, can be restored there while within the window, and are permanently deleted once purged or beyond the window. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.recycle_bin_use.htm&type=5)
+
+[^5]: Manage Duplicate Records / Create Reports on Duplicate Records, Salesforce Help. Documents that you run duplicate jobs to find duplicates across the org and share the results as duplicate reports, which are used to fine-tune duplicate and matching rules. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sales.managing_duplicates_overview.htm&type=5)
+
+[^6]: Matching Rules and Duplicate Rules, Salesforce Help. Documents that matching rules identify potential duplicate candidates while duplicate rules determine the Alert or Block action on create and edit, that up to three matching rules feed a duplicate rule, and that up to five active matching rules are allowed per object. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sales.matching_rule_map_of_reference.htm&type=5)
+
+[^7]: Prevent Duplicate Data in Salesforce, Trailhead. Covers how matching rules and duplicate rules work together to warn of or block potential duplicates before records are saved, so new duplicates are prevented at entry. [trailhead.salesforce.com](https://trailhead.salesforce.com/content/learn/modules/sales_admin_duplicate_management/sales_admin_duplicate_management_unit_2)
+
+[^8]: Change Data Capture, Salesforce Developers. Documents that Change Data Capture publishes change events for record changes, so downstream systems can react to merges and propagate the surviving record's external ID in near real time. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/change-data-capture/guide/cdc-intro.html)
