@@ -30,6 +30,8 @@ The envelope is the defining structure of SOAP. It wraps the operation in a SOAP
 
 The exam tests this directly. A customer's legacy system exposes only a SOAP API, and the consultant must configure the HTTP Action. Use POST with an XML SOAP envelope as the request body, and nothing else. GET, DELETE, and PUT do not match the SOAP contract, and the body must be XML, not JSON or form-encoded [^1].
 
+![A SOAP call is a single HTTP POST whose body is an XML envelope: the request envelope carries a Security header with a username token and a SOAP body with the operation and its parameters, and the response envelope returns the result in verbose, namespaced XML](</diagrams/day-38-r-19b-soap-endpoints-and-advanced-authentication-scenari/1-soap-envelope-structure.png>)
+
 ### SOAP authentication: WS-Security and basic auth over HTTPS
 
 SOAP authentication is often WS-Security, which embeds a username token or a security header inside the SOAP envelope, or it can use basic auth over HTTPS [^3]. The consultant must confirm which mechanism the endpoint expects, because the token may need to live inside the XML body rather than in an HTTP header.
@@ -54,11 +56,15 @@ The multi-step flow is the important case. Some external systems require a token
 
 The consultant's job is to recognize when the standard flow is enough and when it is not. If the external system's developer portal describes a standard OAuth 2.0 flow, the named credential handles it. If the flow is custom, such as a token that must be fetched and then passed manually, the IP must implement the multi-step pattern. The decision is driven by the external system's contract, not by preference.
 
+![The multi-step advanced authentication pattern: an HTTP Action calls the token endpoint, logic captures the token from the response, and a second HTTP Action passes it, often as a header, to the data call](</diagrams/day-38-r-19b-soap-endpoints-and-advanced-authentication-scenari/3-multi-step-auth.png>)
+
 ### The use case determines the approach
 
 The use case determines the approach. A modern cloud API is almost always REST with OAuth, while a legacy on-premise system is often SOAP with WS-Security or basic auth [^1]. The consultant's guidance is to match the endpoint's native protocol rather than force a REST-style call onto a SOAP system.
 
 This is the organizing principle of the requirement. The consultant does not choose SOAP because it is familiar or REST because it is modern. The consultant reads the endpoint's contract, identifies the native protocol, and configures the HTTP Action to match it. A SOAP system gets a POST with an XML envelope and WS-Security; a REST system gets resource methods with OAuth. Forcing one style onto the other is the fastest way to a failed integration [^1].
+
+![The protocol decision: SOAP is XML-based and operation-oriented with a POST envelope, WS-Security or basic auth, and verbose namespaced responses needing a Data Mapper Transform, while REST uses resource methods with OAuth and compact JSON that maps directly](</diagrams/day-38-r-19b-soap-endpoints-and-advanced-authentication-scenari/2-soap-vs-rest.png>)
 
 Error handling deserves the same attention for SOAP as it does for REST. A SOAP call can fail at the transport level, with an HTTP error code, or at the application level, with a SOAP fault embedded in the response envelope. A SOAP fault is a structured error inside the XML, and it carries a fault code and a fault string that describe what went wrong. The consultant should route both kinds of failure to an error path in the IP, so a transport failure and a SOAP fault are distinguishable. A call that returns a SOAP fault is not a network problem; it is the endpoint telling you the request was understood but rejected, and the fault string is the diagnostic. Planning this error path at design time means a failed SOAP call surfaces with the detail needed to fix it, rather than as a generic IP failure [^1].
 
