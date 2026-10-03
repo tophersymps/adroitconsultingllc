@@ -1,0 +1,146 @@
+---
+title: "Object Relationships and Sharing: Parent-Child, Master-Detail Rollups, Lookups, Implicit Sharing"
+slug: day-21-r-6a-object-relationships-and-sharing-parent-child-mast
+series: salesforce-sharing-visibility-architect
+lesson: 21
+excerpt: "Given a scenario, determine the correct object relationships that support record access sharing requirements. Covers master-detail (Controlled by Parent) versus lookup (independent sharing), implicit sharing for standard relationships, roll-up summary data exposure, and the conversion rules that make relationship choice a security decision."
+date: 2026-10-03
+author: Adroit Learning
+readTime: 16
+tags:
+  - master-detail
+  - lookup
+  - implicit sharing
+  - roll-up summary
+  - controlled by parent
+  - object relationships
+  - sharing model
+---
+
+Yesterday you chose between teams, roles, and groups to satisfy a record access requirement. Today the decision moves one level down, into the data model itself. The requirement for this lesson is: given a scenario, determine the correct object relationships that support record access sharing requirements.[^1]
+
+This is the objective where the exam stops asking what a sharing mechanism does and starts asking whether the objects you modeled can even express the access you need. Two objects can hold the same data and share it completely differently depending on whether you linked them with a master-detail relationship or a lookup. The relationship you choose at design time becomes a security decision that is expensive to reverse later. Get it right up front and the sharing model falls into place. Get it wrong and you are fighting the data model for the rest of the project.
+
+## The two relationship families and what they do to access
+
+Salesforce gives you two main ways to link a parent object to a child object, and they behave differently for deletion, required fields, and, most importantly for this exam, sharing.[^2]
+
+**A master-detail relationship couples the child to the parent.** The master record controls certain behaviors of the detail record. The detail record inherits its security settings and permissions from the master, and you cannot set permissions on the detail record independently. The Owner field on the detail record is not available; it is automatically set to the owner of the master record. Because the detail has no owner of its own, a custom object on the detail side of a master-detail relationship cannot have sharing rules, manual sharing, or queues, all of which require an Owner field.[^2]
+
+**A lookup relationship decouples the child from the parent.** Lookup relationships are similar to master-detail relationships except they do not support sharing or roll-up summary fields. Each object in a lookup relationship is shared independently, governed by its own organization-wide default and sharing rules.[^2]
+
+That single difference, whether the child has its own owner, drives almost everything else in this lesson. A child with no owner cannot be shared on its own, so it must follow the parent. A child with an owner can be shared independently, so it does not follow the parent unless you explicitly make it.
+
+## Controlled by Parent: the sharing contract of master-detail
+
+When you create a master-detail relationship, the organization-wide default for the detail object is set to Controlled by Parent. This is the mechanism that makes the child follow the parent. Under Controlled by Parent, a user's access to a detail record is determined entirely by their access to the master record. Grant a user access to the master and they can see the related detail records. Restrict the master and the details stay hidden. There is no separate sharing decision to make for the child, because the child has no owner and no sharing rules of its own.[^2]
+
+The practical consequence is that you cannot widen a child's access independently of its parent. If a user needs to see a detail record, they need access to the master record that owns it. This is the trade-off the exam wants you to recognize: master-detail gives you a simple, automatic sharing model at the cost of flexibility. The child's access is locked to the parent's, and you cannot grant a user access to a child without also granting them access to the master.
+
+This coupling is why the first quiz question in this lesson resolves the way it does. If the requirement is that access to a child object must exactly mirror access to its parent and can never diverge, master-detail is the only relationship that enforces that. A lookup relationship keeps access independent, which is the opposite of the requirement. A junction object and an external lookup both introduce their own sharing behavior, but neither couples child access to the parent the way Controlled by Parent does.
+
+## Lookup: independent sharing per object
+
+A lookup relationship does not propagate access in either direction. Access to a parent record does not grant access to its lookup children, and access to a lookup child does not grant access to its parent. Each object is shared independently, governed by its own organization-wide default and its own sharing rules.[^2]
+
+This is the second quiz question in this lesson. A user can read a parent Account but cannot read its lookup-child custom object records. The reason is not a license problem, not field-level security, and not a Controlled by Parent setting. The reason is that lookup children do not inherit access from the parent. The child's own OWD and sharing configuration govern its records, even when the parent is shared. Only a master-detail relationship, or an explicit related-record sharing rule, couples the two.
+
+The independence of lookup sharing is both a strength and a trap. It is a strength when you need to grant access to a child without exposing the parent, or to a parent without exposing the child. It is a trap when you assume a parent grant covers the children, because it does not. The exam loves this trap because it is the most common real-world mistake: an architect shares the parent, then discovers the children are still locked down.
+
+## Implicit sharing: the built-in exception for standard relationships
+
+There is one place where access does flow between a parent and its children without a sharing rule, and that is implicit sharing. Implicit sharing is a built-in mechanism that automatically grants users access to parent records if they can access related child records, and vice versa. It applies only to standard relationships, and it exists for specific object pairs.[^3]
+
+There are two directions of implicit sharing that matter for internal users.
+
+**Parent implicit access.** If you have access to an account's child case, contact, or opportunity record, you have implicit Read Only access to that account, even when the Account OWD is set to Private. You can view the parent account but you cannot edit it. This access comes from ownership or from sharing access on the child; it does not come from View All Records or Modify All Records object permissions.[^3]
+
+**Child implicit access.** Depending on your sharing configuration, if you have access to a parent account, you can have access to the associated child case, contact, and opportunity records. The account owner's role and the settings configured in account sharing rules and manual shares determine the level of access to the child records. For example, an admin can set up a role so that users can view all opportunities, cases, and contacts associated with accounts they own.[^3]
+
+Implicit sharing also covers specific standard pairs beyond accounts and their children. If you own an order record or are above the order's owner in the role hierarchy, you have implicit Read Only access to its related parent account. Account and contract access is configured with the same OWD setting, so access to an account's contract gives you implicit Read Only access to that account, and access to a parent account gives you access to its associated contracts.[^3]
+
+The key point for the exam is that implicit sharing is a narrow, built-in exception, not a general rule. It exists for standard relationships like Account to Contact, Case, Opportunity, Order, and Contract. It does not apply to custom objects. For custom objects, the only ways to couple access across a relationship are master-detail (Controlled by Parent) or an explicit sharing rule with the related record option.
+
+## Related record sharing: extending access to related records
+
+When you need access to flow across a relationship that is not a master-detail, you can use a sharing rule with the related record option. A related record sharing rule grants users access to records related to records they already have access to. This is the explicit mechanism that couples access for lookup relationships, where implicit sharing does not apply.
+
+The distinction matters. Implicit sharing is automatic and limited to standard relationships. Related record sharing is explicit, configurable, and available for custom objects. If you need a user who can read a parent to also read its lookup children, you build a sharing rule that targets the related records. This is the architect's tool for recreating the coupling of master-detail on top of a lookup, with the flexibility to choose exactly which related records and which access level.
+
+## Roll-up summary fields: the data exposure trade-off
+
+A roll-up summary field calculates a value from related records, such as those in a related list. You create it on a master record to display a value based on fields in detail records. The detail record must be related to the master through a master-detail relationship. You can count the number of detail records, or calculate the sum, minimum, or maximum of a field in the detail records.[^4]
+
+The security implication is subtle and it is the third quiz question in this lesson. A roll-up summary field computes on the master, so a user who can read the master can see the aggregate total even when they cannot access the individual child records that produced it. The roll-up does not hide the children, it does not remove sharing, and it does not require Modify All. It simply exposes an aggregate on the master that is computed from children the user may not be able to open individually.[^4]
+
+This is a real data-exposure consideration. Consider an account with a roll-up SUM field that totals the value of its child opportunity records. A user with Read access to the account sees the total, even if the opportunities themselves are private and the user cannot open a single one. The aggregate leaks information about the children. If the total itself is sensitive, exposing it on the master is a design problem, and you need to decide whether the roll-up is acceptable given the sensitivity of the underlying child data.
+
+The exam wants you to design around this. When you place a roll-up on a master, ask what the aggregate reveals. If the child data is sensitive and the total is sensitive, a roll-up on a broadly shared master is a leak. You may need to restrict access to the master, move the roll-up to a less shared object, or accept the exposure because the aggregate is not sensitive.
+
+## Relationship choice is a security decision
+
+The core architect judgment in this lesson is that choosing master-detail versus lookup is a security decision, not just a data modeling decision. The two relationships express two different sharing philosophies.
+
+**Master-detail couples child sharing to the parent.** It is simpler because the sharing model is automatic: the child follows the parent, and there is no separate OWD or sharing rule to configure for the child. It is less flexible because you cannot grant a user access to a child without granting access to the master, and the child cannot have its own owner, sharing rules, manual sharing, or queues.
+
+**Lookup decouples child sharing from the parent.** It is more flexible because each object shares independently, with its own OWD and sharing rules. It is more work because you must configure sharing for each object, and you must use explicit related record sharing if you want access to flow across the relationship.
+
+The decision rule is straightforward. If the requirement is that child access must mirror parent access and never diverge, use master-detail. If the requirement is that child access must be independently controllable, use lookup. If you need roll-up summary fields, you must use master-detail, because lookups do not support them. If you need the child to have its own owner, sharing rules, manual sharing, or queues, you must use lookup, because master-detail children have none of those.
+
+## Conversion rules: why relationship choice is hard to reverse
+
+The reason you must make this decision with sharing in mind from the start is that converting between relationship types carries data and sharing impacts. The conversion rules are worth memorizing because they are a favorite exam trap.[^5]
+
+You can convert a master-detail relationship to a lookup relationship as long as no roll-up summary fields exist on the master object. If the detail object is a custom object, converting it to a lookup changes its organization-wide default to public read/write, because the child now has its own owner and must be shared independently.
+
+You can convert a lookup relationship to a master-detail relationship only if the lookup field in all records contains a value, because a master-detail relationship field is required. You cannot convert a lookup to a master-detail if the child object's OWD is already Controlled by Parent. When you do convert, the OWD changes to Controlled by Parent and the sharing model updates to public read/write.
+
+There is also a hard constraint on creating master-detail relationships: you cannot create a master-detail relationship if the custom object already contains data. You can create the relationship as a lookup and then convert it to master-detail if the lookup field in all records contains a value. This is why the Salesforce documentation advises creating a master-detail relationship before a custom object contains data.[^2]
+
+The practical lesson is that relationship choice is a design-time decision with real migration cost. If you build a lookup and later decide you need Controlled by Parent, you must ensure every record has a value in the lookup field, and you will change the child's OWD. If you build a master-detail and later decide you need independent child sharing, you must first remove any roll-up summary fields, and you will change the child's OWD to public read/write. Design with sharing in mind from the start and you avoid both migrations.
+
+## Configuration walkthrough: choosing and configuring the relationship
+
+Here is the numbered decision path you would follow in a real scenario.
+
+1. **Decide whether child access should mirror the parent or be independent.** If the child must follow the parent exactly, choose master-detail with Controlled by Parent. If the child must be shared independently, choose lookup. This is the first and most important decision, and it drives everything after it.
+
+2. **For master-detail, rely on parent sharing to govern the children.** The child's OWD is Controlled by Parent, so you configure sharing on the master and the children follow automatically. For lookup children, configure each object's OWD and sharing rules independently, because the parent grant does not cover them.
+
+3. **Where related-record access is needed, use a sharing rule with the related record option, or enable implicit sharing for the supported standard relationships.** For custom objects, build an explicit related record sharing rule. For standard relationships like Account to Contact, Case, or Opportunity, implicit sharing may already provide the coupling you need.
+
+4. **If you use master-detail roll-ups, confirm that exposing the roll-up total on the master is acceptable given the sensitivity of the child data.** A roll-up SUM on a broadly shared master can leak aggregate data from children the user cannot open. Decide whether the aggregate is sensitive before you place it.
+
+5. **Test that changing parent sharing correctly cascades to the children.** For master-detail, changing the master's sharing should change the children's access. For lookup, changing the parent's sharing should not change the children's access. Verify both behaviors in a sandbox before you rely on them.
+
+## Worked example: a project with mixed access requirements
+
+Consider a consulting project that tracks engagements and the deliverables produced for each one. An Engagement record has a set of Deliverable records. The requirement is that anyone who can read an Engagement must be able to read its deliverables, and the deliverables must never be accessible without the engagement. This is a textbook master-detail case. You create a master-detail relationship from Deliverable to Engagement, the Deliverable OWD becomes Controlled by Parent, and access to deliverables follows access to engagements automatically. You can even add a roll-up SUM on Engagement that totals the value of its deliverables, and every user who can read the engagement sees the total.
+
+Now add a second requirement. A separate set of users, the external reviewers, must be able to read individual deliverables without seeing the engagement's financial roll-up total. This breaks the master-detail model, because under Controlled by Parent you cannot grant a user access to a deliverable without granting access to the engagement, and the roll-up total is on the engagement. You have two options. You can move the financial total off the engagement onto a separate object that the reviewers cannot read, keeping the master-detail for the deliverables. Or you can convert the relationship to a lookup, give Deliverable its own OWD and sharing rules, and use a related record sharing rule to grant engagement readers access to the deliverables. The second option is more flexible but more work, and it requires every deliverable to have a value in the lookup field before you can convert.
+
+This is the architect's trade-off in miniature. The master-detail is simple and automatic but inflexible, and it couples the roll-up exposure to the parent's sharing. The lookup is flexible but requires explicit sharing configuration for each object. The right choice depends on which requirement is more important: the automatic coupling or the independent control.
+
+## Try it yourself
+
+Open a sandbox and build a small model with two custom objects, Parent and Child. Create a master-detail relationship from Child to Parent and confirm the Child OWD is Controlled by Parent. Grant a test user access to a Parent record and confirm they can see its Child records. Now create a second custom object, LookupChild, with a lookup relationship to Parent. Grant the same user access to the Parent and confirm they cannot see the LookupChild records. Add a roll-up SUM field on Parent that totals a numeric field on Child, and confirm the test user sees the total even though they cannot open the individual Child records. Then try converting the lookup to a master-detail and observe the OWD change and the requirement that every record has a value in the lookup field.
+
+## Exam traps to avoid
+
+**Lookup relationships do not propagate access.** Assuming a parent grant gives lookup-child access is the most common error. Each object in a lookup relationship shares independently, and the child's OWD and sharing rules govern its own records.
+
+**Master-detail Controlled by Parent means you cannot independently widen a child's access.** The child follows the parent. You cannot grant a user access to a child without granting access to the master, and the child has no owner, sharing rules, manual sharing, or queues of its own.
+
+**Roll-up fields can leak aggregate data.** A roll-up SUM on a master is visible to anyone who can read the master, even if they cannot access the individual child records that produced it. Design around this exposure when the child data or the aggregate is sensitive.
+
+**Conversion is not free.** You cannot convert a lookup to a master-detail unless every record has a value in the lookup field, and you cannot convert a master-detail to a lookup if roll-up summary fields exist. Relationship choice is a design-time decision with real migration cost.
+
+## What's next
+
+Tomorrow, in lesson 22, you move from the mechanics of individual relationships to relationship scenarios: which relationships propagate access, the cumulative impact of multiple relationships on a sharing model, and how record types interact with access. You will take the master-detail versus lookup decision you made today and apply it across a full data model, where several relationships compound into a sharing outcome you have to reason about as a whole.
+
+[^1]: Salesforce Certified Platform Sharing and Visibility Architect exam guide, Domain: Access to Records, objective r-6a: "Given a scenario, determine the correct object relationships that support record access sharing requirements."
+[^2]: Salesforce Help, "Object Relationships Overview," https://help.salesforce.com/s/articleView?id=platform.overview_of_custom_object_relationships.htm
+[^3]: Salesforce Help, "Implicit Sharing," https://help.salesforce.com/s/articleView?id=platform.sharing_across_objects.htm
+[^4]: Salesforce Help, "Roll-Up Summary Field," https://help.salesforce.com/s/articleView?id=platform.fields_about_roll_up_summary_fields.htm
+[^5]: Salesforce Help, "Considerations for Object Relationships," https://help.salesforce.com/s/articleView?id=platform.relationships_considerations.htm
