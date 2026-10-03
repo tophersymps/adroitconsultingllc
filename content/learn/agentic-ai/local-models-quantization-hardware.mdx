@@ -28,6 +28,8 @@ This is the single most useful rule of thumb in local inference: at 4-bit quanti
 
 Quantization is not free. Compressing weights loses information, and a heavily quantized model is measurably worse at hard tasks than its full-precision original. The skill is choosing the coarsest quantization that still passes your quality bar, then spending the saved capacity on a larger or more capable model. A 4-bit 14B model is frequently better than an 8-bit 7B model for the same memory budget. That trade is what makes the whole exercise interesting.
 
+![A comparison of a 7-billion-parameter model at 16-bit full precision (14 GB) versus 4-bit quantized (about 4 GB), with the 0.6 GB per billion parameter rule of thumb for 7B and 70B models](</diagrams/local-models-quantization-hardware/1-quantization-memory.png>)
+
 ## The formats and engines you will actually meet
 
 You rarely download a raw model and run it. The ecosystem has standardized on a few file formats and a few engines, and matching them matters.
@@ -40,6 +42,8 @@ GPTQ and AWQ are the GPU-native quantization methods you will see on NVIDIA hard
 
 For enterprise serving at higher concurrency, vLLM is the engine of choice on NVIDIA GPUs. It contributes PagedAttention, which manages the key-value cache like virtual memory to cut fragmentation, and continuous batching, which lets the GPU stay busy across requests of different lengths instead of draining one batch at a time.[^6] Those optimizations are why a single GPU can serve many concurrent agent calls, not just one at a time. On Apple silicon, MLX is an array framework built for the Metal hardware, which is how models that target iPhones, Macs, and MacBook memory budgets get their tuned kernels.[^3]
 
+![A table of the file formats (GGUF, GPTQ, AWQ) and inference engines (llama.cpp, Ollama, vLLM, MLX) you will meet when running local models](</diagrams/local-models-quantization-hardware/2-formats-engines.png>)
+
 ## Worked example: standing up a 7B model, start to finish
 
 Take a concrete case: you want a private, offline drafting agent that summarizes internal documents, and you have a laptop with 8 GB of unified memory. No way that machine holds a 14 GB fp16 model. With a 4-bit build it is different.
@@ -50,6 +54,8 @@ Take a concrete case: you want a private, offline drafting agent that summarizes
 4. Run it. With Ollama, `ollama pull <model>:<tag>` fetches the build and `ollama run <model>:<tag>` starts it, with the exact tag from the current library listing.[^7]
 5. Point your agent at it. The local server exposes an OpenAI-compatible endpoint, so you change one base URL in the agent's model client and reuse everything else.
 6. Measure. Single-stream speed for one user is bounded by how fast the machine moves weights from memory into the compute units, roughly tokens per second equals memory bandwidth divided by bytes of model. That is why a big model shrunk by quantization feels snappier: fewer bytes per token to move.
+
+![A six-step flow for standing up a 7-billion-parameter model on an 8 GB laptop, from pulling a 4-bit GGUF build to measuring tokens per second](</diagrams/local-models-quantization-hardware/3-seven-billion-setup-flow.png>)
 
 If that 8 GB machine were instead serving many concurrent users, the calculus changes. Continuous batching and PagedAttention let one GPU carry the load far better than a laptop can, which is why the same model on a rented GPU with vLLM is the scaled answer.[^6] Local does not always mean tiny. It means you own the hardware and the weights, and you size them to the workload.
 
