@@ -2,6 +2,27 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "secret-sprawl-machine-identity-2026",
+    "title": "Rotate or Explode: Secrets Are a Machine-Identity Problem",
+    "excerpt": "29M secrets leaked in public commits last year, AI credentials up 81%. The fix is not another vault: short-lived, machine-identity-based credentials.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "October 4, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "11 min read",
+    "featured": false,
+    "tags": [
+      "DevOps",
+      "Security",
+      "Infrastructure",
+      "CI/CD"
+    ],
+    "bannerImage": "/banners/secret-sprawl-machine-identity-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "agent-middleware-deterministic-glue-2026",
     "title": "The Glue Is the Agent: Deterministic Engineering for Agents",
     "excerpt": "A production agent is mostly not the model. The deterministic glue, routing, validation, retry, state, and tool schemas, decides whether it works.",
