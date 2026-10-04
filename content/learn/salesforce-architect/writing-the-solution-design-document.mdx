@@ -1,0 +1,117 @@
+---
+title: "Lesson 58: Writing the Solution Design Document: Structure, NFRs, and Sequence Diagrams"
+slug: writing-the-solution-design-document
+series: "salesforce-architect"
+lesson: 58
+excerpt: "How the architect turns decisions into a design artifact another person can build from. What a solution design document is and why it needs a fixed structure, how to write non-functional requirements that are measurable instead of vague, and how to use sequence diagrams to capture the order in which parts of the system talk to each other. A worked example walks an order integration through all three, and a try-it prompt gets you drafting a document of your own."
+date: "October 4, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [Architecture, Solution Design, NFRs, Sequence Diagrams, Salesforce]
+---
+
+## Lesson 58: Writing the Solution Design Document: Structure, NFRs, and Sequence Diagrams
+
+Lesson 21 showed how to turn a single requirement into an architecture document, and the lessons since have built up the vocabulary: data modeling, governor limits, integration patterns, security, accessibility, and the rest. This lesson is about putting all of that into one artifact a build team can actually work from. A design document is the contract between the architect's head and the people who write code. If it is not structured, its requirements are not measurable, and its behavior is not described, then the build team has to guess, and guessing is where drift starts.
+
+The title of this lesson names three things because those are the three pillars of a usable design document: a structure that makes the document navigable, non-functional requirements that can be tested, and sequence diagrams that describe behavior in order. This lesson covers all three, then folds them into a worked example and a try-it prompt.
+
+## Why the document needs a structure
+
+A solution design document is a written description of how a system will be built or changed, written before the build starts, so that the team building it and the people approving it agree on what is being built. That definition matters for one reason: it is a communication device, not a form to fill out. Its value comes from whether a developer can find the decision they need without rereading the whole thing, and whether a reviewer can tell what was decided and why.
+
+The concrete failure the architect is trying to avoid is a document that is technically thorough but impossible to navigate. A build team that cannot find the field mapping, the governor-limit analysis, or the error-handling decision in a two-hundred-page document will make different choices than the architect intended. Structure is not decoration. It is how the intent survives contact with the build.
+
+A standard solution design document for a Salesforce build, and the structure this lesson recommends, reads top down like this:
+
+1. **Context and goals.** What problem the solution solves, what successful looks like, and the scope boundary. This is the part a new person or a new stakeholder reads first.
+2. **Assumptions and constraints.** What the architect assumed to be true, and what limits the design, such as edition, license level, governor limits, and integration availability. Assumptions belong here because a wrong assumption invalidates later sections.
+3. **Non-functional requirements.** The measurable quality targets: performance, reliability, security, scalability. This section has its own lesson topic below.
+4. **Solution overview and architecture.** The shape of the solution: the objects, the automation, the integration touch points, and the security model, plus the diagrams that show how the parts fit together.
+5. **Detailed design.** The specifics a developer builds from: object and field mappings, flow and Apex behavior, integration messages, error handling, and the sequence diagrams for the nontrivial flows.
+6. **Testing and rollout.** How the solution will be verified and how it reaches users.
+7. **Operational notes.** What the team must monitor after launch, including the alerts tied to the non-functional requirements.
+
+The order is not arbitrary. It moves from the widest view to the narrowest, then to verification and operations. A reader can go as deep as their role needs: a sponsor reads the top, a reviewer reads the goals against the detailed design, and a developer lives in the detailed design. When a design document has a fixed structure like this, every future document is faster to write and faster to read, because the reader already knows where to look.
+
+## Writing non-functional requirements that can be tested
+
+A non-functional requirement, an NFR, is a quality constraint on how the system behaves, as opposed to what it does. Functionality is "what": the system records an order. Non-functionality is "how well": the system records an order in under two seconds, at 99.9 percent availability, without exposing the pricing to the wrong user. Lesson 21 introduced NFRs as part of turning a requirement into a document. This lesson goes deeper into the hard part: making them measurable.
+
+The most common defect in a design document is an NFR that sounds like a requirement but cannot be tested: "the system should be fast," "the integration must be reliable," "access must be secure." None of those sentences can be checked. Fast compared to what, reliable under what conditions, secure against what threat? A requirement that cannot be verified will be interpreted differently by every person who reads it.
+
+The fix is to write an NFR as a target with a method. A good NFR names the quantity, gives it a number or a bound, and states the condition under which it applies. Salesforce's own guidance makes the same point about reliability: the Salesforce SLA covers the platform, but the architect owns reliability for everything built on top of it, and therefore defines the service level objectives, SLOs, that the solution must meet. [^1] That is the mental model. The platform has an SLA; the solution has SLOs, and those SLOs are the measurable NFRs for reliability.
+
+Three families of NFR show up in nearly every Salesforce design, and each has a measurement habit attached.
+
+**Performance.** The useful form is a response-time target under a stated load: a page renders within two seconds for the 95th percentile of users, an integration call returns within five seconds, a batch completes within its daily window. Vague is "should be quick." Measurable names the percentile and the number, because a single average hides the users who are waiting longest. When a target needs to hold under load, scope it: within two seconds for ninety percent of requests at the expected peak volume of the launch period.
+
+**Reliability.** The useful form borrows the vocabulary of recovery and uptime. Reliability talks about the solution continuing to work and recovering when it fails, and the architect sets recovery targets, recovery time objective (RTO) and recovery point objective (RPO), that define how the solution behaves when something goes wrong. [^2] RTO is how long the solution can be down. RPO is how much data the business accepts losing. A measurable reliability NFR names both: restore service within four hours (RTO) with no more than fifteen minutes of data loss (RPO). Those numbers translate directly into design choices, such as whether a backup or replication strategy is needed.
+
+**Security and data protection.** The useful form states a requirement that can be verified against a field or a permission, such as "external users can read only the account fields granted to them through the sharing model," which a permission test can check. Writing security as an NFR makes it part of the acceptance criteria instead of an afterthought.
+
+The pattern is the same across all three: quantity, number, condition. "We can sustain two thousand concurrent users at p95 response time under the transaction mix in the load test." A team can build a test around that sentence. "The system should scale" cannot be tested, and therefore cannot be verified, and therefore will not be met.
+
+There is one Salesforce-specific caution in writing NFRs. Governor limits cap how much any tenant can consume, and a solution must scale gracefully within those limits rather than by requesting more capacity. [^1] An NFR that demands more scale than the platform allows is not a requirement; it is a conflict that must be surfaced back to the stakeholder. The architect's job is to translate a business desire into an NFR that the platform can actually satisfy, or to say clearly when it cannot.
+
+## Sequence diagrams: behavior in order, on paper
+
+The third pillar of the design document is the sequence diagram. A sequence diagram shows how a set of participants interact, in the order the interactions happen. [^3] It is a UML diagram, and UML is the standardized graphical language used to visualize, specify, construct, and document the artifacts of a software system. [^6] For the architect, the sequence diagram is the part of the document that says exactly what happens, step by step, when a user does something, so the build team does not have to infer the order from a wall of prose.
+
+The sequence diagram earns its place in the design document because it is the clearest way to force out the details of a flow. Designers use it during the design phase to expose the object interactions, which is precisely the moment ambiguities surface. [^3] When an architect has to draw every call in order, they find the gaps: the call that was never specified, the response that was never defined, the error path that was assumed away. A design document that contains a sequence diagram for its nontrivial flows is a design document whose author has thought through those flows.
+
+The notation is compact, and the architect only needs the core of it. A sequence diagram is drawn inside a frame, a rectangle that provides the boundary and a name box in the top left corner. The frame's label follows the pattern "diagram type diagram name," and a sequence diagram begins with "sd." [^4] So "sd Create Order" is the standard label for a diagram that shows an order being created.
+
+Across the top of the frame sit the lifelines, one per participant. A lifeline is drawn as a box with a dashed line descending from it, and it represents an object or a role that takes part in the sequence. [^4] The naming rule is "instance name : class name," so "orderController : OrderController" names an instance of the OrderController class. [^4] Every participant in the flow gets a lifeline, including an external system the solution calls.
+
+Messages run between the lifelines, top to bottom, in the order they happen. [^4] A synchronous call, where the sender waits for a reply, is drawn with a solid arrowhead. An asynchronous signal, where the sender does not wait, is drawn with a stick arrowhead. [^5] The message name sits above the arrow, and it is the operation the receiving participant carries out. Return messages, the values sent back, are optional and are drawn as a dotted line with an open arrowhead. [^5] Include a return message when the value it carries matters to the reader; leave it out when it does not, because too many returns clutter a diagram just as quickly as too few leave it vague.
+
+Real flows are not straight lines, so UML gives the architect combined fragments to group messages. [^7] Three cover most cases. An alternative fragment, labeled "alt" in the name box, models if-then-else logic: send one set of messages when a guard is true, a different set otherwise. [^7] An option fragment, labeled "opt", models a sequence that happens only when a condition holds, and otherwise is skipped. [^7] A loop fragment, labeled "loop", models a sequence that repeats. [^7] A guard is the condition in square brackets that controls which path runs, such as "[orderTotal > 0]". [^7] These are enough to describe the branching that real integrations contain, without going deeper into the notation than a build team needs.
+
+## Worked example: an order placement flow
+
+Put all three pillars on one concrete case. A client wants an order to be placed through a Salesforce Experience Cloud site, validated against an external inventory service, and written to the database. The solution involves an Experience Cloud page, a Lightning Web Component for the order form, an Apex class that orchestrates the callout, a third-party inventory API, and an Order object with related OrderLineItem records.
+
+**The structured document.** The architect's design document follows the structure from earlier in this lesson. Context and goals: customers place orders online and see immediate confirmation, with the inventory check happening in line. Assumptions and constraints: the external inventory API has a documented five-second timeout, the site must enforce record-level access so a customer cannot read another customer's order, and all callouts stay within the governor limits for Apex. Non-functional requirements, the measurable ones: the page returns a confirmation within two seconds for ninety percent of users at the expected peak, the inventory callout targets a five-second cap (matching the vendor's own limit), and, since a momentary inventory system outage must not block sales, the design sets an RTO, though the more important choice is that a failed inventory check does not reject the order but instead marks it for manual review. [^2] Detailed design: the LWC collects the form, the Apex controller validates, calls the inventory endpoint, and on success inserts the Order and its line items. That is the section where the sequence diagram lives.
+
+**The non-functional requirements.** Note how the requirements above became testable. "Fast" became a percentile and a number. "Handles the inventory being down" became a defined degradation path (flag for manual review) instead of a vague promise of reliability. The architect wrote these as SLOs the solution owns, separate from the platform SLA, because a customer-facing order flow has a business impact that the platform SLA does not cover. [^1]
+
+**The sequence diagram.** The architect draws one diagram for the happy path. Lifelines across the top: the customer, the order form LWC, OrderController (the Apex class), and inventoryAPI, the external service. [^4] The frame is labeled "sd Place Order." [^4] Reading top to bottom: the customer submits the form to the LWC, the LWC sends submitOrder to the Apex controller, the controller sends checkStock to the inventory API, the API returns a stock availability value, and the controller, on success, inserts the Order and the line items, returning an order ID to the LWC, which shows the confirmation to the customer. [^5] The calls that wait for a reply, the submit and the checkStock callout, are synchronous messages with solid arrowheads. The stock availability is a return message on a dotted line. [^5]
+
+One combined fragment makes the design honest. The architect knows a stock check can fail or time out, so the happy path gains an alternative fragment. [^7] When the inventory check returns with stock, send the "confirmed" messages. When it fails, take the manual-review path instead of rejecting the order. [^7] Drawing that alternative forces the architect to decide, on paper, what happens when the third-party system is slow or down, which is exactly the decision that is painful to make for the first time during an incident.
+
+The lesson of the example is that the three pillars are not three separate tasks. The structure organizes the document, the NFRs say how well it must behave, and the sequence diagram checks that the behavior described actually works. A sequence diagram that cannot be drawn for a flow is a flow that has not been designed.
+
+## Pitfalls to design around
+
+Four failures recur across solution design documents, and naming them saves real rework.
+
+The first is an NFR that cannot be measured. A phrase like "must be robust" is a hope, not a requirement. Rewrite every NFR until it names a quantity, a number, and a condition, or remove it.
+
+The second is an unlabelled or overloaded diagram. A sequence diagram without a frame name ("sd ..."), or crammed with dozens of lifelines and every return message, stops communicating. [^4] Name the diagram, keep the participants to the ones that matter to the point, and include return messages only when the value matters. [^5]
+
+The third is writing the sequence diagram to justify a design that was already built, then discovering the flow does not match. The document is a design artifact, not a record after the fact. If drawing the diagram reveals a conflict, the design should change, not the diagram.
+
+The fourth is treating the platform SLA as the solution's SLO. The Salesforce SLA governs the platform; the architect is responsible for the reliability of everything built on it and must set the solution's own targets. [^1] Writing "the platform is 99.99 percent available" as the order flow's reliability NFR misses the parts the architect and the team control and own.
+
+## Try it
+
+Take a flow you know well, real or imagined, and draft all three pillars for it.
+
+First, write the design document outline for a solution that places an order through Experience Cloud, checks stock against an external API, and records the order (or use a flow of your own choosing). List the sections from this lesson and what goes in each.
+
+Second, write three non-functional requirements for that solution as real NFRs: one performance, one reliability, one security. Check each against the test: does it name a quantity, a number, and a condition? If not, rewrite it. For reliability, state an RTO and an RPO, because those two numbers force the design choices. [^1]
+
+Third, draw the sequence diagram for the happy path and for the failure path where the inventory API is unavailable. Use the notation from this lesson: a frame labeled "sd ...", lifelines in the "instance : class" form, synchronous calls with solid arrowheads, the return value on a dotted line, and an alternative fragment for the failure branch. [^4][^5][^7] When you finish, reread your own diagram and ask whether a developer who saw only it could implement the flow without asking you a question. If they could, the diagram has done its job.
+
+## What's next
+
+You can now turn a set of decisions into a design artifact: a solution design document with a structure anyone can navigate, non-functional requirements that a test can check, and sequence diagrams that describe behavior in order. Lesson 59 is the other half of the design cycle, the **architecture review board**. It covers how to present and defend the tradeoffs in that document, how to handle pushback during review, and how to record the decisions and open items so the review actually changes the design rather than just documenting it. Continue to Lesson 59 to learn how to take the document you now know how to write and get it approved, and improved, through disciplined review.
+
+[^1]: Salesforce. [Reliability | Well-Architected Framework](https://architect.salesforce.com/docs/architect/well-architected/guide/reliability.html). States that the Salesforce SLA covers the platform but the architect owns reliability for everything built on it, defines service level objectives (SLOs) for the solution, and notes that governor limits mean a solution must scale within them rather than by requesting more capacity.
+[^2]: Salesforce. [Reliability | Well-Architected Framework](https://architect.salesforce.com/docs/architect/well-architected/guide/reliability.html). Covers recovery time objective (RTO) and recovery point objective (RPO) as the recovery targets that determine how a system behaves when things go wrong.
+[^3]: IBM. [Explore the UML sequence diagram](https://developer.ibm.com/articles/the-sequence-diagram/). Describes the sequence diagram as showing interactions in sequential order and its use during design to expose object interactions.
+[^4]: IBM. [Explore the UML sequence diagram: Life lines](https://developer.ibm.com/articles/the-sequence-diagram/). Covers the frame and its "diagram type diagram name" label, lifeline notation, and the "instance name : class name" naming rule.
+[^5]: IBM. [Explore the UML sequence diagram: Messages](https://developer.ibm.com/articles/the-sequence-diagram/). Covers synchronous messages with a solid arrowhead, asynchronous messages with a stick arrowhead, and return messages as a dotted open-arrowhead line.
+[^6]: OMG. [Unified Modeling Language Specification 2.5.1](https://www.omg.org/spec/UML/2.5.1/About-UML). Defines UML as a standardized graphical language for visualizing, specifying, constructing, and documenting the artifacts of a software system.
+[^7]: IBM. [Explore the UML sequence diagram: Combined fragments](https://developer.ibm.com/articles/the-sequence-diagram/). Describes the alternative, option, and loop combined fragments and the guard notation used with them.
