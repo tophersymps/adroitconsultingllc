@@ -27,6 +27,8 @@ Two patterns dominate, and they answer different questions:
 
 Both target the same goal, matching the best single model's quality for a fraction of the cost. They differ in how they decide.
 
+![Routing makes one model choice before a call; a cascade escalates to a stronger model only when a cheap answer fails a check, and each carries its own cost and quality evidence](</diagrams/model-routing-small-large-cascades-cost-quality/1-routing-vs-cascade.png>)
+
 ## Routing: one decision up front
 
 A router is a function that looks at the request and returns a model choice. It can be as simple as a hand-written rule (this API path always uses the small model) or as learned as a classifier trained on human preference data.
@@ -40,6 +42,8 @@ Routing by rule is underrated for the long tail of enterprise work. A classifica
 A cascade takes the opposite shape. It starts with the cheap model, checks whether the answer is good enough, and only calls the next, more expensive model when that check fails. The canonical treatment is FrugalGPT, which identifies LLM cascade as one of three cost-reduction strategies, alongside prompt adaptation and LLM approximation. A cascade learns which combinations of models to use for which queries, and the paper reports matching the best individual LLM while cutting cost by up to 98 percent in some settings.[^3]
 
 The hard part of a cascade is the check. How do you know a cheap answer is poor? Two mechanisms appear in practice. First, a verifier or discriminator scores the candidate answer against the source, and escalation triggers when the score falls below a threshold. Second, the system asks several cheap models or several samples and looks for disagreement; when the answers diverge, it escalates to the strong model. Both are attempts to detect the exact case that routing cannot: the request that looked easy but was not.
+
+![A cascade starts with a cheap model, runs a check for whether the answer is good enough, ships on pass or escalates to the strong model on fail, using a verifier score or disagreement among several cheap models](</diagrams/model-routing-small-large-cascades-cost-quality/2-cascade-check.png>)
 
 FrugalGPT shows a cascade can not only match a strong model at lower cost, but can in some experiments improve accuracy over the single best model, because a cascade can route around a model's weak spots.[^4] That framing matters for the budget conversation. Routing is not purely a cost cut. Done well, it is a quality improvement that happens to be cheaper.
 
@@ -55,6 +59,8 @@ The naive build wires the frontier model into every step. Every ticket sends may
 4. Escalate the ambiguous slack. When the classifier cannot confidently label a ticket, or the small model's draft fails internal checks, send it up to the strong model rather than shipping a guess.
 5. Add a cascade on the drafts that matter. For any draft the small model produces that will be sent to a customer, run a verifier. If the verifier flags it, have the strong model rewrite it. The cascade catches the quiet failures the router could not see.
 6. Log the routing decision on every request. You cannot tune what you cannot see. Record which model answered, the router's confidence, and whether it escalated. That log becomes the dataset for retraining the router later.
+
+![A support-ticket flows from a cheap router through a small-model pipeline, with security tickets held on the strong model, ambiguous cases escalated, customer-bound drafts run through a verifier, and every routing decision logged](</diagrams/model-routing-small-large-cascades-cost-quality/3-support-ticket-router.png>)
 
 The shape is the thing to copy, not the specific numbers. Cheap first, escalate on evidence, keep the irretrievably important requests on the strong model, and measure the distribution as you go.
 
