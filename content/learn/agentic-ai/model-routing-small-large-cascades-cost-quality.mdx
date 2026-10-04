@@ -1,0 +1,88 @@
+---
+title: "Lesson 59: Model Routing: Small Models, Cascades, and the Cost/Quality Balance"
+slug: model-routing-small-large-cascades-cost-quality
+series: "agentic-ai"
+lesson: 59
+excerpt: "Lesson 58 made a single model fit your hardware. This lesson makes a fleet of models fit your budget. It defines model routing, the act of choosing which model answers each request at call time, and explains why the frontier model is the wrong default for most of the traffic an agent actually sends. It distinguishes routing from cascades, shows how each balances cost against quality, works a concrete example on a support-ticket triage agent, and lays out a numbered pattern for adding a router to a real pipeline without breaking your quality floor."
+date: "October 4, 2026"
+author: "Adroit Consulting"
+readTime: "15 min read"
+tags: [LLMs, AI Agents, Model Routing, LLM Cascade, Cost Engineering, Small Models, FrugalGPT, RouteLLM]
+---
+
+The most expensive model is not always the best answer for a request, and an agent that sends everything to the frontier model is paying top dollar for the parts of the work that did not need it. Model routing is the act of choosing which model answers a given request, at call time, instead of wiring one model into every call and hoping the workload stays simple.
+
+The last two lessons handled the delivery side of inference: renting capacity on serverless platforms, then running a model on hardware you own. This lesson sits one level up. It treats models as a menu with very different prices and capabilities, and treats cost as a property of the whole flow rather than of any single call. When you route correctly, the average request gets the smallest model that still answers well, and only the hard cases escalate to the expensive one. The result is a system that spends roughly its quality floor and no more.
+
+## The trade that makes routing worth the effort
+
+A frontier model and a small open model differ by more than an order of magnitude in price per token. RouteLLM, a framework for training routers, opens by noting that routing queries to smaller models can save costs by more than 50 times, citing Claude 3 Haiku as an example of a cheap strong model.[^1] That gap is the whole economic argument. Fifty times the cost per token does not buy fifty times the quality on most requests, so you are leaving money on the table every time a trivial classification or a short extraction runs on the flagship.
+
+The counterpoint is real, and it is why routing exists at all. Frontier models beat small models on hard reasoning, on tasks with ambiguous instructions, and on anything where a small error cascades. A router is not a way to downgrade quality everywhere. It is a way to spend premium compute only where it actually changes the answer.
+
+Two patterns dominate, and they answer different questions:
+
+- Routing picks the right model once, before the call. Do I need the strong model for this, or is the weak model enough?
+- A cascade calls one model after another, escalating only when the cheap answer fails a consistency or confidence check.
+
+Both target the same goal, matching the best single model's quality for a fraction of the cost. They differ in how they decide.
+
+## Routing: one decision up front
+
+A router is a function that looks at the request and returns a model choice. It can be as simple as a hand-written rule (this API path always uses the small model) or as learned as a classifier trained on human preference data.
+
+RouteLLM is the canonical learned example. Its authors train routers on pairwise preferences between model outputs drawn from Chatbot Arena data, learning which model answers which kind of query best. A router trained this way can reduce costs by over two times without substantially compromising quality, and on MT Bench, a benchmark of multi-turn chat quality, it reaches about 95 percent of GPT-4 performance while cutting the number of GPT-4 calls dramatically.[^2] The win is that the router gets most requests right cheaply and reserves the expensive model for the inputs that genuinely need it.
+
+Routing by rule is underrated for the long tail of enterprise work. A classification call, a structured-data extraction, a summarization of a short document, a keyword match: these rarely need frontier reasoning, and a competent small model handles them at a fraction of the price and lower latency. The risk is that rules are static. A rule that looks at intent or path can send a deceptively hard request to the small model and ship a wrong answer. A learned router captures more nuance but needs good training data and periodic retraining as models change.
+
+## Cascades: escalate only when the cheap model is not enough
+
+A cascade takes the opposite shape. It starts with the cheap model, checks whether the answer is good enough, and only calls the next, more expensive model when that check fails. The canonical treatment is FrugalGPT, which identifies LLM cascade as one of three cost-reduction strategies, alongside prompt adaptation and LLM approximation. A cascade learns which combinations of models to use for which queries, and the paper reports matching the best individual LLM while cutting cost by up to 98 percent in some settings.[^3]
+
+The hard part of a cascade is the check. How do you know a cheap answer is poor? Two mechanisms appear in practice. First, a verifier or discriminator scores the candidate answer against the source, and escalation triggers when the score falls below a threshold. Second, the system asks several cheap models or several samples and looks for disagreement; when the answers diverge, it escalates to the strong model. Both are attempts to detect the exact case that routing cannot: the request that looked easy but was not.
+
+FrugalGPT shows a cascade can not only match a strong model at lower cost, but can in some experiments improve accuracy over the single best model, because a cascade can route around a model's weak spots.[^4] That framing matters for the budget conversation. Routing is not purely a cost cut. Done well, it is a quality improvement that happens to be cheaper.
+
+## Worked example: a support-ticket triage agent
+
+Put the pattern on a concrete system. A client wants a support agent that reads an incoming ticket, classifies it (billing, technical, feature request, security), extracts the account and product fields, drafts a response, and escalates anything it cannot resolve.
+
+The naive build wires the frontier model into every step. Every ticket sends maybe 1,200 tokens in and 400 tokens out, and at a flagship price that adds up fast across thousands of tickets a day. Most of those tickets are short, formulaic, and answerable by a pattern. Paying premium per-token pricing for all of them is the exact waste routing removes.
+
+1. Add a cheap router as the first hop. It classifies the ticket and, crucially, tags it with a difficulty score. Most billing questions land low. An ambiguous multi-step technical failure lands high.
+2. Route by difficulty. Low-difficulty tickets go to the small model for the whole pipeline: classification, extraction, draft. They are simple, the small model handles them well, and the cost per ticket collapses.
+3. Keep security and compliance tickets on the strong model by rule. Never let a router guess on privileged or anti-fraud traffic. Some requests are worth the premium no matter what a difficulty score says.
+4. Escalate the ambiguous slack. When the classifier cannot confidently label a ticket, or the small model's draft fails internal checks, send it up to the strong model rather than shipping a guess.
+5. Add a cascade on the drafts that matter. For any draft the small model produces that will be sent to a customer, run a verifier. If the verifier flags it, have the strong model rewrite it. The cascade catches the quiet failures the router could not see.
+6. Log the routing decision on every request. You cannot tune what you cannot see. Record which model answered, the router's confidence, and whether it escalated. That log becomes the dataset for retraining the router later.
+
+The shape is the thing to copy, not the specific numbers. Cheap first, escalate on evidence, keep the irretrievably important requests on the strong model, and measure the distribution as you go.
+
+## A concrete pattern for adding routing without breaking quality
+
+Enterprise skeptics worry routing is a quality cut wearing a cost-saving costume. The defense is a constraint set that pins the quality floor:
+
+- Pin the floor with a verifier, not a hope. Any route that can produce a customer-facing or decision-driving answer should have a check that catches garbage before it ships.
+- Make escalation cheap to reach. The cascade threshold should err toward escalation for the first week, then tighten as you see the real distribution. A router tuned blind will over-trust the cheap model.
+- Keep the strong model for security, financial, and adversarial input. Routing is a cost lever, not a security boundary. Never let a difficulty score lower privileges on the traffic that matters most.
+- Treat the router as a model to maintain. A router trained on yesterday's data drifts as models ship and as your workload changes. Retrain it, or at least re-measure its cost/quality point, on a schedule.
+- Instrument the whole path. Cost per request, quality per route, escalation rate: these are the numbers that tell you whether the router is working. Without them it is a black box that happens to be cheaper.
+
+## Summary
+
+Model routing chooses which model answers each request, at call time, and converts the price gap between small and frontier models into a system-level saving. A router makes one decision up front and can be a rule or a learned classifier; RouteLLM shows a preference-trained router keeping about 95 percent of GPT-4 quality on MT Bench while cutting cost by over two times.[^5] A cascade starts cheap and escalates on a failed check; FrugalGPT shows a cascade matching the best single model with up to 98 percent cost reduction in some settings.[^6] The practical pattern is cheap first, escalate on evidence, keep the irretrievably important requests on the strong model, pin the quality floor with a verifier, and instrument every routing decision. Routing is not a downgrade. It is spending premium compute only where it changes the answer.
+
+## Try it
+
+Take a small agent you already run and trace where it sends its calls. At minimum, add a routing decision to one step: a classification or extraction call that currently hits the flagship model can route to a small model behind an OpenAI-compatible endpoint instead. Compare the answers on twenty real inputs, and count how many the small model gets wrong that the large model would have gotten right. Then simulate a one-hop cascade: when the small model's answer fails a keyword or verifier check, escalate that one call to the flagship model, and compare total cost against sending everything to the flagship. You want to see the cost curve drop while the wrong-answer count barely moves.
+
+## What's next
+
+Routing decides which model answers a request. The next lesson, Lesson 60, tackles caching: semantic caching, response caching, and invalidation. A routed system still redoes expensive work when it sees the same or a similar request twice, and caching is the lever that removes that repeat cost. You just learned how to stop paying top dollar for easy requests. The next step is stopping yourself from paying twice for the same one.
+
+[^1]: Isaac Ong, Amjad Almahairi, Vincent Wu, Wei-Lin Chiang, Tianhao Wu, Joseph E. Gonzalez, M Waleed Kadous, and Ion Stoica, "RouteLLM: Learning to Route LLMs with Preference Data," noting that routing to smaller models can save costs by more than 50x: https://arxiv.org/abs/2406.18665
+[^2]: LMSYS Org, "RouteLLM: An Open-Source Framework for Cost-Effective LLM Routing," reporting cost reductions of over 85% on MT Bench while achieving 95% of GPT-4 performance: https://www.lmsys.org/blog/2024-07-01-routellm/
+[^3]: Lingjiao Chen, Matei Zaharia, and James Zou, "FrugalGPT: How to Use Large Language Models While Reducing Cost and Improving Performance," identifying prompt adaptation, LLM approximation, and LLM cascade as cost-reduction strategies: https://arxiv.org/abs/2305.05176
+[^4]: Lingjiao Chen, Matei Zaharia, and James Zou, "FrugalGPT," reporting that a cascade can match the best individual LLM with up to 98% cost reduction or improve accuracy over GPT-4 by 4% at the same cost: https://arxiv.org/abs/2305.05176
+[^5]: LMSYS Org, "RouteLLM: An Open-Source Framework for Cost-Effective LLM Routing," cost reductions over 85% on MT Bench at 95% of GPT-4 performance; the paper reports cost reductions over 2x without sacrificing quality: https://www.lmsys.org/blog/2024-07-01-routellm/
+[^6]: Lingjiao Chen, Matei Zaharia, and James Zou, "FrugalGPT," up to 98% cost reduction while matching the best individual LLM: https://arxiv.org/abs/2305.05176
