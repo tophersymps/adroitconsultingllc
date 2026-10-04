@@ -1,0 +1,154 @@
+---
+title: "Relationship Scenarios: Which Relationships Propagate Access, Cumulative Impact, Record Types"
+slug: day-22-r-6b-relationship-scenarios-which-relationships-propaga
+series: salesforce-sharing-visibility-architect
+lesson: 22
+excerpt: "Given a scenario, determine which relationships propagate access, assess the cumulative sharing impact of multiple access layers, and understand the role of record types. Covers master-detail and related-record propagation, Account-to-Contact/Opportunity access settings, the union of all grant sources, and why record types shape presentation without touching the sharing table."
+date: 2026-10-04
+author: Adroit Learning
+readTime: 17
+tags:
+  - relationship propagation
+  - cumulative sharing
+  - record types
+  - master-detail
+  - related record sharing
+  - account access settings
+  - union of grants
+---
+
+Yesterday you chose the relationship type between two objects and learned why that choice is a security decision. Today the scope widens. The requirement for this lesson is: given a scenario, determine which relationships propagate access, assess cumulative sharing impact, and consider record types.[^1]
+
+This is the lesson where the exam stops asking about a single relationship in isolation and starts asking you to reason about a whole data model at once. A master-detail here, a related record sharing rule there, an Account-to-Contact access setting, a team grant, a role hierarchy. Each one on its own looks fine. Put three of them together for one user and one record, and the union of every grant determines what that user actually sees. That union is the question the exam keeps circling back to, and it is the reason "should access to the parent grant access to the child?" is a question you must answer explicitly for every single relationship in your model.
+
+## Propagation, defined
+
+When we say a relationship propagates access, we mean that granting a user access to one record in the relationship also grants them access to the other. Most exam scenarios about relationships are really scenarios about propagation: does access flow from parent to child, child to parent, both, or neither?
+
+The default answer is: it depends on the relationship type. Master-detail relationships propagate access from parent to child automatically through Controlled by Parent. Lookup relationships do not propagate access at all on their own. Implicit sharing propagates access both ways for a specific set of standard relationships, under specific conditions. And a sharing rule with the related record option propagates access from a record to its related records, but only when you build it.
+
+So the first skill this lesson demands is classifying each relationship in a scenario by whether it propagates, and in which direction. You cannot answer a "given a scenario" question about relationship access until you can look at a master-detail and know the child follows the parent, and look at a lookup and know it does not.[^2]
+
+### Master-detail propagates: Controlled by Parent
+
+A master-detail relationship couples the child to the parent. The master controls the behavior of the detail record, and the detail record inherits its security settings from the master. The detail has no owner of its own; the Owner field is not available, and the record is automatically owned by the master's owner. Because there is no owner, the organization-wide default for the detail is set to Controlled by Parent, meaning access to a detail record is determined entirely by access to the master. Grant the master and the details appear. Restrict the master and the details stay hidden. There is no independent sharing decision to make for the child.[^2]
+
+The consequence you must carry into every scenario: the moment you create a master-detail relationship, you have decided that access to the child will propagate from access to the parent. That is a deliberate coupling. If the child data must ever be visible to someone who cannot see the parent, master-detail is the wrong choice, because you cannot widen a child's access independently of its parent.
+
+### Lookups do not propagate
+
+A lookup relationship keeps each object shared independently. Access to a parent does not grant access to its lookup children, and access to a lookup child does not grant access to its parent. Each object is governed by its own organization-wide default and its own sharing rules.[^2]
+
+This is the single most useful fact in this lesson, because it is also the most commonly misunderstood one in practice. Asking "which relationships propagate access" on the exam almost always has a lookup in the answer, and the correct move is to recognize that the lookup, on its own, propagates nothing. If the scenario needs access to flow across a lookup relationship, it must be added explicitly, through a sharing rule with the related record option. Without that rule, the lookup child stays locked to its own sharing configuration even when the parent is broadly shared.
+
+### Implicit sharing propagates for standard pairs
+
+There is a built-in exception. Implicit sharing automatically grants users access to a parent record if they can access its child, and in the other direction based on certain settings, but only for specific standard relationships. If you can read an account's child case, contact, or opportunity record, you have implicit Read Only access to the account itself, even when Account OWD is Private. And depending on your sharing configuration, access to a parent account can give you access to its associated child case, contact, and opportunity records. Ownership of an order or being above its owner in the role hierarchy also gives implicit Read Only access to the parent account. Account and contract share an OWD setting, so access to a contract gives implicit Read Only access to its account.[^3]
+
+Implicit sharing is narrow. It exists for standard relationships like Account to Contact, Case, Opportunity, Order, and Contract. It does not apply to custom objects. For custom objects, the only coupling mechanisms are master-detail and an explicit related record sharing rule. Keep that boundary in mind, because many exam answers try to stretch implicit sharing onto a custom object and that is always wrong.
+
+## Related record sharing: propagation you build explicitly
+
+When you need access to flow across a lookup relationship, or across a standard relationship where implicit sharing does not do what you want, you use a sharing rule with the related record option. A related record sharing rule grants users access to records that are related to records they already have access to.
+
+This is where the "Related record" sharing option mentioned in the deep-dive directive comes in. When you create a sharing rule, you choose which records to share and you set the access level. For accounts, you can base the rule on the account owner or other criteria, and then set the access level for accounts and their associated contracts, opportunities, cases, and optionally, contacts and orders. That "associated" part is the propagation: the rule does not just share the account, it extends the grant to the account's related records.[^4]
+
+This is a powerful tool and a dangerous one. It lets you couple access across a lookup relationship, which is exactly the flexibility you lose when you choose master-detail. But it is easy to over-apply. A sharing rule that grants read access to an account and its associated opportunities reaches every opportunity related to every account the rule covers. If you only meant to grant access to some of those opportunities, the related record option overshoots. That is a cumulative-impact problem we will get to shortly.
+
+## Account-to-Contact and Account-to-Opportunity access settings
+
+There is a specific set of propagation settings that the exam loves to test, and they are the Account-related access options. When you configure organization-wide defaults, the Account object has settings that let you grant users access to a parent account's related opportunities, cases, contacts, and other related objects. In practice this is how you let a user who can read an account also open the opportunities and contacts attached to it, without a master-detail relationship and without a per-object sharing rule.[^5]
+
+The principle is the same as related record sharing, just configured through the account's OWD settings rather than through a rule. Grant access to the account, and that grant extends to the related opportunities and contacts by a setting you explicitly enabled. The trap is enabling it globally without checking who can read accounts. If a broad set of users can read all accounts, and you turn on the related access setting, those users now also see the related opportunities, cases, and contacts. On its own each setting looks reasonable. Combined with a broad account grant, it can expose child data far wider than anyone intended.
+
+The design check from the directive applies here directly: for every relationship, ask "should access to the parent grant access to the child?" and choose the relationship or rule that matches, rather than letting propagation default. Account-related access settings are a global switch you turn on deliberately, not a thing you enable by accident. They should be enabled only where you have confirmed that the parent grant is scoped tightly enough that the child grant it produces is acceptable.
+
+## Cumulative impact: the union of every grant
+
+Now we reach the heart of this lesson, and the concept behind the second quiz question. Sharing in Salesforce is additive. Every access layer grants access; none of them can remove access that another layer granted. The organization-wide default is the most restrictive baseline, and every other mechanism, the role hierarchy, sharing rules, manual sharing, teams, and relationship propagation, only adds access on top of it. A sharing rule can never be stricter than the OWD.[^6]
+
+This means a user's effective access to a record is not determined by any single layer. It is the union of every layer that touches that user and that record. The OWD says one thing, the role hierarchy says another, a sharing rule adds a grant, a team membership adds another, a master-detail parent grant adds another, and an account-related access setting adds another. Whatever access survives at the end of that union is what the user sees.
+
+The exam trap is underestimating this union. Each layer on its own looks fine. The OWD is Private, the hierarchy is shallow, the sharing rule targets a narrow group, the team has three members. None of it looks like a problem in isolation. But the same user can be in the group, on the team, below the hierarchy owner, and reading a parent account all at once, and the combined effect is a record exposed that no single design decision intended to expose.[^6]
+
+The way to avoid it is to model the union. For a set of test users and a set of test records, list every grant source and verify the combined result matches the requirement. The "shared via parent AND via rule AND via team" case is exactly the scenario the exam puts in front of you: a record reachable through several layers where each layer is individually correct but the sum is wrong. Your job is to map the union before finalizing, not after a user reports seeing a record they should not.
+
+## Record types: presentation, not access
+
+The third piece of this lesson is record types, and the entire section can be reduced to one sentence: record types do not change record-level sharing. A record type lets you offer different business processes, picklist values, and page layouts to different users. It shapes what a user sees when they open, create, or interact with a record of a given type. It does not change who can access the record at all.[^7]
+
+This is the whole point of the third quiz question. The options that say record types change OWD, grant access to related records, or replace sharing rules are all wrong. Record types govern presentation and process. They control which picklist values appear, which page layout renders, which business process the record follows. Access to the underlying record is still determined by OWD, the hierarchy, sharing rules, teams, and relationship propagation. Record types sit on top of that and change the presentation, never the sharing table.[^7]
+
+There is a nuance worth carrying into the exam. A user must have access to the record type to see records of that type, and record type access is itself a profile or permission set assignment. But that is a gate on which record types exist for a user, not a change to how records are shared. The record type does not make a record visible or invisible at the record-access level. If a user cannot read the record, the record type does nothing to change that. And if a user can read the record, the record type only changes how it is presented. Keep these two layers separate and the record type questions become trivial.[^8]
+
+Combined with per-record-type Dynamic Forms, record types shape presentation further, letting you show or hide fields and sections depending on the record type. Dynamic Forms are a page-build tool, aligned to the field-level and UI hides you met back in Days 5 and 6. They change what appears on the page. They do not change the sharing table either. Every presentation-level control, record types and Dynamic Forms alike, must be understood as shaping what users see of records they can already access, never as a substitute for record-access controls.[^7][^8]
+
+## The propagate-or-not design check
+
+Putting it together, the architect's discipline for relationship scenarios is explicit decision-making. For every relationship in the model, ask the question the directive names: should access to the parent grant access to the child? Then choose the mechanism that matches your answer, and do not let propagation happen by accident.
+
+The decision rule:
+
+1. If the child must follow the parent exactly and never diverge, use master-detail. Propagation is enforced by Controlled by Parent.
+2. If the child must share independently and only sometimes be visible to parent readers, use a lookup, and add a related record sharing rule only where propagation is genuinely wanted.
+3. If the objects are a supported standard pair and you want the built-in coupling, check whether implicit sharing already provides it before adding explicit rules.
+4. If you want parent access to reach the related standard records, enable the Account access setting deliberately, and confirm the parent grant is scoped tight enough for the child grant it produces.
+5. If access must NOT propagate, such as for sensitive child data, use a lookup with restrictive OWD on the child and do not build related record sharing. That combination keeps the child locked even when the parent is shared.
+
+## Configuration walkthrough: building the cumulative map
+
+Here is the numbered path you would follow in a real scenario, matching the directive's walkthrough.
+
+1. **Inventory every relationship and label whether access should propagate to children.** Walk the data model and for each parent-child pair write down: master-detail (propagates, forced by Controlled by Parent), lookup with related record sharing (propagates, explicit), lookup without related record sharing (does not propagate), or a standard pair where implicit sharing may apply. This inventory is your starting map.
+
+2. **Configure Account-to-Opportunity and Account-to-Contact related access, and related record sharing options, only where propagation is desired.** Do not enable these globally. Enable related access settings for the specific objects and the specific scope the requirement demands, and build related record sharing rules only for the account-to-child flows you actually need.
+
+3. **Build a cumulative access map for a set of test users.** Pick representative users, one per access class. For each user, list every grant source: OWD, role hierarchy, sharing rules, manual shares, teams, and relationship propagation. For each test record, compute the union and write down the effective access level. Verify the union matches the requirement and, equally important, that it does not exceed it.
+
+4. **Use record types only to shape presentation and process, and confirm sharing is unchanged.** Assign record types to shape layouts, picklists, and business process. Re-check that a record type change did not affect the sharing table. If a requirement sounds like "this group should not see these records," reach for OWD, rules, or relationships, not a record type.
+
+5. **Test a sensitive child under multiple access paths to ensure no unintended propagation.** Take the child record that must stay restricted and check it from every angle: as the parent owner, as a group member, as a team member, as a hierarchy ancestor, and through any account-related access setting or related record sharing rule. Confirm the child is reachable only where the requirement says it should be.
+
+## Worked example: the financial services engagement
+
+Consider a consulting engagement for a financial services client. The model has an Account, and under it a set of Opportunity, Contact, and Case records, plus a custom object, Checkpoint, that stores sensitive compliance data about each account.
+
+The first requirement: account managers who own an account must see its opportunities, cases, and contacts. This is a standard Account-to-child flow. Two options exist. You can rely on implicit sharing, which for these standard pairs gives child access to the parent owner and related access in certain configurations. Or you can enable the Account access settings and the related record sharing rules to grant account managers access to the associated opportunities, cases, and contacts.[^3][^4] You enable the relevant related access deliberately, because the requirement calls for it.
+
+The second requirement: the Checkpoint records are extremely sensitive and must never be visible just because someone can read the account. This is the propagate-or-not decision, and the answer is no propagation. You cannot use a master-detail relationship to Checkpoint, because that would couple its access to the account. You cannot build a related record sharing rule that extends account access to Checkpoint, because that would do the same. Instead you create a lookup relationship from Checkpoint to Account, keep the Checkpoint OWD Private, and build no related record sharing for it. A user who can read the account sees the account, its opportunities, cases, and contacts, but never the Checkpoint records, because the lookup does not propagate and the child OWD keeps them locked.[^2][^9] This is the exact design the first quiz question rewards.
+
+The third requirement is where cumulative impact shows up. A compliance analyst is on the account's Account Team and is also a member of the "East Region" public group, and a criteria-based sharing rule gives the East Region group read access to accounts with region equal to East. The account is in the East region. Now trace the union. The analyst reaches the account through the team membership, and reaches it again through the group rule. Either one alone grants access. Neither is wrong on its own. But because the Account access settings are enabled, granting the analyst access to the account also grants access to its associated opportunities, cases, and contacts. The analyst, who was only supposed to see the account and its opportunities for reporting, now also sees the cases and contacts through the relationship propagation riding on top of the team and group grants. The individual layers were all reasonable. Their union exposed more than the requirement intended.[^6]
+
+The fix is to map the union and then tighten the loosest layer. If the analyst should not see cases and contacts, either the account-access setting that propagates to those objects has to be scoped down, or the analyst has to be removed from one of the grant paths. The point is that no single change to one layer is obviously the answer. You look at the whole union, find the layer that overshoots, and adjust that one.
+
+## Why it matters for the exam and for real builds
+
+On the exam, the "given a scenario" relationship questions are testing a way of thinking more than a single fact. Can you say which relationships propagate? Can you hold the whole union of grants in your head and reason about the combined outcome? Can you resist the reflex to use a record type as an access control? Those are the three skills this lesson trains, and they map directly onto the three quiz questions.
+
+In a real build, the stakes are higher than a score. The propagation you set at design time is what users live with, and over-exposure in a financial or healthcare context is not a nice-to-have to tune later. The discipline is the same one the exam rewards: decide explicitly for every relationship whether access should flow, map the union of every grant for your test users before you ship, and keep record types firmly in the presentation layer where they belong.
+
+## Exam traps to avoid
+
+**Record types are not a record-access control.** Any answer that implies a record type restricts record visibility is wrong. Record types shape page layouts, business process, and picklist values. Access is governed by OWD, hierarchy, rules, teams, and relationship propagation. A record type changes what a user sees of a record they can already access, never whether they can access it.
+
+**Underestimating cumulative grants.** A record can be reachable through several layers even when each single layer looks fine. The union of OWD, hierarchy, sharing rules, teams, and relationship propagation is what determines actual access. Map the combination before finalizing, because multiple individually-correct layers can jointly expose a record.
+
+**Assuming all relationships propagate.** Lookups, absent related record sharing, do not propagate access. If a scenario needs access to flow across a lookup, that flow must come from an explicit related record sharing rule or, for supported standard pairs, implicit sharing and account access settings. On its own, a lookup propagates nothing.
+
+## Try it yourself
+
+In a sandbox, build a model with an Account and a custom child object, SensitiveCheck, linked by a lookup relationship. Set SensitiveCheck OWD to Private and create no sharing rule for it. Grant a test user read access to a specific Account, and confirm the user sees the account but not its SensitiveCheck records. Now create a master-detail relationship from a second custom object, VisibleTask, to the Account, and confirm the same user's access to the account extends to its VisibleTask records. Then enable the Account-to-Opportunity related access setting and add the test user to an Account Team and a public group on the account at the same time. Log in as that user and check what they see across the account's opportunities, cases, and contacts. Trace each path you find back to the grant that produced it, and note where the union of team, group, and relationship propagation overlapped. Finally, create two record types on the Account and confirm the user's record access is identical before and after, even though the presentation changes.
+
+## What's next
+
+Tomorrow, in lesson 23, you move from the declarative sharing you have used all along to programmatic sharing. You will learn Apex managed sharing, Apex sharing reasons, and the Share object itself, the API-level mechanism that lets code share custom objects when sharing rules and manual sharing do not give you the control you need. You will see why Apex managed sharing imposes the restriction that only users with Modify All Data can add or change sharing on a record, and how sharing reasons let you distinguish grants that came from code. That is where the sharing model stops being purely click-configured and starts being something you can shape from code.
+
+[^1]: Salesforce Certified Platform Sharing and Visibility Architect exam guide, Domain: Access to Records, objective r-6b: "Given a scenario, determine which relationships propagate access, assess cumulative sharing impact, and consider record types."
+[^2]: Salesforce Help, "Object Relationships Overview," https://help.salesforce.com/s/articleView?id=platform.overview_of_custom_object_relationships.htm
+[^3]: Salesforce Help, "Implicit Sharing," https://help.salesforce.com/s/articleView?id=platform.sharing_across_objects.htm
+[^4]: Salesforce Help, "Sharing Rules," https://help.salesforce.com/s/articleView?id=platform.security_about_sharing_rules.htm
+[^5]: Salesforce Help, "Organization-Wide Sharing Defaults," https://help.salesforce.com/s/articleView?id=platform.security_sharing_owd_about.htm
+[^6]: Salesforce Help, "Control Who Sees What," https://help.salesforce.com/s/articleView?id=platform.security_data_access.htm
+[^7]: Salesforce Help, "Tailor Business Processes to Different Record Types Users," https://help.salesforce.com/articleView?id=sf.customize_recordtype.htm
+[^8]: Salesforce Help, "How Is Record Type Access Specified?" https://help.salesforce.com/s/articleView?id=platform.permissions_record_type_access.htm
+[^9]: Salesforce Help, "Organization-Wide Sharing Defaults," https://help.salesforce.com/s/articleView?id=platform.security_sharing_owd_about.htm
