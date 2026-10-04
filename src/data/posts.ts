@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "agent-middleware-deterministic-glue-2026",
+    "title": "The Glue Is the Agent: Deterministic Engineering for Agents",
+    "excerpt": "A production agent is mostly not the model. The deterministic glue, routing, validation, retry, state, and tool schemas, decides whether it works.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "2026-10-04",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "13 min read",
+    "featured": false,
+    "tags": [
+      "Agentic AI",
+      "Deterministic Engineering",
+      "Multi-Agent Systems",
+      "Tool Use",
+      "AI Infrastructure",
+      "LLM Orchestration"
+    ],
+    "bannerImage": "/banners/agent-middleware-deterministic-glue-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "postgres-connection-pooling-serverless-2026",
     "title": "Too Many Connections: The Pooling Fix That Works",
     "excerpt": "Too many connections in a serverless app is rarely about traffic. It is how many Postgres connections each warm instance holds. Here is the pooling fix.",

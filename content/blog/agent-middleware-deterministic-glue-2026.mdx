@@ -1,0 +1,108 @@
+---
+title: "The Glue Is the Agent: Deterministic Engineering for Agents"
+slug: agent-middleware-deterministic-glue-2026
+excerpt: "A production agent is mostly not the model. The deterministic glue, routing, validation, retry, state, and tool schemas, decides whether it works."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "2026-10-04"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "13 min read"
+tags: [Agentic AI, Deterministic Engineering, Multi-Agent Systems, Tool Use, AI Infrastructure, LLM Orchestration]
+bannerImage: "/banners/agent-middleware-deterministic-glue-2026.png"
+---
+
+Ask a team what an AI agent is and most will point at the model. The agent is the LLM that reads the request, decides what to do, and calls a tool. Everything else, the routing, the validation, the retries, the state, the tool schemas, the gates, reads as plumbing. It is the unglamorous code you write so the model can do its one clever thing.
+
+That framing is backwards, and it is why so many agent projects stall. In a working production agent, the model call is a small part of the system. The deterministic code around it, the glue that decides which model gets called, what the output must look like, what happens when it does not, and how the agent remembers where it was, is where the reliability actually lives. The model is the engine. The glue is the car. You can swap the engine and keep driving. You cannot drive a car with no chassis.
+
+This article walks through what that deterministic middle actually contains, why it decides whether an agent ships, and how to build it so the model stays the easy part. It draws on the patterns Anthropic publishes for building effective agents, the tool-layer economics that Moderne measured on real coding agents, and the anti-patterns that break enterprise agents in production. It closes with the governance pattern we run in our own delivery pipeline, because we hit the exact failure this article is about.
+
+## The model is the smallest part of the system
+
+Start with the shape of a real agent. Anthropic's engineering team, who build and ship agents at scale, describe an agent as an LLM using tools based on environmental feedback in a loop [^1]. That loop is the whole thing. The model reads a state, picks a tool, the tool runs, the result comes back, the model reads the new state, and it repeats until the task is done.
+
+The loop is deterministic. The model is the only nondeterministic element in it, and it is the smallest one. Everything that makes the loop safe, correct, and resumable is code you write and control. Anthropic is explicit about where the effort goes. On their SWE-bench work, the team that built the coding agent that solved real GitHub issues reports they spent more time optimizing the tools than the overall prompt [^1]. The prompt is the model-facing surface. The tools are the deterministic interface the model acts through. The team that ships agents treats the tools as the product and the prompt as a thin layer on top.
+
+![The engineering sits in the deterministic ring around the model call: routing, validation, retry, state, and tool schemas wrap a small model core](</diagrams/agent-middleware-deterministic-glue-2026/1-engineering-sits.png>)
+
+This is the mental model that separates teams that ship agents from teams that ship demos. A demo is a single model call with a prompt. An agent is a system where the model call is one step in a loop that someone has engineered to be reliable. The difference is not the model. It is the glue.
+
+## The glue is a specific list of jobs
+
+The deterministic middle is not a vague blob of boilerplate. It is a concrete set of responsibilities, each of which has a failure mode you can name. When an agent breaks in production, it almost always breaks in one of these layers, not in the model.
+
+**Routing decides which model and which path a request takes.** Not every request deserves the expensive reasoning model. A classification task and a multi-step research task are different workloads. Routing is the deterministic decision that sends each one to the right place, and it is where a lot of the cost and latency discipline lives. Anthropic lists routing as one of the core workflow patterns, a single classification step that fans out to specialized handlers [^1].
+
+**Validation checks that the model output is actually usable.** A model can return well-formed text that is wrong, or malformed output that breaks the next step. Validation is the deterministic gate that parses the output, checks it against a schema, and rejects it before it touches anything real. Anthropic's guidance is blunt about this: give the model room to fail, and validate the output before it acts [^1]. The validation is not a nicety. It is the difference between a bad suggestion and a bad transaction.
+
+**Retry and backoff handle the model being wrong.** Models are probabilistic. They will occasionally return garbage, or refuse, or hallucinate a tool call. The deterministic loop decides what happens next. It can retry with a clearer instruction, fall back to a simpler model, or escalate to a human. Anthropic's poka-yoke pattern, borrowed from manufacturing, is exactly this: build the system so the model cannot silently do the wrong thing, and make the failure loud and recoverable [^1].
+
+**State is where the agent remembers where it was.** A multi-step agent that loses its place on a retry is not an agent, it is a coin flip. The deterministic layer persists the task, the steps completed, the tool results, and the next action, so a crash or a timeout resumes instead of restarting. This is the layer that makes an agent resumable, auditable, and safe to run unattended.
+
+**Tool schemas are the interface the model acts through.** The model can only do what the tools let it do, and it can only call them correctly if the schemas are precise. Anthropic's team found the tool definitions were where they spent their optimization effort, because a well-defined tool with a tight schema produces reliable behavior, while a loose one produces the model guessing at arguments [^1].
+
+None of these are model intelligence. They are all deterministic engineering. And they are all where a production agent actually gets built.
+
+## The economics prove the point
+
+The strongest evidence that the glue is the agent comes from the cost side. Moderne, a company that builds tools for large-scale code migration, measured what happens when you let a frontier coding agent work on a real enterprise task with no deterministic scaffolding. The task was upgrading a codebase to Java 25. The agent, running on a top-tier model, burned 61 million tokens across 771 turns and 45 minutes of wall-clock time, and completed 4 of 15 subtasks [^2].
+
+The same task, run through a deterministic recipe that encoded the migration steps as tool calls instead of letting the model figure them out, used 30,000 tokens and finished in about three minutes [^2]. That is a 2,000x difference in token cost and a 15x difference in time, for the same outcome. The model did not get smarter. The glue did.
+
+![The same Java 25 migration: a prompt-driven agent burns 61 million tokens across 771 turns, while a deterministic recipe finishes in 30,000 tokens and minutes](</diagrams/agent-middleware-deterministic-glue-2026/2-recipe-vs-prompt.png>)
+
+Moderne's framing is that the durable value in the agentic software development lifecycle sits in the tools layer, not the model layer [^2]. The model is a commodity that improves every few months. The tools, the recipes, the schemas, the validation, are the accumulated engineering that does not get cheaper with the next model release. When the model improves, the glue gets better too. When the model does not improve, the glue is what keeps the agent working.
+
+This is the density mismatch that most teams miss. A coding agent that reads files, greps for patterns, and edits code one file at a time is doing the work of a deterministic tool, but paying model-inference prices for every step. The glue is not just reliability. It is the difference between an agent that is economical to run and one that is a money pit.
+
+## Escalate structure before you escalate the model
+
+The instinct when an agent is unreliable is to reach for a bigger model. The better instinct is to add structure. Anthropic's guidance is a ladder of increasing determinism, and the discipline is to climb it one rung at a time, adding the smallest amount of structure that fixes the problem [^1].
+
+The bottom rung is a single prompt. If that is not reliable enough, you add prompt chaining, breaking the task into sequential steps where each step's output feeds the next. If you have different kinds of requests, you add routing, a classification step that sends each one to a specialized handler. If you have independent subtasks, you add parallelization, running them at the same time. If you have a complex task with subtasks that need coordination, you add an orchestrator-workers pattern, where a central model delegates to specialized workers. If you have a task where you can evaluate the output, you add an evaluator-optimizer loop, where one model generates and another critiques [^1].
+
+![The structure ladder: single prompt, then prompt chaining, routing, parallelization, orchestrator-workers, and evaluator-optimizer, each adding determinism before you reach a full agent loop](</diagrams/agent-middleware-deterministic-glue-2026/3-escalate-structure.png>)
+
+Only after all of those, when the task genuinely needs the model to decide its own path, do you build a full agent loop. Anthropic is explicit that agents are the last resort, not the default, and that the simplest solution that works is the right one [^1]. Most teams reach for the agent loop first, because it is the impressive thing. The discipline is to reach for it last, because it is the least deterministic and the hardest to make reliable.
+
+The same logic applies to the model itself. When a workflow is not accurate enough, the first question is not "which bigger model" but "what structure is missing." A routing layer that sends the hard cases to the reasoning model and the easy ones to a fast model often beats a single big model on both cost and latency. The glue decides the economics. The model just executes.
+
+## The stable loop is the unit of reliability
+
+The payoff of all this glue is a loop that behaves deterministically even though the model inside it is probabilistic. The pattern is a stable loop: model output, validate, retry, gate, persist, and only then act. Each step is deterministic, and the model is the only place where randomness enters.
+
+![The stable loop: model output is validated against a schema, rejected outputs retry with feedback, and only validated results persist to state and trigger an action](</diagrams/agent-middleware-deterministic-glue-2026/4-stable-loop.png>)
+
+The validation step is the hinge. It parses the model output, checks it against the schema, and decides whether it is usable. If it is not, the loop retries, feeding the validation error back to the model so it can correct itself. If it is, the loop persists the result to state and triggers the action. The gate is what makes the loop safe: nothing real happens until the output has passed validation.
+
+This is the pattern that makes an agent safe to run unattended. A model that occasionally returns garbage is fine, because the garbage never reaches a real system. It gets caught by validation, retried, and only a validated result acts. The reliability is not in the model. It is in the loop that contains it.
+
+## The anti-patterns are all glue failures
+
+The enterprise agent anti-patterns that break systems in production are, almost without exception, failures of the deterministic layer, not the model. Allen Chan's catalog of agent anti-patterns names the recurring ones, and they map directly onto the glue jobs above [^3].
+
+The monolithic mega-prompt is a routing failure. One giant prompt tries to make the model handle every case, instead of a routing layer that sends each request to a focused handler. The agent-as-business-process fallacy is a state failure. The team encodes a whole business process in the model's head instead of in deterministic state and workflow, so the agent has no durable record of where it is. The invisible-state anti-pattern is the same thing: the agent's state lives only in the conversation, so a retry or a crash loses it. The all-or-nothing autonomy anti-pattern is a gate failure. The agent is given full autonomy with no validation gate, so a single bad model output can do real damage [^3].
+
+Every one of these is a missing piece of glue. The fix is not a better model. It is routing, state, validation, and gates. Chan's recommendation is to split the work into a supervisor and specialized sub-agents, and to offload the deterministic steps to a workflow layer instead of asking the model to do them [^3]. That is the glue, built deliberately.
+
+## What this means for your team
+
+The practical takeaway is a shift in where you spend your engineering effort. If you are building an agent and most of your time is going into the prompt, you are probably building a demo. If most of your time is going into the tools, the schemas, the validation, the state, and the routing, you are building an agent.
+
+Concretely, that means a few habits. Define the tool schemas before you write the prompt, because the tools are the interface the model acts through and the prompt is a thin layer on top. Add a validation gate before anything real happens, and make the failure loud and recoverable instead of silent. Persist state so a retry resumes instead of restarting. Route requests to the cheapest model that can handle them, and escalate structure before you escalate the model. Measure the cost per task, not the cost per token, because the glue is what turns tokens into outcomes. For the mechanics of the validation and state layers specifically, our piece on [structured output and tool-calling reliability](/field-notes/structured-output-tool-calling-reliability-2026) walks through the schema and retry patterns in detail, and the [durable execution state machine](/field-notes/agent-durable-execution-state-machines-2026) note covers how to persist an agent's place so a retry resumes instead of restarting.
+
+The model will keep getting better, and that is good. But the teams that ship agents that work are not the ones with the best models. They are the ones with the best glue. The model is the engine. The glue is the car. Build the car.
+
+## The pattern we run in our own pipeline
+
+We hit this exact failure in our own delivery pipeline, and it is why this article exists. We run a multi-agent pipeline for client work, and early on we treated the model call as the whole job. The result was an agent that was impressive in a demo and unreliable in production. It lost its place on retries, it occasionally returned malformed output that broke the next step, and it burned tokens on work a deterministic step should have done.
+
+The fix was not a bigger model. It was glue. We added a routing layer that sends each request to the right model, a validation gate that rejects malformed output before it acts, persisted state so a retry resumes instead of restarting, and tool schemas tight enough that the model stops guessing at arguments. The model did not change. The agent got reliable. That is the whole argument of this article, and we have the scars to prove it.
+
+If you are building an agent and it is not reliable, do not reach for a bigger model. Look at the glue. The answer is almost always there.
+
+[^1]: Anthropic, "Building Effective Agents," December 19, 2024: [article](https://www.anthropic.com/engineering/building-effective-agents)
+[^2]: Moderne, "AI Coding Agents and the Tools Layer of the Agentic SDLC," 2026: [article](https://moderne.ai/blog/ai-coding-agents-better-tools)
+[^3]: Allen Chan, "AI Agent Anti-Patterns Part 1: Architectural Pitfalls That Break Enterprise Agents Before They Start," March 2, 2026: [article](https://achan2013.medium.com/ai-agent-anti-patterns-part-1-architectural-pitfalls-that-break-enterprise-agents-before-they-32d211dded43)
