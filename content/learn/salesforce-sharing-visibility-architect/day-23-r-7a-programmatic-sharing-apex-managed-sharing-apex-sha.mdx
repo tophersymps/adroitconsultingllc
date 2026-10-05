@@ -30,6 +30,8 @@ Every object that participates in sharing has a Share table. Standard objects us
 
 The Share table carries the fields that define the grant. ParentId holds the ID of the record being shared. UserOrGroupId holds the ID of the user or public group receiving access. AccessLevel holds the strength of the grant, Read or Edit (and on some objects, other levels such as All when object permissions allow it). RowCause records why the row exists, the origin of the grant, so you can tell a row created by a sharing rule from a row created manually from a row created by code. That last field, RowCause, is the one this lesson turns on its head.[^3]
 
+![Every explicit grant, whether from a sharing rule, a manual share, or Apex managed sharing, is a row in the object's Share table carrying ParentId, UserOrGroupId, AccessLevel, and RowCause](</diagrams/day-23-r-7a-programmatic-sharing-apex-managed-sharing-apex-sha/1-share-object.png>)
+
 ## Managed sharing, defined
 
 Apex managed sharing is the practice of inserting rows into the Share object programmatically, from Apex code, to grant record access to a specific user or group. The word "managed" contrasts with two siblings you should keep straight.
@@ -39,6 +41,8 @@ Manual sharing is the point-and-click sharing a user does on a record with the S
 Apex managed sharing is the same physical operation done from code, and it is the tool this lesson is about. The code inserts rows into the Share table with a chosen AccessLevel and a chosen RowCause. Because the rows have a RowCause the code controls, you can identify, query, and manage exactly the shares your code created. That identifier is why "managed" is in the name: the share rows belong to a reason you defined, so you can clean them up, change them, and understand where they came from.[^4]
 
 There is also implicit sharing, which you met back in Day 22. Implicit sharing is entirely different. It is not rows you write at all. It is automatic access computed by Salesforce for standard relationships, like access to an account from its child case. Implicit sharing is not a Share row and not something you create in Apex managed sharing. Do not let the word "sharing" blur these three: manual sharing is declarative and user-driven, Apex managed sharing is programmatic and reason-tagged, and implicit sharing is automatic and not a row at all.
+
+![Manual sharing is declarative and user-driven, Apex managed sharing is programmatic and reason-tagged, and implicit sharing is automatic and not a Share row at all](</diagrams/day-23-r-7a-programmatic-sharing-apex-managed-sharing-apex-sha/2-three-sharing-types.png>)
 
 ## Why write sharing in code at all
 
@@ -101,6 +105,8 @@ The design, step by step. First, confirm the sharing class runs in system mode w
 
 Now trace what happens when the approver changes from Keira to Mateo. The reassignment updates Approver__c to Mateo. The sharing code runs and inserts an Edit share row for Mateo. In the same pass, it finds the rows tagged ApprovalAccess__c where UserOrGroupId equals Keira but the record's Approver__c no longer names Keira, and deletes them. Keira loses access she no longer needs, Mateo gains exactly the access he needs, and the Inspection__Share table never grows unbounded because every insert is paired with a cleanup.[^7]
 
+![The compliance approver flow: read the current approver, insert an Edit share row tagged ApprovalAccess__c, delete the stale grant, and keep the Share table bounded](</diagrams/day-23-r-7a-programmatic-sharing-apex-managed-sharing-apex-sha/3-compliance-approver.png>)
+
 This example is the exact scenario the first quiz question rewards. A data-derived access rule that a sharing rule cannot express is the textbook case for Apex managed sharing: insert Share rows with a custom RowCause. A public group with static rules fails because the group membership cannot track the moving approver. Making OWD Public over-exposes every inspection to every user. A record type cannot express dynamic user-level access at all. Only the code can compute the approver, write the row, and keep it current.
 
 ## Why it matters for the exam and for real builds
@@ -116,6 +122,8 @@ In a real build, managed sharing is a reliability liability in exactly one way: 
 **The wrong RowCause or missing Modify All Data fails.** A share insert with a RowCause value that is not a defined custom reason, or a sharing user without Modify All Data on the object, fails. Lesser permission such as View All or Read is not enough to write a managed share row.
 
 **Share rows are physical and accumulate.** Managed share rows persist until deleted. Without cleanup they bloat the Share table, slow queries, and leave users with access long after the reason for it expired. Grant, revoke, and re-grant in the same flow to keep the table bounded.
+
+![Two exam rules: writing a managed share row requires Modify All Data, and managed sharing can only grant access, never restrict it](</diagrams/day-23-r-7a-programmatic-sharing-apex-managed-sharing-apex-sha/4-exam-traps.png>)
 
 ## Try it yourself
 
