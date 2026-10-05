@@ -1,0 +1,168 @@
+---
+title: "Data Architect SM-4b: Multi-Org Data Scenarios: When to Consolidate vs Integrate"
+slug: day-24-sm-4b-multi-org-data-scenarios-when-to-consolidate-vs-in
+series: salesforce-data-architect
+lesson: 24
+excerpt: "Given a customer scenario, decide whether to consolidate multiple Salesforce orgs or keep them separate and integrate. Covers the decision inputs you score each scenario against (process commonality, residency and compliance, data volume, release alignment, cost, and the target timeline), the two forces that pull you toward those answers, phased and hub-and-spoke consolidation when you do merge, the reporting-only case where Data Connect or a shared warehouse gives you a unified view without merging orgs at all, the global customer key that stitches identities across orgs, the cost and effort trade-off between a heavy one-time migration and an ongoing integration surface, and why there is no universally right answer, only the design that minimizes risk for a specific customer's constraints. Includes a worked multi-org scenario, a numbered configuration walkthrough, the three exam traps, and a try-it exercise."
+date: "October 5, 2026"
+author: "Adroit Consulting"
+readTime: "25 min read"
+tags: [Salesforce, Data Architecture, Data Management, Certification]
+---
+
+Lesson 23 gave you the tools for the multi-org world: the difference between consolidating orgs and integrating them, the three consolidation paths, per-entity masters, and Data Pipelines and Data Connect. Requirement sm-4b stops holding the tools up and starts pointing them at real situations. The requirement is short: given a customer scenario, recommend a design to effectively consolidate and/or leverage data from multiple Salesforce instances, deciding when consolidation is preferable to integration and vice versa.[^1]
+
+Everything rests on that last phrase: when consolidation is preferable to integration, and the reverse. The exam hands you a scenario with a customer's constraint, and you have to say which way the design should lean and why. Two customers can look almost identical on the surface and demand opposite answers. The skill the requirement rewards is not knowing the features, it is reading a scenario, scoring it against the right inputs, and landing on a design that survives the customer's actual constraints.
+
+This lesson teaches that reading. We define the decision inputs you score every scenario against, walk the forces that pull toward consolidation or away from it, work the phased and hub-and-spoke paths in the detail they need, spend real time on the reporting-only case that does not need a merge at all, and close on the global key that stitches a customer view across whatever orgs you keep.
+
+## The decision inputs
+
+When the exam gives you a multi-org scenario, it is really giving you six dimensions to score. Each one pushes toward consolidation, toward integration, or toward a middle path, and the right answer is the design that best satisfies the combination.
+
+Process commonality is the first. How similarly do the orgs actually work? If both orgs run the same sales stages, the same service model, the same product catalog, then a single org can represent both without forcing anyone to change. If the orgs run genuinely different processes, a service org that works case-by-case and a product org that works account-by-account, then consolidation forces one side to compromise on how it works. High process commonality favors consolidation, because sharing an org costs nothing in rework. Low commonality favors keeping them apart, because merging them means forcing a compromise someone will have to live with.[^2]
+
+Compliance and residency is the second, and it is often the one that decides the question by itself. Data residency rules can require that personal data physically live in a specific region, inside a specific instance. GDPR, local banking rules, or a customer contract can all mandate this. If the data must stay in an EU instance, you cannot move it into a US org no matter how much you want one customer view. Residency is the cleanest reason a scenario ends in integration or virtual sharing rather than consolidation, because consolidation is not a design choice, it is a legal prohibition.[^3]
+
+Data volume is the third. A consolidation is a migration, and migrations get harder and riskier as the volume grows. Two orgs with a few thousand records can big-bang merge in a weekend. Two orgs carrying tens of millions of records, with history and attachments and audit trails, take a long, phased program with careful testing at every step. High volume does not forbid consolidation, but it changes the risk profile and pushes you toward an incremental path rather than a single cutover.
+
+Release alignment is the fourth. Org consolidations are expensive partly because each org runs its own release train. If the orgs release on the same cadence and coordinate changes, sharing an instance is smoother. If one org ships every week and another ships quarterly under heavy change control, the faster one will constantly be blocked by the slower one's process. Release alignment makes a single org more workable. Divergent release trains are a quiet argument for keeping orgs separate.
+
+Cost is the fifth. Consolidation carries a large, one-time cost: the migration itself, the ETL, the deduplication, the re-keying of downstream systems, the security and profile rebuild, the user retraining. Integration carries a smaller upfront cost but an ongoing one: every interface you build must be monitored, versioned, and error-handled for as long as both orgs live. The exam's cleanest frame is that consolidation is a heavy one-time migration with ongoing simplicity, while integration is a lighter start with ongoing per-interface cost. Neither is cheap; they just spend the money at different times.[^4]
+
+The target timeline is the sixth. If the business needs a single view in three months, a long phased consolidation is off the table and integration or data sharing is the honest answer. If the business is restructuring over two years and can stage the work, an incremental consolidation becomes viable again. The timeline sets what is possible; the other inputs set what is wise.
+
+The exam wants you to score all six, not fixate on one. The trap is deciding on a single factor. A scenario with high process commonality still stays multi-org if residency forbids the merge. A scenario with perfect residency clearance still stays multi-org if the processes would fight each other in one instance. You read the whole picture.
+
+## Two pulls: consolidate for shared truth, integrate for autonomy
+
+Once you have scored the inputs, the decision reduces to a tension between two values, and the exam expects you to name them.
+
+Consolidation buys shared truth. One org means one Account record, one product record, one customer row that everyone reads. No syncing, no matching, no deciding which copy is right, because there is only one copy. That is a powerful simplification, and it is worth real money when the whole company genuinely works the same way on the same data. If a customer must be a single shared account with a single shared process across every unit, consolidation is the design that delivers it.
+
+Integration buys autonomy. Separate orgs let each unit keep its own processes, its own release cadence, and its own data residency. Nothing has to compromise on how it works. The price is that the shared entities, the Accounts and Products that multiple orgs need, must be synced, matched, and kept from drifting. Integration keeps the parts free; it just makes every boundary between them a thing you must operate.
+
+The exam asks you to map a scenario to whichever of these the customer actually needs. A mandate for one shared customer and process across all units points at consolidation, because only a single org swallows the divergence. A desire to remove all integration complexity also points at consolidation, because consolidation is how you stop maintaining interfaces. Those are the two pulls in favor of merging. The pulls away are the reasons above: divergent processes that would require compromise, and residency that forbids the move. When the scenario names divergent service models or regionally confined data, the design tips to integration and to keeping the orgs separate, not to a merge.[^5]
+
+## Phased consolidation: reduce risk by moving a division at a time
+
+When the scenario does call for consolidation, the exam expects you to pick a path, not just say "merge them." The safest path for anything beyond a small org is phased, incremental consolidation.
+
+The idea is simple. You do not move everything at once. You pick one division or region, migrate its data and users into the target org, verify it works, cut it over, and only then start the next one. Each phase has its own migration and its own cutover, and it survives on its own if it fails. If the first division's migration breaks, only that division is affected, and you fix it before touching the next. The whole program is slower than a big-bang merge, but it is survivable when any single move goes wrong, which in a real migration they do.[^6]
+
+The tooling that makes phased consolidation work is the external ID. When you move a division's records into the target org, the records get new Salesforce IDs, because a record ID is org-specific. Every related record, every downstream system, and every cross-reference that pointed at the old ID breaks unless you carried the stable bridge over. You give each migrated record an external ID that holds the source system's identifier, then relink related records and re-key downstream systems using that external ID, so nothing that depended on the record loses it when the ID changes.
+
+The trade is honest. Phased consolidation runs in a hybrid state for a while, with some divisions in the target org and others still in their source orgs. That in-between period is uncomfortable, because the migrated divisions and the not-yet-migrated ones still need to talk. You roll the migration out in an order that minimizes that friction, usually moving the entities and the divisions that most of the company depends on first, and you accept some integration during the transition. Phased is not the fastest route to a single org. It is the route that gets there without betting the whole business on one cutover.
+
+## Hub and spoke: a global master without a full merge
+
+Not every consolidation has to be a full merge, and the exam tests the middle path hard. Hub and spoke keeps a global master org and lets regional or business-unit spoke orgs keep operating, while the shared entities sync both ways against the master.
+
+In a hub-and-spoke design, the hub org holds the global master data: the customer master, the product master, the entities that everyone needs to agree on. Each spoke org runs its local operations, its local processes, its local cases and orders, but pulls its shared master data down from the hub. On the way back up, the spoke pushes its local changes to the entities it contributes, and the hub relays what the other spokes should see. The customer's record lives authoritatively in the hub, and every spoke keeps a synchronized copy it can actually work against.
+
+The subtlety, and the point the exam hammers, is what stops this from turning into a write war. If the hub and a spoke both update the same Account and both push, they overwrite each other forever, an update loop with no end. The thing that prevents the loop is a per-entity master: for every entity that is shared, you declare which org is the authoritative writer, and you make the sync respect that direction.
+
+If the hub owns the Account, then the hub is the master for Accounts. Spokes treat their Accounts as read-only, updated down from the hub, and any change to a spoke's Account copy flows up to the hub before the hub redistributes it. The write direction is controlled, so two orgs never clobber the same record at the same time. Duplicate rules and external IDs help you identify and match records, and more external IDs never hurt, but they do not, by themselves, stop a bidirectional loop. Only a declared per-entity master does that, because it fixes which org is allowed to write.[^7]
+
+Hub and spoke is the design you reach for when the scenario asks for a shared customer and product truth but the orgs cannot fully merge, usually because of residency, process divergence, or simply that a full merge would be too disruptive. It gives you the benefit of a single source of truth for the shared entities without forcing every org into one instance. The trade is that the sync itself is a permanent piece of architecture. You never finish implementing a hub and spoke; you operate it as long as it exists, monitoring the sync, handling its errors, and fighting its latency.
+
+## Reporting-only: the case that rarely needs a merge
+
+The most common trap in this requirement, because it is the most tempting, is consolidating orgs just to get unified reporting. The exam is explicit: a unified report across orgs is almost never, by itself, a reason to merge them.
+
+If the only requirement is a unified customer dashboard, and the processes differ and stay separate, then consolidating the orgs to produce that dashboard is massive overkill. You would be doing a multi-million-dollar migration, forcing process compromises, and re-keying every downstream system, all to produce a report that the tools can produce without merging anything. The right design is to unify the reporting while keeping the orgs separate.
+
+There are three honest ways to get that unified view. A data warehouse fed by each org is the classic one: each org exports its data to a shared warehouse, and the analytics team builds the cross-org report against the warehouse, leaving the orgs untouched. CRM Analytics over shared datasets is the same idea inside the Salesforce ecosystem, where you bring each org's data into shared datasets and build the unified view there. And Data Connect gives you zero-copy sharing: a central analytics layer queries each org's data in place, without physically copying it into a new system, so the unified view exists while the source orgs stay authoritative and the data never leaves where the law or the process says it must live.[^8]
+
+This is exactly the scenario the exam's Q1 tests. Three orgs, processes different and staying separate, and the only real need is a unified customer dashboard. The correct design is to unify the reporting with Data Connect or a warehouse while keeping the orgs separate. Consolidating all three to get that dashboard fixes a reporting need with a structural change, merging the Accounts alone does not meet the goal, and enabling CDC and deleting orgs is nonsense. When the need is reporting, you buy reporting, not a migration.
+
+## The global customer key
+
+Whatever mix of consolidation, integration, and sharing a design lands on, it needs one thing to make the customer view real: a global customer key that spans the orgs. Downstream identity is the requirement hiding inside this objective.
+
+A customer exists in more than one org under different records with different Salesforce IDs. To answer the question "which records in these orgs are the same customer," you need a stable identifier that is the same in every org, not an org-specific record ID. That identifier is the global customer key, implemented as an external ID field on the Account and Contact objects in every org, holding a company-wide value the orgs all agree on.
+
+Once the key exists, the rest of the identity machinery builds on it. External IDs let you upsert and match records across systems. Cross-references map a source record to its counterpart in another org. A global identifier map, the registry of which key value maps to which record in which org, is the single view's backbone. Reporting, integration, and even the hub-and-spoke sync all join on this key. Without it, you can merge orgs and still not know your customer, because the orgs never agreed on who the customer was to begin with.[^9]
+
+## The cost and effort trade-off
+
+No honest treatment of this requirement can pretend there is a universally right answer, and the exam does not want you to pretend there is either. The present trade-off, map it to the customer's constraints, and choose the design that minimizes risk while meeting the goal.
+
+Consolidation is a heavyweight, one-time investment. The migration, the dedup, the re-keying, the security and profile rebuild, the user training, the downtime, all of it lands at the start, and you pay it once. What you buy is ongoing simplicity: one org, one set of profiles, one release train, no interfaces between orgs to monitor. The cost is front-loaded and finite.
+
+Integration is the mirror image. It starts light, because you are not migrating anything, just standing up interfaces between orgs that already work. But every interface is a persistent operational surface. Each one needs monitoring, error handling, and latency management for as long as both orgs exist. A design with five synced entities across three orgs is a small permanent operations team's worth of work. The cost is spread out and ongoing, and it grows as you add boundaries.
+
+The exam grades the reasoning, not the pick. A scenario with compliance pressure and divergent processes and a tight timeline gets integration or data sharing, because consolidation would violate residency or take longer than the business allows. A scenario with shared processes and clean residency and no time pressure gets consolidation, because the long-term simplicity is worth the heavy start. Both are defensible when the scoring supports them. The indefensible answers are the ones that ignore the scenario: consolidating for a reporting need, syncing without a master, or treating a migration as a minor task.
+
+## Worked example: the two-division company
+
+Here is the applied scenario the exam is shaped like, and the reasoning it wants to see.
+
+A company runs two divisions in two Salesforce orgs. The service division resolves support cases, works case-by-case, and keeps EU customer data in an EU instance to satisfy data residency. The product division sells a separate product line, works account-by-account, and runs on its own release cadence. The company's stated need is a unified customer dashboard and a single record of which products a customer has bought.
+
+Score the inputs. Process commonality is low: a case-driven service org and an account-driven product org do not want to share a release train. Residency is binding: the EU service data must stay in the EU instance. Release alignment is poor: the two divisions ship at different cadences. Cost: consolidation is heavyweight. Timeline: the product team wants the dashboard this quarter. Every significant input points away from consolidation.
+
+So the design does not merge the orgs. It keeps them separate, and it solves the customer view with identity plus reporting. You add a global customer key, an external ID field on Account in both orgs, holding a company-wide customer identifier so the product division and the service division agree on who the customer is. When the divisions need the unified data, you expose each org to a central analytics layer through Data Connect or a shared warehouse, and you join on the global key. The EU invoice data stays in the EU org, because the analytics layer queries it in place rather than copying it out. The product division's own sales data stays in its org, because nothing requires it to move.
+
+The result meets every stated constraint. It honors residency by never moving the EU data. It honors the divergent processes by never forcing them into one org. It produces the unified dashboard on a realistic timeline, because building a Data Connect share is fast. And it avoids the risk of a heavy migration the company did not need. That is the exam's idea of a good answer: not the most technically impressive design, but the one that satisfies the scene with the least risk.
+
+## Config walkthrough: deciding and building the design
+
+Here is the numbered walkthrough the exam expects you to be able to reason through, start to finish.
+
+1. Score the scenario against the decision inputs. For each of the six inputs, process commonality, residency and compliance, data volume, release alignment, cost, and target timeline, name which direction it pushes and how strongly. Record the residency position first, because it can forbid options before the others are weighed.
+
+2. Decide consolidate versus integrate, per entity. A world-class answer does not make one blanket decision. Products may consolidate cleanly into a single master while EU customer Accounts must stay local. For each entity, ask whether the orgs can genuinely unify their process and whether compliance allows the data to move. If both are yes, consolidation is on the table. If either is no, integrate or share.
+
+3. If you are consolidating, pick the path by risk tolerance and residency. Small orgs with little data can big-bang merge in a single cutover. Larger orgs should run a phased, incremental consolidation, one division or region at a time, each with its own migration and cutover, so a failure is contained to one phase. If the orgs cannot fully merge but still need shared master data, use hub and spoke with a global master org and syncing spokes.
+
+4. If you are integrating, define the master per entity and the global key. Every shared entity gets exactly one master org, and every other org treats its copy as read-only for that entity. Give the shared entities an external ID field holding a company-wide key, and use Data Pipelines, Data Connect, or middleware for the sync. The master declaration is what stops the bidirectional write loop.
+
+5. If the need is reporting only, do not merge. Feed a shared warehouse or CRM Analytics datasets from each org, or use zero-copy Data Connect so a central layer queries each org in place. Satisfy the unified analytic view while the orgs stay separate and authoritative.
+
+6. Establish the global customer key map regardless. External IDs on the shared entities, cross-references between orgs, and a global identifier map of which key maps to which record in which org are what make the single customer view real in any multi-org design. Without it, consolidation, integration, and reporting all fail to recognize the customer.
+
+## The three exam traps
+
+Trap one, consolidating solely to get unified reporting. If the only need is a report across orgs, Data Connect, a shared warehouse, or CRM Analytics over shared datasets delivers it without merging anything. Consolidating three orgs to produce a dashboard is a migration-size solution to a reporting-size problem. Unify the analytics, keep the orgs separate.
+
+Trap two, integrating two orgs bidirectionally without a master per entity. If two orgs both write the same shared entity and both push, they overwrite each other forever, an update loop with conflicting writes. Every shared entity needs exactly one master org, and every other org must treat its copy as read-only for that entity, so writes flow in a controlled direction. Duplicate rules and external IDs help identity but do not stop the loop by themselves.
+
+Trap three, underestimating consolidation as just a migration. A consolidation is a full program, not a data move. It changes processes, because two ways of working become one. It changes security, because profiles, sharing, and permissions must be rebuilt in the target org. And it changes every ID, because record IDs are org-specific and break every downstream reference unless you carry external IDs across. Treat consolidation with the program-level planning it demands, or it quietly breaks the business it was meant to fix.
+
+## Try it for yourself
+
+In sandboxes, reproduce the reporting-only decision from the exam. Set up two orgs, give each a set of Accounts, and establish a Data Connect connection or a shared CRM Analytics dataset so a single dashboard queries both. Then try to justify consolidating the orgs to produce that same dashboard and see how much unnecessary work the merge represents. This makes concrete why reporting needs rarely justify a merge.
+
+Then reproduce the hub-and-spoke loop trap. In two sandboxes, set up a bidirectional sync of the Account object without declaring a master, update the same Account in both, and watch the updates fight. Now declare one org as the master for Accounts, make the other read-only for that entity, and confirm the write direction is controlled and the loop stops. This is the exact mechanism the exam's hub-and-spoke question is testing.
+
+Finally, exercise the global key. Give the Account object in both orgs an external ID holding a company-wide identifier, upsert a record by that key, and build a report that joins both orgs' data on the key. Confirm that the single view only becomes coherent once the orgs agree on who the customer is.
+
+## What's next
+
+You can now score a multi-org scenario against the decision inputs, decide when consolidation is preferable to integration and the reverse, run phased or hub-and-spoke consolidation when a merge is called for, satisfy a reporting-only need with Data Connect or a shared warehouse instead of a merge, and establish a global customer key that stitches identities across whatever orgs you keep. Lesson 25 moves from reading the shape of a multi-org setup to reading the data inside it: a GDPR-compliant data model, how to identify, classify, and protect personal and sensitive information, and how to honor the right to erasure (gv-1a). The identity work you just did, the task of knowing which records are the same customer, is where the GDPR classification effort begins.
+
+## Related Requirements
+
+- Lesson 23 of 42 (sm-4a): Consolidating and leveraging multiple Salesforce instances
+- Lesson 28 of 42 (sm-?): Governance implementation scenarios
+
+## References
+
+[^1]: Platform Data Architect exam guide, Salesforce. Outlines the Salesforce Data Management domain and the objective to recommend a design to effectively consolidate and/or leverage data from multiple Salesforce instances, deciding when consolidation is preferable to integration and vice versa. [trailhead.salesforce.com](https://trailhead.salesforce.com/en/credentials/platformdataarchitect/)
+
+[^2]: Enterprise Architecture: Single-org versus Multi-org Strategy, Salesforce Developers blog. Documents that enterprises end up with multiple orgs for reasons including divergent processes, and that the architect assesses each org's process and integration needs when choosing a single-org or multi-org architecture. [developer.salesforce.com](https://developer.salesforce.com/blogs/developer-relations/2014/10/enterprise-architecture-multi-org-strategy)
+
+[^3]: Salesforce Architecture: Single Org vs Multi Org Strategy, LevelShift. Documents that data residency and compliance requirements often force a multi-org design, and that integration rather than consolidation is required when data must live in a specific region. [levelshift.com](https://levelshift.com/blogs/salesforce-architecture-single-multi-org)
+
+[^4]: Salesforce Org Consolidation After M&A: A Playbook, Vantage Point. Documents the drivers for consolidation and its heavyweight, one-time cost profile, and the need to assess the long-term operational and integration overhead of each approach. [vantagepoint.io](https://vantagepoint.io/blog/sf/salesforce-org-consolidation-after-ma-playbook)
+
+[^5]: Connect Multiple Orgs with Data Cloud One, Trailhead. Documents a multi-org architecture strategy that organizes orgs to work together, including a hub-and-spoke style approach where a central org holds shared data and other orgs sync against it, and the per-entity decisions involved. [trailhead.salesforce.com](https://trailhead.salesforce.com/content/learn/modules/data-cloud-one-quick-look/connect-multiple-orgs-with-data-cloud-one)
+
+[^6]: Salesforce Incremental Migration Approach, Salesforce Architects blog. Documents phased or incremental org and data migration, moving a division or region at a time with its own cutover, to reduce the risk of a large single migration. [architect.salesforce.com](https://architect.salesforce.com/decision-guides/incremental-salesforce-org-migration)
+
+[^7]: Differences between the External ID field and the Unique ID field setting, Salesforce Help. Documents that an External ID field references an ID from another system, serves as a bridge between systems, and is used with upsert to match records across systems, which is the identity foundation for org-to-org sync. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000385174&language=en_US&type=1)
+
+[^8]: Data Cloud Zero Copy Connectivity, Salesforce. Documents that zero copy is a data federation technology that lets a central platform access and query data without copying it, and is bi-directional, so a centralized analytics layer can query each org's data in place rather than merging the orgs. [salesforce.com](https://www.salesforce.com/data/connectivity/zero-copy/)
+
+[^9]: What Is Zero Copy?, Salesforce. Documents that zero copy lets you combine data from multiple sources without duplicating it, and supports data sharing to external platforms, which is the mechanism behind a unified analytic view across separate orgs and external stores. [salesforce.com](https://www.salesforce.com/data/zero-copy-partner-network/guide/)
