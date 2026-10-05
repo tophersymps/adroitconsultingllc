@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "keyboard-navigation-focus-management-2026",
+    "title": "Keyboard Navigation Is the Interface Pattern Nobody Tests",
+    "excerpt": "Focus management is the invisible interface pattern every design system implements and almost nobody verifies. WCAG 2.2, roving tabindex, and a test loop.",
+    "category": "UI/UX",
+    "categoryColor": "ux",
+    "categoryGradient": "from-violet to-violet-dark",
+    "date": "October 5, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "11 min read",
+    "featured": false,
+    "tags": [
+      "UI/UX",
+      "Accessibility",
+      "Interface Patterns",
+      "Design Engineering",
+      "WCAG",
+      "Design Systems"
+    ],
+    "bannerImage": "/banners/keyboard-navigation-focus-management-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "secret-sprawl-machine-identity-2026",
     "title": "Rotate or Explode: Secrets Are a Machine-Identity Problem",
     "excerpt": "29M secrets leaked in public commits last year, AI credentials up 81%. The fix is not another vault: short-lived, machine-identity-based credentials.",
