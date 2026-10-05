@@ -1,0 +1,117 @@
+---
+title: "Lesson 60: Caching Strategies: Semantic Caching, Response Caching, and Invalidation"
+slug: caching-strategies-semantic-response-invalidation
+series: "agentic-ai"
+lesson: 60
+excerpt: "Lesson 27 treated caching as a cost lever and stopped there. This lesson treats caching as a correctness problem, which is the harder of the two. It walks the three layers of LLM caching in order of reach and risk: provider prefix caching, exact-match response caching, and semantic caching. It explains the similarity threshold as a precision-versus-recall knob, shows why embedding-close is not meaning-equal, and makes the case that invalidation, not hit rate, is the discipline that separates a cache that saves money from one that quietly serves the wrong answer. A worked example runs a support assistant through all three layers with per-tenant scoping and version-based invalidation."
+date: "October 5, 2026"
+author: "Adroit Consulting"
+readTime: "15 min read"
+tags: [LLMs, AI Agents, Caching, Semantic Caching, Response Caching, Invalidation, Vector Search]
+---
+
+# Lesson 60: Caching Strategies: Semantic Caching, Response Caching, and Invalidation
+
+Lesson 27 gave you the cost argument for caching: do not pay twice for the same answer. Prompt caching knocked the input cost of a stable prefix down by an order of magnitude, and semantic caching meant the same question asked six different ways could hit a store instead of the model. That is the easy half of the story. The hard half is that every cache is a promise to serve an answer you stored earlier, and the moment that stored answer no longer matches what you would generate fresh, the cache stops saving money and starts causing harm.
+
+The one idea to carry out of this lesson: **a cache is only as good as its invalidation.** Speed wins vanish the instant a cache serves a stale or wrong answer, because a fast wrong answer is worse than a slow right one, and it is also harder to notice. Engineers joke that there are only two hard things in computer science, and cache invalidation is one of them, because it is the point where a system you control collides with data that changed somewhere you do not fully see. This lesson gives you the vocabulary to pick the right cache layer, the knob that governs how aggressively any of them matches, and the invalidation pattern that keeps a cache honest.
+
+## The three layers of LLM caching
+
+"Caching" is not one technique. It is three mechanisms that reuse different amounts of a request and carry different amounts of risk. Reaching further up each layer gets you a higher hit rate and a larger safety surface.
+
+**Provider prefix caching** reuses an exact, identical prefix of the prompt, typically the system prompt and tool definitions that repeat unchanged across calls. The provider matches on exact text and bills the repeated portion at a discount. It is automatic, it never serves a wrong answer because it only matches byte-for-byte identical text, and it needs almost no thought beyond keeping your stable prefix genuinely stable. Its ceiling is low: it cannot help when two questions are similar but differently worded. [^1]
+
+**Exact-match response caching** hashes the entire normalized request and returns the stored response when the hash matches a previous one. Identical input yields identical output, so this layer is also safe, but its hit rate is low because real users rarely phrase a question the same way twice. It is the cache you want in deterministic test and development paths where identical requests are expected and a stable, repeatable answer is the point. [^1]
+
+**Semantic caching** is the layer this lesson centers on. It embeds the incoming request into a vector, searches a vector store for the nearest prior request, and if that neighbor clears a similarity threshold, serves the stored response instead of calling the model. This is where the hit rate jumps, because "where is my package?" and "has my order shipped yet?" can share an answer. It is also where the risk arrives, because "similar" is a judgment call made by a threshold, not a fact established by a match. [^1]
+
+Order the three by reach and risk and you get a practical ladder: prefix caching is free and safe, exact-match is safe and rarely fires, semantic caching fires often and is the only one that can confidently serve the wrong thing. Put the first two everywhere for free and treat the third as something you opt into per route.
+
+## How semantic caching works: embed, match, serve
+
+The mechanism is three steps. Embed the incoming request into a vector. Search the vector store for the nearest prior request within the correct scope, never a global search. If the nearest neighbor's similarity is above the threshold, return its stored response; otherwise call the model and store the new request, response, and embedding for next time.
+
+```python
+emb = embed(request.text)                            # a few tens of milliseconds
+hit = vector_store.nearest(emb, scope=tenant_id)     # scoped search, never global
+if hit and hit.score >= THRESHOLD:                   # the knob that governs everything
+    return hit.response, "cache_hit"                 # tens of ms, no model call
+
+resp = call_model(request)                           # a miss means the full model call
+vector_store.put(emb, resp, scope=tenant_id, ttl=TTL)
+return resp, "cache_miss"
+```
+
+On a hit you have replaced a generation, which takes hundreds of milliseconds and costs per token, with an embedding and a vector lookup, which takes tens of milliseconds and costs a fraction. The trade is not free. On every miss you pay the embedding and lookup cost on top of the normal model call, so a cache with a very low hit rate can spend more on embeds than it saves. The economics hinge entirely on the hit rate, and the safety hinges entirely on the threshold.
+
+## The similarity threshold is a precision-and-recall knob
+
+The threshold decides how close a new request must be to a cached one to count as a hit, and it is a straight precision-versus-recall tradeoff. Set it too low, accept loose matches, and the hit rate climbs but you serve answers to questions that were not quite asked. Set it too high, demand near-identical phrasing, and the cache is safe but collapses toward the exact-match layer with extra steps.
+
+There is no universal correct value, because it depends on your embedding model, your domain, and how much a wrong answer costs you. The research gives a sane starting band. The GPT Semantic Cache paper, which uses an in-memory Redis store, reports cache-hit rates between 61.6 and 68.8 percent across workloads, reducing API calls by up to 68.8 percent, with positive-hit accuracy above 97 percent, and finds that pushing the similarity threshold much above roughly 0.8 costs hit rate faster than it buys safety. [^2] Gateway vendors translate that into tiers: 0.95 to 1.0 for strict cases where a wrong hit is costly, 0.85 to 0.95 for balanced conversational assistants, and below 0.85 for exploratory or low-risk routes. [^1]
+
+The way to set it for your own route is empirical, not ergonomic. Build a small labeled set of request pairs that should share an answer and pairs that should not, sweep the threshold, and pick the point where false hits fall to a rate you can tolerate given what a wrong answer costs. High-stakes routes touching money, health, or identity warrant a conservative threshold or no semantic caching at all. Low-stakes informational routes such as documentation Q&A can run looser. A single global threshold across every route is almost always wrong for at least one of them, so set the threshold per route. [^1]
+
+## When semantic caching serves the wrong answer
+
+The core hazard is easy to state and easy to underestimate: embedding-close is not meaning-equal. Embeddings capture topical similarity, not logical equivalence. "What is the capital of France?" and "What is the capital of Germany?" sit extremely close in embedding space, same structure, same domain, one word different, yet they need different answers, and a threshold tuned for recall will treat them as the same question. [^1]
+
+The honest consequence is that a semantic cache can serve one user's data to another. The canonical failure is a personalized answer cached without user scope. Two customers ask semantically identical questions minutes apart, the support assistant embeds both to nearly the same vector, scores a hit, and serves the first customer's answer to the second. That is a privacy incident, not just a wrong answer. The mitigation stack has several layers, and none of them is complete alone. A conservative threshold removes loose matches. Entity and keyword guards add a check that the salient entity, the country, the order number, the product, actually matches before serving a hit, catching the France-and-Germany case that cosine similarity misses. Per-namespace caches keep distinct contexts from colliding. And the most reliable mitigation is upstream: do not cache the classes of request where a near miss is dangerous at all. [^1]
+
+As a default, do not semantically cache personalized responses, whose correctness depends on who is asking. Do not cache time-sensitive answers such as balances, prices, or statuses, which are right at write time and wrong minutes later. Do not cache stateful conversational turns, where the right answer depends on prior turns a single request embedding does not capture. And do not cache high-stakes outputs in money, health, legal, or identity, where the cost of one false hit outweighs the savings from many hits. Those four classes are where the cache loses more than it wins. [^1]
+
+## Cache key design, scoping, and invalidation
+
+A semantic cache entry is not keyed by text alone. It is keyed by an embedding inside a namespace, and the namespace is where correctness is enforced. The namespace should encode everything that makes two textually similar requests genuinely different: the tenant or user for anything user-specific, the model, the system-prompt version, and the active tool set. Two identical questions under different system-prompt versions are different questions, because the instructions that shaped the answer have changed. [^1]
+
+```python
+# Same text in a different namespace is a different entry, on purpose.
+namespace = f"{tenant_id}:{model}:{system_prompt_version}"
+
+# For user-specific answers the user/tenant must be in the namespace, so a
+# lookup can never return another user's cached response.
+vector_store.put(emb, resp, namespace=namespace, ttl=TTL)
+```
+
+Invalidation has two triggers, and you should plan for both. Time, via a TTL chosen for how fast the underlying truth changes: short for anything that drifts, longer for stable reference answers. And version, via the namespace. Bumping the system-prompt version or changing the tool set rolls the cache forward, so stale answers from the old configuration are never served. The failure to invalidate on a prompt change is a subtle and common bug: the prompt improves, but cached answers keep reflecting the old one until their TTL expires, and a reviewer reading the answers believes the prompt still has the old behavior. [^1]
+
+## The invalidation discipline, as a numbered pattern
+
+A safe caching rollout follows a sequence that front-loads the correctness work and treats invalidation as a first-class requirement rather than a cleanup task.
+
+1. Classify every route before you cache it. Label each one as cacheable or not, and for the cacheable ones, name the risk class: low-stakes reference answers, conversational, personalized, time-sensitive, or high-stakes. The "never cache" classes drop out here, before any store is built.
+2. Pick the layer per route. Exact-match response caching for deterministic paths and development environments where identical requests are expected. Semantic caching only for the low-stakes, non-personalized, non-time-sensitive routes you just classified.
+3. Encode the scope and version into the namespace. Put tenant, model, and system-prompt version into every key, so a prompt change or a tenant boundary is respected without hunting for entries to evict.
+4. Set the threshold empirically per route. Use a labeled pair set and sweep, starting from the 0.85-to-0.95 conversational band, and set a higher bar or no semantic cache for anything close to high-stakes.
+5. Choose TTLs by how fast the truth changes. Stable reference answers can live an hour or more; anything that reflects changing state gets a short TTL or no cache at all.
+6. Instrument the hits. Return the cache status and similarity score on every response, and watch the false-hit rate alongside the hit rate, because a rising hit rate without a check on correctness is a red flag, not a win.
+
+The pattern's spine is that invalidation is designed in at step three and four, before a single entry is written, rather than bolted on after a wrong answer surfaces in production.
+
+## Where the cache lives: gateway versus application
+
+A semantic cache can live in the application, but the gateway is the stronger default. The gateway already sits on every request, so the cache is shared across services instead of reimplemented in each, and it already holds the cost, latency, and hit-rate telemetry needed to tell whether the cache is paying off. The division of labor is the one that recurs across this series: the gateway owns the mechanics, the scoped store, and the observability, while the application owns the policy, which routes are safe to cache and at what threshold, because only the application knows that "where is my delivery?" is personalized and "what is your return window?" is not. [^1]
+
+## Worked example: three layers on a support assistant
+
+Northwind Support runs three routes through one gateway, and each gets the layer it deserves. The account-history route is personalized, so it takes no semantic cache at all.
+
+Route A, the product FAQ, is low-risk reference material. It runs semantic caching with a threshold near the middle of the conversational band, a per-tenant namespace so two tenants never see each other's stored answers, and a one-hour TTL. A customer asks "do you offer bulk pricing?" and five minutes later another asks "is there a volume discount?", the embeddings land near each other, the similarity clears the threshold, and the second customer gets the cached answer in tens of milliseconds with no model call. The hit rate here is high and the stakes are low, so loose matching is fine.
+
+Route B, per-tenant support, is conversational and touches account details. It runs semantic caching with a stricter threshold, a namespace that includes the tenant and the system-prompt version, and a short TTL. When the team ships a prompt v2 that changes how refund eligibility is explained, the namespace bumps from tenant:support:v1 to tenant:support:v2, and every cached v1 answer is simply never matched again. The prompt improves, and no stale refund answer survives the change to keep contradicting it.
+
+Route C, the staging environment, runs exact-match caching only. Test automation sends deterministic requests, identical hashes recur, and the tests get stable repeatable answers. No embedding, no threshold, no risk of a near miss in a place where reproducibility is the goal.
+
+The bill drops because the high-volume FAQ is served from the store. The correctness holds because the personalized route is not cached, the cross-tenant collision is blocked by the namespace, and the prompt change is handled by the version bump rather than by hoping a TTL expires before anyone asks.
+
+## Summary
+
+Caching is a spectrum with a speed-versus-safety tradeoff at every step. Prefix caching is free and safe and only matches identical text. Exact-match response caching is safe and rarely fires. Semantic caching fires often and is the only layer that can confidently serve the wrong answer. The similarity threshold is a precision-and-recall knob you tune per route, and the invalidation discipline, TTLs plus version bumps encoded in the namespace, is what keeps a cache from outliving the truth it was written to. Classify routes, pick a layer, scope and version the keys, set the threshold empirically, and instrument the hits, and caching becomes a quiet cost and latency win instead of a trap that serves last week's answer with total confidence.
+
+## What's next
+
+The next lesson, Lesson 61, is agent memory at scale: vector memory, knowledge graphs, and hybrid stores. A cache is a short-lived store keyed by similarity, and memory is the long-lived version of the same instinct, the system that lets an agent recall what it learned and decide what to keep. Where caching answers "have I seen this exact or near-exact request before?", agent memory answers "what do I know, and how do I find it when I need it?", at the scale of a whole organization rather than a single repeat query.
+
+[^1]: Boyu Wang, "Semantic Caching for LLMs: Cutting Cost and Latency Beyond Prefix Caching," TrueFoundry, covering the three cache layers, the similarity-threshold precision/recall tradeoff and its per-route guidance, the embedding-close-is-not-meaning-equal failure mode, the never-cache list, and the namespace-based scoping and invalidation pattern: https://www.truefoundry.com/blog/semantic-caching-ai-gateway
+[^2]: Mansi, "GPT Semantic Cache: Reducing LLM Costs and Latency via Semantic Embedding Caching," arXiv (2024), reporting cache-hit rates of 61.6 to 68.8 percent, API-call reductions of up to 68.8 percent, positive-hit accuracy above 97 percent, and the finding that a similarity threshold near 0.8 balances hit rate against safety: https://arxiv.org/abs/2411.05276
