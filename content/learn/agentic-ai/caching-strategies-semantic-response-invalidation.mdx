@@ -28,6 +28,8 @@ The one idea to carry out of this lesson: **a cache is only as good as its inval
 
 Order the three by reach and risk and you get a practical ladder: prefix caching is free and safe, exact-match is safe and rarely fires, semantic caching fires often and is the only one that can confidently serve the wrong thing. Put the first two everywhere for free and treat the third as something you opt into per route.
 
+![The three layers of LLM caching form a ladder: prefix caching is free and safe, exact-match is safe but rarely fires, and semantic caching fires often and is the only layer that can confidently serve the wrong answer](</diagrams/caching-strategies-semantic-response-invalidation/1-three-layers-ladder.png>)
+
 ## How semantic caching works: embed, match, serve
 
 The mechanism is three steps. Embed the incoming request into a vector. Search the vector store for the nearest prior request within the correct scope, never a global search. If the nearest neighbor's similarity is above the threshold, return its stored response; otherwise call the model and store the new request, response, and embedding for next time.
@@ -44,6 +46,8 @@ return resp, "cache_miss"
 ```
 
 On a hit you have replaced a generation, which takes hundreds of milliseconds and costs per token, with an embedding and a vector lookup, which takes tens of milliseconds and costs a fraction. The trade is not free. On every miss you pay the embedding and lookup cost on top of the normal model call, so a cache with a very low hit rate can spend more on embeds than it saves. The economics hinge entirely on the hit rate, and the safety hinges entirely on the threshold.
+
+![Semantic caching runs three steps: embed the request, search the vector store within the correct scope, then check the similarity threshold to decide between serving the stored response on a hit or calling the model on a miss](</diagrams/caching-strategies-semantic-response-invalidation/2-embed-match-serve.png>)
 
 ## The similarity threshold is a precision-and-recall knob
 
@@ -75,6 +79,8 @@ vector_store.put(emb, resp, namespace=namespace, ttl=TTL)
 ```
 
 Invalidation has two triggers, and you should plan for both. Time, via a TTL chosen for how fast the underlying truth changes: short for anything that drifts, longer for stable reference answers. And version, via the namespace. Bumping the system-prompt version or changing the tool set rolls the cache forward, so stale answers from the old configuration are never served. The failure to invalidate on a prompt change is a subtle and common bug: the prompt improves, but cached answers keep reflecting the old one until their TTL expires, and a reviewer reading the answers believes the prompt still has the old behavior. [^1]
+
+![Invalidation by version bump: the namespace encodes tenant, model, and system-prompt version, so bumping the version rolls the cache forward and stale answers from the old prompt are never matched again](</diagrams/caching-strategies-semantic-response-invalidation/3-version-bump-invalidation.png>)
 
 ## The invalidation discipline, as a numbered pattern
 
