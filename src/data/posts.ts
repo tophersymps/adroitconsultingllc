@@ -2,6 +2,28 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "on-device-small-language-models-2026",
+    "title": "How Small Can an LLM Get? The 2026 On-Device Tradeoff",
+    "excerpt": "Sub-billion-parameter models now run real inference on a phone. Memory bandwidth is the real bottleneck, and quantization gives back speed up to a cliff.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "October 06, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "10 min read",
+    "featured": false,
+    "tags": [
+      "AI Infrastructure",
+      "On-Device AI",
+      "Model Quantization",
+      "LLM Optimization",
+      "Edge Computing"
+    ],
+    "bannerImage": "/banners/on-device-small-language-models-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "handover-hypercare-exit-criteria-2026",
     "title": "Handover and Hypercare: Closing a Consulting Engagement",
     "excerpt": "An engagement ends not at go-live but the day the client can run the system without you. The handover, runbooks, and hypercare window are what close the work.",
