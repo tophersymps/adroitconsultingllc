@@ -1,0 +1,128 @@
+---
+title: "Lesson 60: Presenting AI System Designs with the Same Review Skills"
+slug: presenting-ai-system-designs-review-skills
+series: "salesforce-architect"
+lesson: 60
+excerpt: "The review skills from lesson 59 transfer to a new target: an AI system design, where the unit under review is a machine-learning pipeline or an autonomous agent instead of a deterministic integration. This lesson works through what changes how you present such a design, from leading with an evaluation plan instead of a feature list, to defending a system that behaves probabilistically, to carrying severity-tiered release gates that decide what ships. A worked example walks an agent service desk design through review, and a try-it prompt has you preparing your own two-minute AI design brief."
+date: "October 6, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [AI, Architecture, Review, Evaluation, Salesforce]
+---
+
+Reviewing a design is a skill you already own. Lesson 59 gave you the machinery: the board, the prepared alternatives, the honest tradeoff defense, the on-the-record decision. That machinery is agnostic. It does not care whether the whiteboard shows a Heroku integration or a data pipeline, a MuleSoft flow or an agent that books appointments. The discipline of presenting a design under hard questions, and documenting the decision so it survives the room, transfers unchanged.
+
+What does not transfer unchanged is the thing being reviewed. An AI system design is not a deterministic integration wearing a different label. It behaves probabilistically, its quality is not a property you can read off a class descriptor, and its worst failures happen after a green status in the logs. Presenting such a design well means knowing what changed, and leading your review with the artifacts that answer the questions deterministic designs never raise.
+
+This lesson is the bridge between lesson 59's review discipline and the general systems architecture strand of the exam. It is not a rehash of the board. It is about what you, the architect presenting an AI design, must bring to that board so the review is real rather than ceremonial.
+
+## The core shift: you defend an evaluation, not a feature
+
+When you present an integration, you stand behind an interface contract, a data flow, and a set of functional requirements. You can point at a changed method and say, this is the behavior. A reviewer can reason about it because the behavior is repeatable. Put the same input in twice, you get the same output twice.
+
+An AI system does not work that way. Its output is sampled from a distribution, not computed from an axiom. The same prompt can produce a different answer on two runs. That is not a defect, it is the nature of the system, and it changes the entire shape of your defense. You cannot present the system's behavior, because it has no single behavior. You can only present the system's *expected* behavior, and that expectation is only as trustworthy as the evaluation that produced it.
+
+This is why the first thing a strong presenter brings to the board is not a demo but an evaluation plan. AWS's team, writing about evaluating the agentic systems they built at Amazon, is blunt on the point. They argue that evaluating an AI agent requires a fundamental shift from assessing the final output of a black box to assessing the emergent behavior of the whole system: how well it selects tools, whether its multi-step reasoning stays coherent, how efficiently it retrieves memory, and how often it completes the task at all. [^1] A single accuracy number on one prompt is not a review artifact. It is a screenshot.
+
+So when you present an AI design, your opening is not "here is what it does." Your opening is "here is the evidence that it works, how I gathered that evidence, and where that evidence has holes." That inversion, from feature-led to evaluation-led, is the single biggest change in how you talk about an AI system in a review.
+
+## A healthy mistrust of the green checkmark
+
+The reason evaluation-led presentation matters is that the logs lie in a way that is specific to AI. Salesforce's team studied transcripts of agent interactions that the system itself had flagged as successful. When they read the actual conversations, they found that nearly one in seven of those "successful" sessions had actually failed the user. [^2] The user did not get what they needed. They got a technically plausible response that did not move their task forward, or took too long, or was too much work to verify. The system said win. The user experienced loss.
+
+Salesforce calls these phantom successes, and they are the reason an AI design review cannot stop at "the unit tests pass." A deterministic system either does the thing or it does not, and you can see which. An AI system can appear to do the thing while quietly failing the only person who matters, and the failure is invisible in the telemetry that would catch it in a normal integration. [^2]
+
+The presenter's job is to surface this category of risk before the board has to discover it in production. You do that by being honest, up front, that "the user got an answer" and "the user got what they needed" are two different measurements, and that your evaluation counts the second one. That is not a weakness in your design. It is the difference between talking about a system you measured and talking about a system you assumed.
+
+## What you actually present: the evaluation stack
+
+Because an AI system has no single behavior to defend, you defend a stack of evidence instead. This is the structure an experienced reviewer wants to see, and it maps cleanly onto how the Amazon teams decompose evaluation into layers.
+
+AWS's framework evaluates an agent at three levels. The bottom layer benchmarks the underlying models to see how different models affect the agent's quality and latency. The middle layer evaluates the agent's components: intent detection, multi-turn conversation, memory, reasoning and planning, and tool use, checking whether the agent understands the user, whether its plan is sound, and whether it picks and executes tools correctly. The upper layer assesses the final response, task completion, whether the system meets the goal of the use case, and the responsibility and safety, cost, and customer experience impacts. [^1]
+
+You present against that stack, not just at the top of it. A reviewer who only asks "does it answer right?" is probing one layer. The design you present has to answer at three:
+
+- **The model layer.** What model underlies the system, and how does it perform on the specific task? What did you benchmark, and against what baseline?
+- **The component layer.** Does the agent detect intent correctly? Does it pick the right tool? Does it remember context across turns? This is where most AI designs actually fail, and where an evaluation that only looks at final output misses the problem.
+- **The outcome layer.** Did the user's goal get met? Was the response safe? What did it cost, in both money and user effort?
+
+Presenting only the top layer is the fastest way to lose a board that knows what it is doing. Presenting all three, and being honest about which is weakest, is how you earn the room.
+
+## The tool-use story is where the design lives
+
+Of the three layers, tool use deserves specific attention in a review because it is where an otherwise sensible design tends to fall apart, and where you can point at a concrete failure mechanism. An AI agent that calls tools, whether that is a Salesforce flow, a database query, an external API, or another subordinate agent, depends entirely on choosing the right tool and calling it correctly. Get that wrong and the whole thing unwinds.
+
+The Amazon team learned this the hard way across hundreds of tool integrations. When a tool's schema and its semantic description are poorly defined, the agent makes wrong tool-selection decisions. It invokes irrelevant APIs, which needlessly expands the context window, increases latency, and drives up compute cost through redundant model calls. [^1] The failure is not in the model's reasoning alone. It is in the contract between the model and the tools it can call, where a vague description of what a tool does is indistinguishable, to the agent, from a correct one.
+
+This gives the architect something concrete to defend in review: the tool contracts. You present not just "the agent can update cases," but the schema and the semantic description of each tool, how you wrote them so an agent picks the right one, and how you tested that selection under realistic inputs. When a board asks "how do you stop it calling the wrong API?", the honest answer starts with the tool descriptions you authored and the evaluation that exercises them. [^1]
+
+## Severity tiers as your review vocabulary
+
+The trickiest thing to present in an AI design review is that failures are not binary. A deterministic bug is either fixed or it is not. An AI system has a spectrum of failure, and a good presentation names that spectrum so the board can reason about what is acceptable.
+
+Salesforce's team gives a vocabulary that is directly useful at a review table: they classify agent failures into three severity tiers, and you can present your design using exactly those tiers.
+
+- **P0, trust-breaking failures.** The agent gives a wrong answer or fails to respond at all. A legal agent confidently reciting an outdated contract term is the canonical example, and the risk is not the single error, it is that the user loses faith in the whole system. [^2] These fail loudly, and they must be caught before anything ships.
+- **P1, intent failures.** The agent is technically accurate but not useful. It ignored a piece of the input, misunderstood what the user wanted, or never asked for clarification when the request was ambiguous. These failures block adoption because they force the user to do the mental work the AI was supposed to save them. [^2]
+- **P2, friction and overhead.** The agent returns the right answer in the wrong way. A long unformatted block on mobile, a link where the user wanted a summary, an extra confirmation loop that was never needed. These do not break the system, but they raise cognitive load and, accumulated over time, push users back to their old workflow. [^2]
+
+In front of a board, these tiers turn "is it good enough?" from an argument into a measurement. You do not claim the system is flawless. You claim, with evidence, that P0 failures are caught before deployment, P1 failures are at an acceptable measured rate and understood, and P2 friction is actively being reduced. That is a reviewable statement, because each clause is false until you prove it with an evaluation result.
+
+## Turning quality into a release gate
+
+The most important thing a presenter can do is encode quality as a gate rather than just report it. Salesforce treats these severity tiers as release gates, and that is the model to present. A declared threshold is something the board can hold you to; an aspiration is not. [^2]
+
+So in your design brief you do not say "we want it to be accurate." You say P0 failures block deployment, meaning if a factual error or safety violation shows up at any stage, you stop, and if the agent is already live you pull it. P1 failures block scale, meaning you do not open the doors to more users while a pilot shows the agent leaving people hanging. P2 failures block adoption, meaning you treat accumulated friction as a feature failure even though it never crashes. [^2]
+
+This framing also decides what the review approves. You are not asking the board to bless a finished artifact. You are asking it to bless the gates: the thresholds, the measurement methods, and the authority to stop. That is a much more honest thing to review, because it is the thing the board can actually hold you to in six months when the agent is in production.
+
+## The role of the human in the loop
+
+There is a temptation, in an AI presentation, to imply the system evaluates itself and therefore you are done. That is the wrong note to strike. Every credible evaluation framework keeps a person in the decision loop, and you should present that as a design feature, not an admission.
+
+The Amazon teams treat human-in-the-loop validation as essential, and for a reason useful in a review: it is what calibrates the automatic evaluation itself. A human reviews reasoning chains, checks whether the multi-step workflow stays coherent, and verifies the agent's behavior aligns with the business requirement. Those human judgments become the ground truth labels that train the golden test set, and they calibrate the very judge that scores the automated evaluation so it aligns with what humans actually prefer. [^1]
+
+Present a credible HITL mechanism and you answer the question every skeptical reviewer wants to ask: "who checks the checker?" The answer is a named role, on a cadence, with authority. Not "the AI is self-assessing, trust it."
+
+## Automation that scales review, not replaces it
+
+A related point: evaluating an AI system thoroughly is expensive, and the design has to say how you afford it. Manually reading transcripts is not sustainable at production volume, and a naive presenter gets stuck between "we do not evaluate enough" and "we cannot afford to evaluate more."
+
+The mechanical answer is an LLM-as-judge pipeline, where a model scores conversations against a rubric far faster than a human can read them. Salesforce's team reports that running conversations through such a pipeline cut a session review from about thirty minutes to a few seconds, which is what lets them hold a high quality bar across thousands of interactions. [^2] But note the crucial qualifier in their description: the automation does not remove the human from the strategic loop. [^2] The judge is fast, and the human still owns the judgment.
+
+In a review, state that split explicitly. You present the throughput the automation buys, and the human authority the automation does not replace. That combination, fast and human-audited, is what makes an evaluation plan both credible and affordable, and it answers "how do you keep this bar at scale" without pretending the answer is free.
+
+## Worked example: reviewing an agent service desk
+
+Walk it through so the abstract pieces attach to something concrete. Suppose you are presenting an AI agent that triages and resolves routine case-submission problems for a service organization: password resets, access requests, and straightforward status questions.
+
+Your opening is not a demo of it answering a question. It is an evaluation plan. You state that you benchmarked the candidate model against two alternatives on a set of two thousand anonymized historical cases, and that the chosen model wins on intent detection and tool-selection accuracy while being slightly slower, a tradeoff you accepted for correctness. [^1] You are already presenting the bottom and middle layers, and you have named a tradeoff and owned it, which is exactly what a board wants to hear.
+
+A board member pushes you on the phantom-success problem. [^2] You do not deflect. You say you read the transcripts of sessions the logs marked successful, that your evaluation found several of them had not actually resolved the user's ticket, and that you classified those. The ones where the agent gave a plausible-but-wrong instruction are your demonstrated P0 trigger. The ones where it misunderstood an ambiguous request are your demonstrated P1.
+
+You then show the gates. P0 blocks deployment, and you give the evidence that nothing with a factual error reaches the user. P1 blocks scale, and you name the measured rate at which the agent leaves a user hanging, and what it would take to widen the rollout. P2, friction, you present as a live reduction target based on the friction heuristics you score every session against. [^2]
+
+The board asks about the tool that resets passwords, and how you keep the agent from calling the wrong endpoint against a member. You answer with the tool-contract story: the schema and description you wrote, and the evaluation that exercises tool selection against realistic inputs, catching the failure mode Amazon documented where vague descriptions drive the agent to the wrong tool. [^1]
+
+Finally, when the board asks who checks the judge, you name the service operations lead who audits a sampled subset of scored sessions weekly, and whose rulings keep the automatic scorer honest. [^1] You close your time. You answer the questions with evidence you gathered, and you name the two things you do not yet know and the window in which you will find them out. That is what presenting an AI design looks like.
+
+## A word on when the board overreaches
+
+Presenting AI carries one more risk the integration worldview does not: reviewers who do not yet understand the system will reach for false precision, and so will you, if you are not careful.
+
+A board member with a deterministic mental model may demand a single "accuracy" number and treat it as the whole verdict. You should not supply that number as if it settled anything, because no such number captures the three evaluation layers, and a number without its evaluation context is actively misleading. The honest move is to refuse the false precision and redirect to the layers this lesson lays out. [^1] Similarly, resist the urge to inflate a single strong benchmark result into a general claim. A score on one curated dataset is one data point about one layer, not a statement about the system in production.
+
+The discipline here is the same honesty lesson 59 taught about numbers you do not have. It just takes a sharper form, because with AI the numbers that look like they exist are often composites that obscure the real failure modes. Say what you measured, at which layer, on which data, and what it does not cover. [^1]
+
+## Try it
+
+Write a two-minute design brief for an AI agent you could actually build in a Salesforce context, and present it as if the board is in front of you. Make it a case-resolution agent, a lead-qualification agent, or a support-triage agent, and hold yourself to the structure in this lesson.
+
+Your brief must name, in two minutes of speech, the three evaluation layers and what you measured at each, the tool contract that is most likely to fail and how you tested tool selection, your P0, P1, and P2 definition with a concrete example of each of the two higher tiers, your release gates, and your human-in-the-loop authority. [^1][^2] Then read it back and mark every sentence that needs evidence you do not yet have. Those gaps are what the review is for, and naming them honestly, rather than filling them with assumed numbers, is the whole point.
+
+## What's next
+
+You can now present an AI system design with the same review skills you built for deterministic systems, leading with an evaluation plan, defending across three layers, and encoding quality as a release gate. The next lesson changes register completely: it shifts from presenting single designs to the shape of the exam itself, covering what the Salesforce Certified Technical Architect path takes, the domains it examines, and the design scenario format you will face. That is the first step toward turning everything in this course into a credential.
+
+[^1]: AWS Machine Learning Blog. [Evaluating AI agents: Real-world lessons from building agentic systems at Amazon](https://aws.amazon.com/blogs/machine-learning/evaluating-ai-agents-real-world-lessons-from-building-agentic-systems-at-amazon/)
+[^2]: salesforce.com. [Why Technical Accuracy is the Wrong Metric for Agent Success](https://www.salesforce.com/blog/measure-ai-agent-success/)
