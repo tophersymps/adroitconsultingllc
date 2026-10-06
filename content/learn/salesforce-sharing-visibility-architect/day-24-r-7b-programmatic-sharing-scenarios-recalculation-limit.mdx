@@ -34,6 +34,8 @@ Second, external data. Access that depends on information that lives outside Sal
 
 Third, rules too complex for the share-rule builder. When the access requirement needs a cross-object span, an aggregation across many related records, or a chain of conditions the click-based builder cannot express in one rule, declarative reaches its ceiling. The rule builder is deliberately simple; it shares one object to one group based on one criteria. A requirement that must weigh data from several objects to decide each grant is beyond it.
 
+![Three families of need break the declarative layer: runtime-computed logic, external data, and rules too complex for the share-rule builder, each with why the rule fails, and the deciding question that routes to declarative or Apex managed sharing.](</diagrams/day-24-r-7b-programmatic-sharing-scenarios-recalculation-limit/1-three-families-declarative-fails.png>)
+
 When the requirement falls into one of these three, declarative sharing fails, and Apex managed sharing is the tool to reach for. The deciding question you should ask in any scenario is: can a criteria-based sharing rule, a public group, a team, or a change to OWD express this grant? If yes, declarative is almost always the better answer. If no, because the deciding condition is computed, external, or too complex, you write the grant yourself.[^2]
 
 ## Apex managed sharing is the answer when the rule builder cannot
@@ -58,6 +60,8 @@ Think about what happens if you ignore that. An integration field names user A a
 
 The term the exam uses for keeping this in sync is recalculation: the periodic or event-driven recomputation of what the correct set of share rows is, followed by the actual inserts and deletes that make the physical table match the computed answer. For a rule, recalculation is free and automatic. For managed sharing, recalculation is your code's job, and it is the price you pay for the flexibility to express grants the rules cannot.[^5]
 
+![Sharing rules are platform-recalculated and self-healing, while Apex managed share rows are physical and persistent, so recalculation is the code's job and neglecting it creates a phantom grant.](</diagrams/day-24-r-7b-programmatic-sharing-scenarios-recalculation-limit/2-rules-vs-managed-recalculation.png>)
+
 ## The compute-diff-reconcile pattern: keep the table minimal and correct
 
 When a grant is data-derived, the recurrence is the whole game. The pattern that keeps a managed-sharing system correct and bounded has three steps, and you should be able to describe them cold.
@@ -68,6 +72,8 @@ Second, diff against the existing set. Query the current managed share rows for 
 
 Third, reconcile the delta. Insert the rows that are new, delete the rows that are stale, in the same transaction, batching both operations. The insert list and the delete list are never empty at the same time in a data-change-driven run: a change that adds a grant for user B usually invalidates one for user A, so you delete A's row in the same pass that you insert B's.
 
+![The compute-diff-reconcile pattern: compute the desired set, diff it against the existing set filtered by custom RowCause, then reconcile the delta with batched inserts and deletes in one transaction, keeping the table minimal and correct.](</diagrams/day-24-r-7b-programmatic-sharing-scenarios-recalculation-limit/3-compute-diff-reconcile.png>)
+
 The reason this pattern matters for both correctness and limits is that it touches only what changed. You do not delete and reinsert every share, which would churn the table and burn DML. You do not insert unconditionally, which would create duplicates and bloat the table. You reconcile the delta, and the table stays minimal because it always expresses exactly the current computation.
 
 ## Governor limits: why the delta approach is not optional
@@ -77,6 +83,8 @@ The compute-diff-reconcile pattern is not just tidy; it is how you stay inside A
 The trap is the per-record trigger. A common but wrong design puts a share insert in a trigger body that fires once per record, or loops over each record and does a DML per record. With a batch of records in one operation, that can mean hundreds or thousands of individual DML calls. Apex caps the number of DML statements you can issue in a single transaction, and one-per-record inserts in a loop smash into that wall almost immediately. Even when they do not crash, they create share rows in a tight loop, one distinct statement churning the table, which is both slow and wasteful.
 
 The alternative, which the exam rewards, is to compute the delta and insert or delete in batches within one transaction. Building the entire list of new share rows and inserting them with a single insert statement, and building the entire list of stale rows and deleting them with a single delete statement, uses far fewer DML statements and stays comfortably inside the governor. The batching is what makes the sharing volume low and the DML spend low at the same time.
+
+![Per-record trigger-managed sharing blows the per-transaction DML governor, while computing the delta and inserting or deleting in batches within one transaction stays inside the limits, with a batchable class resetting governors per chunk.](</diagrams/day-24-r-7b-programmatic-sharing-scenarios-recalculation-limit/4-per-record-vs-batched-delta.png>)
 
 Let me also name the wrong answers on this question so you are ready. Inserting shares in a per-record trigger unconditionally is exactly the pattern that bloats the sharing table and hits the limits. Using a different RowCause per record has nothing to do with volume or DML; RowCause is a tagging field, and scattering distinct causes per record makes cleanup harder, not easier. Only ever deleting and never inserting cannot satisfy a grant requirement at all. The best answer is always the one that reconciles the delta in batches within a single transaction.
 
@@ -119,6 +127,8 @@ A sharing rule cannot express this. The deciding input, the manager who should o
 The design. A nightly batch job pulls the tier-to-manager mapping from the integration, resolves each tier to its manager's user ID, and reconciles the CaseReview__Share table. For each case, the desired set is one Edit share for the user who manages the case's Tier__c. The batch queries all CaseReview__Share rows tagged with a custom RowCause, ManagerAccess__c, diffs them against the computed desire, inserts the rows that are new (manager changed, or a new case entered a tier), and deletes the rows that are stale (the old manager for a case whose tier moved). One batch, one transaction set of batched DML, and the table always matches the latest external mapping.
 
 Now trace a single case. It sits in tier two, mapped to a manager we will call Amara, so the batch grants Amara Edit access via a row tagged ManagerAccess__c. The risk platform recalibrates, tier two's case moves to tier four, and the mapped manager for tier four is Denis. Tonight's run computes the desire: the case should be visible to Denis, not Amara. The diff finds the Amara row is now stale and the Denis row is missing. The batch deletes the Amara row and inserts the Denis row in the same run. Amara loses access she no longer needs, Denis gains exactly the access he needs, and the CaseReview__Share table holds precisely one managed row per qualifying case, nothing redundant, nothing stale.[^6]
+
+![The risk-tier analyst example: a case in tier two is granted to Amara, recalibration moves it to tier four, the diff finds Amara stale and Denis missing, and the batch deletes Amara and inserts Denis in the same run.](</diagrams/day-24-r-7b-programmatic-sharing-scenarios-recalculation-limit/5-risk-tier-analyst.png>)
 
 That is recalculation working. If the batch instead only inserted and never deleted, Amara would keep access to tier-two cases long after tier two left her remit, a phantom grant nobody decided on. The symmetric insert-and-delete is what keeps access current and the table bounded, and it is the exact behavior the exam's recalculation questions reward.
 
