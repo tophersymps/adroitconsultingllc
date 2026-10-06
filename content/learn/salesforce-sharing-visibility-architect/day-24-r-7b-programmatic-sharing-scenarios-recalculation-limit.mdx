@@ -1,0 +1,154 @@
+---
+title: "Programmatic-Sharing Scenarios, Recalculation, Limits, and When Declarative Fails"
+slug: day-24-r-7b-programmatic-sharing-scenarios-recalculation-limit
+series: salesforce-sharing-visibility-architect
+lesson: 24
+excerpt: "Given a scenario, determine when programmatic sharing is required and how to keep it correct and bounded. Covers when declarative sharing fails and Apex managed sharing is the only answer, why recalculation of managed shares is the code's responsibility, the DML and governor limits that bound the work, and the compute-diff-reconcile design pattern that keeps the sharing table minimal."
+date: 2026-10-06
+author: Adroit Learning
+readTime: 16
+tags:
+  - programmatic sharing
+  - apex managed sharing
+  - recalculation
+  - governor limits
+  - delta reconciliation
+  - sharing scenarios
+  - when declarative fails
+  - row cause
+---
+
+Yesterday you learned to write a single managed share row: the mechanics of the Share object, RowCause, and the Modify All Data requirement. Today the exam stops asking you to write one row and starts asking you to run a whole system of them correctly. The requirement for this lesson is: given a scenario, determine when programmatic sharing is required and how to keep it correct and bounded.[^1]
+
+That second half, "keep it correct and bounded," is what separates someone who copied a snippet from someone who can architect sharing. Writing a Share row is easy. Knowing when declarative cannot do the job, and then keeping the rows you write correct as data changes and bounded against governor limits, is the architect-level skill this lesson tests.
+
+## When declarative fails: the trigger for writing sharing in code
+
+Sharing rules express a fixed relationship. A criteria-based sharing rule says: when a record's field values match these criteria, grant this public group this access level. That works beautifully when the criterion is a value at rest, sitting in a field, unchanged by computation. The rule builder reads the field, evaluates the match, and the platform recalculates the grant whenever records change. No code anywhere.[^2]
+
+The problem appears the moment access depends on something the rule builder cannot see. There are three families of need that break the declarative layer, and the exam wants you to name each of them.
+
+First, runtime-computed logic. Access that depends on a value you only know at runtime, when the code or a process runs, defies a static rule. The value is not in the record; it is computed by walking a relationship, calling a service, or assembling data from several places. A sharing rule cannot call a method. It can only compare stored fields.
+
+Second, external data. Access that depends on information that lives outside Salesforce, data a third-party integration holds, cannot be matched by the rule builder at all. A rule is a point-in-time field comparison against records that exist in the org. If the deciding factor is a score, a status, or a membership value that arrives from an external system, the rule builder has nothing to match against. The code that receives the external data has to translate it into a share.
+
+Third, rules too complex for the share-rule builder. When the access requirement needs a cross-object span, an aggregation across many related records, or a chain of conditions the click-based builder cannot express in one rule, declarative reaches its ceiling. The rule builder is deliberately simple; it shares one object to one group based on one criteria. A requirement that must weigh data from several objects to decide each grant is beyond it.
+
+When the requirement falls into one of these three, declarative sharing fails, and Apex managed sharing is the tool to reach for. The deciding question you should ask in any scenario is: can a criteria-based sharing rule, a public group, a team, or a change to OWD express this grant? If yes, declarative is almost always the better answer. If no, because the deciding condition is computed, external, or too complex, you write the grant yourself.[^2]
+
+## Apex managed sharing is the answer when the rule builder cannot
+
+Let me name the tool directly, because the first quiz question turns on it. When access depends on a value computed from an external integration, and the share-rule builder cannot express that condition, the correct solution is Apex managed sharing with a scheduled or triggered reconciliation of the Share rows.[^3]
+
+That is a precise, two-part answer, and the exam rewards both halves. The first half is the mechanism: Apex managed sharing inserts rows into the object's Share table to grant a user or group access to a record. The sharing-rule builder cannot do this because it has no vocabulary for a runtime value. The second half is the stewardship: because the grant is computed from data that changes, the code must reconcile the rows, adding the ones that newly qualify and deleting the ones that no longer do. A single unconditional insert is not the answer; a reconciliation loop that keeps the rows matching the current data is.
+
+Now I want to preempt the tempting wrong answers on the exam. A criteria-based sharing rule fails because there is no static criteria to match: the deciding value is computed, not resting in a field. Making the object Public over-exposes every record to every user, granting access far beyond what the requirement asks. An Account Team is a declarative, team-based sharing mechanism tied to the account's team; it has no way to express a condition computed from a third-party value. Of the options, only Apex managed sharing with reconciliation code can translate a runtime-computed condition into a per-record grant and keep it current.
+
+This is also the moment to remember the rule from yesterday that constrains all of this. Apex managed sharing can only grant access; it can never restrict it. Share rows add to the union of grants and never remove anything. So the scenario this lesson serves is always a grant-side requirement: users who must gain access that declarative cannot express. If a scenario is about hiding records, Apex managed sharing is the wrong tool regardless of how dynamic the data is.[^4]
+
+## Recalculation is the code's responsibility, not the platform's
+
+Here is the divide that makes managed sharing a discipline rather than a one-liner. Sharing rules are platform-recalculated. When a record leaves a rule's criteria, the platform automatically deletes the rule-generated share row; when it enters the criteria, the platform adds it. The recency of the grant is maintained for you, invisibly, by Salesforce. Declarative sharing is self-healing by construction.[^2]
+
+Apex managed sharing gets none of that. A managed share row is a physical row you inserted, and it persists until something deletes it. No platform process watches over it. If the data that justified the grant changes, the row does not change; it sits there, granting access that the current state of the data no longer warrants. The platform will not clean it up for you, object-level defaults will not remove it, and the role hierarchy will not touch it. Only your code can remove it.
+
+This asymmetry is the entire basis of the second quiz question. Managed shares are persistent physical records, and because they are not platform-recalculated the way rules are, your code must insert and delete them as the governing data changes. When the deciding value changes, the code that reads the data must also reconcile the rows the previous value created.[^3]
+
+Think about what happens if you ignore that. An integration field names user A as the current reviewer, so your code grants user A Edit access. The field later changes to user B, and your code, if it only runs the grant path, inserts a row for user B while leaving user A's row in place. User A keeps access long after the business reason vanished. That is a phantom grant, driven not by any security decision but by neglect. The record is now shared more widely than the current data justifies, and nobody decided it should be. Access is leaking by omission.
+
+The term the exam uses for keeping this in sync is recalculation: the periodic or event-driven recomputation of what the correct set of share rows is, followed by the actual inserts and deletes that make the physical table match the computed answer. For a rule, recalculation is free and automatic. For managed sharing, recalculation is your code's job, and it is the price you pay for the flexibility to express grants the rules cannot.[^5]
+
+## The compute-diff-reconcile pattern: keep the table minimal and correct
+
+When a grant is data-derived, the recurrence is the whole game. The pattern that keeps a managed-sharing system correct and bounded has three steps, and you should be able to describe them cold.
+
+First, compute the desired set. For the affected records, determine which users or groups should have access and at what access level, from the current state of the data. This is a pure function of the data: given the records, read the deciding fields, resolve the targets, and you have the set of share rows that should exist.
+
+Second, diff against the existing set. Query the current managed share rows for those records, filtered by your custom RowCause, and compare them to the desired set. Some desired rows are missing, meaning you must insert them. Some existing rows are no longer desired, meaning you must delete them. Some rows are both present and desired, meaning you leave them alone. The output of the diff is a delta: a list of inserts and a list of deletes, and nothing else.
+
+Third, reconcile the delta. Insert the rows that are new, delete the rows that are stale, in the same transaction, batching both operations. The insert list and the delete list are never empty at the same time in a data-change-driven run: a change that adds a grant for user B usually invalidates one for user A, so you delete A's row in the same pass that you insert B's.
+
+The reason this pattern matters for both correctness and limits is that it touches only what changed. You do not delete and reinsert every share, which would churn the table and burn DML. You do not insert unconditionally, which would create duplicates and bloat the table. You reconcile the delta, and the table stays minimal because it always expresses exactly the current computation.
+
+## Governor limits: why the delta approach is not optional
+
+The compute-diff-reconcile pattern is not just tidy; it is how you stay inside Apex governor limits, and that is the subject of the third quiz question. Managed share DML counts against the same per-transaction governor limits as any other DML, and it is easy to blow them apart if you write sharing code naively.[^7]
+
+The trap is the per-record trigger. A common but wrong design puts a share insert in a trigger body that fires once per record, or loops over each record and does a DML per record. With a batch of records in one operation, that can mean hundreds or thousands of individual DML calls. Apex caps the number of DML statements you can issue in a single transaction, and one-per-record inserts in a loop smash into that wall almost immediately. Even when they do not crash, they create share rows in a tight loop, one distinct statement churning the table, which is both slow and wasteful.
+
+The alternative, which the exam rewards, is to compute the delta and insert or delete in batches within one transaction. Building the entire list of new share rows and inserting them with a single insert statement, and building the entire list of stale rows and deleting them with a single delete statement, uses far fewer DML statements and stays comfortably inside the governor. The batching is what makes the sharing volume low and the DML spend low at the same time.
+
+Let me also name the wrong answers on this question so you are ready. Inserting shares in a per-record trigger unconditionally is exactly the pattern that bloats the sharing table and hits the limits. Using a different RowCause per record has nothing to do with volume or DML; RowCause is a tagging field, and scattering distinct causes per record makes cleanup harder, not easier. Only ever deleting and never inserting cannot satisfy a grant requirement at all. The best answer is always the one that reconciles the delta in batches within a single transaction.
+
+Keep in mind that DML limits are per-transaction, so a batch class gives you breathing room. A batchable class processes records in batches, each batch being its own transaction, which resets the per-transaction governors. That is why the directive pairs "scheduled batch" with "triggered": for large data sets or scheduled recalculation, a batch job that reconciles each chunk in its own transaction is the scale-safe shape. Within a single trigger transaction, batch your inserts and deletes and reconcile only the delta.[^7]
+
+## Combining with declarative: rules for the static part, Apex for the dynamic remainder
+
+A senior answer to a programmatic sharing scenario never goes full custom. The architect instinct is to minimize the surface area of code, because code is where bugs, limits, and missed recalculation live. So the design rule is: use rules, groups, and teams for the static portion of the access story, and reserve Apex managed sharing for the dynamic remainder that declarative genuinely cannot express.
+
+Picture the split. Say a record should be readable by everyone in a Support team, which is a stable membership a public group captures perfectly, and additionally editable by a specific external-sourced reviewer that only an integration knows. You do not write custom sharing for the team; a sharing rule or a public group covers that static grant for free, self-recalculated by the platform. You write managed sharing only for the reviewer grant, the one that depends on the integration value. The declarative layer carries the bulk, and your code carries only the dynamic edge.
+
+That split makes the system smaller, cheaper, and safer. Fewer managed share rows means a smaller table, less DML, and less recalculation burden. Fewer possible failure modes means fewer phantom grants to audit. And the rules you keep are self-healing, so you are only responsible for the rows you actually had to write. The exam rewards this restraint: an answer that reaches for Apex managed sharing when a rule already handles the requirement is unnecessary custom complexity, and it is a trap you will see flagged.[^8]
+
+The corollary is to avoid redundant shares entirely. Do not create a managed share on a record the target already accesses through OWD, a rule, the hierarchy, or the owner relationship. A share row that adds nothing is pure waste: it occupies storage, it counts against DML, and it must be reconciled forever. Before you insert, ask whether the target already has that access from any declarative source. If they do, the insert is redundant and you should drop it. And dedupe your targets: if two data paths both resolve to the same user, insert one row, not two, and avoid circular sharing where, say, two records share each other with no net benefit.
+
+## A management query and RowCause: how you keep programmatic sharing auditable
+
+None of the reconcile step works without a way to identify the rows your code created, and that is RowCause. Because you tag every managed share with a custom reason value of your choice, such as PartnershipSharing__c or ReviewerAccess__c, you can query exactly your rows, change them together, and delete them together. Yesterday you learned what RowCause is; today you rely on it as the key to the entire management story.[^3]
+
+The management query takes the form: delete or query the Share rows WHERE RowCause equals your custom value. For custom reasons you define yourself, you will usually append the __c suffix to make the reason a custom value you own, like MyReason__c. Compare that to the standard value Manual, which is never yours: if you tagged everything Manual, you could not separate the shares your code wrote from the ones a person clicked into existence. A distinct custom RowCause is what makes cleanup possible without touching anyone else's grants.
+
+That management query is also your recalculation scope. When you run the reconcile step, the diff is: what should the rows with RowCause = 'MyReason__c' look like right now, given the current data, versus what they actually are. Querying by RowCause returns exactly the rows you are responsible for, and you reconcile those against the computed answer. It is the linchpin that turns "first, second, third" into a repeatable job you can run on demand, nightly, or in a trigger, always resetting the table to match the current computation.
+
+## Configuration walkthrough: implementing a triggered shared-reconciliation
+
+Here is the numbered path you would follow in a real build to implement managed sharing that stays correct and bounded. It matches the directive's walkthrough step for step.
+
+1. **Confirm the requirement genuinely cannot be met declaratively.** Before writing any code, test the scenario against the rule builder, public groups, teams, and related-record sharing. If a criteria-based sharing rule, a team, or a related-record grant covers the static part, use it. Only the runtime-computed, external, or overly complex remainder earns a custom share. Document that decision; it is the honest justification for the code you are about to write.
+2. **Decide the trigger: a trigger or a scheduled batch.** For changes your own data drives, a trigger on the deciding object catches the change and reconciles the affected records in the same transaction. For large or periodic recomputation, or when the deciding data arrives from outside in bulk, a scheduled batch (a Schedulable that launches a Batchable) reconciles in chunks, each its own transaction, and stays inside governor limits. Choose the shape that matches how the deciding data arrives.
+3. **Implement the reconcile.** In the trigger or the batch, compute the desired set of target users and access levels from the current data. Query the existing managed share rows for the affected records filtered by your custom RowCause. Compare the two, build the insert list for the missing rows and the delete list for the stale rows, and issue both DML operations in batches within the transaction.
+4. **Use custom RowCause values and a management query.** Patiently tag every managed share with the custom reason value you defined, like ReviewerAccess__c. This is what makes step 3's diff and delete possible. Keep the management query in the codebase, delete WHERE RowCause = 'ReviewerAccess__c', so you can purge every programmatic share on demand, for a refactor or a data reset, without touching declarative grants.
+5. **Validate with runAs tests.** Write Apex tests that run under System.runAs of a target user and assert that access appears only after the reconcile inserts the row, and disappears after the reconcile deletes it. Change the deciding data, re-run the reconcile, and assert the delta moved exactly as expected: the stale user lost access, the new user gained it, and neither redundant nor duplicate rows exist. That round trip is your proof that the recalculation is correct.
+
+## Worked example: the risk-tier analyst
+
+Consider a financial services client. A custom object, CaseReview__c, stores an investigation case. An external risk platform, via a scheduled integration, writes a tier value into a field, Tier__c, every night. The requirement: each case must be visible to the manager responsible for its tier, where the tier-to-manager mapping lives in the external system and changes as the risk model is recalibrated. The OWD on CaseReview__c is Private.
+
+A sharing rule cannot express this. The deciding input, the manager who should own a given tier's cases, comes from an external mapping that no field in CaseReview__c stores and no rule builder can evaluate. Making the object Public is far too broad. This is a genuine Apex managed sharing scenario.
+
+The design. A nightly batch job pulls the tier-to-manager mapping from the integration, resolves each tier to its manager's user ID, and reconciles the CaseReview__Share table. For each case, the desired set is one Edit share for the user who manages the case's Tier__c. The batch queries all CaseReview__Share rows tagged with a custom RowCause, ManagerAccess__c, diffs them against the computed desire, inserts the rows that are new (manager changed, or a new case entered a tier), and deletes the rows that are stale (the old manager for a case whose tier moved). One batch, one transaction set of batched DML, and the table always matches the latest external mapping.
+
+Now trace a single case. It sits in tier two, mapped to a manager we will call Amara, so the batch grants Amara Edit access via a row tagged ManagerAccess__c. The risk platform recalibrates, tier two's case moves to tier four, and the mapped manager for tier four is Denis. Tonight's run computes the desire: the case should be visible to Denis, not Amara. The diff finds the Amara row is now stale and the Denis row is missing. The batch deletes the Amara row and inserts the Denis row in the same run. Amara loses access she no longer needs, Denis gains exactly the access he needs, and the CaseReview__Share table holds precisely one managed row per qualifying case, nothing redundant, nothing stale.[^6]
+
+That is recalculation working. If the batch instead only inserted and never deleted, Amara would keep access to tier-two cases long after tier two left her remit, a phantom grant nobody decided on. The symmetric insert-and-delete is what keeps access current and the table bounded, and it is the exact behavior the exam's recalculation questions reward.
+
+## Why it matters for the exam and for real builds
+
+On the exam, the programmatic-sharing-scenarios questions reward four facts. First, recognition: when a grant depends on runtime-computed logic, external data, or rules too complex for the builder, declarative fails and Apex managed sharing with reconciliation is the answer. Second, recency: managed share rows are physical and persistent, so the platform will not recalculate them, and your code must insert and delete as data changes. Third, limits: managed-share DML counts against governor limits, so you reconcile the delta in batches within a single transaction or a batch job, never per record in a tight loop. Fourth, restraint: you combine declarative for the static part and Apex for only the dynamic edge, and you avoid redundant and circular shares.
+
+In a real build, the discipline the requirement names, keeping sharing correct and bounded, is the whole job. Correct means the table expresses the current computation: every desired grant present, every stale grant gone, nothing redundant. Bounded means the table stays small: only the dynamic edge is custom, only the delta is touched, and RowCause (a custom reason) gives you a management query to purge on demand. The architect who runs a managed-sharing design without that symmetric reconcile is building a system that leaks access by neglect, exactly the phantom-grant failure the exam wants you to anticipate and prevent.
+
+## Exam traps to avoid
+
+**Managed-share recalculation is manual.** Forgetting to delete stale shares when the underlying data changes leaves phantom access: users keep access long after the reason for it vanished. The platform recalculates rules, never managed rows. Your code must delete the stale rows in the same pass that inserts the new ones.
+
+**Per-record trigger-managed sharing blows limits.** Putting a share insert in a loop that issues one DML per record trips the per-transaction DML governor and creates share rows in a tight loop. Compute the delta and insert or delete in batches within one transaction, or run the reconcile in a batch job where each chunk is its own transaction.
+
+**Using managed sharing for what a rule already handles is unnecessary complexity.** If a sharing rule, public group, team, or related-record grant covers a requirement, that declarative mechanism is free, self-recalculated, and self-healing. Reaching for Apex managed sharing anyway adds code, limits, and phantom-grant risk with no benefit. Reserve the code for the dynamic edge only.
+
+## Try it yourself
+
+In a sandbox, build a custom object, Review__c, with an OWD of Private and a lookup field Approver__c to User. Write a batchable class that computes one Edit share per Review__c record for its Approver__c user, tags it with a custom RowCause ReviewAccess__c, queries the existing ReviewAccess__c rows, diffs them against the computed desire, and inserts the missing and deletes the stale in batched DML. Run it, confirm each review has exactly one managed row for its current approver, and confirm under System.runAs of the approver that the user can query the record. Now change Approver__c on one review to a different user and re-run the batch. Confirm the old approver lost access, the new one gained it, and querying Review__Share by RowCause ReviewAccess__c shows no stale and no duplicate row. Finally, deliberately insert one unconditional share in a per-record trigger and watch it blow the per-transaction DML limit on a large batch: that failure is the governor constraint this lesson is about.
+
+## What's next
+
+Tomorrow you leave the internal user model entirely and move to lesson 25, which covers external users. You will work with the Guest User, the licensing that governs Experience Cloud access, and the sharing mechanisms that serve a portal audience: Sharing Sets and Sharing Groups. Where this lesson was about code managing internal grants, lesson 25 is about how declarative sharing extends to authenticated users beyond your internal user base, and the constraints those external licenses place on the architect. The course continues in syllabus order toward the full Platform Sharing and Visibility Architect exam coverage.[^1]
+
+[^1]: Salesforce Certified Platform Sharing and Visibility Architect exam guide, Domain: Access to Records, objective r-7b: "Given a scenario, determine when programmatic sharing is required and how to keep it correct and bounded."
+[^2]: Salesforce Apex Developer Guide, "Understanding Apex Managed Sharing," https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_bulk_sharing_concepts.htm
+[^3]: Salesforce Apex Developer Guide, "Using Apex Managed Sharing to Share Records," https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_bulk_sharing_creating_using_apex_managed_sharing.htm
+[^4]: Salesforce Help, "Control Who Sees What," https://help.salesforce.com/s/articleView?id=platform.security_data_access.htm
+[^5]: Salesforce Apex Developer Guide, "Sharing Reasons," https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_bulk_sharing_sharing_reasons.htm
+[^6]: Salesforce Apex Developer Guide, "Execution Governors and Limits," https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_transaction_statements_governor_limits.htm
+[^7]: Salesforce Apex Developer Guide, "Batch Apex," https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_batch_apex.htm
+[^8]: Salesforce Help, "A Comparison of Sharing, Permission Sets, and Teams," https://help.salesforce.com/s/articleView?id=platform.security_considerations_comparison.htm
