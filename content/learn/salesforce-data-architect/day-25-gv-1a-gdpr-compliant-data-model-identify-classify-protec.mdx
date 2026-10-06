@@ -16,6 +16,8 @@ GDPR is the law the exam uses to stand for the whole class of privacy regulation
 
 This lesson teaches that translation. We define personal and special-category data and why location is the first problem, work the data inventory you build to find that data, walk the classification tiers you maintain as metadata, cover the protection layer and its encryption trade-offs, model consent and retention, and close on the erasure patterns the requirement names. The right-to-erasure quiz question is reinforced at every step.
 
+![The five-stage GDPR data model pipeline: identify, classify, protect, record consent and retention, then erase](</diagrams/day-25-gv-1a-gdpr-compliant-data-model-identify-classify-protec/1-gdpr-model-pipeline.png>)
+
 ## Personal data, special-category data, and why location is the first problem
 
 GDPR defines personal data very broadly. It is any information relating to an identified or identifiable natural person. The classic test is whether you can point at a specific human. A name, an email address, a phone number, an IP address, a device identifier, a customer account number that maps to one person, all of it is personal data when it can identify someone. The definition is what floods the model with obligations: nearly every standard object in a Salesforce org, Account, Contact, Lead, Case, Opportunity with a primary contact, holds at least one field that can identify a person.[^2]
@@ -23,6 +25,8 @@ GDPR defines personal data very broadly. It is any information relating to an id
 Special-category data is narrower and far more restricted. GDPR Article 9 covers data revealing racial or ethnic origin, political opinions, religious or philosophical beliefs, trade-union membership, genetic data, biometric data used to uniquely identify a person, health data, and data concerning sex life or sexual orientation. Processing special-category data is prohibited unless an explicit lawful basis applies, and it generally needs a higher standard of protection and tighter access than ordinary personal data. A health-cloud case that records a diagnosis, a field capturing ethnicity for a demographic study, a biometric attendance field, these are special-category and the model must treat them with stricter controls than a name field.[^3]
 
 Why is location the first problem? Because a control you can apply to a field you cannot see is a control you cannot apply at all. Encryption, field-level security, retention, and erasure all act on data you have located and tagged. Before you can protect personal data, you must know exactly which objects, which fields, which files, and which free-text containers hold it. A model that never inventoried its data cannot answer the regulator's basic question, where does personal data live? GDPR's accountability principle makes that answer mandatory. The first deliverable of a compliant model is therefore not a permission set or an encryption key. It is a map.[^4]
+
+![Personal data versus special-category data, with the examples and the protection standard each carries](</diagrams/day-25-gv-1a-gdpr-compliant-data-model-identify-classify-protec/2-personal-vs-special-category.png>)
 
 ## Identify: the data inventory that finds personal data, including in free text
 
@@ -56,6 +60,8 @@ The trade-offs matter enough to test. With Shield, some functions behave differe
 
 Classic and Deterministic encryption are the older at-rest options. Classic encryption applies to a narrower set of standard fields such as Street, City, Postal Code, and Phone, and it has its own functional limits, for example it cannot filter or sort, so its use is confined to fields where the value is stored but not queried. Deterministic encryption is the newer, broader scheme that supports advanced encryption algorithms and keeps equality semantics for matches and lookups. Your choice among them follows what the field has to do: a field that must be matched exactly gets a deterministic scheme, a field that only needs storage gets probabilistic or the simplest fit, and a field that must be searched by range or pattern may need to stay plaintext behind strict access rather than be encrypted at all.
 
+![Choosing between deterministic and probabilistic encryption based on what the field must do](</diagrams/day-25-gv-1a-gdpr-compliant-data-model-identify-classify-protec/5-encryption-scheme-choice.png>)
+
 Two more protections round out the layer. Event Monitoring and Field Audit Trail log access and changes to records and fields, which is how the org proves who read or changed personal data and when. Field Audit Trail retains history for up to ten years, and event monitoring captures field-level read and write events, both of which the accountability principle effectively requires for sensitive data. Data Mask replaces sensitive values with fictional substitutes in sandboxes, so that developers and testers do not work against real customer personal data, which extends the protection boundary from production to every environment that copies it.[^9]
 
 ## Consent and lawful basis: the model must be able to prove why it processes
@@ -73,6 +79,8 @@ Retention is the time dimension of the model. GDPR's storage-limitation principl
 The right to erasure, sometimes called the right to be forgotten, lets a data subject request deletion of her personal data. The exam frames the architect's job as supporting two things: finding all records for a subject across objects, files, and systems, and erasing or anonymizing them while balancing legal retention obligations. The finding problem is the part most models undersell. Personal data about one person can sit in Contacts, their related accounts, their cases, their orders, their log files, their notes, their attachments, and their export copies in downstream systems. An erasure request that deletes the Contact but leaves the case description full of her details has only half-erased her.
 
 The requirement names four erasure patterns, and the skill is knowing which fits a given record.
+
+![Decision tree for choosing an erasure pattern based on whether a legal retention obligation attaches](</diagrams/day-25-gv-1a-gdpr-compliant-data-model-identify-classify-protec/3-erasure-pattern-decision.png>)
 
 Hard delete is the destructive erasure you perform when no retention obligation attaches. You physically remove the records, or the personal fields, from the object. It is the cleanest erasure but the least available, because it is subject to retention law and to referential constraints. If government or contract law requires keeping transactions for seven years, you cannot hard-delete the transaction records that create a personal-data footprint, and if other objects reference the record you delete, referential integrity breaks. Hard delete belongs to data you may lawfully forget.
 
@@ -93,6 +101,8 @@ A financial-services customer holds a GDPR data-subject request from a former cl
 The correct design does not hard-delete. Score it against the obligations. The erasure right extends to personal data wherever it lives, so the company must find the client across every object: the former Contact (if one remains), the opportunity and order history, the notes and case descriptions, the account record that carries his identity, any files or attachments that name him, and the downstream analytics copies if they hold identifiable values. But the seven-year retention requirement is a legal obligation that outranks the deletion instinct, because the company is forbidden from destroying the transactional records. Destroying them would break the law the erasure request is trying to satisfy.
 
 So the design applies anonymization to the retained transactional records. The company keeps the seven years of order and trade history for financial integrity and audit, but it scrubs the personal fields, the name, the contact identifiers, the account references in that context, replacing them with non-identifying tokens so the retained history can no longer be tied to the individual. Where no retention obligation attaches, such as an old marketing preference and the consent record behind it, the company hard-deletes those records outright. It also scrubs or removes the notes, case descriptions, and files that name him, because those are personal-data containers sitting outside the transactional obligation. The result honors both masters: the client gets his erasure, because he is no longer identifiable from anything the company holds, and the company keeps the records the law forces it to keep. That tension, and the anonymization bridge across it, is the exam's idea of a correct erasure answer.
+
+![The retention-bound erasure request: anonymize retained transaction history, hard delete records with no retention](</diagrams/day-25-gv-1a-gdpr-compliant-data-model-identify-classify-protec/4-retention-bound-erasure.png>)
 
 ## Config walkthrough: building the compliant model
 
