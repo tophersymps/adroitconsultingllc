@@ -2,6 +2,32 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "handover-hypercare-exit-criteria-2026",
+    "title": "Handover and Hypercare: Closing a Consulting Engagement",
+    "excerpt": "An engagement ends not at go-live but the day the client can run the system without you. The handover, runbooks, and hypercare window are what close the work.",
+    "category": "Project Management",
+    "categoryColor": "pm",
+    "categoryGradient": "from-teal to-teal-dark",
+    "date": "October 5, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "Project Management",
+      "Delivery Practice",
+      "Knowledge Transfer",
+      "Hypercare",
+      "Handover",
+      "Runbooks",
+      "Exit Criteria",
+      "Client Enablement",
+      "Consulting Delivery"
+    ],
+    "bannerImage": "/banners/handover-hypercare-exit-criteria-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "keyboard-navigation-focus-management-2026",
     "title": "Keyboard Navigation Is the Interface Pattern Nobody Tests",
     "excerpt": "Focus management is the invisible interface pattern every design system implements and almost nobody verifies. WCAG 2.2, roving tabindex, and a test loop.",
