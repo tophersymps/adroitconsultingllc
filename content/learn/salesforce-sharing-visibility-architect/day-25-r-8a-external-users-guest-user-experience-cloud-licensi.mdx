@@ -1,0 +1,135 @@
+---
+title: "External Users: Guest User, Experience Cloud Licensing, Sharing Sets and Sharing Groups"
+slug: day-25-r-8a-external-users-guest-user-experience-cloud-licensi
+series: salesforce-sharing-visibility-architect
+lesson: 25
+excerpt: "Given a scenario, determine what sharing mechanism is appropriate to share records with external users. Covers how Experience Cloud represents external users through a license and profile, the difference between an authenticated external user and the anonymous guest user, why sharing sets and sharing groups replace OWD-based public sharing for portals, and how the license tier gates which features and objects external users can reach."
+date: 2026-10-07
+author: Adroit Learning
+readTime: 16
+tags:
+  - external users
+  - guest user
+  - experience cloud
+  - sharing sets
+  - sharing groups
+  - portal licensing
+  - account relationship
+  - external sharing
+---
+
+Yesterday you worked with Apex managed sharing, code that grants internal users access when the declarative layer cannot. Today the audience changes completely. The requirement for this lesson is: given a scenario, determine what sharing mechanism is appropriate to share records with external users.[^1]
+
+External users are people who are not your employees. They are customers, partners, distributors, and vendors who log into an Experience Cloud site to see and work with a slice of your data. The exam wants you to know that sharing records with them is not the same problem as sharing with internal users. The mechanisms differ, the licensing differs, and the security posture differs. This lesson builds the mental model you need to pick the right tool for a portal audience.
+
+## External users are a different kind of user
+
+An internal user is a person with a Salesforce license who works inside the org. An external user is a person who accesses an Experience Cloud site, which is a branded portal that exposes a controlled subset of your data to people outside your company. The two are governed by different license types, different profiles, and different sharing mechanisms, and the exam is careful to keep them separate.[^2]
+
+The first thing to internalize is that an external user is represented by a unique profile type tied to a specific license. When you create a user for a customer or partner, you do not give them a standard Salesforce license. You assign an Experience Cloud license, such as Customer Community, Customer Community Plus, or Partner Community, and you assign a profile built for that license. The profile carries the object permissions and the license carries the entitlements. Together they define what the external user can see and do in the site.[^2]
+
+That pairing is the foundation of the whole lesson. The license determines the ceiling: which objects, features, and capabilities the external user is entitled to. The profile determines the floor: what object and field permissions apply within that ceiling. And the sharing mechanism, which is the subject of this lesson, determines which specific records the user can actually reach. Get the license wrong and the user cannot see the object at all. Get the sharing wrong and the user can see the object but not the records they need.
+
+## The guest user is the anonymous profile
+
+Within Experience Cloud there are two very different kinds of external access, and the exam wants you to keep them apart. The first is the authenticated external user: a person who has a license, a profile, and login credentials, and who signs in to the site. The second is the guest user: the unauthenticated profile that serves the public, anonymous experience. A visitor who lands on your site without logging in is running as the guest user.[^5]
+
+The guest user is not a person. It is a single profile, specific to each Experience Cloud site, that represents every anonymous visitor at once. Because it has no login and no identity, it cannot be tied to an account or contact relationship the way an authenticated user can. That single fact drives everything about how you share with it. You cannot grant the guest user access through a sharing set, because a sharing set keys off the user's account or contact, and an anonymous visitor has neither. The only declarative way to open records to the guest user is a guest user sharing rule, a special type of criteria-based sharing rule that grants Read Only access to records matching its criteria.[^5]
+
+The security posture around the guest user is deliberately strict, and the exam rewards knowing why. The guest user profile should be locked down. Salesforce's Secure guest user record access setting, which is enabled by default and cannot be disabled, forces org-wide defaults to Private for all objects, prevents guest users from being added to queues or public groups, and blocks access through manual sharing or Apex managed sharing. The only path to guest record access is a guest user sharing rule, and those rules grant Read Only access only.[^6]
+
+The reason for all this caution is that a guest user sharing rule is a blunt instrument. When you create one, you are granting immediate and unlimited access to every record that matches the rule's criteria, to anyone, with no login required. There is no identity to audit, no user to hold accountable, and no way to know who actually saw the data. Salesforce's own guidance is blunt about it: for almost all objects, the guest user should have no access, and you should never assign View All Records, Modify All Records, update, or delete permissions to the guest profile.[^6]
+
+So the mental model is: authenticated external users are real people with licenses, profiles, and account relationships, and you share with them through relationship-based mechanisms. The guest user is an anonymous, shared profile with its own restricted sharing, and you open records to it only through explicit guest user sharing rules, kept to the minimum the public experience requires. The two are configured separately, and locking down the guest user is a distinct task from configuring authenticated external access.
+
+## Experience Cloud licensing gates what external users can reach
+
+The license tier is the ceiling on everything an external user can do, and the exam tests whether you understand that a missing feature is often a license limitation, not a configuration error. Experience Cloud offers several license types, and they differ in which objects and features they entitle. The main ones you need to know are Customer Community, Customer Community Plus, and Partner Community, plus the older portal licenses that preceded them.[^2]
+
+Customer Community is the entry-level license, aimed at B2C use cases. It gives external users access to a limited set of standard objects, including Accounts, Contacts, and Cases, but with Cases read-only. It does not include Opportunities or Leads. It allows 10 custom objects per license. Customer Community Plus is the B2B step up. It adds create and edit access to Cases, includes Opportunities and Leads, and requires the user to have a role. Partner Community is the partner-facing license, with the broadest standard-object access, including Campaigns, Opportunities, and Leads, and it also requires a role.[^2]
+
+The older portal licenses, such as Customer Portal and Partner Portal, are the predecessors of the Experience Cloud licenses. They are largely superseded, and the exam expects you to recognize that the modern answer is the Experience Cloud license family. When you see a scenario that mentions a portal license, the architect's move is to think in terms of the current Customer Community, Customer Community Plus, and Partner Community tiers and what each one entitles.[^2]
+
+The architect-level insight is that the license tier determines feature and object availability. If a partner expects a feature and it is unavailable for external users, the most likely cause is that the license tier does not include that feature or object, not that a sharing rule is missing or that OWD is misconfigured. A sharing rule cannot grant access to an object the license does not entitle. Before you chase a sharing configuration, check the license. This is a classic exam trap, and it is the subject of one of the quiz questions in this lesson.
+
+There is also a scale dimension worth knowing. A Customer Community license can support up to 100 million users, while a Customer Community Plus license supports up to 10 million. The Plus and Partner licenses require a role, which imposes role-hierarchy considerations and can create performance and scale issues at high volume. For an architect, that means the license choice is not just a feature decision; it is a capacity and architecture decision that shapes how you design sharing at scale.[^7]
+
+## Sharing sets: the portal-specific sharing mechanism
+
+Now we reach the heart of the lesson. The primary declarative mechanism for granting authenticated external users access to records is the sharing set. A sharing set grants site users access to any record associated with an account or contact that matches the user's account or contact. It is the portal-specific tool that replaces OWD-based public sharing for external audiences.[^3]
+
+Here is how it works. Each external user is linked to an Account through their Contact. The sharing set defines a mapping: for a given object, take the account or contact on the user's record, and grant access to records whose account or contact matches. The mapping supports indirect lookups, so you can grant access to records related to the account through a chain, not just records that directly reference it. For example, you can grant a site user access to all Cases related to the Account identified on the user's Contact record.[^3]
+
+The key phrase in the requirement is "based on their account/contact relationship." That is what makes sharing sets the correct portal pattern. A sharing set keys off the relationship between the external user and the records through their account or contact. That is why, in the first quiz question, an authenticated partner user who must see the Cases belonging to their partner Account is served by a sharing set mapping the user's Account to Case access. Public groups, OWD relaxation, and internal teams do not key off the portal user's account, so they are the wrong tools for this scenario.[^3]
+
+There are important constraints on sharing sets that the exam expects you to know. You can have only one sharing set per profile. A sharing set applies across all sites a user is a member of. Record access granted through a sharing set is not extended to the user's superiors in the role hierarchy. And sharing sets for Contacts, Cases, and Opportunities do not automatically grant access to those objects' parent Accounts; if the user needs the parent Account, you must include the Account in the sharing set as well.[^3]
+
+Sharing sets also have a scope limit. The Available Objects list for a sharing set excludes objects with an org-wide sharing setting of Public Read/Write, and it excludes custom objects that do not have an account or contact lookup field. That second exclusion matters: a custom object with no account or contact lookup cannot be shared through a sharing set, because there is nothing to key the relationship off. If you need to share such an object with external users, you have to give it an account or contact lookup, or use a different mechanism.[^3]
+
+## Sharing groups: for high-volume site users
+
+Sharing sets handle the common case of an external user tied to an account. Sharing groups handle a different, more specialized case: records owned by high-volume Experience Cloud site users. A share group allows you to share records owned by high-volume site users with authenticated internal and external users.[^4]
+
+High-volume site users are limited-access users intended for orgs with thousands to millions of users. They do not have roles, and they include license types such as External Apps, Customer Community, High Volume Customer Portal, and Authenticated Website. Because they have no roles and are designed for extreme scale, the standard sharing mechanisms behave differently for them, and share groups are the tool that bridges the gap.[^4]
+
+The distinction the exam wants you to hold is between sharing sets and sharing groups. A sharing set grants external users access to records based on their own account or contact relationship. A sharing group shares records owned by high-volume site users with other users. They solve different problems, and they are not interchangeable. There is also a licensing wrinkle: share group functionality is not available to users with Customer Community Plus and Partner Community licenses. So the choice between sharing sets and sharing groups is partly a function of which license tier your external users hold.[^3]
+
+## OWD for external users: the same defaults, opened by relationship
+
+A common point of confusion is how org-wide defaults apply to external users. The answer is that external users are governed by the same OWD as internal users, but the sharing sets and contact relationships are what open the records they need. You do not relax OWD to Public to serve a portal audience; you keep OWD restrictive and use sharing sets to grant the specific relationship-based access each external user needs.[^3]
+
+This is the architect's discipline. If you set an object's OWD to Public Read Only to let external users see records, you expose every record to every user, internal and external, far beyond what the portal requirement asks. The correct pattern is to keep OWD at its restrictive default and let the sharing set open only the records tied to each user's account. That keeps the blast radius small and the access precise.
+
+The one place OWD interacts with external access in a special way is the guest user. Under the Secure guest user record access setting, guest users have org-wide defaults set to Private for all objects, and that access level cannot be changed. So for the guest user, OWD is effectively locked to Private, and the only way to open records is a guest user sharing rule. For authenticated external users, OWD applies normally, and sharing sets open the relationship-based records.[^6]
+
+## The design pattern: account, contact, sharing set, license, test
+
+The exam rewards a repeatable design pattern for sharing records with external users, and the directive lays it out as a numbered walkthrough. Here is the pattern you should be able to apply to any scenario.
+
+1. **Assign the appropriate Experience Cloud license and external profile to the users.** Choose the license tier that entitles the objects and features the external users need. For partners, that is usually Customer Community Plus or Partner Community. Assign a profile built for that license. This is the ceiling; get it right before you touch sharing.
+2. **Ensure each external user has a Contact linked to the Account that owns the data they must access.** The sharing set keys off this relationship. If the user's Contact is not linked to the right Account, the sharing set has nothing to match, and the user sees nothing. This step is the foundation of everything that follows.
+3. **In Sharing Settings, create sharing sets on the objects and map the user's Account to grant related-record access.** For each object the external users must see, create a sharing set for the relevant profile, select the object, and configure the access mapping from the user's account or contact to the target record's account or contact. Choose Read Only or Read/Write as the requirement demands.
+4. **Create or verify sharing groups and any guest user sharing rule for public content, and keep guest access minimal.** If you have high-volume site users, set up share groups. If the public experience needs any records, create a guest user sharing rule for exactly that content, and nothing more. Lock the guest profile down: no View All, no Modify All, no update or delete.
+5. **Test as an authenticated external user and as the guest user.** Log in as an authenticated external user and confirm they see their account's records and nothing else. Then test the guest path and confirm the guest sees only the public content the guest sharing rule grants. Both paths must be verified, because they are configured separately and fail separately.
+
+## Worked example: the partner case portal
+
+Let me make this concrete with a worked example, the same shape as the first quiz question. A manufacturer runs an Experience Cloud site for its distributors. Each distributor is an Account, and each distributor's users are Contacts on that Account. The requirement: an authenticated partner user must see the Cases belonging to their partner Account, and only those Cases.
+
+The design follows the pattern. Each distributor user gets a Partner Community license and a partner profile. Each user's Contact is linked to their distributor Account. In Sharing Settings, you create a sharing set for the partner profile, select Case, and configure the access mapping: the user's account is Contact.Account, and the target record's account is Case.Account. You grant Read/Write, because the partner needs to update their cases. You keep Case OWD at its restrictive default, so no record is exposed beyond the sharing set.
+
+Now trace a single user. A distributor user named Priya logs in. Her Contact is linked to Acme Distribution. The sharing set matches her account, Acme, to every Case whose Account is Acme. Priya sees Acme's cases and nothing else. A case belonging to a different distributor, Beta Supply, does not match her account, so she never sees it. The sharing set gives her exactly the relationship-based access the requirement asks for, and no more.
+
+This is why the correct answer to the first quiz question is the sharing set mapping the user's Account to Case access. A public group with a criteria rule does not key off the portal user's account. Setting Case OWD to Public Read Only would expose every case to every user, internal and external. An internal team is a mechanism for internal users, not a portal audience. Only the sharing set expresses the account-relationship-based grant that the scenario demands.
+
+Now consider the guest path on the same site. The public experience lets anonymous visitors read a few published knowledge articles. You create a guest user sharing rule on the Knowledge object for the published articles, granting Read Only. The guest user profile has no access to Cases at all, so an anonymous visitor cannot see any case. The authenticated partner sees their account's cases; the guest sees only the public articles. Two different audiences, two different sharing mechanisms, both configured deliberately.
+
+## Why it matters for the exam and for real builds
+
+On the exam, the external-user questions reward four facts. First, recognition: external users are represented by a license and profile, and the guest user is the separate, anonymous, locked-down profile. Second, licensing: the Experience Cloud license tier gates which features and objects external users get, so an unavailable feature is frequently a license limitation, not a sharing error. Third, mechanism: sharing sets are the primary declarative tool for granting external users access based on their account/contact relationship, and they replace OWD-based public sharing for portals. Fourth, security: the guest user is locked down, and guest sharing rules grant only explicitly public content.
+
+In a real build, the discipline the requirement names, choosing the appropriate sharing mechanism for external users, is a decision you make before you configure anything. You decide whether the audience is authenticated or guest. You decide which license tier entitles the objects they need. You decide whether a sharing set, a sharing group, or a guest user sharing rule is the right tool. And you test both the authenticated and the guest path, because they are configured separately and a failure in either one is a real access gap, either exposing data or hiding it.
+
+## Exam traps to avoid
+
+**External user access is not granted by the same OWD and rules as internal users.** Sharing sets and the account relationship are the portal-specific tools. Reaching for a public group, an internal team, or an OWD relaxation to serve a portal audience is the wrong pattern, because none of them key off the portal user's account.
+
+**The guest user is a different profile with its own sharing rules.** Locking down the guest user is a separate task from configuring authenticated external users. The guest user has no account relationship, so sharing sets cannot serve it; only guest user sharing rules can, and they grant Read Only access to explicitly public content.
+
+**The portal license tier determines feature and object availability.** A feature that is missing for external users is often a license limitation, not a config error. A sharing rule cannot grant access to an object the license does not entitle. Check the license before you chase a sharing configuration.
+
+## Try it yourself
+
+In a sandbox with Experience Cloud enabled, create a partner Account and a Contact on it, then create a user from that Contact with a Customer Community Plus license and a partner profile. Create a Case owned by the partner Account. In Sharing Settings, create a sharing set for the partner profile, select Case, and map the user's account to Case.Account with Read/Write access. Log in as the partner user and confirm you see the Case. Now create a second Case on a different Account and confirm the partner user cannot see it. Then configure the guest user profile: confirm the Secure guest user record access setting is on, create a guest user sharing rule on a Knowledge article, and confirm an anonymous visitor sees the article but not the Case. Finally, try to add a custom object with no account or contact lookup to the sharing set and observe that it is excluded from the Available Objects list. That exclusion is the scope limit this lesson is about.
+
+## What's next
+
+Tomorrow you move to lesson 26, which covers external-user scenarios in more depth: portal roles, account and contact access, and data protection. Where this lesson established the mechanisms, the guest user, and the licensing, lesson 26 walks through the scenarios that combine them, how portal roles shape access, how account and contact access is granted and bounded, and how to protect data when external users are in the picture. The course continues in syllabus order toward the full Platform Sharing and Visibility Architect exam coverage.[^1]
+
+[^1]: Salesforce Certified Platform Sharing and Visibility Architect exam guide, Domain: Access to Records, objective r-8a: "Given a scenario, determine what sharing mechanism is appropriate to share records with external users."
+[^2]: Salesforce Help, "Experience Cloud User Licenses," https://help.salesforce.com/s/articleView?id=platform.users_license_types_communities.htm&language=en_US&type=5
+[^3]: Salesforce Help, "Create a Sharing Set for Experience Cloud Site Users," https://help.salesforce.com/s/articleView?id=sf.networks_setting_light_users.htm&type=5&language=en_US
+[^4]: Salesforce Help, "Use Share Groups to Share Records Owned by High-Volume Experience Cloud Site Users," https://help.salesforce.com/s/articleView?id=platform.networks_sharing_light_users.htm&language=en_US&type=5
+[^5]: Salesforce Help, "Create Guest User Sharing Rules," https://help.salesforce.com/s/articleView?language=en_US&id=platform.security_sharing_rules_guest.htm&type=5
+[^6]: Salesforce Help, "Best Practices and Considerations When Configuring the Guest User Profile," https://help.salesforce.com/s/articleView?language=en_US&id=platform.networks_guest_profile_best_practices.htm&type=5
+[^7]: Salesforce Help, "Experience Cloud Licenses Eligible for Upgrades," https://help.salesforce.com/s/articleView?language=en_US&id=platform.networks_license_upgrade_eligible.htm&type=5
