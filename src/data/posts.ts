@@ -24,6 +24,27 @@ export const posts: BlogPost[] = [
     "status": "published"
   },
   {
+    "slug": "salesforce-data-cloud-strategy-guide",
+    "title": "Salesforce Data Cloud Strategy Guide",
+    "excerpt": "Data Cloud is Salesforce's hyperscale data platform, and it changes how you think about the data layer. A pragmatic strategy for getting from proof-of-concept to production.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "October 06, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "9 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "Data Cloud",
+      "Data",
+      "CDP",
+      "Strategy"
+    ],
+    "status": "published"
+  },
+  {
     "slug": "handover-hypercare-exit-criteria-2026",
     "title": "Handover and Hypercare: Closing a Consulting Engagement",
     "excerpt": "An engagement ends not at go-live but the day the client can run the system without you. The handover, runbooks, and hypercare window are what close the work.",
