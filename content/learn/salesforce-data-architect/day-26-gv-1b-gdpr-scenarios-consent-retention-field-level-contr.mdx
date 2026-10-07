@@ -28,6 +28,8 @@ Second, consent must be withdrawable, and withdrawal must stop the consented pro
 
 The practical shape of this in a data model is usually a consent or opt-in object, or a set of consent fields on the Contact or Account, holding purpose, timestamp, channel, and status. Status is the field that does the operational work: a status of "withdrawn" makes the marketing segmentation, the approval flows, and the sending logic exclude that record. The exam wants you to understand that the model does not just store consent, it wires consent state into every process that depends on consent as its legal basis. If a journey sends marketing on the basis of consent, the journey has to check the consent record before it sends, and stop when consent is withdrawn.
 
+![Consent lifecycle: a consent record stores purpose, timestamp, channel, and status, and a withdrawn status stops the marketing segmentation, approval flows, and sending logic that rely on consent as their lawful basis](</diagrams/day-26-gv-1b-gdpr-scenarios-consent-retention-field-level-contr/1-consent-lifecycle.png>)
+
 ## Retention: storage limitation, made into a schedule
 
 The second control surface is retention, and it is the least glamorous and the easiest to get wrong. GDPR's storage-limitation principle is blunt: personal data must be kept for no longer than is necessary for the purposes for which it is processed.[^5] In practical terms, "keep everything forever because it might be useful" is non-compliant. The data model has to say how long each category of data is held, and something has to enforce that limit.
@@ -41,6 +43,8 @@ Second, enforce the retention period with scheduled purge and archive jobs. A re
 Third, document the schedule. The exam treats retention as a governance artifact, not just a mechanism. The schedule of what gets purged, how often, and under what rule has to be discoverable, because the definition of "necessary" changes over time and the policy has to be reviewable. A retention schedule that no one can find is a policy failure, and it is also a compliance failure, because the company cannot demonstrate how it honors storage limitation.[^6]
 
 The trap the exam sets here is the "it might be useful" argument. A customer's data being useful to marketing is not the same as it being necessary for the purpose it was collected. If the purpose has ended, the retention period has ended, and keeping the data because a future campaign might want it defeats storage limitation. The model has to distinguish what is necessary from what is merely convenient.
+
+![Retention schedule: each data category carries its own retention period and a purge or archive action, enforced by a scheduled job that finds elapsed records on a documented cadence](</diagrams/day-26-gv-1b-gdpr-scenarios-consent-retention-field-level-contr/2-retention-schedule.png>)
 
 ## Field-level controls: FLS, permission sets, and encryption
 
@@ -60,6 +64,8 @@ And encryption does not replace FLS. Encrypting a field protects it at rest, but
 
 A third field-level control the exam names is Data Mask, used in sandboxes. Non-production environments are a leak vector for production personal data. If a sandbox is refreshed with production data, that personal data has moved into an environment that is not protected the way production is, and which may be accessible to developers and testers. Data Mask replaces the sensitive values in sandbox copies with realistic but fake data, so the sandbox keeps its shape for testing without carrying production personal data out of the production environment.[^11] A GDPR-aware design enables Data Mask so personal data never leaks into non-production.
 
+![Encryption trade-offs: standard encryption changes some filters, sorts, roll-ups, and searches, deterministic encryption restores exact-match operations within limits, and encryption never replaces field-level security](</diagrams/day-26-gv-1b-gdpr-scenarios-consent-retention-field-level-contr/3-encryption-tradeoffs.png>)
+
 ## Deletion patterns: erasure has to reach everything
 
 The fourth control surface is deletion and anonymization, and it is where the exam tests whether you understand the full blast radius of the right to erasure. When a subject requests erasure, or when a retention period ends, the obligation is not "delete the hole in the customer record." It is "remove the subject's personal data from everywhere it lives." The exam Q3 tests exactly this: a company wants to honor erasure while keeping analytics on transaction volumes, and the right answer is to anonymize the identifying fields while retaining the transactional and aggregate data, not to hard-delete all rows, not to offload records to a warehouse and leave Salesforce untouched, and not to disable audit history.
@@ -75,6 +81,8 @@ Pattern three, purge unstructured personal data. Personal data does not only liv
 Pattern four, coordinate deletion with downstream and warehouse systems. Erasure is an obligation that crosses system boundaries. If the CRM pushes data to a data warehouse, a marketing platform, or an integration partner, then deleting the record in Salesforce does not erase it from those systems. A compliant design coordinates the deletion with every downstream consumer, so the subject's personal data is removed from the warehouse and the partner systems too. This is the coordination obligation the exam keeps returning to, and it is one of the most commonly missed boundaries.[^14]
 
 There are two extras the exam wants you to keep in view. Audit history and logs may also contain personal data, and they must be addressed. A subject's erasure request does not stop being real because the personal data has aged into an audit log. And the right of access and portability cut the other way: the model must be able to gather all of a subject's personal data in a machine-readable form on request. That extract is only possible if you know every object and field that holds the subject's data, which is the classification work paying off a second time. The same inventory that makes erasure complete makes access and portability possible.
+
+![The four deletion patterns: delete the subject's records, anonymize identifiers, purge unstructured personal data, and coordinate deletion with downstream and warehouse systems](</diagrams/day-26-gv-1b-gdpr-scenarios-consent-retention-field-level-contr/4-deletion-patterns.png>)
 
 ## Cross-border transfer and residency
 
@@ -95,6 +103,8 @@ Score the obligations. Consent is the lawful basis for the marketing, so withdra
 The design runs the four surfaces together. Consent: a consent record tracks purpose and status, and on withdrawal the marketing logic excludes this customer, so no further marketing is sent. Retention and deletion: an erasure job finds every object, field, file, note, and log entry that holds this customer's personal data and removes the identifying values. Encryption and field controls: whatever identifying fields remain on the retained transaction records are not exposed beyond the roles that need them, and are encrypted at rest. Anonymization: the transaction rows the analytics warehouse needs are kept with their identifying relationships to the individual removed, replaced by a pseudonym, so the volume analytics survive while the subject is no longer identifiable.
 
 The result meets every obligation. Marketing stops, because consent withdrawal halted it. Erasure reaches the records, the unstructured content, and the downstream view, because the erasure job covered them and the warehouse received the anonymized, not the identifying, rows. The analytics are preserved, because anonymization kept the shape of the transactions. That is the exam's idea of a good answer: a design that honors consent, erasure, storage limitation, and the business's legitimate analytics need at the same time.
+
+![Worked retail scenario: consent withdrawal stops marketing, an erasure job reaches every object, field, file, note, and log, remaining fields are encrypted and restricted, and anonymized transaction rows keep the volume analytics alive](</diagrams/day-26-gv-1b-gdpr-scenarios-consent-retention-field-level-contr/5-retail-scenario.png>)
 
 ## Config walkthrough: building the GDPR-compliant design
 
