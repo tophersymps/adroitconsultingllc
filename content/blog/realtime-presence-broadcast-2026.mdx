@@ -1,0 +1,162 @@
+---
+title: "Live Presence Meets Fast Broadcast"
+slug: realtime-presence-broadcast-2026
+excerpt: "Cursors, typing, and who's-online come from two Realtime features. Presence carries slow state, Broadcast carries fast events, and a real app uses both."
+category: "React & Web Dev"
+categoryColor: react
+categoryGradient: "from-emerald to-emerald-dark"
+date: "October 7, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: 12
+tags: [React, Next.js, Supabase, Real-Time, WebSockets, TypeScript]
+bannerImage: "/banners/realtime-presence-broadcast-2026.png"
+---
+
+Every product list eventually asks for the same three features: "show me who is also here", "show me their cursor as they type", and "show a typing indicator". They feel like one ask, a live-collaboration feature, so teams reach for one real-time tool and build it. The result is usually a feature that kind of works and then breaks: the cursor trail lags and jitters, or the "online users" counter floods the socket, or the feature leaks who is in a private room. The root cause is a category error. Those three UI elements run on two different real-time models, and trying to force both into one model is what produces the breakage.
+
+This article is the build you actually do. It takes the two Supabase Realtime features that power collaborative screens, Presence and Broadcast, and shows where each belongs, what each pays for, and how a Next.js client wires them together into a live cursors and roster feature that survives a real user load. It pairs with the earlier pieces that covered the transport and the subscription layer ([choosing the transport](/field-notes/sse-vs-websockets-2026), [the subscription lifecycle](/field-notes/realtime-subscription-lifecycle-supabase-2026) and [binary broadcasts](/field-notes/supabase-realtime-binary-payloads)); this one is about the two client-facing tools and how they split the work.
+
+## Two models, one screen
+
+A collaborative screen shows two kinds of state that age at completely different rates. The "who is viewing this document" list changes when someone opens or closes a tab, a handful of events per minute at most. A cursor travels across the page every time someone moves the mouse, dozens or hundreds of events per second. Collapsing both into one mechanism forces you to either cram fast events into a model built for slow state, or spend the cost of acknowledging every event on state that barely changes.
+
+Supabase splits them on purpose. Presence tracks the small piece of state each client publishes to a shared channel, keeps a merged view of every connected client, and notifies subscribers when that view changes. It is built for slow-changing state: online status, the active document, the current page.[^1] Broadcast sends ephemeral messages from one client to every other client on the channel and forgets them immediately. It is built for high-frequency events that nobody needs after the instant they happen: cursor positions, typing pings, whiteboard strokes.[^2]
+
+The decision that keeps a collaborative app healthy is not about which library to import. It is a two-question test applied to every piece of screen state. Does this change at high frequency, or only rarely? Does anyone need to recover it after a page reload? Cursor movement fails the second question, nobody needs yesterday's cursor, so it belongs on Broadcast. "Who is online right now" fails the first question in the fast direction, it changes rarely, so it belongs on Presence. Run that test on each element and the two-feature split falls out by itself.
+
+![A collaborative screen runs on two Realtime features at once. Presence carries slow-changing state like who is online and which document is open, delivered through sync, join, and leave events. Broadcast carries high-frequency ephemeral events like cursor positions and typing indicators, delivered once and forgotten. The two-question test chooses the lane: high frequency means Broadcast, rare changes plus recovery after reload means Presence.](</diagrams/realtime-presence-broadcast-2026/1-presence-vs-broadcast.png>)
+
+## Presence: the roster that says who is here
+
+Presence's contract is small and specific. Each client publishes a payload to a shared channel, and the server stores that payload under a unique per-client key, then hands any subscriber a merged view of every connected caller. When a client subscribes, updates, or leaves, the library fires `sync`, `join`, and `leave` events.[^1] The payload shape reveals the design: `presenceState()` returns an object keyed by client key whose values are arrays, so you can attach more than one presence entry to the same identity if you want.
+
+```tsx
+const room = supabase.channel("doc:onboarding-guide");
+
+room
+  .on("presence", { event: "sync" }, () => {
+    // push the whole roster into React state on every sync
+    setRoster(Object.values(room.presenceState()));
+  })
+  .subscribe(async (status) => {
+    if (status === "SUBSCRIBED") {
+      await room.track({ user: "user-1", activeDoc: "onboarding-guide" });
+    }
+  });
+```
+
+Two details in that snippet are load-bearing. First, you render from the resolved state in the `sync` handler, not from `join` and `leave` in isolation, because a `sync` reconciles the full view and can fire `join` and `leave` together even when nobody actually entered or left the room.[^1] If your UI paints each `join` as a new avatar, a reconciliation blip paints a phantom entry that was never a real person. Derive from the complete block of state and the roster stays honest. Second, the payload is a shared identity, so `untrack()` on unmount is the partner to `track()` on subscribe. A React effect that subscribes and returns a cleanup which calls `removeChannel` prevents the roster from leaking users who navigated away.
+
+Presence carries the hard limit that most teams discover the hard way: the free and Pro plans allow **5 presence calls per client every 30 seconds**.[^5] That number is the platform's own answer to the "can I just track my cursor here?" question. It cannot, and the cap is telling you the intended rhythm. Track once on subscribe, retrack when the user's status meaningfully changes, and never in a render loop.
+
+## Broadcast: the fast lane that forgets
+
+Broadcast is the inverse design: a message sent once, fanned out to every other subscriber on the channel, then gone. Because nothing is stored, nothing ages and nothing needs reconciling, which is exactly why it can run at mouse-move rates where presence would flood.[^2] The send path is a single `send` call, and the library picks the transport for you: before the channel is subscribed the message goes over HTTP, and after `SUBSCRIBED` it rides the WebSocket.[^2]
+
+```tsx
+const room = supabase.channel("doc:onboarding-guide", {
+  config: { broadcast: { self: true } },
+});
+
+room
+  .on("broadcast", { event: "cursor" }, (ctx) => {
+    setCursor(ctx.payload); // { user, x, y } relative to the board
+  })
+  .subscribe((status) => {
+    if (status !== "SUBSCRIBED") return;
+
+    const move = (e: MouseEvent) => {
+      room.send({
+        type: "broadcast",
+        event: "cursor",
+        payload: { x: e.clientX, y: e.clientY },
+      });
+    };
+    board.addEventListener("mousemove", throttle(move, 30));
+  });
+```
+
+Two knobs on that channel matter for a cursor feature. `self: true` tells the server to echo a message back to its sender, so the moving user's own cursor renders through the same code path as everyone else's instead of being drawn by a special-case.[^2] Without it, broadcast defaults to other-clients-only and your own cursor comes from local state, two code paths that drift. The `throttle` around `mousemove` is not a nicety, it is the difference between a smooth stream and a flood: send one position roughly every 30 milliseconds rather than on every browser event.
+
+Broadcast also supports binary payloads as `ArrayBuffer` or `Uint8Array`, enabled for `supabase-js` in version 2.91.0 and later.[^2] That is the efficient shape for a cursor or a stroke sample: a fixed struct of `x`, `y`, and a timestamp packs far smaller as bytes than as JSON, and at mouse-move rates the size difference is real throughput. The same caveat that applies everywhere on the WebSocket applies here: clients on SDK versions older than 2.91.0 silently drop binary messages, so if your audience can run old clients, ship JSON or gate the binary path behind a capability check.
+
+![Broadcast is a fan-out that forgets. A client sends a message on a channel, the Realtime server fans it out to every other subscribed client, and no copy is stored. The self option echoes the message back to its sender so the author renders through the same path as everyone else. The ack option makes the send promise resolve only after the server confirms receipt, giving you delivery confidence without persistence.](</diagrams/realtime-presence-broadcast-2026/2-broadcast-fanout.png>)
+
+## Pairing them into one feature
+
+A real cursors-plus-roster screen wires the two together rather than choosing one. The roster comes from Presence's `sync` and `presenceState()`, because who-is-online is slow state that must survive a reload. The cursors come from Broadcast, because they are fast state that must not. Both live on the same channel, so they share one WebSocket connection and one set of membership rules, which is the point of Realtime's channel model: all the collaboration for one document hangs off a single `channel("doc:roomId")`, multiplexed over one connection.[^6]
+
+Where that wiring lives in a Next.js app follows the same rule as every Realtime subscription: client components own the socket, because a server component cannot hold an open WebSocket.[^7] The pattern is one `"use client"` component, one channel opened in a `useEffect`, and one cleanup that removes the channel on unmount. Merge what arrives over the socket with the server-rendered snapshot of the document, and nothing else on the page needs to know a socket exists.
+
+![One channel carries both lanes. The roster comes from the Presence lane through sync, join, and leave events feeding presenceState. The cursors come from the Broadcast lane as throttled positions sent once and forgotten. Both live on a single channel and one WebSocket connection, opened in a Next.js use client component that removes the channel on unmount.](</diagrams/realtime-presence-broadcast-2026/4-one-channel-two-lanes.png>)
+
+The mode decision for each payload is where a real feature lives or dies, and the sharpest warning in the whole system is about mixing them: calling `track()` rapidly, a cursor on every mouse move, floods the channel and causes performance problems, and the docs are explicit that presence is not built for it.[^1] When a team ships "collaborative cursors" by tracking each position through Presence, they are fighting the platform's core design and the 5-calls-per-30-seconds cap will eventually cut them off mid-session. Broadcast exists to take that load, and the splitting of work is not two implementations, it is one channel with two event lanes.
+
+## Private rooms cut to the membership table
+
+A cursor feature is only useful if the right people see it, and a collaborative document is often a private room. Realtime guards that by making you authorize the channel, and the mechanism is deliberately the same as the rest of your database: Row Level Security on the `realtime.messages` table, evaluated against your Auth JWT when the client joins.[^3] Enabling it is two steps: set `config: { private: true }` on the channel, and disable public access in Realtime settings, then write policies on `realtime.messages` that decide who may read and write each topic.
+
+The policies key off two helpers. `realtime.topic()` returns the channel topic the caller is trying to join, so a policy can require the topic to match a room the caller belongs to. And `realtime.messages.extension` tells you the message kind, `broadcast` or `presence`, so you can authorize the two lanes independently. A membership table that lists which users are in which room becomes the single source of truth for all four gates:
+
+```sql
+create policy "member can receive presence and broadcast on their rooms"
+on "realtime"."messages"
+for select
+to authenticated
+using (
+  exists (
+    select 1 from rooms_users ru
+    where ru.user_id = (select auth.uid())
+      and ru.room_topic = (select realtime.topic())
+      and realtime.messages.extension in ('broadcast', 'presence')
+  )
+);
+
+create policy "member can send presence and broadcast on their rooms"
+on "realtime"."messages"
+for insert
+to authenticated
+with check (
+  exists (
+    select 1 from rooms_users ru
+    where ru.user_id = (select auth.uid())
+      and ru.room_topic = (select realtime.topic())
+      and realtime.messages.extension in ('broadcast', 'presence')
+  )
+);
+```
+
+Two facts about this path stop the most common implementation bugs. First, RLS is already enabled on `realtime.messages`, so your migration must not add `ALTER TABLE realtime.messages ENABLE ROW LEVEL SECURITY`; that statement fails with a permission error and aborts the rest of the migration.[^3] Write the policies and stop. Second, client access is cached for the duration of the connection, evaluated when the client joins and refreshed only when a new JWT is sent.[^3] If you revoke a user's membership while they are connected, they keep receiving messages until their JWT expires. That is not a design flaw to work around by some other trick; it is a reason to keep the JWT window short, the same stance you already take for the rest of your app.
+
+![Private Realtime rooms are authorized with Row Level Security on the realtime.messages table, the same database mechanism as your other data. A single membership table drives four gates: read and write for presence, read and write for broadcast, each policy matching the caller's uid against realtime.topic and filtering by the extension column to tell presence from broadcast. Access is cached for the connection duration, so a revocation applies only when the user's JWT expires.](</diagrams/realtime-presence-broadcast-2026/3-private-room-rls.png>)
+
+## The 2026 key change you cannot ignore
+
+Wait until you have a private room and then deploy it, and you hit the quietest migration of the year: Supabase is deprecating the `anon` and `service_role` API keys by the end of 2026, replacing them with publishable (`sb_publishable_...`) and secret (`sb_secret_...`) keys.[^4][^6] For a real-time app this matters more than it sounds, because your channel subscriptions run on the client, and the client key is the one that must be safe to expose.
+
+The migration mapping is mechanical. The `anon` key, which you could ship to a browser because it only reached what RLS allowed, becomes the publishable key, which carries the same low privilege and the same "safe to expose online" property.[^4] The `service_role` key, which bypassed RLS entirely, becomes the secret key, and it must never leave the server, an Edge Function, or another backend you control; Supabase even returns HTTP 401 when a secret key is used from a browser, matching on the user-agent header.[^4] Your client Realtime code swaps `anon` for a publishable key and keeps working, because a publishable key resolves to the same `anon` and `authenticated` Postgres roles your RLS policies already target.[^4]
+
+Modern signing with these is a strict improvement and worth grabbing as part of the same change: keys are short strings now, not the long JWT-looking values that started with `eyJ`, so a tool or tutorial telling you to copy such a long token predates the migration.[^4] Put the publishable key in a `NEXT_PUBLIC_` variable so the bundler ships it to the browser, and keep the secret key in a server-only variable that is never prefixed, so it never reaches the client bundle at all.[^4]
+
+## Recency after a reload: broadcast replay
+
+A cursor stream that forgets is right until a page reload, and then the new tab is a blank board with no idea what already happened. Broadcast replay closes that gap. A channel configured with replay asks the server for the last messages on the channel since a given timestamp, capped at 25 messages per request, so a freshly loaded page can pull the recent positions, strokes, or annotations it missed while it was disconnected.[^5][^2] Replayed messages arrive on the same broadcast handler with a `meta.replayed` flag so you can treat them differently from live ones, for example by rendering them instantly instead of animating them in.[^2]
+
+Replay is the recovery mechanism that turns a deliberately stateless feature into one that survives normal churn. It is bounded, retention is 72 hours and the per-request cap holds, so it is not a chat-history replacement and should not be used as one; durable data that must survive a reload belongs in the database and arrives over Postgres Changes, not broadcast replay.[^5] But for the ephemeral layer, the cursors and live marks, replay is the difference between "works in two open tabs" and "still makes sense when someone opens a shared board an hour later."
+
+## The limits that shape the design
+
+The plan caps do most of the design thinking for you if you read them before you build. The free plan allows 200 concurrent connections, Pro allows 500, and 10,000 needs a no-spend-cap or Team plan or higher.[^5] That is why one channel per document, shared by everyone in that document, beats a per-user-pair channel fan-out: a hundred people in a shared document join one channel, not thousands of pairwise ones. Broadcast payloads run to 256 KB on the free plan and 3,000 KB on Pro, comfortable for cursor packets but a reason to keep a single message small.[^5]
+
+Two numbers deserve special attention because they are the ones a collaborative feature actually trips. Presence is throttled to five calls per client per thirty seconds on every standard plan, the single hard number that keeps cursors off the Presence lane.[^5] And the `sync`/`join`/`leave` reconciliation means your roster rendering must derive from the whole state block, which is also why a roster beats per-avatar reactivity when the channel has many members.[^1]
+
+None of this makes a collaborative feature a big undertaking. It is the opposite: the platform hands you the pair, Presence for who-is-here and Broadcast for what-is-happening, and the discipline is just keeping the two lanes honest about which state feeds which. Ship one channel per document, put the roster on Presence and the cursors on Broadcast, authorize the room with the same RLS habits you already use, and swap to the new keys before the year ends. The demo does not lie here; a feature built this way works in one tab, two tabs, and a hundred, because you are not fighting the transport, you are matching each piece of state to the lane built for it.
+
+[^1]: Supabase Realtime Presence reference: how presence works, the merged per-client view, the `sync`, `join`, and `leave` events, `track()` and `untrack()`, the warning that presence is not designed for high-frequency updates such as mouse-move cursor sharing, and deriving UI from the resolved sync state. [supabase.com](https://supabase.com/docs/guides/realtime/presence)
+[^2]: Supabase Realtime Broadcast reference: the client, REST, and database send paths, receive and send with `channel.send`, the `self` and `ack` channel options, binary `ArrayBuffer`/`Uint8Array` payloads from supabase-js 2.91.0, broadcast replay with `meta.replayed`, and the 72-hour retained window. [supabase.com](https://supabase.com/docs/guides/realtime/broadcast)
+[^3]: Supabase Realtime Authorization: Row Level Security on the `realtime.messages` table, the `realtime.topic()` and `realtime.messages.extension` helpers, private vs public channels, the rule against adding `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` to the `realtime` schema, and the per-connection caching of access policies tied to JWT expiry. [supabase.com](https://supabase.com/docs/guides/realtime/authorization)
+[^4]: Supabase API keys guide: publishable and secret keys replacing the deprecated `anon` and `service_role` keys, which Postgres role each maps to, the browser 401 behavior for secret keys, the `NEXT_PUBLIC_` and server-only environment conventions, and the migration steps. [supabase.com](https://supabase.com/docs/guides/getting-started/api-keys)
+[^5]: Supabase Realtime limits by plan: concurrent connections, messages per second, channels per connection, the 5-presence-calls-per-client-per-30-seconds cap, broadcast payload sizes, and broadcast replay retention and per-request cap. [supabase.com](https://supabase.com/docs/guides/realtime/limits)
+[^6]: Supabase engineering announcement on the API-key change: the reasoning for replacing `anon`/`service_role` with publishable and secret keys, and the migration timetable to the end of 2026. [github.com](https://github.com/orgs/supabase/discussions/29260)
+[^7]: Supabase Realtime with Next.js guide: where real-time subscriptions live in a Next.js app, with the client component owning the socket and the server component rules. [supabase.com](https://supabase.com/docs/guides/realtime/realtime-with-nextjs)

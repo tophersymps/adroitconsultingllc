@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "realtime-presence-broadcast-2026",
+    "title": "Live Presence Meets Fast Broadcast",
+    "excerpt": "Cursors, typing, and who's-online come from two Realtime features. Presence carries slow state, Broadcast carries fast events, and a real app uses both.",
+    "category": "React & Web Dev",
+    "categoryColor": "react",
+    "categoryGradient": "from-emerald to-emerald-dark",
+    "date": "October 7, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12",
+    "featured": false,
+    "tags": [
+      "React",
+      "Next.js",
+      "Supabase",
+      "Real-Time",
+      "WebSockets",
+      "TypeScript"
+    ],
+    "bannerImage": "/banners/realtime-presence-broadcast-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "on-device-small-language-models-2026",
     "title": "How Small Can an LLM Get? The 2026 On-Device Tradeoff",
     "excerpt": "Sub-billion-parameter models now run real inference on a phone. Memory bandwidth is the real bottleneck, and quantization gives back speed up to a cliff.",
