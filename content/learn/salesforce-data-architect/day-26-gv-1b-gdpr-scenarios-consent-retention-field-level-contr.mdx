@@ -1,0 +1,170 @@
+---
+title: "Data Architect GV-1b: GDPR Scenarios: Consent, Retention, Field-Level Controls, Encryption, Deletion Patterns"
+slug: day-26-gv-1b-gdpr-scenarios-consent-retention-field-level-contr
+series: salesforce-data-architect
+lesson: 26
+excerpt: "Given a customer scenario, recommend an approach for a GDPR-compliant data model, applying consent management, retention scheduling, field-level controls, encryption, and deletion/anonymization patterns to real design decisions. Covers how to model consent so it can be recorded and withdrawn and processing actually stops, how to set a retention period per data category and enforce it with scheduled purge and archive jobs, how to use FLS, permission sets, Platform Encryption, and Data Mask to keep sensitive fields from the wrong eyes, the honest trade-offs of encryption (some filters, sorts, roll-ups, and searches change behavior; deterministic encryption buys exact matches within limits), the four deletion patterns that reach files, notes, logs, and downstream warehouses rather than stopping at the record, the subject-access and portability extract that depends on knowing every object and field holding a subject's data, and why GDPR is operationalized through a governance program, not a one-time config. Includes a worked consumer-consent scenario, a numbered configuration walkthrough, the three exam traps, and a try-it exercise."
+date: "October 7, 2026"
+author: "Adroit Consulting"
+readTime: "26 min read"
+tags: [Salesforce, Data Architecture, Data Governance, GDPR, Certification]
+---
+
+GDPR is where data governance stops being theory and becomes a legal requirement with a deadline. Lesson 25 gave you the classification spine of the GDPR-compliant data model: how to identify what is personal and sensitive, how to classify it, and how to protect it while honoring the right to erasure (gv-1a). This lesson, requirement gv-1b, takes the next step. It hands you a customer scenario and asks you to put that classification to work across the five control surfaces the exam cares about: consent management, retention scheduling, field-level controls, encryption, and deletion and anonymization patterns.
+
+The requirement is explicit about what it wants you to do: given a customer scenario, recommend an approach for a GDPR-compliant data model, applying consent management, retention scheduling, field-level controls, encryption, and deletion/anonymization patterns to real design decisions.[^1] The loaded word is "recommend." This is not a feature-recognition question. The exam sets a scene, a company with constraints and a data model, and expects you to make a design decision and defend it. The classification work you learned is the input; the five control surfaces are the levers you move.
+
+Everything in this lesson traces back to one premise: compliance is a property of the running system, not of a configuration you set once. A design that records consent but has no way to stop processing when consent is withdrawn is not compliant. A model that keeps every record forever because the data is "useful" violates storage limitation. A field that is encrypted but visible to every profile defeats the point. The exam rewards architects who see GDPR as a set of ongoing obligations that the data model must embody, and punishes those who treat it as a checkbox.
+
+## Consent management: record it, and be able to stop
+
+The first control surface, and the one the exam treats as the gateway to the others, is consent. Under GDPR, consent is a lawful basis for processing, and when you rely on it, it has to be real: freely given, specific, informed, and unambiguous, with the subject able to withdraw it as easily as they gave it.[^2] If a customer opted in to marketing, the company may process their data for marketing because of that consent, and only for that purpose, until the customer takes it back.
+
+The design demand this creates is that consent must be recordable and withdrawable. That single sentence hides the field-level detail the exam wants you to know.
+
+First, the data model needs a place to store what the subject consented to, not just a checkbox that says yes. When the exam asks you to model consent, it is looking for four things recorded together: the purpose the consent covers (marketing, analytics, third-party sharing), the timestamp of when consent was given, the channel through which it was given (a web form, an in-store sign-up, a call), and the current status of that consent. These four elements make consent auditable. If a regulator asks whether this customer consented to marketing, on what date, through which channel, and whether that consent is still valid, the model has to be able to answer all four.[^3]
+
+Second, consent must be withdrawable, and withdrawal must stop the consented processing. This is the logic the exam's Q1 tests directly. A subject withdraws consent for marketing. The requirement is not "keep the record," it is not "delete the customer's entire record immediately," and it is certainly not "encrypt the marketing field harder." The requirement is that the data model records the withdrawal and stops the consented processing, which in this case is the marketing. The distinction matters for the data model: consent covers one purpose, so withdrawal stops that purpose and the marketing sends and segmentation that run on it, not necessarily the whole customer record. A customer might still have a legitimate legal or contractual basis to hold some of their data, or a separate, non-consent basis for other processing. Consent withdrawal halts what consent authorized, and the design must be able to express that precisely.[^4]
+
+The practical shape of this in a data model is usually a consent or opt-in object, or a set of consent fields on the Contact or Account, holding purpose, timestamp, channel, and status. Status is the field that does the operational work: a status of "withdrawn" makes the marketing segmentation, the approval flows, and the sending logic exclude that record. The exam wants you to understand that the model does not just store consent, it wires consent state into every process that depends on consent as its legal basis. If a journey sends marketing on the basis of consent, the journey has to check the consent record before it sends, and stop when consent is withdrawn.
+
+## Retention: storage limitation, made into a schedule
+
+The second control surface is retention, and it is the least glamorous and the easiest to get wrong. GDPR's storage-limitation principle is blunt: personal data must be kept for no longer than is necessary for the purposes for which it is processed.[^5] In practical terms, "keep everything forever because it might be useful" is non-compliant. The data model has to say how long each category of data is held, and something has to enforce that limit.
+
+The exam wants three pieces of design here, and they chain together.
+
+First, define a retention period per data category. Different data has different legitimate lifespans. A customer's marketing consent record might be kept only as long as consent is active plus a defined post-withdrawal period for record-keeping. Transactional order data might be held for the statutory bookkeeping period (often several years). Session logs and audit trails have their own retention based on the purpose they serve. The point is that "retention" is not one number for the whole org; it is a policy per category, driven by the legitimate purpose each category serves. This is where the classification from lesson 25 pays off, because a retention policy can only be assigned to data you have classified.
+
+Second, enforce the retention period with scheduled purge and archive jobs. A retention policy that lives in a document and is never executed is worth nothing. The design needs a scheduled job, typically a batch Apex job or a scheduled data-management flow, that runs on a defined cadence, finds records whose retention period has elapsed, and either deletes them or moves them to an archive. Archive is a legitimate pattern when there is a reason to keep the data (legal hold, bookkeeping) but no reason to keep it in the working CRM tables. The purge is where storage limitation actually takes effect.
+
+Third, document the schedule. The exam treats retention as a governance artifact, not just a mechanism. The schedule of what gets purged, how often, and under what rule has to be discoverable, because the definition of "necessary" changes over time and the policy has to be reviewable. A retention schedule that no one can find is a policy failure, and it is also a compliance failure, because the company cannot demonstrate how it honors storage limitation.[^6]
+
+The trap the exam sets here is the "it might be useful" argument. A customer's data being useful to marketing is not the same as it being necessary for the purpose it was collected. If the purpose has ended, the retention period has ended, and keeping the data because a future campaign might want it defeats storage limitation. The model has to distinguish what is necessary from what is merely convenient.
+
+## Field-level controls: FLS, permission sets, and encryption
+
+The third control surface is who can see what. A GDPR-compliant data model does not just store sensitive personal data, it restricts access to the roles that have a legitimate need for it. The principle is data minimization applied at the field level: a service agent handling a case does not need to see the customer's banking details, and a marketing operator does not need to see an identity document number.
+
+The baseline mechanism is field-level security, FLS, delivered through profiles and permission sets. FLS controls whether a user can see or edit a specific field on an object. A permission set is the cleaner way to grant FLS than editing profiles directly, because you can grant a tight set of fields to exactly the roles that need them, rather than loosening a profile that many users share. The exam wants you to reach for FLS and permission sets as the first line of defense: only roles with a legitimate need can view sensitive fields.[^7]
+
+Platform Encryption is the second layer, and it is the one the exam spends the most time on, because it is where real design trade-offs hide. Shield Platform Encryption protects data at rest: fields you encrypt are stored in an encrypted form in the database, so even at the storage layer, the personal data is not readable in plaintext.[^8] This is exactly what a GDPR-relevant model should want for fields like national identifiers, financial details, or medical information. Encryption at rest addresses the confidentiality half of the obligation.
+
+But here is the critical exam material: encryption is not free. The exam Q2 asks which two statements are true about enabling Platform Encryption on a field, and the answer pairs A and C: some filters, sorts, and roll-ups may behave differently on encrypted fields, and deterministic encryption supports certain exact-match operations within limits. The wrong answers are B, that encryption has no effect on any platform function, and D, that encryption removes the need for field-level security. Both are false, and knowing why they are false is the whole point.
+
+Encryption changes function behavior. When a field is encrypted, the platform cannot always evaluate filters, sorts, formula fields, roll-up summaries, and certain search operations against it the way it can against a plaintext field, because the stored value is not directly comparable. So a roll-up that sums an encrypted numeric field, or a report filter that narrows on an encrypted value, may not work, or may work differently, until the platform's behavior for that function is confirmed. The exam wants you to design around these constraints, and to confirm current release behavior before you assume a function still works on an encrypted field, because behavior changes as the platform evolves.[^9]
+
+Deterministic encryption is the partial answer to that problem. Unlike standard encryption, which produces different ciphertext for the same plaintext every time, deterministic encryption always produces the same ciphertext for the same plaintext value. That means the platform can do exact-match operations on the field: a filter for an exact value, a join, an upsert by that field, can work within defined limits. The trade-off is a real risk profile, because determinism makes the encrypted data statistically analyzable: an attacker with knowledge of the plaintext domain can guess-and-check which ciphertext corresponds to which value. So deterministic encryption is a bounded tool, useful for fields you must filter or join on exactly, and it has its own limits and risk profile that the architect must weigh.[^10]
+
+And encryption does not replace FLS. Encrypting a field protects it at rest, but it does not control who can read it in the running application. A user with field-level access and the right to decrypt can still see the value. So the correct design layers the two: FLS and permission sets restrict which roles can view the field, and encryption protects the field at rest for the roles that can. The exam is explicit that enabling encryption does not remove the need for field-level security.
+
+A third field-level control the exam names is Data Mask, used in sandboxes. Non-production environments are a leak vector for production personal data. If a sandbox is refreshed with production data, that personal data has moved into an environment that is not protected the way production is, and which may be accessible to developers and testers. Data Mask replaces the sensitive values in sandbox copies with realistic but fake data, so the sandbox keeps its shape for testing without carrying production personal data out of the production environment.[^11] A GDPR-aware design enables Data Mask so personal data never leaks into non-production.
+
+## Deletion patterns: erasure has to reach everything
+
+The fourth control surface is deletion and anonymization, and it is where the exam tests whether you understand the full blast radius of the right to erasure. When a subject requests erasure, or when a retention period ends, the obligation is not "delete the hole in the customer record." It is "remove the subject's personal data from everywhere it lives." The exam Q3 tests exactly this: a company wants to honor erasure while keeping analytics on transaction volumes, and the right answer is to anonymize the identifying fields while retaining the transactional and aggregate data, not to hard-delete all rows, not to offload records to a warehouse and leave Salesforce untouched, and not to disable audit history.
+
+The pattern the exam wants you to recognize is the four-way deletion toolkit, and which one applies depends on the data and the reason for keeping it.
+
+Pattern one, delete the subject's records and their related personal fields across all objects. This is the straightforward erasure: the record goes, and every related record that holds the subject's personal data goes with it. The hard part is not the delete, it is knowing every object and field that holds the subject's identity. If only the Contact is deleted but the subject's notes, attached files, and related case data survive, the erasure is incomplete. The classification inventory from lesson 25 is what answers "everywhere it lives."[^12]
+
+Pattern two, anonymize identifiers, is the one the exam Q3 wants. When the company needs the analytics on transaction volumes but the subject has a right to erasure, you do not keep the personal data, and you do not destroy the analytics. You replace the identifying fields with pseudonyms or anonymized keys, so the transaction rows survive for aggregate analysis but can no longer be tied back to the individual. The personal identifiers are gone; the transactional and aggregate value remains. This is the correct design when the business value is in the shape of the data, not in who the data is about.[^13]
+
+Pattern three, purge unstructured personal data. Personal data does not only live in structured record fields. It lives in attached files, in notes, in feed items, and in cases. A robust erasure job has to reach unstructured content, not just record fields, because an attached file with an identity document contains personal data even though it is not a field on a record. The design has to inventory unstructured personal data and purge it alongside the structured data.
+
+Pattern four, coordinate deletion with downstream and warehouse systems. Erasure is an obligation that crosses system boundaries. If the CRM pushes data to a data warehouse, a marketing platform, or an integration partner, then deleting the record in Salesforce does not erase it from those systems. A compliant design coordinates the deletion with every downstream consumer, so the subject's personal data is removed from the warehouse and the partner systems too. This is the coordination obligation the exam keeps returning to, and it is one of the most commonly missed boundaries.[^14]
+
+There are two extras the exam wants you to keep in view. Audit history and logs may also contain personal data, and they must be addressed. A subject's erasure request does not stop being real because the personal data has aged into an audit log. And the right of access and portability cut the other way: the model must be able to gather all of a subject's personal data in a machine-readable form on request. That extract is only possible if you know every object and field that holds the subject's data, which is the classification work paying off a second time. The same inventory that makes erasure complete makes access and portability possible.
+
+## Cross-border transfer and residency
+
+A GDPR-compliant design also has to answer where the data lives. The exam places this inside the data-governance objective because it leans on the multi-org design you studied: in multi-org architectures, the design keeps regulated data in-region. If a customer's data is subject to GDPR or to local residency rules that require it to physically stay in a specific region or instance, the design keeps it there, and it documents the transfer mechanism for anything that does cross a border.[^15] A single global org holding every customer's data in one region, no matter where those customers live, is not automatically compliant when residency rules say otherwise. The residency decision from the multi-org lesson and the compliance requirement here are the same design muscle.
+
+## Governance linkage: compliance is a process
+
+The fifth thread, and the one that ties all four surfaces together, is governance. The exam is explicit that GDPR compliance is operationalized through the governance program, not through a one-time configuration. A DPO or data steward owns the classification and the policies. The classification is maintained as the data model changes, because a new object or field holding personal data becomes a new erasure and retention surface. And periodic audits verify that consent, retention, encryption, and deletion still behave as designed. Compliance is a process that runs continuously; the moment you treat it as a finished configuration, it starts to decay as the environment changes. This is the frame that changes "recommend an approach" from a feature list into an ongoing responsibility.[^16]
+
+## Worked example: the retail consent-and-erasure scenario
+
+Here is the applied scenario the exam is shaped like, and the reasoning it wants to see.
+
+A retailer processes customer data primarily under consent for marketing communications, sells through a commerce system that produces order transactions, and also pushes customer data to an analytics warehouse for volume reporting. A customer withdraws consent for marketing and separately requests erasure. The company still needs its transaction-volume analytics.
+
+Score the obligations. Consent is the lawful basis for the marketing, so withdrawing consent means the marketing processing must stop: the segmentation, the sends, and any campaign that touches this customer. The order transactions themselves are not processed on the basis of marketing consent, so they are not automatically part of the consent withdrawal. But the erasure request is broader, and the company still needs the volume analytics.
+
+The design runs the four surfaces together. Consent: a consent record tracks purpose and status, and on withdrawal the marketing logic excludes this customer, so no further marketing is sent. Retention and deletion: an erasure job finds every object, field, file, note, and log entry that holds this customer's personal data and removes the identifying values. Encryption and field controls: whatever identifying fields remain on the retained transaction records are not exposed beyond the roles that need them, and are encrypted at rest. Anonymization: the transaction rows the analytics warehouse needs are kept with their identifying relationships to the individual removed, replaced by a pseudonym, so the volume analytics survive while the subject is no longer identifiable.
+
+The result meets every obligation. Marketing stops, because consent withdrawal halted it. Erasure reaches the records, the unstructured content, and the downstream view, because the erasure job covered them and the warehouse received the anonymized, not the identifying, rows. The analytics are preserved, because anonymization kept the shape of the transactions. That is the exam's idea of a good answer: a design that honors consent, erasure, storage limitation, and the business's legitimate analytics need at the same time.
+
+## Config walkthrough: building the GDPR-compliant design
+
+Here is the numbered walkthrough the exam expects you to be able to reason through.
+
+1. Model consent. Create a consent object or consent fields on the Contact or Account holding purpose, timestamp, channel, and status. Wire the status field into every process that relies on consent as its lawful basis: the marketing segmentation, the approval flows, and the sending logic all check consent state and stop when it is withdrawn.
+
+2. Define retention per data category and schedule purge and archive jobs. For each classified category, set the retention period and choose purge or archive based on the legitimate purpose. Schedule a batch or flow job that finds elapsed records and executes the chosen action on a documented cadence, and document the schedule so the policy is discoverable and reviewable.
+
+3. Apply field-level controls and encryption to sensitive fields. Grant FLS through profiles and permission sets so only roles with a legitimate need can view sensitive fields. Enable Shield Platform Encryption on the personal fields, and confirm which filters, sorts, roll-ups, and searches are affected on encrypted fields, applying deterministic encryption only where an exact match is a required operation and the risk profile is accepted. Enable Data Mask for sandboxes so production personal data does not leak into non-production.
+
+4. Build an erasure and anonymization job that reaches everything. Find all subject records and their personal fields across all objects, purge unstructured personal data in files, notes, and cases, and anonymize or delete identifiers per the reason for keeping the data. Coordinate deletion with downstream and warehouse systems so the subject's personal data is removed everywhere it lives, including audit logs and logs.
+
+5. Provide a subject-access and portability extract. Using the classification inventory, gather all of a subject's personal data into a machine-readable form on request, and document that the same inventory drives complete erasure.
+
+## The three exam traps
+
+Trap one, retaining data indefinitely because it is useful. Storage limitation makes indefinite retention non-compliant. A retention period is required per data category, and a scheduled purge or archive job must enforce it. "Keep the forever data because a campaign might want it" is exactly the violation the exam flags.
+
+Trap two, forgetting that erasure has to reach files, notes, audit logs, and downstream warehouses. Deleting the customer record is not erasure if the subject's notes, attached files, and warehouse rows survive. The erasure job has to cover unstructured personal data and coordinate deletion downstream, including logs and audit history, not just the record fields.
+
+Trap three, expecting encryption to leave every function unchanged. Enabling Platform Encryption changes some filters, sorts, roll-ups, and search behavior on the encrypted field, and you must confirm current behavior. Deterministic encryption restores limited exact-match operations at the cost of a specific risk profile. And encryption never replaces field-level security, because an encrypted field still must be restricted to roles that can legitimately read and decrypt it.
+
+## Try it for yourself
+
+In a sandbox, build the consent model. Create a consent object or consent fields with purpose, timestamp, channel, and status, then wire the status into a simple marketing flow that sends or suppresses based on consent state. Withdraw a test contact's consent and confirm the flow stops the marketing send. This makes concrete why consent must be recordable and withdrawable, and not just a checkbox.
+
+Then enable Shield Platform Encryption on a test sensitive field and explore what happens to a roll-up and a filter on that field. Confirm which functions behave differently and which exact matches deterministic encryption restores. This makes concrete the encryption trade-off the exam tests.
+
+Finally, build an erasure job that finds a test subject across a record, a note, and a file, anonymizes the identifying values, and confirm the analytics on the retained transaction rows survive while the subject is no longer identifiable. This is the anonymization pattern from the exam's erasure question.
+
+## What's next
+
+You can now model consent so it is recordable and withdrawable and processing actually stops, set a retention period per data category and enforce it with scheduled purge and archive jobs, restrict and encrypt sensitive fields with FLS, permission sets, Platform Encryption, and Data Mask, run the four deletion and anonymization patterns that reach files, logs, and downstream systems, and build subject-access and portability extracts from the classification inventory. Lesson 27 moves up a level from the individual GDPR controls to the program that governs them: Enterprise Data Governance Program is up next, covering the governance framework, data stewardship, and the policies that institutionalize all of this work (gv-2a). The consent, retention, encryption, and deletion controls you just designed are the enforcement mechanisms; the governance program in lesson 27 is the ownership and policy structure that keeps them maintained, audited, and non-negotiable.
+
+## Related Requirements
+
+- Lesson 25 of 42 (gv-1a): GDPR-compliant data model: identify, classify, protect, right to erasure
+- Lesson 28 of 42 (gv-?): Governance implementation scenarios
+
+## References
+
+[^1]: Platform Data Architect exam guide, Salesforce. Outlines the Data Governance domain and the objective to recommend an approach for a GDPR-compliant data model, applying consent management, retention scheduling, field-level controls, encryption, and deletion/anonymization patterns to real design decisions. [trailhead.salesforce.com](https://trailhead.salesforce.com/credentials/platformdataarchitect)
+
+[^2]: GDPR, Article 4(11) and Article 7. Defines consent as freely given, specific, informed, and unambiguous, and requires that it be as easy to withdraw as to give. [gdpr-info.eu](https://gdpr-info.eu/art-4-gdpr/)
+
+[^3]: Consent Management in Salesforce, Salesforce Help. Documents that a consent-based data model records the consent category, the channel, and the status of a subject's consent so the org can honor and audit consent at the individual level. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.consent_management_overview.htm&language=en_US&type=5)
+
+[^4]: GDPR, Article 7(3). Requires that the data subject have the right to withdraw consent at any time, and that withdrawal of consent does not affect the lawfulness of processing based on consent before its withdrawal. [gdpr-info.eu](https://gdpr-info.eu/art-7-gdpr/)
+
+[^5]: GDPR, Article 5(1)(e). States the storage-limitation principle: personal data must be kept in a form which permits identification of data subjects for no longer than is necessary for the purposes for which the personal data are processed. [gdpr-info.eu](https://gdpr-info.eu/art-5-gdpr/)
+
+[^6]: Field-Level Security, Salesforce Help. Documents that field-level security controls whether a user can see, edit, and report on a specific field, and is applied through profiles and permission sets. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.fields_about_field_access.htm&language=en_US&type=5)
+
+[^7]: Shield Platform Encryption Implementation Guide, Salesforce. Documents that Platform Encryption protects data at rest in the database and that enabling encryption on a field can affect which platform functions work on it. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.security_pe_implementation_guide.htm&language=en_US&type=5)
+
+[^8]: Shield Platform Encryption Implementation Guide, Salesforce. Documents that encrypted fields are stored in encrypted form at rest, protecting sensitive data in the database layer. [salesforce.com](https://www.salesforce.com/products/platform/products/shield/)
+
+[^9]: Shield Platform Encryption Implementation Guide, Salesforce. Documents that some filters, sorts, formula fields, roll-up summaries, and search operations behave differently on encrypted fields, and that architects must confirm behavior before assuming a function still works. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.security_pe_considerations.htm&language=en_US&type=5)
+
+[^10]: Shield Platform Encryption Implementation Guide, Salesforce. Documents deterministic encryption as a scheme that produces the same encrypted value for the same input, enabling exact-match filtering, joins, and upserts within defined limits while carrying a distinct security risk profile. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.security_pe_implementation_guide.htm&language=en_US&type=5)
+
+[^11]: Data Mask, Salesforce Help. Documents that Data Mask replaces sensitive data in sandbox environments with realistic but fake values so production personal data does not leak into non-production copies. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.data_mask.htm&language=en_US&type=5)
+
+[^12]: GDPR, Article 17. Establishes the right to erasure: the data subject has the right to obtain the erasure of personal data concerning them when the data are no longer necessary or consent is withdrawn. [gdpr-info.eu](https://gdpr-info.eu/art-17-gdpr/)
+
+[^13]: Pseudonymisation, GDPR Article 4(5) and Recital 28. Defines pseudonymisation as processing personal data so it can no longer be attributed to a specific data subject without the use of additional information kept separately, which preserves aggregate analytics while protecting identity. [gdpr-info.eu](https://gdpr-info.eu/art-4-gdpr/)
+
+[^14]: GDPR, Article 17(2). Requires the controller who has made personal data public to take reasonable steps to inform other controllers processing the data of the erasure request, recognizing that erasure obligations extend across systems. [gdpr-info.eu](https://gdpr-info.eu/art-17-gdpr/)
+
+[^15]: GDPR, Chapter V (Articles 44-49). Establishes the rules for transferring personal data to third countries, requiring that transfers only occur under adequate safeguards or appropriate mechanisms. [gdpr-info.eu](https://gdpr-info.eu/chapter-5/)
+
+[^16]: GDPR, Article 24 and Article 32. Requires the controller to implement appropriate technical and organizational measures to ensure and demonstrate that processing is compliant, and to implement measures appropriate to the risk, which is the ongoing governance obligation. [gdpr-info.eu](https://gdpr-info.eu/art-24-gdpr/)
