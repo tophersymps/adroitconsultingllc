@@ -95,6 +95,7 @@ export const articleAudio: ArticleAudio[] = [
   { slug: "salesforce-apex-trigger-framework", voice: "af_heart", storagePath: "blog/salesforce-apex-trigger-framework/af_heart.mp3", timingsStoragePath: "blog/salesforce-apex-trigger-framework/af_heart.timing.json" },
   { slug: "salesforce-api-version-advance-2026", voice: "af_heart", storagePath: "blog/salesforce-api-version-advance-2026/af_heart.mp3", timingsStoragePath: "blog/salesforce-api-version-advance-2026/af_heart.timing.json" },
   { slug: "salesforce-build-order-feb-2027", voice: "af_heart", storagePath: "blog/salesforce-build-order-feb-2027/af_heart.mp3", timingsStoragePath: "blog/salesforce-build-order-feb-2027/af_heart.timing.json" },
+  { slug: "salesforce-data-cloud-strategy-guide", voice: "af_heart", storagePath: "blog/salesforce-data-cloud-strategy-guide/af_heart.mp3", timingsStoragePath: "blog/salesforce-data-cloud-strategy-guide/af_heart.timing.json" },
   { slug: "salesforce-error-recovery-2026", voice: "af_heart", storagePath: "blog/salesforce-error-recovery-2026/af_heart.mp3", timingsStoragePath: "blog/salesforce-error-recovery-2026/af_heart.timing.json" },
   { slug: "salesforce-failure-patterns-2026", voice: "af_heart", storagePath: "blog/salesforce-failure-patterns-2026/af_heart.mp3", timingsStoragePath: "blog/salesforce-failure-patterns-2026/af_heart.timing.json" },
   { slug: "salesforce-flow-patterns", voice: "af_heart", storagePath: "blog/salesforce-flow-patterns/af_heart.mp3", timingsStoragePath: "blog/salesforce-flow-patterns/af_heart.timing.json" },
