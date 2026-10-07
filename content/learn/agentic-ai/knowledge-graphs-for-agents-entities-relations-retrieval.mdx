@@ -1,0 +1,114 @@
+---
+title: "Lesson 62: Knowledge Graphs for Agents: Entities, Relations, and When Retrieval Gets Structured"
+slug: knowledge-graphs-for-agents-entities-relations-retrieval
+series: "agentic-ai"
+lesson: 62
+excerpt: "A knowledge graph models your data as entities and the relationships between them, so an agent can follow a chain of connections instead of hoping similarity scores line up. This lesson goes inside that structure: what entities, relations, and properties actually are, how retrieval walks them with vector search, Cypher, and text-to-query, and when the graph genuinely beats vector memory. It closes with a worked example, a concrete pattern, and a self-check quiz.Whats-next"
+date: "October 7, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [LLMs, AI Agents, Knowledge Graphs, GraphRAG, Agent Memory, Retrieval]
+---
+Ask a naive retrieval system "how many open tickets are there?" and it will answer smugly, then be wrong. In the LangChain team's DevOps RAG demo, a vector index retrieved the canonical top four results and the LLM reported "there are 4 open tickets." A Cypher query against the same data returned five. The vector search wasn't lying, exactly; it retrieved the four most similar task chunks and let the model assume those four were the whole population. Similarity found you text that sounds like the question. It never told you there were more open tasks hiding off-screen.[^2]
+
+That gap is where knowledge graphs earn their place. This lesson goes inside the machinery: what the nodes, edges, and properties actually are, how an agent retrieves from a graph once it exists, and how to judge when the structure pays off versus when plain vector memory was fine all along.
+
+
+
+## The graph as facts, not documents
+
+The mental model most people carry from vector RAG is documents, chunks, embeddings. A knowledge graph swaps the unit entirely. Everything is a set of nodes and the relationships between them. The index unit isn't a chunk embedding; it's a set of nodes (entities) and edges (the relationships between them.[^3]
+
+- A node is an entity, like a person, team, microservice, task, product, or event.
+- A relationship (an edge) names how two entities are connected, like a dependency between services or who owns a taskolico
+- A property is a key-value pair attached to a node or a relationship, like a task's status, its description, or its embedding vector.[^2]
+
+Both nodes and edges can carry property values. In LangChain's microservice example, the microservice nodes store name and technology as properties, while task nodes hold name, status, description, and, crucially, their embedding values. That last one deserves attention: by storing text embeddings as node properties, you can run a vector similarity search over task descriptions as if the tasks lived in a dedicated vector database. A knowledge graph can hold structured and unstructured information in a single store, so you don't need to stand up and sync a second database type. The term for running one less polyglot architecture is a feature.[^2]
+
+What gets lost in vector-only memory is structure: that chunk embedding captures meaning but drops the fact that "Jane Smith" and "J. Smith" are the same person, or that a 2025 policy supersedes the 2023 version.[^3] The graph makes those relations explicit rather than leaving the model to guess. That is the whole point: knowing how facts connect, not just how similar they sound.
+
+
+
+## Why plain retrieval hits a wall on multi-part questions
+
+Vector similarity search is great at finding text that means something similar to your query. That strength becomes a limit the moment an answer spans several related facts. The Neo4j team's example is a two-part question:"did any of the former OpenAI employees start their own company?" It breaks into two sub-questions: who are the former OpenAI employees, and did any of them found a company. A single doc rarely carries both facts, and the top few chunks you retrieve might all mention one founder while burying everyone else. You can tweak chunk overlap or raise the retrieved count, but that only papers over the real problem: traditional vector search has no awareness of how facts are connected, so it can't reliably chain them together.[^1]
+
+The failure has a concrete shape. The retrieved top-N documents can be repetitive (the same fact three times)and miss the bridging fact entirely, because similarity scores one text at a time. It's not a tuning bug; it is what nearest-neighbor matching does. Similarity measures how alike two pieces of text are, not how they relate.[^1][^3]
+
+
+
+## The worked example: a DevOps graph retrieves across two question types
+
+Let's walk the retrieval paths on one concrete graph, using the LangChain team's microservice setup because it spans both structured and unstructured data:[^2]
+
+The domain has person, team, microservice, and task nodes. Microservices hold DEPENDS_ON relationships to each other; tasks link back to the services they touch, and teams link to the people assigned to them. A task node stores its description, status, embedding, and more. Two question shapes come out of this graph, and each needs a different retriever.
+
+
+
+**Vector search for the unstructured questions.** Questions like "how will RecommendationService be updated?" want textual recall, not counts. You embed task name, description, and status properties, create a vector index, then run a similarity search at query time, just as you would against a standalone vector store. The agent answers "how will recommendation service be updated" from the most relevant task context.[^2]
+
+**Structured queries for the analytical questions.** Questions like "how many open tickets are there?" or "which team has the most open tasks?" are aggregations. No single passage is similar to them; they are properties of the whole collection. Vector search can't count. This is where a structured query language like Cypher takes over, matching patterns in the graph with an ascii-art style syntax, for example `(:Person {name:"Tomaz"})-[:LIVES_IN]->(:Country{name:"Slovenia"})`.[^2] Writing valid Cypher by hand every time is real work, so tools like LangChain's GraphCypherQAChain generate the Cypher from your natural-language question, letting a strong LLM handle query synthesis while a second, cheaper model turns the returned rows into an answer.[^2]
+
+The deeper win is graph traversal, not just counting. Because relationships are first-class, you can ask "which services depend on Database directly?" and "which services depend on Database indirectly?" The indirect question walks variable-length paths, following dependencies across however many hops the graph records. That is an answer vector search physically cannot reach, because the connecting steps live in structure, not in any single chunk's wording. If several services end up in both answers, that reflects the shape of the dependency graph, not a wrong query.[^2]
+
+
+
+## The four-step knowledge graph retrieval loop
+
+Once the graph exists, retrieval on it tends to run the same way every time. The Redis team lays out the common pattern in four steps:[^3]
+
+1. Extract the entities, relationships, and metadata from your source data, typically with an LLM during ingestion.
+2. Link the query's entities: pull key entities out of the user's question and use vector search to find the matching nodes in the graphombat
+3. Traverse the graph: generate graph queries, for example in Cypher, to walk the relationships the question needs, possibly breaking a complex question into focused sub-questions along the way
+4. Generate the response: layer the retrieved graph context into the prompt and let the model answer grounded in it.[^3]
+
+Notice what does not happen: nothing re-embeds the whole graph at query time, and nothing dumps a pile of similar-but-loosely-related chunks into the context. The split is clean: the app orchestrates extraction and traversal, the graph store holds entities and edges, and the model reasons over exactly what it retrieved.[^3] That is the "context engineering" move from prior lessons, applied to a graph rather than a vector index: fill the window with what the next step actually needs, not everything that vaguely matches.
+
+
+
+##When a knowledge graph genuinely helps
+
+You don't reach for a graph for every question, and you shouldn't. Vector memory is the right tool when the question is "what text means the same ass this" over unstructured prose. The graph pays off on three question shapes, and they are the same three that break vector search:[^3]
+
+1. Relationship-path, multi-hop queries. The answer is split across pieces that connect through relationships, not shared wording. Following the "reported in" and"fixed by" links turns three otherwise-unrelated documents into one answer. Vector search surfaces each individually but cannot follow the chain.
+2. Whole-corpus questions. "What are the top five themes in our support tickets?" is a property of the entire collection, so no single passage is similar to it. Nearest-neighbor search only sees the chunks closest to the query, so it can't reason about the shape of the whole corpus.
+
+3. Dense, interconnected domains. Code dependencies, org charts, citation networks, where everything looks similar to everything else. Vector search returns plausible-but-wrong neighbors, and retrieving more documents only adds noise, because it treats each item as an isolated block, not a node in a network. The graph's declared relationships cut past the similarity-noise to the connections that matter.[^3]
+
+The common thread across all three: similarity reports how alike two pieces of text are; the graph reports how they relate. When the question is actually about relating, the graph wins. When it's about resemblance in free text, vector wins, and the pairing of the two under one agent is the reason the hybrid pattern from the previous lesson exists[^1][^3]
+
+
+
+## The pattern: model the domain as a graph so the reasoning paths are precompiled
+
+Here is the concrete takeaway worth carrying forward. People tend to treat the knowledge graph as a retrieval optimization, but its real job is schema. You model the domain as a graph, and in doing so you precompile the reasoning paths the agent will need, instead of forcing a broad vector search every single time. The graph's structure, its declared nodes and edges, IS the map of questions the system can answer well. A domain whose answers are relational (who depends on what, who owns what, what fixed what) gets cheaper, more accurate retrieval the moment those relations are explicit.[^3]
+
+The freshness caveat belongs in the same breath. A multi-hop graph is only as good as how current it is. Batch indexing leaves graphs stale, and that staleness fails silently, because semantic similarity doesn't prioritize time: a vector embedding of a deprecated API reference can score as highly as a current one. Stale relationships, entity decay, and version blindness all show up as wrong-but-confident answers long after the graph went stale. If your data churns, plan for incremental, change-driven updates, not nightly rebuilds of everything.[^3]
+
+
+
+##A worked loop you can steal
+
+To wire a graph into an agent, take the LangChain route: build one agent with two tools, one per question shape. A "Tasks" tool wraps the vector retriever and handles questions about task descriptions; a "Graph" tool wraps the Cypher chain and handles questions about microservices, their dependencies, assigned people, or any aggregation like counting tasks. Write each tool's description so the agent knows which to call, then let the agent pick per question. Ask "which team maintains PaymentService?" and the agent routes to the graph tool; ask "which tasks have optimization in their description?" and it routes to the vector tool. One agent, two memory types, each answering the question it was built to answer.[^2]
+
+The lesson: retrieval is a routing decision, exactly like model routing was in an earlier lesson. Pair the retriever's strength to the question's shape, and let the agent make that call at query time.
+
+
+
+##Try it
+
+Pick a domain you know well, say your own team's services, repos, and on-call rotation. Sketch it as a graph:which nodes are entities, which edges are real relationships (who can deploy what, which repo depends on which, who is on call when),and which facts are properties rather than their own nodes. Then invent one relational question("which service will break if the auth repo goes down?")and one aggregation question("which team owns the most open incident tickets?"). Which type of retriever should answer each, and why? If you had both, would you hand the agent two tools or one?
+
+
+
+##Summary
+
+A knowledge graph stores facts as triples:two entities joined by a relation. Its retrieval advantage over vector memory appears exactly where resemblance fails: relationship-path questions, whole-corpus aggregations, and dense interconnected domains. Vector and graph retrieval pair neatly under one agent with two tools, since each answers a different question shape. The real design decision is the schema: modeling the domain as a graph precompiles the reasoning paths the agent needs. Keep the graph fresh, or the structure you built to help will quietly answer from facts that stopped being true. It's the same discipline as context engineering: give the model precisely the connections the question needs, not a pile of vaguely similar text.[^1][^3]
+
+
+
+[^1]: Tomaž Bratanič, "How to improve multi-hop reasoning with knowledge graphs and LLMs," Neo4j, June   18,  2025. https://neo4j.com/blog/genai/knowledge-graph-llm-multi-hop-reasoning/
+
+[^2]: The LangChain Team, "Using a Knowledge Graph to Implement a DevOps RAG application," LangChain, October4, 2023. https://www.langchain.com/blog/using-a-knowledge-graph-to-implement-a-devops-rag-application
+
+[^3]: "Knowledge Graph RAG: Structured Retrieval for AI Agents," The Redis Team, Redis. https://redis.io/blog/knowledge-graph-rag-structured-retrieval-ai-agents/
