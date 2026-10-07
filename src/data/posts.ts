@@ -25,6 +25,32 @@ export const posts: BlogPost[] = [
     "status": "published"
   },
   {
+    "slug": "salesforce-stack-testing-2026",
+    "title": "Half Your Salesforce Stack Is Not Code",
+    "excerpt": "Most of a modern Salesforce org is declarative and AI, not Apex. Confidence comes from testing each layer by the mechanism it runs on.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "October 7, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "15 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "Testing",
+      "Flow",
+      "Agentforce",
+      "Data Cloud",
+      "Experience Cloud",
+      "Apex",
+      "API",
+      "Security"
+    ],
+    "bannerImage": "/banners/salesforce-stack-testing-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "on-device-small-language-models-2026",
     "title": "How Small Can an LLM Get? The 2026 On-Device Tradeoff",
     "excerpt": "Sub-billion-parameter models now run real inference on a phone. Memory bandwidth is the real bottleneck, and quantization gives back speed up to a cliff.",
@@ -411,8 +437,8 @@ export const posts: BlogPost[] = [
   },
   {
     "slug": "salesforce-apex-trigger-framework",
-    "title": "The Apex Trigger Framework: one handler per object keeps automation from collapsing at scale",
-    "excerpt": "The Flow vs Apex decision guide tells you to reach for an Apex trigger framework past 30 automations. It never shows you how to build one. This is that blueprint.",
+    "title": "The Apex Trigger Framework: One Handler Per Object",
+    "excerpt": "The Flow vs Apex guide says reach for a trigger framework past 30 automations. It never shows you how to build one. This is that blueprint.",
     "category": "Salesforce",
     "categoryColor": "sf",
     "categoryGradient": "from-sky to-sky-dark",
@@ -612,7 +638,7 @@ export const posts: BlogPost[] = [
   {
     "slug": "salesforce-ldv-query-performance-2026",
     "title": "The Sandbox Has 4,000 Rows. Production Has 40 Million.",
-    "excerpt": "Spring '26 added Apex cursors and Winter '27 raised heap limits. Neither helps a query the optimizer refuses to index. Here is the selectivity arithmetic to check first.",
+    "excerpt": "Spring '26 added Apex cursors and Winter '27 raised heap limits. Neither helps a query the optimizer refuses to index. Check selectivity first.",
     "category": "Salesforce",
     "categoryColor": "sf",
     "categoryGradient": "from-sky to-sky-dark",
@@ -795,8 +821,8 @@ export const posts: BlogPost[] = [
   },
   {
     "slug": "salesforce-release-discipline-2026",
-    "title": "Salesforce Doesn't Fail at the Build. It Fails at the Release.",
-    "excerpt": "Most orgs can build a modern stack. The failure point is moving Flow, Apex, Experience Cloud and the security retirements between orgs without taking production down. Here is the discipline that holds.",
+    "title": "Salesforce Fails at the Release, Not the Build",
+    "excerpt": "Most orgs can build a modern stack. The failure point is moving Flow, Apex, Experience Cloud and security retirements between orgs without downtime.",
     "category": "Salesforce",
     "categoryColor": "sf",
     "categoryGradient": "from-sky to-sky-dark",
@@ -1243,7 +1269,7 @@ export const posts: BlogPost[] = [
   {
     "slug": "accessibility-testing-layers-ci-2026",
     "title": "Accessibility Is Regressing. Automated Testing Won't Stop It",
-    "excerpt": "The web got measurably less accessible in 2026. Here is what axe catches, what it misses, and the layered test stack that keeps accessibility from regressing in CI.",
+    "excerpt": "The web got measurably less accessible in 2026. Here is what axe catches, what it misses, and the layered test stack that stops the regression.",
     "category": "UI/UX",
     "categoryColor": "ux",
     "categoryGradient": "from-violet to-violet-dark",
@@ -1439,7 +1465,7 @@ export const posts: BlogPost[] = [
   {
     "slug": "merge-queue-trunk-based-2026",
     "title": "The Merge Queue Ended the Rebase Storm",
-    "excerpt": "When CI passes on every pull request but main still breaks, you have hit a green-green conflict. Merge queues close that gap. Here is how they work and when you need one.",
+    "excerpt": "When CI passes on every pull request but main still breaks, you have hit a green-green conflict. Merge queues close that gap. Here is how they work.",
     "category": "AI & Consulting",
     "categoryColor": "ai",
     "categoryGradient": "from-amber to-amber-dark",

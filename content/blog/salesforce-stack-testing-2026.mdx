@@ -1,0 +1,100 @@
+---
+title: "Half Your Salesforce Stack Is Not Code"
+slug: salesforce-stack-testing-2026
+excerpt: "Most of a modern Salesforce org is declarative and AI, not Apex. Confidence comes from testing each layer by the mechanism it runs on."
+category: "Salesforce"
+categoryColor: sf
+categoryGradient: "from-sky to-sky-dark"
+date: "October 7, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "15 min read"
+tags: [Salesforce, Testing, Flow, Agentforce, Data Cloud, Experience Cloud, Apex, API, Security]
+bannerImage: /banners/salesforce-stack-testing-2026.png
+---
+
+![Five layers of the modern Salesforce stack, each with its own build mechanism, failure mode, and test gate: Flow automation, Agentforce AI, Apex code, Data Cloud, and the API surface](</diagrams/salesforce-stack-testing-2026/1-stack-test-gates.png>)
+
+Ask a Salesforce architect what "testing" means and you will usually get the same answer an Apex developer gives: unit tests, 75 percent code coverage, every trigger covered.[^1] That answer is true for the code. It is almost useless for the org. The modern stack runs mostly on things that are not code at all. Your Flow is declarative, a canvas of decisions and actions the platform executes. Your Agentforce agent is a set of instructions and actions over an AI model with no deterministic output. Your Data Cloud pipeline is stream definitions and mappings. Your Experience Cloud site is a config tree plus guest user access over it. Only one layer, Apex, is measurable with the tools a unit-test suite gives you.
+
+This is the gap [the release-discipline article](/field-notes/salesforce-release-discipline-2026) avoided: it covered how change moves between orgs, but not how you know a change is safe in the first place. This article is that second half. The rule is simple to state and hard to practice: test every layer by the mechanism it actually runs on, not by the mindset of the layer you know best. A 75 percent coverage number on your triggers tells you nothing about whether your agent will hand a customer the wrong policy answer, your Data Cloud stream will silently drop a thousand rows, or your guest user will see a record they should not. Each of those needs its own discipline.
+
+## The failure-mode map is the test plan
+
+Before you write a single test, build the map. For each layer of the stack, name three things: what it is built with, what its central failure mode is, and where you catch that failure. The map turns "we test everything" into a concrete plan, and it exposes the traps immediately. The trap of the Flow layer is a branch that looks fine in the builder and breaks the first time a real user with real permissions hits it. The trap of the agent layer is the confident wrong answer, because the model has no opinion about your knowledge base. The trap of the data layer is a decision you made once and cannot change later, like a primary key or a field type, that corrupts everything downstream. The trap of the experience layer is access you never verified as a guest. The trap of the API layer is an integration still calling a version the platform is about to retire.
+
+Each layer's test lives at its own gate, and they do not substitute for one another. That is the whole point of the map: you cannot compensate for weak data testing with strong Apex coverage, because they run on different mechanisms and fail in different ways.
+
+## Flow: test the branches, the faults, and the permissions
+
+Flow is where most of your automation lives, and it is the layer most orgs test the least, because it does not have a unit-test button in the way Apex does. Salesforce does give you real tools, and the discipline is real. Test your flows in a sandbox, never against production data. Use sample records that mimic the real scenario, so a flow that sends email does not mail a real customer during testing.[^2]
+
+Within that sandbox you have two paths. For flows that are not record-triggered or autolaunched, the Flow Builder debugger runs the flow step by step, shows you the exact path it takes, and exposes where resource values change.[^2] For the record-triggered and autolaunched flows that carry most of your workload, use Test Mode, where you configure a triggering record or input values and save the scenario to reuse. Test Mode now supports Scenario Testing Automation: turn it on, add assertions, and the platform evaluates expected results automatically instead of you reading a debug log. You can also test Data Cloud-triggered flows this way, which matters because those flows fire off asynchronous pipeline events where a mistake is easy to miss.[^3]
+
+The coverage you are chasing in a Flow is path coverage, not line coverage. For every Decision element, test each outcome, including the default path you usually forget. Test boundary conditions: minimum, maximum, and genuinely unexpected values. Test the fault paths and make sure the error handling messages work, because a flow that dies silently is worse than one that admits failure. And test permissions: turn on the org-wide setting that lets admins run a test scenario as a specific user, then run the flow as the minimum-privilege user who will actually trigger it.[^3] The most common production Flow failure I see is not a logic error in the builder. It is a flow that works for the admin who built it and breaks for the frontline rep whose profile lacks one permission the flow assumes.
+
+![What to cover when testing a flow before activation: each decision outcome including the default, boundary values, fault paths, and a run as the minimum-privilege user](</diagrams/salesforce-stack-testing-2026/2-flow-test-coverage.png>)
+
+## Agentforce: impose a deterministic discipline on a nondeterministic layer
+
+The agent layer is the one that breaks every inherited instinct. When output is generated by a model, you cannot assert against exactly one expected string, and you cannot reach 100 percent coverage on anything. What you can do is test at scale against ground truth, which is exactly what Agentforce Testing Center is built for. Run it in a sandbox (it is enabled for all Agentforce customers there and is not recommended in production, because it can touch production data).[^4]
+
+Testing Center turns your agent evaluation into a repeatable job. You build test cases by uploading a CSV, by letting the platform generate them from your agent configuration, by generating Q&A pairs from your data library, or by importing real conversation history from Agent Builder. Then you define what success means and let an evaluation run score the agent against it.[^4] The metrics matter because they name what "good" means for a system with no single right answer:
+
+- Topic classification is checked by exact match, so you can prove the agent routes an utterance to the right topic every time.
+- Action sequences are verified, so you know the agent actually executes the right series of actions rather than just saying it will.
+- Response quality is scored by an LLM judge on a 0 to 5 scale, where 3 or above counts as a pass.
+- Citation support verifies that knowledge-article answers actually cite a real article.
+- Instruction adherence checks that the agent followed your tone and guardrails.
+
+Start with 30 to 40 test cases on the first iteration, mix test types across features, scenarios, personas, and edge cases, and keep generating cases until you stop seeing new failure modes. Keep each evaluation job small, around 20 to 30 cases, because the limits bite: at most 500 test cases per job and about 10 jobs per hour.[^4] And crucially, include the adversarial cases. Prompt injection, incomplete information, "I want a refund" when refunds are out of scope, a customer asking in a channel where that action is not allowed. The Testing Center exists precisely to flush out the confident wrong or unsafe answer before a real customer receives it.
+
+![Agentforce Testing Center loop: build test cases, run the evaluation scoring topic classification, action sequences, and citation support, then refine instructions and retest](</diagrams/salesforce-stack-testing-2026/3-agent-testing-loop.png>)
+
+Treat the test results as a signal to edit the agent's instructions and knowledge, not as a verdict on the agent. Nondeterministic agents drift: you re-evaluate after every change to a prompt, an action, or the knowledge base, and you carry a small regression set forward each release so you can prove the agent has not silently regressed while you were improving another topic.
+
+## Apex: the 75 percent floor is a floor, not a strategy
+
+The code layer is the one you already know, so the discipline here is to stop treating the platform's minimum as your target. Salesforce requires 75 percent line coverage to deploy, every trigger must have some coverage, and everything must compile.[^1] But the developer guide is explicit and worth quoting in spirit: do not focus on the percentage of code covered. Focus on covering every use case, including positive and negative cases, and bulk as well as single-record behavior. The 75 percent number is the gate that blocks a careless deployment; it is not a measure of whether your logic is correct.
+
+Good Apex tests use the Assert class to prove behavior rather than merely running without exceptions. They use runAs to exercise the application under different user contexts so you catch the same permission failure mode your Flow tests catch. They use the bulk test data path with at least 20 records to prove the trigger handles the governor-count regime real batches hit. They call methods with both valid and invalid inputs, and they execute every branch of conditional logic, including ternary operators. And every trigger gets direct exercise.[^1] When you push to production, the platform runs your unit tests again by default, which is a gift and a trap: it only proves what you wrote, so write tests that assert meaningful outcomes, not tests that exist to paint the graph green.
+
+## Data Cloud: validate the stream, not the sink
+
+Data Cloud is the layer orgs trust too early. It is a pipeline from data stream object to data lake object to data model object, and each hop can silently transform or drop data.[^5] The first discipline is that several decisions are locked in when you create a stream: the category (Profile, Engagement, or Other) cannot change after creation, and the field types Data Cloud infers are often wrong and cannot be modified later. A ZIP code that gets typed as a number is a one-time mistake you live with forever unless you catch it at stream setup, before it is locked.[^5] Your primary key must be unique, because a non-unique key means lost records, and engagement events often need a composite key built from email plus event time plus event name to be unique. The Record Modified field decides which duplicate wins, and the update mode, upsert versus full refresh, decides whether records that vanish from the source also vanish from the stream.[^5]
+
+Once the streams run, testing becomes reconciliation. Use the Data Explorer and the SQL Query Editor to validate what Data Cloud actually produced: check for missing values, verify joins between datasets, and run the business-rule checks your use case needs, not just "table has rows."[^5] Monitor the processing status of any real-time or streaming data transforms, because a transform that silently fails in the pipeline is exactly the kind of fault a sink-level check misses.[^6] The hard-won lesson is to validate upstream where you can, in the source system, and then still validate inside Data Cloud, because type conversions, formula fields, and connector behavior change data in ways the source never could. A Data Cloud-triggered flow needs its own automated test, exactly like the record-triggered Flow you tested in the automation layer.[^3]
+
+## Experience Cloud: test the surface the way an outsider sees it
+
+The Experience Cloud site is where your data meets the public, and it has a distinct failure mode: the guest. Anonymous visitors all share a single guest user profile, so one access mistake exposes records to everyone.[^7] Salesforce models this as a four-layer security stack, and the testing discipline is to verify each layer from the outside. Configure the guest user access for your site type (an LWR site has its own setup), then take the site on a test drive specifically as the guest user, not as the admin who built it.[^7][^8] Open the site in an incognito session, hit the pages a logged-out visitor can reach, and confirm the data and actions available to them are exactly the intended set and nothing more.
+
+Treat the Experience Cloud site as a distinct surface, not as a thin skin over the same org data. A change to a sharing rule or a record type in the core org changes what a guest can reach, so a site is not "tested once at build" and left alone. Re-test the guest view as part of any release that touches sharing, and load-test the site before a known traffic spike, because a slow customer-facing portal is its own kind of failure.
+
+## The API layer: test the migration before the enforcement lands
+
+The last layer is the one the release calendar forces you to keep current, and it is where testing pays back the most because a missed retirement is a hard outage. The pattern is always the same: audit, force the failure early in a sandbox, migrate, regression-test, and only then let the enforcement time bomb expire.
+
+Find every caller first, using the tools Salesforce gives you. The API Total Usage event log events report REST, SOAP, and Bulk requests to your org, and the Event Log File Browser lets you pull the daily CSVs and identify which integrations are calling versions that are about to be retired.[^9] The trigger to watch is the SOAP API login() retirement: it is scheduled for the Summer '27 release, and applications that still authenticate with it will simply stop working once your org upgrades.[^10] The fix is to migrate server-to-server and headless integrations to OAuth, the JWT bearer flow or the client credentials flow, and browser-based integrations to the web server flow.[^10]
+
+The testing move that makes the whole thing safe is the release update test run. In a sandbox, find the retirement release update card and enable the test run, which deliberately makes the retired calls fail with exactly the same error the real retirement will produce. That flushes out hidden callers you never added to your inventory, safely, before the deadline.[^9][^10] Run the test run in the sandbox first, migrate everything it exposes, re-run, and when the sandbox is clean, do the same enforcement test in production during a quiet window. Then regression-test the full stack, because a security change can ripple. The v67 release, for example, made with sharing the default for Apex and enforced a more secure default on SOQL and DML, and a change like that shifts behavior across triggers, flows, and integrations even when no test fails in isolation.[^11] Communicate that impact to the admin team; an API advance is not just a version bump.
+
+![API and security migration test window: audit with the event log, enable the release-update test run in a sandbox to force failures early, migrate SOAP login to OAuth, regression-test the full stack, then enforce](</diagrams/salesforce-stack-testing-2026/4-api-migration-test-window.png>)
+
+## Confidence is a stack, not a number
+
+The mistake shared by every under-tested org is treating testing as one activity measured by one number. It is not. It is six disciplines that do not substitute for each other, because the layers run on different mechanisms and fail in different ways. The Flow fails on an untested permission branch. The agent fails with a confident wrong answer the model does not know is wrong. The code fails where you never wrote the assertion. The pipeline fails at a transform hop a sink-level query cannot see. The site fails to an outsider who sees one record too many. The integration fails the day its API version leaves retirement.
+
+Testing a modern Salesforce org means running each layer on its own terms and then testing the seams where they meet: the Data Cloud-triggered flow, the flow that hands a customer to the agent, the site that serves data the pipeline just delivered. Build the failure-mode map first, keep a per-layer test suite that moves with each release, and re-run the nondeterministic layers on a schedule instead of once. Do that and a release stops being a gamble, it becomes a set of gates you already passed. That is the only definition of confidence that scales.
+
+[^1]: Salesforce, "Testing Best Practices," Apex Developer Guide. [Salesforce Developers](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_testing_best_practices.htm)
+[^2]: Salesforce, "Testing Your Flow Before Activation." [Salesforce Help](https://help.salesforce.com/s/articleView?id=platform.flow_concepts_testing.htm&type=5)
+[^3]: Salesforce, "Testing Your Flow in Test Mode," including Scenario Testing Automation and automated testing for Data Cloud-triggered flows. [Salesforce Help](https://help.salesforce.com/s/articleView?id=platform.automate_flow_test_mode.htm&type=5)
+[^4]: Salesforce Help, "Learn About Agentforce Testing Center." [Salesforce Help](https://help.salesforce.com/s/articleView?id=005228642&type=1)
+[^5]: Scandiweb, "Data Ingestion in Salesforce Data Cloud: Practical Guide." [Scandiweb](https://scandiweb.com/blog/data-ingestion-in-salesforce-data-cloud/)
+[^6]: Salesforce Help, "Check the Status of a Streaming Data Transform." [Salesforce Help](https://help.salesforce.com/s/articleView?id=data.c360_a_streaming_transform_check_data_transform_status.htm&type=5)
+[^7]: Salesforce, "Essential Actions to Secure Experience Cloud Guest User Access." [Salesforce Blog](https://www.salesforce.com/blog/protecting-your-data-essential-actions-to-secure-experience-cloud-guest-user-access/)
+[^8]: Salesforce Help, "Test Guest User Access in Your Experience Cloud Site." [Salesforce Help](https://help.salesforce.com/s/articleView?id=platform.networks_guest_access_test.htm&type=5)
+[^9]: Salesforce Developers Blog, "New Tools to Help Prepare for API Version Retirement." [Salesforce Developers](https://developer.salesforce.com/blogs/2024/10/new-tools-to-help-prepare-for-api-version-retirement)
+[^10]: Salesforce Help, "Platform SOAP API login() Retirement." [Salesforce Help](https://help.salesforce.com/s/articleView?id=005132110&type=1)
+[^11]: Salesforce Ben, "Complete Guide to Salesforce API Version Maintenance and Retirement." [Salesforce Ben](https://www.salesforceben.com/complete-guide-to-salesforce-api-version-maintenance-and-retirement/)
