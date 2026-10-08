@@ -178,11 +178,19 @@ function FigureSvg({
   const artX = cx - artSize / 2 + (art?.dx ?? 0) * unit;
   const artY = cy - artSize / 2 + (art?.dy ?? 0) * unit;
 
+  /*
+   * One scale for both axes, from the figure's longer side. Normalising x and
+   * y separately forced every figure into a square and stretched the short
+   * axis — Ursa Minor ×3.2, Sagitta ×2.2 — so stars left the body parts the
+   * plate gives them. With a uniform scale the longer side spans `unit` and
+   * the shorter side keeps its true proportion.
+   */
   const bounds = drawn.length > 0 ? boundsOf(figure, drawn) : null;
+  const fit = bounds ? unit / Math.max(bounds.w, bounds.h) : 0;
   const toX = (x: number) =>
-    bounds ? cx + ((x - (bounds.minX + bounds.maxX) / 2) / bounds.w) * unit : cx;
+    bounds ? cx + (x - (bounds.minX + bounds.maxX) / 2) * fit : cx;
   const toY = (y: number) =>
-    bounds ? cy - ((y - (bounds.minY + bounds.maxY) / 2) / bounds.h) * unit : cy;
+    bounds ? cy - (y - (bounds.minY + bounds.maxY) / 2) * fit : cy;
 
   const rails = figure.connections.filter(([a, b]) => figure.stars[a] && figure.stars[b]);
   const litRails = Math.round(rails.length * progress);

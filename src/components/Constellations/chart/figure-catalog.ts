@@ -1059,14 +1059,29 @@ export interface ProjectedStar {
   isNebula?: boolean;
 }
 
+const DEG = Math.PI / 180;
+
+/** Span the projection normalises the figure's longer side to. */
+const PROJECTED_SPAN = 6.5;
+
 /**
  * RA/Dec → a flat plane, centred on the figure and scaled to a unit-ish box.
  *
- * RA is flipped because the sky is seen from inside: higher RA (east) belongs on
- * the left, which is what makes Orion read with Betelgeuse upper-left. Declination
- * is used directly — a proper projection would scale RA by `cos(dec)`, and this
- * deliberately does not, because the renderer normalises each figure into its own
- * bounding box anyway, so the only thing that survives is relative shape.
+ * An azimuthal equidistant projection about the figure's own centre, so the
+ * shape on screen is the shape in the sky: an hour of RA shrinks by `cos(dec)`
+ * as it should, a figure near the pole (Ursa Minor) is not smeared sideways,
+ * and figures that straddle RA 0h (Pegasus) or the pole itself project without
+ * any unwrapping. Earlier versions used raw RA and Dec as x and y, which
+ * stretched Draco ×1.9 and Ursa Minor ×5.8 and moved stars off the body parts
+ * the engraved plates give them.
+ *
+ * x is flipped because the sky is seen from inside: higher RA (east) belongs on
+ * the left, which is what makes Orion read with Betelgeuse upper-left. North is
+ * up. `rotationDeg` then turns the whole figure rigidly (a rotation, never a
+ * flip) so a figure can be drawn upright.
+ *
+ * One scale for both axes. The renderer also normalises with a single scale,
+ * so a wide figure stays wide and a tall one stays tall.
  *
  * Unlike the 3D projection this carries no depth: the chart is flat, and a z
  * offset there existed only to give the camera parallax.
@@ -1077,33 +1092,60 @@ export function projectFigure(figure: ConstellationFigure): ProjectedStar[] {
   const { stars } = figure;
   if (stars.length === 0) return [];
 
-  const raDeg = stars.map((s) => s.raH * 15);
-  const dec = stars.map((s) => s.decDeg);
-
   /*
-   * Constellations that straddle RA 0h (Pegasus runs 21h→0.2h) would otherwise
-   * get a ~350° span and collapse to a dot. Unwrap onto a continuous line first.
+   * Centre on the mean direction vector rather than mean RA/Dec: the mean of
+   * angles is wrong across the 0h seam and meaningless at the pole, the mean of
+   * unit vectors is neither.
    */
-  const spanRaw = Math.max(...raDeg) - Math.min(...raDeg);
-  const ra = spanRaw > 180 ? raDeg.map((r) => (r < 180 ? r + 360 : r)) : raDeg;
+  const dirs = stars.map((s) => {
+    const ra = s.raH * 15 * DEG;
+    const dec = s.decDeg * DEG;
+    return [Math.cos(dec) * Math.cos(ra), Math.cos(dec) * Math.sin(ra), Math.sin(dec)] as const;
+  });
+  const mean = dirs.reduce(
+    (acc, d) => [acc[0] + d[0], acc[1] + d[1], acc[2] + d[2]] as const,
+    [0, 0, 0] as const,
+  );
+  const norm = Math.hypot(mean[0], mean[1], mean[2]) || 1;
+  const ra0 = Math.atan2(mean[1], mean[0]);
+  const dec0 = Math.asin(Math.max(-1, Math.min(1, mean[2] / norm)));
 
-  const cRa = ra.reduce((a, b) => a + b, 0) / ra.length;
-  const cDec = dec.reduce((a, b) => a + b, 0) / dec.length;
+  const rot = (figure.rotationDeg ?? 0) * DEG;
+  const cosRot = Math.cos(rot);
+  const sinRot = Math.sin(rot);
 
-  const xs = ra.map((r) => r - cRa);
-  const ys = dec.map((d) => d - cDec);
+  const plane = stars.map((s) => {
+    const ra = s.raH * 15 * DEG;
+    const dec = s.decDeg * DEG;
+    const dRa = ra - ra0;
+    const cosC =
+      Math.sin(dec0) * Math.sin(dec) + Math.cos(dec0) * Math.cos(dec) * Math.cos(dRa);
+    const c = Math.acos(Math.max(-1, Math.min(1, cosC)));
+    // Equidistant: radius on the plane equals the angle from the centre.
+    const k = c < 1e-9 ? 1 : c / Math.sin(c);
+    // East (increasing RA) to the left.
+    const x = -k * Math.cos(dec) * Math.sin(dRa);
+    const y =
+      k * (Math.cos(dec0) * Math.sin(dec) - Math.sin(dec0) * Math.cos(dec) * Math.cos(dRa));
+    return [x * cosRot - y * sinRot, x * sinRot + y * cosRot] as const;
+  });
+
+  const xs = plane.map((p) => p[0]);
+  const ys = plane.map((p) => p[1]);
+  const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
+  const cy = (Math.max(...ys) + Math.min(...ys)) / 2;
   const span = Math.max(
     Math.max(...xs) - Math.min(...xs),
     Math.max(...ys) - Math.min(...ys),
-    1e-6,
+    1e-9,
   );
-  const k = 6.5 / span;
+  const scale = PROJECTED_SPAN / span;
 
   return stars.map((s, i) => ({
     name: s.name,
     position: [
-      Number(((cRa - ra[i]!) * k).toFixed(3)),
-      Number(((s.decDeg - cDec) * k).toFixed(3)),
+      Number(((plane[i]![0] - cx) * scale).toFixed(3)),
+      Number(((plane[i]![1] - cy) * scale).toFixed(3)),
       0,
     ],
     spectralClass: s.spectralClass,
