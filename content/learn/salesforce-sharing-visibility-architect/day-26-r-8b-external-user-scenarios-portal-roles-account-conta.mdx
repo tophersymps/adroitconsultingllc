@@ -1,0 +1,116 @@
+---
+title: "External-User Scenarios: Portal Roles, Account and Contact Access, Data Protection"
+slug: day-26-r-8b-external-user-scenarios-portal-roles-account-conta
+series: salesforce-sharing-visibility-architect
+lesson: 26
+excerpt: "How to configure portal roles and account and contact access for external users while keeping their data exposure to the least the relationship requires."
+date: 2026-10-08
+author: Jimmy Olsen
+readTime: "13 min read"
+tags: [salesforce, sharing, visibility, architect, external-users, portal-roles, sharing-sets, field-security, data-protection]
+---
+
+# External-User Scenarios: Portal Roles, Account and Contact Access, Data Protection
+
+Lesson 25 gave you the mechanisms: Experience Cloud licenses, the guest user, sharing sets, and guest user sharing rules. This lesson is where those mechanisms stop being a list and become a decision. The exam objective asks you, given a scenario, to configure portal roles and account and contact access for external users while protecting their data. That is a scenario question, not a feature question. You will be handed a partner or customer situation and judged on whether you pick the lowest-exposure combination of a role, a sharing set, and field-level security without ever relaxing org-wide defaults.
+
+## Define the terms
+
+**External user.** A Salesforce user who logs into an Experience Cloud site rather than the internal app. Their identity is anchored to a Contact and that Contact's Account. You create them by enabling a contact as an external user, which is why their record access so often flows through the account relationship. The license (Partner Community, Customer Community, and so on) gates what they can reach.[^2]
+
+**Portal role / external role.** A role in the role hierarchy assigned to an external user. When you enable the first external user on an account, Salesforce creates a small role hierarchy for that account that rolls up to the account owner, normally the internal channel manager. The partner-side tiers are Partner User, Partner Manager, and Partner Executive, and the role you give an external user is a subordinate of the account owner's role.[^2] What matters for the exam is the direction of hierarchy sharing: an external user at a given role inherits access to records owned by users below that role in the hierarchy, and their own owned records roll up to everyone above them.
+
+**External account hierarchy.** A separate structure you build under Digital Experiences settings that lets data share between related external accounts without custom sharing rules. It works like a role hierarchy but for accounts, so records owned by users in child accounts share up to parent accounts. It is available in orgs with Partner or Customer Community Plus licenses, and it composes to five levels deep.[^4]
+
+**Sharing set.** The Experience Cloud tool that grants a site user access to records through their account or contact relationship. You pick which profiles the set applies to, which objects it covers, and how access maps from the user's account or contact to a lookup on the target record. A sharing set applies across every site the user belongs to, and access granted by it does not extend up the role hierarchy.[^5]
+
+**Field-level security (FLS).** The per-profile control that decides whether a user can see and edit a given field on an object record. It is independent of record access: a user can have full record visibility yet still not see a sensitive field if FLS hides it. You configure it per profile or per permission set.[^6]
+
+**Field-level masking.** A further blur on the same idea. Beyond hiding a field entirely, you can mask its value so a profile sees only a masked rendering (for example, the last few digits or a fixed placeholder) instead of the raw sensitive data. Where record-level sharing says who reaches a record, FLS and masking say how much of that record they actually see.
+
+**Org-wide default (OWD).** The baseline access a user has to every record of an object, before sharing rules, teams, and hierarchies add more. For external users, the architect's rule is to leave OWD as restrictive as the business allows and add access only through relationship-based mechanisms.
+
+The exam premise for this whole lesson is least privilege: give the external user exactly the records their relationship requires and no more, then restrict the fields they can see on those records.
+
+## Why it matters for the exam and for real builds
+
+Scenario questions in this domain reward four things. First, you must know that an external user's role sits under an internal role and rolls up to the account owner, because that single fact explains both legitimate access and the trap. Second, you must know that relationship-based access (sharing sets, external account hierarchies) is the correct tool and that OWD should never be relaxed to make a portal work. Third, you must remember that account-level record access and field-level visibility are two separate dials, and you must turn both. Fourth, you must test the external path as its own user, because what looks right in setup can be silently wrong in the portal.
+
+That last point is the one architects miss. Setting up a sharing set and a role gives someone access in a model you can reason about, but the external user's login, profile, license, and relationship all interact. A gap anywhere in that chain means they see nothing, or worse, they see something they should not. Real portal work is a loop: configure, log in as the external user, confirm exactly the intended records appear, confirm the sensitive fields stay hidden, then repeat for the next scenario.
+
+## The two access layers and why they stay separate
+
+Every external-user decision in this lesson reduces to two independent layers.
+
+**Record access decides which records the user can reach.** It comes from OWD, the role hierarchy, sharing rules, sharing sets, external account hierarchies, and manual shares. For external users, the relationship-based pieces (sharing sets and external account hierarchies) do the heavy lifting, while the role hierarchy provides access to the internal owner's records.
+
+**Field access decides what the user sees on a record they can reach.** It comes from FLS and field-level masking on the portal profile. Field access does not grant record access, and record access does not grant field access. You can have a user who can open every Case and still not see the customer's credit card field, because the field is masked or hidden on their profile.
+
+The classic failure mode in this domain is conflating the two. A consultant grants record access through a role, sees the record render, and calls it done, without noticing the profile exposes every sensitive field on that record. Record access was right; field access was wrong.
+
+## Worked example: the partner who must see their account manager's records
+
+Take a concrete scenario, the same shape as the exam's hardest question. A partner user must see Cases and Opportunities owned by their internal account manager, plus anything on their own partner account. They must not see any other internal manager's data, and they must not read internal fields like margin and commission.
+
+The cleanest configuration has three parts you apply in order.
+
+1. **Place the external role deliberately, low in the hierarchy.** When you enable the first external user for the account, the role rolls up to the account owner, normally the internal channel or account manager who owns the partner account. Because the external role is a subordinate of the account manager's role, the partner inherits access to records the manager owns. That gives the manager's Cases and Opportunities to the partner through hierarchy sharing, and no more, because hierarchy sharing only reaches up the chain of ownership, not sideways to other managers. A deliberately low role under the correct manager is how you provide exactly that access.[^2]
+
+2. **Add relationship-based sharing for the account's own data.** For records owned by the partner account itself, use a sharing set. Create a sharing set for the partner profile, pick Case and Opportunity, and map the user's contact account to `Case.Account` and `Opportunity.Account` with read access. Now records on the partner's own account are reachable through the relationship. Keep OWD at the standard account-and-opportunity restriction (usually Private or Public Read Only, with the portal objects as restrictive as permitted). You never relax it.[^5]
+
+3. **Lock the fields with FLS on the portal profile.** The partner now can reach the correct records, but can they see the margin field on an Opportunity? Not if the portal profile keeps that field hidden or masks it. Edit the portal profile's field-level security on Opportunity and Case, hide or mask margin, commission, internal notes, and any pricing detail the partner should not read, and make sure the page layout the portal uses does not fight you by forcing a field the profile already hides.[^6]
+
+That is the whole answer: a low external role under the right internal role for owner-based access, a sharing set for relationship-based access, FLS and masking for the fields, and OWD left alone. This is exactly the configuration the exam's correct answer describes, and it is the pattern to hold in your head for every external-user scenario.
+
+For contrast, here is what each wrong answer in that question does. Relaxing OWD to Public Read Only makes every record of the object visible to the partner through the org-wide default, which is the opposite of least privilege. Granting View All overrides sharing for good outright and throws the relationship model away. Making the partner a system administrator is not sharing configuration at all, it opens the entire org. All three solve the immediate need by destroying the boundary around it. The disciplined answer is the low role plus sharing sets plus FLS.
+
+## Numbered configuration walkthrough
+
+Walk these steps in order for a fresh partner scenario. The order matters because the role affects what the sharing set needs to cover.
+
+**Step 1: Create or confirm the external role under the internal owner.** If the account already has external users, a role hierarchy exists and rolls up to the account owner. Assign the external user a role in it, as low as the scenario allows. If you are starting fresh, enable the first external user and let the automatic role creation run, then edit the role assignment on subsequent users. Verify the chosen role sits under the internal account manager whose records the external user must inherit, because that is what hierarchy sharing reads.[^2]
+
+**Step 2: Assign the external profile, the portal license, and the Contact and Account linkage.** Create your external user from the right Contact on the right Account. Assign a portal profile cloned from the partner user profile and the Experience Cloud license the scenario calls for. Confirm the user record carries the correct Contact and Account, because sharing sets and the account relationship read those fields. A user attached to the wrong Contact sees the wrong account's data through every relationship-based rule.[^2]
+
+**Step 3: Use sharing sets for relationship access and FLS to hide sensitive fields.** Build a sharing set for the portal profile covering the objects the partner needs, mapping from the user's account or contact to the target object's account lookup. Then go through the portal profile's field-level security and hide or mask every field the partner does not need. Both changes are on the same profile, and they are separate dials: the sharing set controls reach, FLS controls what is readable once reached.[^5][^6]
+
+**Step 4: Apply the data-protection controls.** Keep guest and anonymous access minimal. Confirm the guest user profile is locked down and that anonymous visitors see only content you explicitly shared as public. Where the policy demands it, add two-factor authentication and IP restrictions for the external audiences. Mask sensitive fields at the profile level so no casual query returns their raw values. Resist any temptation to relax OWD or object permissions, because the scenario evaluates least privilege.[^8]
+
+**Step 5: Test as the external user.** Log in to the Experience Cloud site as the partner user. Confirm they reach exactly the Cases and Opportunities the scenario intends, their own account's data plus the manager's records, and nothing else. Open one record and confirm the hidden fields stay hidden and the masked fields render masked. Then create a record on a different account in a test and confirm the partner cannot see it. That negative test is the one that proves the model: least privilege is only real when the wrong access is absent, not when the right access is present.[^5]
+
+## Exam traps to avoid
+
+**Granting external users a high role over-exposes internal records.** Hierarchy sharing runs down to the owner of a record, not up. A partner given a role near the top of the hierarchy inherits access to every record owned by every user below that role, which will include managers and accounts the partner has nothing to do with. Place the external role as low as the scenario allows, under the specific internal owner whose records the partner should see. A high role is the single most common over-exposure in external-user sharing.[^2]
+
+**Relaxing OWD or object permissions to make the portal work leaks data.** "Let's just set Case OWD to Public Read Only so the partners can see cases" is how a portal becomes a data breach. OWD is the org-wide baseline; raising it raises access for every internal user too, not just the portal audience. Relationship-based sharing, a sharing set or an external account hierarchy, grants the portal user the access without touching anyone else's baseline. Reach for the relationship, never the OWD switch.[^4][^5]
+
+**Forgetting FLS lets sensitive fields leak even when record access is correct.** This is the trap the exam loves because it is subtle. The partner can reach exactly the right Cases, but the portal profile still exposes the margin, commission, and notes fields on them. Record access is a different dial from field access. After you set up the sharing, audit the portal profile's field-level security and mask or hide every field the relationship does not require. Correct reach plus a leaky profile is still a leak.[^6]
+
+## Try it yourself
+
+In a sandbox with Experience Cloud enabled, create a partner Account and a Contact, enable an external user on that Contact with a Partner Community license and a partner profile, and confirm the role that Salesforce created rolls up to the account owner. Create a Case and an Opportunity owned by that owner. In Sharing Settings, build a sharing set for the partner profile mapping the user's contact account to `Case.Account` and `Opportunity.Account` with read access. Then edit the partner profile's field-level security on Opportunity and hide the amount or a custom internal field. Log in to the site as the partner user. Confirm you see the owned Case and Opportunity, plus anything on the partner account, and that the hidden field does not render even though the record does. Now create a Case on a second account and confirm the partner cannot reach it. Finally, try raising one object's OWD to Public Read Only and observe how access to that object suddenly broadens, then set it back. That last experiment is the one that makes the "never relax OWD" rule stick.
+
+## Why the role and the relationship stay in tension
+
+A useful mental model for the exam is to treat the external role and the sharing set as two access channels that must be balanced. The role leans on hierarchy sharing, which is powerful and broad, because it reads the whole ownership chain above the role. The sharing set leans on the account and contact relationship, which is precise, because it matches a specific lookup. The blunder is to use the role to do the sharing set's job, giving the partner a role high enough to reach everything the relationship should have delivered at the account level. That lands them on top of unrelated internal data. The correct split keeps the role low, narrow, and pointed at one owner, and lets the sharing set carry the account-relationship access.
+
+The same logic applies to external account hierarchies. When a scenario shows multiple partner accounts that must see each other's records, an external account hierarchy shares child-account data up to parent accounts without custom sharing rules, and it does not touch OWD or the internal hierarchy. It is the relationship-based answer for multi-account partner structures, and like the sharing set it is precise where a high role is blunt.[^4]
+
+## Monitoring and the blast radius
+
+Least privilege is not a one-time setup. Audit external access as a habit. Use the Experience Cloud users list to see who is enabled, which accounts anchor them, and which roles and profiles they carry. Run the security health check from Setup to scan the org's security settings for the weak configurations this lesson warns about, raised OWD and over-broad permissions chief among them.[^7]
+
+The blast-radius idea ties it together. When a portal user is compromised or a partner leaves, how much damage can one credential do? If the external role is low, the sharing sets are scoped to one account's relationship, and the sensitive fields are masked, a single compromised partner credential reaches only that partner's slice of the org. If any of those three is left wide, the same credential opens a much larger slice. The architect's job is to keep each of those three dials as tight as the business allows, so the blast radius of a single external user matches what the relationship actually requires. When a scenario on the exam asks you to protect data for external users, it is asking you to shrink that blast radius on all three layers at once.
+
+## What's next
+
+Tomorrow you move to lesson 27, which covers record access overrides: the difference between a stamp and a rollup, and how record type, field update, and formula combine to override access on individual records. Where this lesson kept record access and field access in balance for the external audience, lesson 27 drills into the mechanics of how a single record's access can be overridden and how to reason about when each mechanism applies. The course continues in syllabus order toward the full Platform Sharing and Visibility Architect exam coverage.[^1]
+
+[^1]: Salesforce Certified Platform Sharing and Visibility Architect exam guide, Domain: Access to Records, objective r-8b: "Given a scenario, determine how to configure portal roles and account and contact access while protecting data for external users."
+[^2]: Salesforce Help, "Considerations When Creating Partner Users," https://help.salesforce.com/s/articleView?language=en_US&id=platform.exp_cloud_partner_create_considerations.htm&type=5
+[^3]: Salesforce Help, "Partner User Roles," https://help.salesforce.com/s/articleView?language=en_US&id=platform.networks_partner_roles_overview.htm&type=5
+[^4]: Salesforce Help, "Configure an External Account Hierarchy," https://help.salesforce.com/s/articleView?language=en_US&id=platform.networks_external_account_hierarchies.htm&type=5
+[^5]: Salesforce Help, "Create a Sharing Set for Experience Cloud Site Users," https://help.salesforce.com/s/articleView?language=en_US&id=sf.networks_setting_light_users.htm&type=5
+[^6]: Salesforce Help, "Set Field-Level Security for a Field on All Permission Sets," https://help.salesforce.com/s/articleView?language=en_US&id=platform.users_fields_fls_permsets.htm&type=5
+[^7]: Salesforce Help, "Security Health Check," https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.security_health_check.htm&type=5
+[^8]: Salesforce Help, "Best Practices and Considerations When Configuring the Guest User Profile," https://help.salesforce.com/s/articleView?language=en_US&id=platform.networks_guest_profile_best_practices.htm&type=5
