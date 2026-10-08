@@ -1,0 +1,110 @@
+---
+title: "Lesson 62: CTA Integration: Designing a Comprehensive Enterprise Integration Strategy"
+slug: cta-integration-comprehensive-enterprise-integration-strategy
+series: "salesforce-architect"
+lesson: 62
+excerpt: "The CTA integration domain as a design discipline: naming the system of record, choosing between Salesforce-hub, middleware, and point-to-point, drawing the synchronous and asynchronous seams, agreeing a canonical data model, and turning it all into one coherent strategy a board will defend."
+date: "October 08, 2026"
+author: "Adroit Consulting"
+readTime: "11 min read"
+tags: [Salesforce, Architecture, CTA, Integration, Certifications]
+---
+
+# Lesson 62: CTA Integration: Designing a Comprehensive Enterprise Integration Strategy
+
+Lesson 61 gave you the map: the CTA is scored on the integration of concerns, not on knowing a list of patterns, and the first domain it throws at you is integration. This lesson takes that domain as deep as it goes. The goal is not to add new patterns to your memory. You already have the pieces from earlier lessons: REST and SOAP and Bulk, request-reply and fire-and-forget, the integration hub and the tradeoffs of middleware. What you do not have yet, unless you have shipped a real architecture, is the discipline of turning those pieces into a single coherent strategy for an entire enterprise. That is the CTA integration domain. It is not "pick the right pattern for this flow." It is "decide how every system in this company will talk to every other system, on purpose, and be able to justify each choice."
+
+Let me be clear about what that shift costs, because it is the difference between passing an exam and passing a board. When you are asked to design integration for one flow, you pick a pattern and move on. When you are asked to design an enterprise integration strategy, you are answering a different set of questions: who owns each piece of data, which systems must be coupled and which must be deliberately uncoupled, where the synchronous seam ends and the asynchronous one begins, whether a single integration hub concentrates risk or removes it, and how new systems join the architecture ten years from now without a rewrite. Those are strategy questions, not pattern questions, and the board judges your answers to them. [^1]
+
+## What an integration strategy actually is
+
+An **integration strategy** is the set of standing decisions about how the systems in an enterprise exchange data. The word "standing" matters. A strategy is not a per-project choice; it is the policy that makes per-project choices consistent. When a new application needs an order shipped to the ERP, the strategy should already answer whether that happens synchronously or asynchronously, who the system of record is, what the message shape looks like, and how a failure is retried. The architect implementing the new app then works inside those answers instead of re-deciding them each time.
+
+Salesforce's own guidance frames this in terms of reusable patterns. It does not hand you one integration design; it hands you a selection of patterns, each addressing an archetype scenario, and expects you to choose the pattern that fits the scenario. [^1] The patterns it names are the ones you met earlier in this track and they form a coherent vocabulary:
+
+- **Remote process invocation, request and reply.** Salesforce calls an external process and waits for the result to update state.
+- **Remote process invocation, fire and forget.** Salesforce invokes an external process and does not wait for completion, only for an acknowledgement.
+- **Batch data synchronization.** Data is refreshed in either direction in bulk, not flow by flow.
+- **Remote call-in.** An external system creates, reads, updates, or deletes Salesforce data.
+- **UI updates based on data changes.** The user interface refreshes automatically when underlying data changes.
+- **Data virtualization.** Salesforce reads external data in real time without persisting it, which removes the reconciliation burden. [^1]
+
+That list is the strategy menu. A comprehensive integration strategy is mostly the discipline of assigning every real flow on this chart to the right pattern, and then holding that assignment stable as the company grows. When the board asks you why an order handoff is batch and a quote is request-reply, you should be able to answer in terms of the load, the latency tolerance, and the failure tolerance of each flow, not in terms of which pattern you like.
+
+## The ownership decision comes first
+
+Before any pattern is chosen, you must decide who owns each piece of data. **System of record** is the term for the system whose version of a fact is authoritative when two systems disagree. This is the first and most consequential decision in any integration strategy, and it has a clear direction: when Salesforce participates, it is usually the system of record for the data it is the front office for (accounts, quotes, opportunities, service cases), while a backend system such as an ERP remains the system of record for fulfillment data (orders, inventory, billing). [^1]
+
+The reason ownership comes first is that it determines the integration direction and the failure semantics. If Salesforce owns the quote and the ERP owns fulfillment, then the flow is one-way by definition: the quote pushes to the ERP, and order status pushes back. There is no two-way reconciliation because the two systems are not both trying to be authoritative for the same fact. The moment you leave ownership ambiguous, you inherit a reconciliation problem you cannot design away. Two systems that both believe they own the customer's order will quietly diverge, and every attempt to sync them will be a band-aid. This is exactly the lesson the earlier hub lesson made: you can aggregate many systems, but you still have to be honest about which one is the source of truth for each field. [^1]
+
+So an integration strategy begins as a table. One column is the business object. The next column is the system of record. The next is the direction of flow. Most weak board answers fail before they get to patterns, because the candidate never filled out this table and so built integration with no agreed owner. Your first move in any integration scenario should be to state, for each major object, who owns it and which way the data flows.
+
+## Salesforce as hub, middleware, or point-to-point
+
+The most visible strategy decision, and the one clients and boards both push hardest on, is the shape of the integration topology. Three broad options exist, and each is right in different circumstances. This is consulting judgment, so it gets no citation; it is a tradeoff you must be able to argue with the client's constraints in hand.
+
+**Point-to-point** connects each pair of systems directly. It is the cheapest to start and the fastest to stand up for a single flow: the quoting app calls the ERP, done. Its cost shows up later, because the number of connections grows on the order of the number of systems squared. Five systems need up to ten direct links; twenty systems need up to one hundred ninety. Every link is a separate integration to build, test, secure, and own, and a change to one system's contract ripples into every link that touches it. Point-to-point is the right call for a small number of stable flows, and the wrong default for an enterprise that expects to keep adding systems.
+
+**Middleware** inserts a dedicated integration layer between systems. The classic enterprise service bus and modern integration platforms such as MuleSoft and Boomi live here. Middleware centralizes transformation, message routing, orchestration, and monitoring in one governed place, which is powerful when the enterprise is heterogeneous and stable enough to invest in that layer. It is also a significant ongoing cost: a platform to license, run, and staff, and it becomes a new system of its own that the integrations depend on. Middleware suits enterprises with many complex, high-volume flows that justify the platform, and it suits teams that need a place where non-Salesforce specialists can also build integrations.
+
+**Salesforce as integration hub** means Salesforce does the fan-in and fan-out instead of a separate middleware product. This is the pattern the earlier hub lesson walked through: Salesforce calls out to multiple systems, aggregates their responses, maintains a composed view, and uses a partial-failure policy so one slow or down system does not take the whole page down. [^1] The hub approach suits a company whose architects are Salesforce-first, whose flows mostly involve Salesforce as the front office, and who want to avoid standing up a whole middleware platform for a moderate number of integrations.
+
+There is no universally correct answer, and the board will reward you for arguing the fit rather than for having a favorite. The honest way to make the call is to weigh three things: the number and complexity of flows (many complex flows favor middleware), the team's home platform (Salesforce-first shops favor the hub), and the operating budget (a hub avoids a platform license). A strategy that states this reasoning and then holds to it is far stronger than one that picks a topology because it is fashionable.
+
+## The synchronous and asynchronous seams
+
+Every integration strategy must decide, flow by flow, where data moves synchronously and where it moves asynchronously. The decision is a tradeoff between freshness and resilience, and the right answer is rarely "everything real-time."
+
+The constraint that forces the question is concrete and worth memorizing because it is load-bearing in the integration domain. A single Apex transaction can make at most 100 callouts across all inbound and outbound callouts, the default timeout on a callout is 10 seconds, and the maximum cumulative timeout for all callouts in one Apex transaction is 120 seconds. [^2] Those are platform limits that no amount of good architecture removes. They mean a synchronous design is only viable when a flow needs few external calls, each one fast, and the whole chain fits inside the transaction budget. [^3]
+
+Where the flow does not fit, the strategy moves the work off the synchronous path. **Asynchronous integration** hands the work to a queue or an event and returns control immediately. The caller does not wait, so the transaction budget stops being the constraint, and the receiving side can process at its own pace. The cost is that the data is not fresh the instant the caller acts. A quote that must be generated the moment the rep clicks is a synchronous seam. An order that the ERP can pick up within a minute is a fine asynchronous seam. Getting this assignment right is most of the strategy.
+
+The **event-driven seam** deserves special attention because it is the modern answer to decoupling. Platform events let Salesforce exchange real-time event messages with external applications, publishing events that subscribers receive in real time. [^4] The architecture it enables is event-driven: publishers and subscribers are decoupled, so the system that produces a fact does not need to know which other systems consume it or how many. [^1] When the quote is approved, Salesforce publishes an event; any subscriber that cares (the ERP, a warehouse system, a notification service) listens on its own schedule. Adding a new consumer later does not change the publisher at all, which is the property that keeps an integration strategy from growing stale as the enterprise adds systems.
+
+## The canonical data model and API governance
+
+Two more standing decisions round out a comprehensive strategy, and both are easy to skip and expensive to skip.
+
+First, the **canonical data model**. When systems exchange data, they often disagree on the shape of a fact. The ERP calls the customer an "account head," the CRM calls it an "account," and the warehouse calls it a "shipper." The integration strategy should name one canonical representation for the objects that cross systems, and each system should map to and from that representation at its own boundary. [^1] Without it, every new integration reinvents the mapping, and the same field gets interpreted three different ways in three different flows. The canonical model does not eliminate the differences; it contains them in one agreed place.
+
+Second, **API governance**. A strategy that names a system of record and a canonical model still has to decide how external systems are allowed to touch Salesforce data. This is the remote call-in pattern, and the strategy should govern it: which APIs are exposed, who can call, what the contract is, and how version changes are handled so a running consumer is not broken by a contract change. [^1] Governance is what keeps the integration model from devolving into hand-rolled endpoints that no one owns. It is the difference between an integration architecture and an integration tangle.
+
+## Worked example: Meridian's order handoff
+
+Let me put all of this to work on the scenario Lesson 61 introduced, so you see the strategy assemble from the pieces. Meridian Logistics, a freight forwarder, runs Salesforce Sales Cloud as its front office for quoting and order management, and a legacy on-premises ERP for fulfillment whose API is unreliable at high volume. The business wants a single view of customer orders and automated handoff of orders to the ERP. A three-month budget is fixed.
+
+**Ownership.** The first move is the table. Salesforce owns the quote and the sales order as far as the customer and the sales team are concerned. The ERP owns fulfillment: inventory, shipment, and the authoritative order status after handoff. The strategy therefore reads that order status flows back from the ERP to Salesforce, and the sales order flows out from Salesforce to the ERP. Two systems, two owners, one direction each, no reconciliation loop.
+
+**Topology.** Meridian is a Salesforce-first shop and has a moderate set of flows: quoting, order handoff, order status return, and a master customer sync. Standing up a full middleware platform for four moderate flows within a three-month budget is hard to justify. Salesforce is the natural hub. The strategy centralizes the order-status fan-in in Salesforce, so the single order view is assembled there.
+
+**Synchronous and asynchronous seams.** This is where Meridian's unreliable ERP forces the hard call. The order handoff cannot be a synchronous request-reply from the sales rep's click: at high volume the ERP times out, and the strategy has to survive the ERP failing under load. So the handoff moves off the synchronous path. When a rep commits a sales order, Salesforce stores it and publishes an event on the event bus rather than blocking on the ERP. [^4] A background process, decoupled from the rep's action, drains the queue and pushes orders to the ERP in a controlled way. That converts an unreliable synchronous dependency into a reliable asynchronous one. [^1] Order status, by contrast, is safe to aggregate back into the hub on the read side, using the partial-failure policy the hub lesson established: if the ERP is down, the order view shows the orders Salesforce knows about and flags the status as unavailable, naming the missing source. [^1]
+
+**Canonical model and governance.** All flows exchange the sales order in one canonical shape. The ERP adapter maps order status from the ERP's native format into that shape, so the hub and downstream consumers never see ERP-specific fields. [^1] External access to Salesforce is governed through a small set of named APIs, versioned so a change to the order contract does not break the warehouse consumer that already runs against it. [^1]
+
+Notice what the strategy did not do. It did not pick a pattern and stop. It made six coherent decisions: ownership, topology, the synchronous cut, the asynchronous cut, the canonical shape, and governance, and it justified each against a constraint in the scenario. That coherence, decisions that reinforce rather than contradict each other, is what the CTA integration domain is really grading. [^1]
+
+## The pitfall to avoid
+
+**Treating integration as a menu of patterns instead of a set of decisions.** The most common failure is a candidate who can recite request-reply and fire-and-forget but who builds a point-to-point mess with no stated owner, or who makes everything synchronous and then hits the callout budget. [^2] The board is not impressed by breadth of vocabulary. It is impressed by whether the vocabulary is arranged into an architecture that survives the client's constraints.
+
+The second trap is **choosing topology on fashion.** Point-to-point is not automatically bad and middleware is not automatically better. A shop with four stable flows does not need a platform; a shop with forty heterogeneous flows probably does. When a candidate maps a problem to a topology without weighing volume, team, and budget, the board hears someone who has memorized a trend rather than reasoned about an enterprise.
+
+## Try it
+
+Take the Meridian scenario you just read and design the integration strategy yourself, on paper, without looking back at my version. Do it in four steps:
+
+1. Write the ownership table: for the quote, the sales order, and order status, name the system of record and the direction of flow.
+2. Argue the topology choice for Meridian in three sentences: number of flows, team platform, and budget.
+3. Decide the synchronous and asynchronous seams for the order handoff, and state the exact constraint that forces the handoff off the synchronous path.
+4. Draft one paragraph of API governance for the remote call-in consumers, including how a version change to the order contract is handled.
+
+When you are done, compare each decision against the criterion the board applies: does it name the constraint it is responding to, and does it stay consistent with the other four decisions? If your ownership table contradicts your asynchronous seam (for example, an ERP that is the record for fulfillment but is expected to push order status synchronously on every change), the strategy is incoherent and a judge will find the seam.
+
+## What's next
+
+This lesson built the integration strategy from its decisions: system of record, hub versus middleware versus point-to-point, synchronous and asynchronous seams, the canonical model, and governance. Lesson 63 takes the next CTA domain to the same depth: an enterprise-grade security model across systems. You will learn how identity, authentication, authorization, and data protection are designed consistently across every system in an enterprise, and how the security model stays coherent with the integration decisions this lesson just established. That is where the integration strategy and the security strategy have to agree, because a hub that aggregates five systems is only as safe as the weakest credential among them.
+
+[^1]: Salesforce Architects. [Integration Patterns](https://architect.salesforce.com/docs/architect/fundamentals/guide/integration-patterns.html). Describes the reusable integration patterns (request-reply, fire-and-forget, batch synchronization, remote call-in, UI updates, data virtualization), the pattern selection approach, and the event-driven architecture enabled by Platform Events, Change Data Capture, and the Pub/Sub API.
+[^2]: Salesforce Developers. [Callout Limits and Limitations](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_callouts_timeouts.htm). A single Apex transaction can make a maximum of 100 callouts; the default timeout is 10 seconds; the maximum cumulative timeout for callouts in one transaction is 120 seconds.
+[^3]: Salesforce Developers. [Execution Governors and Limits](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_gov_limits.htm). The Apex runtime enforces per-transaction limits that a synchronous design must operate within.
+[^4]: Salesforce Developers. [Platform Events Developer Guide](https://developer.salesforce.com/docs/platform/platform-events/guide/platform-events-intro.html). Platform events connect business processes in Salesforce and external applications through the real-time exchange of event messages.
