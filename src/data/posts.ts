@@ -2,6 +2,31 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "acceptance-gate-consulting-delivery-2026",
+    "title": "The Acceptance Gate: Where 'Done' Becomes Profit",
+    "excerpt": "A team can ship perfectly against its Definition of Done and still deliver nothing the client accepts. The acceptance gate is where consulting value closes.",
+    "category": "Project Management",
+    "categoryColor": "pm",
+    "categoryGradient": "from-teal to-teal-dark",
+    "date": "October 07, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "11 min read",
+    "featured": false,
+    "tags": [
+      "Project Management",
+      "Delivery Practice",
+      "Acceptance",
+      "UAT",
+      "Definition of Done",
+      "Scope",
+      "Stakeholders",
+      "Consulting Delivery"
+    ],
+    "bannerImage": "/banners/acceptance-gate-consulting-delivery-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "realtime-presence-broadcast-2026",
     "title": "Live Presence Meets Fast Broadcast",
     "excerpt": "Cursors, typing, and who's-online come from two Realtime features. Presence carries slow state, Broadcast carries fast events, and a real app uses both.",
