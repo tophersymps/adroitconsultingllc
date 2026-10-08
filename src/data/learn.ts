@@ -1076,6 +1076,476 @@ export const learnSeries: LearningSeries[] = [
     "curriculumLessons": 90
   },
   {
+    "slug": "salesforce-data-architect",
+    "name": "Platform Data Architect Certification",
+    "description": "A one-stop prep course for the Salesforce Certified Platform Data Architect exam. All 21 official objectives split into 42 focused lessons, with data-modeling design patterns, LDV and MDM trade-offs, exam traps, and practice questions.",
+    "gradient": "from-teal to-cyan-600",
+    "lessons": [
+      {
+        "slug": "day-01-dm-1a-data-modeling-fundamentals-objects-fields-relation",
+        "title": "Data Architect DM-1a: Data Modeling Fundamentals: Objects, Fields, Relationships",
+        "series": "salesforce-data-architect",
+        "lesson": 1,
+        "excerpt": "The building blocks of every Salesforce data model: standard vs custom objects, what a field type actually commits you to, the lookup vs master-detail decision and everything it controls (ownership, sharing, delete, roll-ups), and the object features that shape the UI and the rules. Includes a configuration walkthrough, the exam traps, and a hands-on try-it.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Modeling",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-02-dm-1b-modeling-design-considerations-normalized-vs-denor",
+        "title": "Data Architect DM-1B: Modeling Design Considerations: Normalized vs Denormalized, Standard vs Custom, Common Data Model",
+        "series": "salesforce-data-architect",
+        "lesson": 2,
+        "excerpt": "How to make the modeling trade-offs that day one only named: normalization versus denormalization and when each wins on a shallow-query platform, extending standard objects versus building custom ones, and the Salesforce common data model built around accounts, contacts, and person accounts that underpins Customer 360. Includes a configuration walkthrough, the exam traps, and a worked example. Day 2 of the Platform Data Architect exam prep.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Modeling",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-03-dm-2a-designing-a-scalable-data-model-that-obeys-the-sec",
+        "title": "Data Architect DM-2A: Designing a Scalable Data Model That Obeys the Security and Sharing Model",
+        "series": "salesforce-data-architect",
+        "lesson": 3,
+        "excerpt": "How the Salesforce sharing stack really works: organization-wide defaults set the baseline, then the role hierarchy, sharing rules, teams, and manual sharing open access upward and outward. This lesson ties that stack to data modeling by showing how ownership and the lookup versus master-detail choice determine who can see each record, and how to design private-by-default, few-rules models that scale. Includes a configuration walkthrough, the exam traps, and a worked example. Day 3 of the Platform Data Architect exam prep.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Security",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-04-dm-2b-data-model-scenarios-given-security-sharing-constr",
+        "title": "Data Architect DM-2B: Data-Model Scenarios Given Security and Sharing Constraints",
+        "series": "salesforce-data-architect",
+        "lesson": 4,
+        "excerpt": "Security and sharing are not ornaments bolted onto a data model; they are constraints that decide which relationships and access mechanisms survive a design review. This lesson shows how to work backward from who must see what, to an Organization-Wide Defaults baseline, a role hierarchy, a small set of sharing rules, and the right relationship choices, then covers territories, account and opportunity teams, and Experience Cloud sharing sets for the access edge cases. Day 4 of the Platform Data Architect exam prep.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Modeling",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-05-dm-3a-business-and-technical-metadata-business-dictionar",
+        "title": "Data Architect DM-3A: Business and Technical Metadata: Business Dictionary, Data Lineage, Taxonomy, Data Classification",
+        "series": "salesforce-data-architect",
+        "lesson": 5,
+        "excerpt": "The difference between metadata that helps and metadata that lies is discipline. This lesson separates business metadata from technical metadata, distinguishes the business glossary from the technical data dictionary, and shows how data lineage, taxonomy, and data classification each answer a different question: where a value came from, how categories are controlled, and how sensitive a field is. It closes with why even good metadata needs owners, change control, and a review cadence to stay trustworthy. Day 5 of the Platform Data Architect exam prep.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Governance",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-06-dm-3b-capturing-and-managing-metadata-tools-governance-l",
+        "title": "Data Architect DM-3B: Capturing and Managing Metadata: Tools, Change Control, and Governance Linkage",
+        "series": "salesforce-data-architect",
+        "lesson": 6,
+        "excerpt": "Metadata that nobody can retrieve, diff, or report on is documentation, not governance. This lesson covers the tool families that capture metadata on the platform (Object Manager, Field Usage, the Setup Audit Trail, the Metadata API, the Tooling API), where enterprise catalogs and platform scanners fit, and why source-controlled deployment is metadata governance in practice. It closes on the linkage that turns a written standard into a running control: checked automatically, reconciled on a cadence, owned by a named steward. Day 6 of the Platform Data Architect exam prep.",
+        "date": "September 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Governance",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-07-dm-4a-big-objects-vs-standard-custom-objects-reasons-pro",
+        "title": "Data Architect DM-4A: Big Objects vs Standard/Custom Objects: Reasons, Pros and Cons, Async SOQL, Partitioning, and Indexing",
+        "series": "salesforce-data-architect",
+        "lesson": 7,
+        "excerpt": "The data model reaches a wall. A custom object can store a lot, but there is a limit to how many rows it holds comfortably and how fast an arbitrary query against them runs. Big Objects exist for the data that outgrows that wall: billions of rows of audit history, clickstream events, and IoT telemetry that must stay on the platform without dragging down the org. This lesson compares the reasons to choose Big Objects versus standard and custom objects, walks the pros and cons, and explains the three mechanics that decide whether a Big Object is usable: the composite primary key and its index, the prefix rule that governs query performance, and Async SOQL for extracting and aggregating the results. Day 7 of the Platform Data Architect exam prep.",
+        "date": "September 18, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Big Objects",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-08-dm-4b-big-object-scenarios-when-to-use-when-not",
+        "title": "Data Architect DM-4B: Big Object scenarios: when to use, when not",
+        "series": "salesforce-data-architect",
+        "lesson": 8,
+        "excerpt": "Lesson 7 built the mechanics of Big Objects. This lesson applies them to decisions. A customer hands you a scenario: a volume, an access pattern, a retention window, and often a cost constraint. You decide whether a Big Object is right, or whether the answer is a standard or custom object, an External Object that virtualizes instead of stores, or an off-platform store that the platform never serves. This lesson walks the fit criteria, compares the four alternatives, and works the two patterns the exam loves: archiving old records out of a standard object into a Big Object, and the aggregate-and-report loop where high-volume events land in a Big Object and summaries roll to a reportable object. Day 8 of the Platform Data Architect exam prep.",
+        "date": "September 19, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Big Objects",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-09-dm-5a-data-skew-record-locking-sharing-recalculation-iss",
+        "title": "Data Architect DM-5A: Data Skew: Record Locking, Sharing Recalculation Issues, Excessive Child-to-Parent Relationships",
+        "series": "salesforce-data-architect",
+        "lesson": 9,
+        "excerpt": "A data model can be perfectly normalized and still collapse under real load when the data is skewed. This lesson defines the three shapes of data skew the exam tests, ownership skew, lookup skew, and the account skew they both produce, and explains why each turns into record-lock timeouts and sharing recalculation bottlenecks. It walks the mechanisms: why updating a parent with millions of children serializes on a lock, why reparenting a heavily-referenced record fans out cascades, and why a roll-up summary can make a skewed relationship worse instead of better. The mitigation play is concrete: distribute ownership across queues and integration users, shard a hot parent into intermediate parent records, run Bulk API in serial mode with larger batches, avoid reparenting high-volume children, and defer sharing calculation during bulk loads. Day 9 of the Platform Data Architect exam prep, requirement dm-5a.",
+        "date": "September 20, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Skew",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-10-dm-5b-data-skew-scenarios-avoidance-and-design-patterns",
+        "title": "Data Architect DM-5B: Data-Skew Scenarios: Avoidance and Design Patterns (Polymorphic, Junction, Denormalization)",
+        "series": "salesforce-data-architect",
+        "lesson": 10,
+        "excerpt": "Lesson 9 showed you how skewed data turns a healthy org into a wall of row-lock timeouts. This lesson moves from diagnosis to design: the durable fixes that prevent skew from the model up. You will learn four structural patterns that spread reference concentration instead of tolerating it. Polymorphic relationships let one field point at several object types and fan references across many parents. Junction objects flatten many-to-many relationships laterally so no single parent collects the children. Intermediate (shard) parents insert a segment object between a hot parent and its children so no one record owns millions. Denormalization copies the shared hot value onto the child so frequent paths stop touching the parent at all. The lesson also covers what does not fix skew: deferring sharing and running off-peak shrink the blast radius of a load but leave the concentration in place, and a roll-up summary on a skewed relationship makes parent locking worse. A five-step configuration walkthrough, three exam traps, and a try-it exercise round out requirement dm-5b. Day 10 of the Platform Data Architect exam prep.",
+        "date": "September 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Skew",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-11-md-1a-mdm-styles-registry-consolidation-co-existence-cen",
+        "title": "Data Architect MD-1A: MDM Implementation Styles: Registry, Consolidation, Co-existence, and Centralized",
+        "series": "salesforce-data-architect",
+        "lesson": 11,
+        "excerpt": "Master data management is the discipline of keeping one authoritative version of the customer, product, and supplier records that every system in an enterprise references. The exam asks you to compare and contrast the four ways to deliver that single version of truth: registry, consolidation, co-existence, and centralized. This lesson trains each style as a decision staged on a centralization spectrum. Registry is the lightest touch, the hub stores only the map between a master record and the source-system records plus a global identifier, and source systems keep owning the attributes. Consolidation pulls source data into a read-mostly hub for analytics and reporting without pushing corrections back. Co-existence makes the hub and the sources both hold data, consolidating here and publishing values back there, and it is the most common enterprise pattern because it keeps sources operating. Centralized hands authorship to the hub and makes source systems consume from it, which gives the strongest single truth but demands the most application change. The lesson covers the considerations for choosing among them latency, whether sources can accept hub updates, governance maturity, source data quality, and integration cost and how each style maps onto Salesforce, which can be the hub or a participant. A five-step configuration walkthrough, three exam traps, and a try-it exercise round out requirement md-1a. Day 11 of the Platform Data Architect exam prep.",
+        "date": "September 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Master Data Management",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-12-md-1b-harmonizing-and-consolidating-multi-source-data-ca",
+        "title": "Data Architect MD-1B: Harmonizing and Consolidating Multi-Source Data, Canonical Modeling, and Hierarchy Management",
+        "series": "salesforce-data-architect",
+        "lesson": 12,
+        "excerpt": "When four systems each hold a version of the same customer, the exam wants you to know the order of operations that turns those disagreeing records into one master representation. Harmonization comes first: you reconcile code sets, date and address formats, units, and value domains so the values are comparable. Then a canonical model gives you a neutral, business-level object and attribute model that every source maps into exactly once, which decouples N sources from M targets into a hub-and-spoke mapping instead of an N-times-M explosion. Only then do you consolidate, merging the harmonized records into a golden representation using identity resolution and attribute-level survivorship. This lesson walks the full flow, standardizes reference data, and covers hierarchy management: a single self-lookup parent field supports one hierarchy, while multiple simultaneous hierarchies such as a legal hierarchy and a reporting hierarchy need a separate hierarchy or junction object. A five-step configuration walkthrough, three exam traps, and a try-it exercise round out requirement md-1b. Day 12 of the Platform Data Architect exam prep.",
+        "date": "September 23, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Master Data Management",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-13-md-2a-golden-record-system-of-truth-in-a-single-org-iden",
+        "title": "Data Architect MD-2A: Golden Record and System of Truth in a Single Org, Identity Resolution, Dedup, and Matching Rules",
+        "series": "salesforce-data-architect",
+        "lesson": 13,
+        "excerpt": "Requirement md-2a gives you a customer scenario and asks you to recommend and use techniques for establishing a golden record and system of truth for the customer domain in a single Salesforce org. This lesson makes that concrete: a golden record is the single, authoritative, best-quality representation of an entity, and in a single org the Salesforce Account (or Person Account) usually plays that role for the customer domain. The challenge is keeping it clean as records arrive from a portal, manual entry, imports, and API loads. In this lesson you learn identity resolution, which decides when two records are the same real-world entity, and the two ways it is done: deterministic matching on a stable external ID where one exists, and fuzzy matching on normalized fields where it does not. You learn how native Matching Rules and Duplicate Rules implement this declaratively, how those rules are configured in Setup, and how deduplication as an operational process uses duplicate reports and merges to drive cleanup. Then you learn the subtle exam point: system of truth is often attribute-level, not just record-level, so the golden record is a composite with a source of truth per attribute. A worked scenario, a five-step configuration walkthrough, three exam traps, and a try-it exercise close out requirement md-2a. Day 13 of the Platform Data Architect exam prep.",
+        "date": "September 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Master Data Management",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-14-md-2b-golden-record-scenarios-survivorship-rules-thresho",
+        "title": "Data Architect MD-2B: Golden-Record Scenarios, Survivorship Rules, Thresholds and Weights, Reference-Data Enrichment",
+        "series": "salesforce-data-architect",
+        "lesson": 14,
+        "excerpt": "Requirement md-2b gives you a customer scenario and asks you to recommend and use techniques for establishing a golden record, including survivorship rules, matching thresholds and weights, and leveraging external reference data for enrichment. This lesson makes it concrete. You already learned in md-2a that matching decides when two records are the same entity and that system of truth is often attribute-level. This lesson is about what happens after the match: survivorship, which picks a winning value per attribute when the sources disagree. You learn the survivorship strategies (source priority, most recent, most complete, most frequent, longest, steward override), why survivorship is attribute-level and never a single global rule, and how source priority as a trust ranking gives you the simplest and most auditable default. Then you learn matching thresholds and weights: how a fuzzy match produces a score, how weights make strong identifiers like a tax ID outweigh weak ones like a postal code, and how a three-band threshold design (auto-merge, review, no match) balances automation against the cost of a false merge. Next you learn reference-data enrichment from address validation, firmographic providers, and tax and registration databases, the considerations that govern it, and the exam-critical point that enrichment should feed survivorship as a lower-priority source rather than overwrite trusted values. A worked scenario, a five-step configuration walkthrough, three exam traps, and a try-it exercise close out requirement md-2b. Day 14 of the Platform Data Architect exam prep.",
+        "date": "September 25, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Master Data Management",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-15-md-3a-consolidating-attributes-from-multiple-sources-win",
+        "title": "Data Architect MD-3A: Consolidating Attributes From Multiple Sources, Winning-Attribute Criteria, Methodology, Stewardship",
+        "series": "salesforce-data-architect",
+        "lesson": 15,
+        "excerpt": "Requirement md-3a asks you to recommend, given a customer scenario, approaches and techniques for consolidating data attributes from multiple sources, and to discuss the criteria and methodology for picking the winning attributes, including the role of data stewardship. This lesson makes that concrete. You already learned in md-2b that survivorship picks a winning value per attribute once matching has clustered records into one entity. This lesson pushes one level out: it is about the whole consolidation process, not just the winning rule. You learn the five-step consolidation methodology (harmonize values, resolve identity, apply attribute-level survivorship, persist the golden record and the cross-reference, and publish), why harmonization must happen before you can meaningfully compare values, and how each step feeds the next. Then you learn the criteria a winning-attribute rule weighs: source trust and authority, recency, completeness, whether the value passed a validation or reference check, and business rules such as legal name coming from the legal system regardless of recency. Next you learn that real rules are usually composed as an ordered list per attribute, with source priority, recency, and completeness as cascading fallbacks, and why documenting that order keeps every winner explainable. Then you learn provenance: storing which source won and when, so the golden record is auditable and future rules are built on evidence. After that you learn the stewardship roles (owners set policy, stewards resolve exceptions and monitor quality, custodians run the pipelines), and the quality metrics that keep a steward honest: match rate, duplicate rate, completeness, survivorship override rate, and unresolved-conflict counts. Finally you learn how a steward's tie-break becomes a rule update so the same conflict falls away next time. Day 15 of the Platform Data Architect exam prep.",
+        "date": "September 26, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Master Data Management",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-16-md-3b-mdm-architecture-scenarios-traceability-common-con",
+        "title": "Data Architect MD-3B: MDM Architecture Scenarios, Traceability, Common Context for Business Rules, Tooling vs Declarative",
+        "series": "salesforce-data-architect",
+        "lesson": 16,
+        "excerpt": "Requirement md-3b asks you to recommend, given a customer scenario, the approaches and techniques that capture and maintain customer reference and metadata to preserve traceability and establish a common context for business rules, and to decide when dedicated MDM tooling is warranted versus declarative Salesforce capabilities. This lesson makes that concrete. You already learned in md-1 and md-3a that a golden record consolidates attributes and that consolidation is a governed process with ownership, stewardship, and provenance. This lesson pushes up to the architecture level: it is about the whole master-data-management design, not just one record. You learn what traceability really means, why a cross-reference and provenance are the two artifacts that make it possible, and why a golden record without them is an unverifiable black box. Then you learn what a common context for business rules is, and how the canonical model and governed reference data deliver it so segmentation, pricing, and eligibility behave identically across systems. Next you learn the metadata repository, the inventory of entity definitions, source systems, mapping and survivorship rules, hierarchy definitions, and reference data, that an MDM program must maintain. Then you learn the declarative-first path on Salesforce: matching and duplicate rules, external IDs, validation rules, Flows, and Data Pipelines that cover many single-org needs without third-party tooling. After that you learn when dedicated MDM tooling is warranted, the multi-domain, multi-system, fuzzy-matching, real-time-sync, and regulatory-lineage triggers, and the honest trade-offs of that decision. Finally you learn the common hybrid pattern, a dedicated hub feeding a shared golden customer into Salesforce while duplicate rules keep local records clean, and why governance wires whichever architecture you choose. Day 16 of the Platform Data Architect exam prep.",
+        "date": "September 27, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Master Data Management",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-17-sm-1a-license-types-to-standard-custom-objects-crm-tiers",
+        "title": "Data Architect SM-1a: License Types to Standard and Custom Objects: CRM Tiers, Platform License, Object Access per License",
+        "series": "salesforce-data-architect",
+        "lesson": 17,
+        "excerpt": "The single most common cost and access mistake in Salesforce data architecture is buying every user a full CRM license when most of them only touch custom objects. This lesson teaches how CRM-edition licenses differ from Platform licenses in their access to standard and custom objects, how Experience Cloud licenses restrict external users, why integration jobs can run on cheaper Platform or Integration licenses, and how to map each user group to the cheapest license that still reaches every object it actually needs.",
+        "date": "September 28, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "License",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-18-sm-1b-license-and-object-scenarios",
+        "title": "Data Architect SM-1b: License and Object Scenarios: Matching Licenses to Standard and Custom Objects for Cost, Access, and Platform Limits",
+        "series": "salesforce-data-architect",
+        "lesson": 18,
+        "excerpt": "How to design licenses from a customer scenario, not from a cost default: build a user-group to object-need matrix, split mixed workloads into separate license pools, put external collaborators on Experience Cloud licenses with sharing sets, and secure API-only automation users on dedicated integration or Platform licenses with Named Credentials. Includes the architectural trade-off of re-modeling onto custom objects versus upgrading a license, why a license is a ceiling and not record visibility, the three exam traps, and a worked scenario.",
+        "date": "September 29, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "18 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "License",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-19-sm-2a-data-consistency-validation-rules-required-fields",
+        "title": "Data Architect SM-2a: Data Consistency: Validation Rules, Required Fields, Picklists, Unique Constraints, Lookup Filters, Duplicate Rules, and External IDs",
+        "series": "salesforce-data-architect",
+        "lesson": 19,
+        "excerpt": "How to keep data persisted consistently no matter how many users and integrations write to it: the difference between field-level required and layout required (and why one is a data-consistency gap), validation rules for conditional business logic, dependent and restricted picklists, unique constraints and external IDs as hard keys, lookup filters for referential integrity, and duplicate rules for fuzzy matches. Includes a worked customer scenario, when each layer applies and when it is bypassed, the three exam traps, and a configuration walkthrough.",
+        "date": "September 30, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "19 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Management",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-20-sm-2b-persistence-consistency-scenarios-keys-natural-key",
+        "title": "Data Architect SM-2b: Persistence-Consistency Scenarios: Keys, Natural Keys, Idempotent Writes, and Upsert",
+        "series": "salesforce-data-architect",
+        "lesson": 20,
+        "excerpt": "How to make cross-system persistence consistent: the difference between surrogate and natural keys, why the Salesforce record Id is not a cross-org identity, using external IDs as stable keys, composite keys for multi-source consistency, and upsert as the canonical idempotent write so re-running a failed load never duplicates records. Includes a worked customer scenario, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.",
+        "date": "October 1, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "21 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Management",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-21-sm-3a-single-view-of-the-customer-across-systems-integra",
+        "title": "Data Architect SM-3a: Single View of the Customer Across Systems: Integration, Master Record, and Change Data Capture",
+        "series": "salesforce-data-architect",
+        "lesson": 21,
+        "excerpt": "How to represent one authoritative view of a customer when the data lives across many systems: the four approaches to a single view, per-attribute system of record, shared identity through external IDs and cross-references, the integration patterns that propagate changes, and Change Data Capture for near-real-time synchronization. Includes a worked multi-system scenario, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.",
+        "date": "October 2, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "22 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Management",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-22-sm-3b-single-customer-view-scenarios-merging-deduplicati",
+        "title": "Data Architect SM-3b: Single-Customer-View Scenarios: Merging and Deduplication",
+        "series": "salesforce-data-architect",
+        "lesson": 22,
+        "excerpt": "What to do when the single view is already broken: how merging consolidates duplicate Accounts, Contacts, and Leads into one surviving record, how it reparents related records and deletes the losers, why it is not reversible, how bulk deduplication finds duplicates with reports and merges them with native or third-party tooling, why prevention with duplicate and matching rules beats cleanup, and how to propagate the surviving record's ID downstream so the view does not fragment again. Includes a worked household scenario, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.",
+        "date": "October 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "21 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Management",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-23-sm-4a-consolidating-leveraging-multiple-salesforce-insta",
+        "title": "Data Architect SM-4a: Consolidating and Leveraging Multiple Salesforce Instances",
+        "series": "salesforce-data-architect",
+        "lesson": 23,
+        "excerpt": "How enterprises end up with many Salesforce orgs and what the architect does about it: when to consolidate into one org versus integrate separate orgs and sync data, the three consolidation options (merge into one, incremental, hub and spoke) and their cutover profiles, how to sync shared entities with a per-entity master and external IDs so you avoid update loops, and how Data Pipelines and Data Connect provide managed integration and zero-copy sharing when you want shared truth without merging everything. Includes a worked multi-org scenario, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.",
+        "date": "October 4, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "22 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Management",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-24-sm-4b-multi-org-data-scenarios-when-to-consolidate-vs-in",
+        "title": "Data Architect SM-4b: Multi-Org Data Scenarios: When to Consolidate vs Integrate",
+        "series": "salesforce-data-architect",
+        "lesson": 24,
+        "excerpt": "Given a customer scenario, decide whether to consolidate multiple Salesforce orgs or keep them separate and integrate. Covers the decision inputs you score each scenario against (process commonality, residency and compliance, data volume, release alignment, cost, and the target timeline), the two forces that pull you toward those answers, phased and hub-and-spoke consolidation when you do merge, the reporting-only case where Data Connect or a shared warehouse gives you a unified view without merging orgs at all, the global customer key that stitches identities across orgs, the cost and effort trade-off between a heavy one-time migration and an ongoing integration surface, and why there is no universally right answer, only the design that minimizes risk for a specific customer's constraints. Includes a worked multi-org scenario, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.",
+        "date": "October 5, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "25 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Management",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-25-gv-1a-gdpr-compliant-data-model-identify-classify-protec",
+        "title": "Data Architect GV-1a: GDPR-Compliant Data Model: Identify, Classify, and Protect Personal Data",
+        "series": "salesforce-data-architect",
+        "lesson": 25,
+        "excerpt": "Given a customer scenario, recommend an approach for designing a GDPR-compliant data model, discussing the options to identify, classify, and protect personal and sensitive information, including the right to erasure. Covers how GDPR defines personal and special-category data and why the model must know where that data lives and under what legal basis, the discipline of building a data inventory that finds data in structured fields and in free text, sensitivity tiers you maintain as metadata, the protection layer made from field-level security and permission sets, Shield and Classic encryption with their search trade-offs, audit trails and event monitoring, and Data Mask for sandboxes, consent and lawful-basis modeling, retention schedules, and the four erasure patterns with when each fits. Includes a worked erasure scenario, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.",
+        "date": "October 6, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "26 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Governance",
+          "GDPR"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-26-gv-1b-gdpr-scenarios-consent-retention-field-level-contr",
+        "title": "Data Architect GV-1b: GDPR Scenarios: Consent, Retention, Field-Level Controls, Encryption, Deletion Patterns",
+        "series": "salesforce-data-architect",
+        "lesson": 26,
+        "excerpt": "Given a customer scenario, recommend an approach for a GDPR-compliant data model, applying consent management, retention scheduling, field-level controls, encryption, and deletion/anonymization patterns to real design decisions. Covers how to model consent so it can be recorded and withdrawn and processing actually stops, how to set a retention period per data category and enforce it with scheduled purge and archive jobs, how to use FLS, permission sets, Platform Encryption, and Data Mask to keep sensitive fields from the wrong eyes, the honest trade-offs of encryption (some filters, sorts, roll-ups, and searches change behavior; deterministic encryption buys exact matches within limits), the four deletion patterns that reach files, notes, logs, and downstream warehouses rather than stopping at the record, the subject-access and portability extract that depends on knowing every object and field holding a subject's data, and why GDPR is operationalized through a governance program, not a one-time config. Includes a worked consumer-consent scenario, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.",
+        "date": "October 7, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "26 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Governance",
+          "GDPR",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-27-gv-2a-enterprise-data-governance-program-framework-stewa",
+        "title": "Data Architect GV-2a: Enterprise Data Governance Program: Framework, Stewardship, Policies",
+        "series": "salesforce-data-architect",
+        "lesson": 27,
+        "excerpt": "Compare and contrast various approaches and considerations for designing and implementing an enterprise data governance program, including the operating framework, stewardship roles, policies, standards, and metrics. Covers what data governance actually is (a set of decision rights and accountabilities, not a tool), the building blocks of a governance framework (scope and domains, policy, standards, processes, and roles), the difference between the data owner, the data steward, and the custodian, the centralized, federated, and hybrid operating models and why hybrid is the common enterprise choice, the policies and standards that must be defined (classification and handling, naming conventions, retention, quality thresholds, access principles, issue management) and why standards must be enforceable and auditable to be meaningful, the quality metrics that turn governance from aspiration into a managed program, why governance must be embedded in the SDLC as a delivery gate rather than run as a parallel bureaucracy, and the maturity path that starts with a pilot domain and proves value before expanding. Includes a worked retail governance example, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.",
+        "date": "October 8, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "27 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Governance",
+          "Certification"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 27,
+    "curriculumLessons": 42
+  },
+  {
     "slug": "salesforce-sharing-visibility-architect",
     "name": "Platform Sharing and Visibility Architect Certification",
     "description": "A one-stop prep course for the Salesforce Certified Platform Sharing and Visibility Architect exam. All 18 official objectives split into 36 focused lessons, with config walkthroughs, sharing-model trade-offs, exam traps, and practice questions.",
@@ -3091,459 +3561,6 @@ export const learnSeries: LearningSeries[] = [
     ],
     "totalLessons": 15,
     "curriculumLessons": 30
-  },
-  {
-    "slug": "salesforce-data-architect",
-    "name": "Platform Data Architect Certification",
-    "description": "A one-stop prep course for the Salesforce Certified Platform Data Architect exam. All 21 official objectives split into 42 focused lessons, with data-modeling design patterns, LDV and MDM trade-offs, exam traps, and practice questions.",
-    "gradient": "from-teal to-cyan-600",
-    "lessons": [
-      {
-        "slug": "day-01-dm-1a-data-modeling-fundamentals-objects-fields-relation",
-        "title": "Data Architect DM-1a: Data Modeling Fundamentals: Objects, Fields, Relationships",
-        "series": "salesforce-data-architect",
-        "lesson": 1,
-        "excerpt": "The building blocks of every Salesforce data model: standard vs custom objects, what a field type actually commits you to, the lookup vs master-detail decision and everything it controls (ownership, sharing, delete, roll-ups), and the object features that shape the UI and the rules. Includes a configuration walkthrough, the exam traps, and a hands-on try-it.",
-        "date": "September 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Data Modeling",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-02-dm-1b-modeling-design-considerations-normalized-vs-denor",
-        "title": "Data Architect DM-1B: Modeling Design Considerations: Normalized vs Denormalized, Standard vs Custom, Common Data Model",
-        "series": "salesforce-data-architect",
-        "lesson": 2,
-        "excerpt": "How to make the modeling trade-offs that day one only named: normalization versus denormalization and when each wins on a shallow-query platform, extending standard objects versus building custom ones, and the Salesforce common data model built around accounts, contacts, and person accounts that underpins Customer 360. Includes a configuration walkthrough, the exam traps, and a worked example. Day 2 of the Platform Data Architect exam prep.",
-        "date": "September 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "17 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Data Modeling",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-03-dm-2a-designing-a-scalable-data-model-that-obeys-the-sec",
-        "title": "Data Architect DM-2A: Designing a Scalable Data Model That Obeys the Security and Sharing Model",
-        "series": "salesforce-data-architect",
-        "lesson": 3,
-        "excerpt": "How the Salesforce sharing stack really works: organization-wide defaults set the baseline, then the role hierarchy, sharing rules, teams, and manual sharing open access upward and outward. This lesson ties that stack to data modeling by showing how ownership and the lookup versus master-detail choice determine who can see each record, and how to design private-by-default, few-rules models that scale. Includes a configuration walkthrough, the exam traps, and a worked example. Day 3 of the Platform Data Architect exam prep.",
-        "date": "September 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "17 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Security",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-04-dm-2b-data-model-scenarios-given-security-sharing-constr",
-        "title": "Data Architect DM-2B: Data-Model Scenarios Given Security and Sharing Constraints",
-        "series": "salesforce-data-architect",
-        "lesson": 4,
-        "excerpt": "Security and sharing are not ornaments bolted onto a data model; they are constraints that decide which relationships and access mechanisms survive a design review. This lesson shows how to work backward from who must see what, to an Organization-Wide Defaults baseline, a role hierarchy, a small set of sharing rules, and the right relationship choices, then covers territories, account and opportunity teams, and Experience Cloud sharing sets for the access edge cases. Day 4 of the Platform Data Architect exam prep.",
-        "date": "September 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Data Modeling",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-05-dm-3a-business-and-technical-metadata-business-dictionar",
-        "title": "Data Architect DM-3A: Business and Technical Metadata: Business Dictionary, Data Lineage, Taxonomy, Data Classification",
-        "series": "salesforce-data-architect",
-        "lesson": 5,
-        "excerpt": "The difference between metadata that helps and metadata that lies is discipline. This lesson separates business metadata from technical metadata, distinguishes the business glossary from the technical data dictionary, and shows how data lineage, taxonomy, and data classification each answer a different question: where a value came from, how categories are controlled, and how sensitive a field is. It closes with why even good metadata needs owners, change control, and a review cadence to stay trustworthy. Day 5 of the Platform Data Architect exam prep.",
-        "date": "September 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Data Governance",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-06-dm-3b-capturing-and-managing-metadata-tools-governance-l",
-        "title": "Data Architect DM-3B: Capturing and Managing Metadata: Tools, Change Control, and Governance Linkage",
-        "series": "salesforce-data-architect",
-        "lesson": 6,
-        "excerpt": "Metadata that nobody can retrieve, diff, or report on is documentation, not governance. This lesson covers the tool families that capture metadata on the platform (Object Manager, Field Usage, the Setup Audit Trail, the Metadata API, the Tooling API), where enterprise catalogs and platform scanners fit, and why source-controlled deployment is metadata governance in practice. It closes on the linkage that turns a written standard into a running control: checked automatically, reconciled on a cadence, owned by a named steward. Day 6 of the Platform Data Architect exam prep.",
-        "date": "September 17, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Data Governance",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-07-dm-4a-big-objects-vs-standard-custom-objects-reasons-pro",
-        "title": "Data Architect DM-4A: Big Objects vs Standard/Custom Objects: Reasons, Pros and Cons, Async SOQL, Partitioning, and Indexing",
-        "series": "salesforce-data-architect",
-        "lesson": 7,
-        "excerpt": "The data model reaches a wall. A custom object can store a lot, but there is a limit to how many rows it holds comfortably and how fast an arbitrary query against them runs. Big Objects exist for the data that outgrows that wall: billions of rows of audit history, clickstream events, and IoT telemetry that must stay on the platform without dragging down the org. This lesson compares the reasons to choose Big Objects versus standard and custom objects, walks the pros and cons, and explains the three mechanics that decide whether a Big Object is usable: the composite primary key and its index, the prefix rule that governs query performance, and Async SOQL for extracting and aggregating the results. Day 7 of the Platform Data Architect exam prep.",
-        "date": "September 18, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Big Objects",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-08-dm-4b-big-object-scenarios-when-to-use-when-not",
-        "title": "Data Architect DM-4B: Big Object scenarios: when to use, when not",
-        "series": "salesforce-data-architect",
-        "lesson": 8,
-        "excerpt": "Lesson 7 built the mechanics of Big Objects. This lesson applies them to decisions. A customer hands you a scenario: a volume, an access pattern, a retention window, and often a cost constraint. You decide whether a Big Object is right, or whether the answer is a standard or custom object, an External Object that virtualizes instead of stores, or an off-platform store that the platform never serves. This lesson walks the fit criteria, compares the four alternatives, and works the two patterns the exam loves: archiving old records out of a standard object into a Big Object, and the aggregate-and-report loop where high-volume events land in a Big Object and summaries roll to a reportable object. Day 8 of the Platform Data Architect exam prep.",
-        "date": "September 19, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Big Objects",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-09-dm-5a-data-skew-record-locking-sharing-recalculation-iss",
-        "title": "Data Architect DM-5A: Data Skew: Record Locking, Sharing Recalculation Issues, Excessive Child-to-Parent Relationships",
-        "series": "salesforce-data-architect",
-        "lesson": 9,
-        "excerpt": "A data model can be perfectly normalized and still collapse under real load when the data is skewed. This lesson defines the three shapes of data skew the exam tests, ownership skew, lookup skew, and the account skew they both produce, and explains why each turns into record-lock timeouts and sharing recalculation bottlenecks. It walks the mechanisms: why updating a parent with millions of children serializes on a lock, why reparenting a heavily-referenced record fans out cascades, and why a roll-up summary can make a skewed relationship worse instead of better. The mitigation play is concrete: distribute ownership across queues and integration users, shard a hot parent into intermediate parent records, run Bulk API in serial mode with larger batches, avoid reparenting high-volume children, and defer sharing calculation during bulk loads. Day 9 of the Platform Data Architect exam prep, requirement dm-5a.",
-        "date": "September 20, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "17 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Data Skew",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-10-dm-5b-data-skew-scenarios-avoidance-and-design-patterns",
-        "title": "Data Architect DM-5B: Data-Skew Scenarios: Avoidance and Design Patterns (Polymorphic, Junction, Denormalization)",
-        "series": "salesforce-data-architect",
-        "lesson": 10,
-        "excerpt": "Lesson 9 showed you how skewed data turns a healthy org into a wall of row-lock timeouts. This lesson moves from diagnosis to design: the durable fixes that prevent skew from the model up. You will learn four structural patterns that spread reference concentration instead of tolerating it. Polymorphic relationships let one field point at several object types and fan references across many parents. Junction objects flatten many-to-many relationships laterally so no single parent collects the children. Intermediate (shard) parents insert a segment object between a hot parent and its children so no one record owns millions. Denormalization copies the shared hot value onto the child so frequent paths stop touching the parent at all. The lesson also covers what does not fix skew: deferring sharing and running off-peak shrink the blast radius of a load but leave the concentration in place, and a roll-up summary on a skewed relationship makes parent locking worse. A five-step configuration walkthrough, three exam traps, and a try-it exercise round out requirement dm-5b. Day 10 of the Platform Data Architect exam prep.",
-        "date": "September 21, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Data Skew",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-11-md-1a-mdm-styles-registry-consolidation-co-existence-cen",
-        "title": "Data Architect MD-1A: MDM Implementation Styles: Registry, Consolidation, Co-existence, and Centralized",
-        "series": "salesforce-data-architect",
-        "lesson": 11,
-        "excerpt": "Master data management is the discipline of keeping one authoritative version of the customer, product, and supplier records that every system in an enterprise references. The exam asks you to compare and contrast the four ways to deliver that single version of truth: registry, consolidation, co-existence, and centralized. This lesson trains each style as a decision staged on a centralization spectrum. Registry is the lightest touch, the hub stores only the map between a master record and the source-system records plus a global identifier, and source systems keep owning the attributes. Consolidation pulls source data into a read-mostly hub for analytics and reporting without pushing corrections back. Co-existence makes the hub and the sources both hold data, consolidating here and publishing values back there, and it is the most common enterprise pattern because it keeps sources operating. Centralized hands authorship to the hub and makes source systems consume from it, which gives the strongest single truth but demands the most application change. The lesson covers the considerations for choosing among them latency, whether sources can accept hub updates, governance maturity, source data quality, and integration cost and how each style maps onto Salesforce, which can be the hub or a participant. A five-step configuration walkthrough, three exam traps, and a try-it exercise round out requirement md-1a. Day 11 of the Platform Data Architect exam prep.",
-        "date": "September 22, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Master Data Management",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-12-md-1b-harmonizing-and-consolidating-multi-source-data-ca",
-        "title": "Data Architect MD-1B: Harmonizing and Consolidating Multi-Source Data, Canonical Modeling, and Hierarchy Management",
-        "series": "salesforce-data-architect",
-        "lesson": 12,
-        "excerpt": "When four systems each hold a version of the same customer, the exam wants you to know the order of operations that turns those disagreeing records into one master representation. Harmonization comes first: you reconcile code sets, date and address formats, units, and value domains so the values are comparable. Then a canonical model gives you a neutral, business-level object and attribute model that every source maps into exactly once, which decouples N sources from M targets into a hub-and-spoke mapping instead of an N-times-M explosion. Only then do you consolidate, merging the harmonized records into a golden representation using identity resolution and attribute-level survivorship. This lesson walks the full flow, standardizes reference data, and covers hierarchy management: a single self-lookup parent field supports one hierarchy, while multiple simultaneous hierarchies such as a legal hierarchy and a reporting hierarchy need a separate hierarchy or junction object. A five-step configuration walkthrough, three exam traps, and a try-it exercise round out requirement md-1b. Day 12 of the Platform Data Architect exam prep.",
-        "date": "September 23, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Master Data Management",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-13-md-2a-golden-record-system-of-truth-in-a-single-org-iden",
-        "title": "Data Architect MD-2A: Golden Record and System of Truth in a Single Org, Identity Resolution, Dedup, and Matching Rules",
-        "series": "salesforce-data-architect",
-        "lesson": 13,
-        "excerpt": "Requirement md-2a gives you a customer scenario and asks you to recommend and use techniques for establishing a golden record and system of truth for the customer domain in a single Salesforce org. This lesson makes that concrete: a golden record is the single, authoritative, best-quality representation of an entity, and in a single org the Salesforce Account (or Person Account) usually plays that role for the customer domain. The challenge is keeping it clean as records arrive from a portal, manual entry, imports, and API loads. In this lesson you learn identity resolution, which decides when two records are the same real-world entity, and the two ways it is done: deterministic matching on a stable external ID where one exists, and fuzzy matching on normalized fields where it does not. You learn how native Matching Rules and Duplicate Rules implement this declaratively, how those rules are configured in Setup, and how deduplication as an operational process uses duplicate reports and merges to drive cleanup. Then you learn the subtle exam point: system of truth is often attribute-level, not just record-level, so the golden record is a composite with a source of truth per attribute. A worked scenario, a five-step configuration walkthrough, three exam traps, and a try-it exercise close out requirement md-2a. Day 13 of the Platform Data Architect exam prep.",
-        "date": "September 24, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Master Data Management",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-14-md-2b-golden-record-scenarios-survivorship-rules-thresho",
-        "title": "Data Architect MD-2B: Golden-Record Scenarios, Survivorship Rules, Thresholds and Weights, Reference-Data Enrichment",
-        "series": "salesforce-data-architect",
-        "lesson": 14,
-        "excerpt": "Requirement md-2b gives you a customer scenario and asks you to recommend and use techniques for establishing a golden record, including survivorship rules, matching thresholds and weights, and leveraging external reference data for enrichment. This lesson makes it concrete. You already learned in md-2a that matching decides when two records are the same entity and that system of truth is often attribute-level. This lesson is about what happens after the match: survivorship, which picks a winning value per attribute when the sources disagree. You learn the survivorship strategies (source priority, most recent, most complete, most frequent, longest, steward override), why survivorship is attribute-level and never a single global rule, and how source priority as a trust ranking gives you the simplest and most auditable default. Then you learn matching thresholds and weights: how a fuzzy match produces a score, how weights make strong identifiers like a tax ID outweigh weak ones like a postal code, and how a three-band threshold design (auto-merge, review, no match) balances automation against the cost of a false merge. Next you learn reference-data enrichment from address validation, firmographic providers, and tax and registration databases, the considerations that govern it, and the exam-critical point that enrichment should feed survivorship as a lower-priority source rather than overwrite trusted values. A worked scenario, a five-step configuration walkthrough, three exam traps, and a try-it exercise close out requirement md-2b. Day 14 of the Platform Data Architect exam prep.",
-        "date": "September 25, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Master Data Management",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-15-md-3a-consolidating-attributes-from-multiple-sources-win",
-        "title": "Data Architect MD-3A: Consolidating Attributes From Multiple Sources, Winning-Attribute Criteria, Methodology, Stewardship",
-        "series": "salesforce-data-architect",
-        "lesson": 15,
-        "excerpt": "Requirement md-3a asks you to recommend, given a customer scenario, approaches and techniques for consolidating data attributes from multiple sources, and to discuss the criteria and methodology for picking the winning attributes, including the role of data stewardship. This lesson makes that concrete. You already learned in md-2b that survivorship picks a winning value per attribute once matching has clustered records into one entity. This lesson pushes one level out: it is about the whole consolidation process, not just the winning rule. You learn the five-step consolidation methodology (harmonize values, resolve identity, apply attribute-level survivorship, persist the golden record and the cross-reference, and publish), why harmonization must happen before you can meaningfully compare values, and how each step feeds the next. Then you learn the criteria a winning-attribute rule weighs: source trust and authority, recency, completeness, whether the value passed a validation or reference check, and business rules such as legal name coming from the legal system regardless of recency. Next you learn that real rules are usually composed as an ordered list per attribute, with source priority, recency, and completeness as cascading fallbacks, and why documenting that order keeps every winner explainable. Then you learn provenance: storing which source won and when, so the golden record is auditable and future rules are built on evidence. After that you learn the stewardship roles (owners set policy, stewards resolve exceptions and monitor quality, custodians run the pipelines), and the quality metrics that keep a steward honest: match rate, duplicate rate, completeness, survivorship override rate, and unresolved-conflict counts. Finally you learn how a steward's tie-break becomes a rule update so the same conflict falls away next time. Day 15 of the Platform Data Architect exam prep.",
-        "date": "September 26, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "16 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Master Data Management",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-16-md-3b-mdm-architecture-scenarios-traceability-common-con",
-        "title": "Data Architect MD-3B: MDM Architecture Scenarios, Traceability, Common Context for Business Rules, Tooling vs Declarative",
-        "series": "salesforce-data-architect",
-        "lesson": 16,
-        "excerpt": "Requirement md-3b asks you to recommend, given a customer scenario, the approaches and techniques that capture and maintain customer reference and metadata to preserve traceability and establish a common context for business rules, and to decide when dedicated MDM tooling is warranted versus declarative Salesforce capabilities. This lesson makes that concrete. You already learned in md-1 and md-3a that a golden record consolidates attributes and that consolidation is a governed process with ownership, stewardship, and provenance. This lesson pushes up to the architecture level: it is about the whole master-data-management design, not just one record. You learn what traceability really means, why a cross-reference and provenance are the two artifacts that make it possible, and why a golden record without them is an unverifiable black box. Then you learn what a common context for business rules is, and how the canonical model and governed reference data deliver it so segmentation, pricing, and eligibility behave identically across systems. Next you learn the metadata repository, the inventory of entity definitions, source systems, mapping and survivorship rules, hierarchy definitions, and reference data, that an MDM program must maintain. Then you learn the declarative-first path on Salesforce: matching and duplicate rules, external IDs, validation rules, Flows, and Data Pipelines that cover many single-org needs without third-party tooling. After that you learn when dedicated MDM tooling is warranted, the multi-domain, multi-system, fuzzy-matching, real-time-sync, and regulatory-lineage triggers, and the honest trade-offs of that decision. Finally you learn the common hybrid pattern, a dedicated hub feeding a shared golden customer into Salesforce while duplicate rules keep local records clean, and why governance wires whichever architecture you choose. Day 16 of the Platform Data Architect exam prep.",
-        "date": "September 27, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Master Data Management",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-17-sm-1a-license-types-to-standard-custom-objects-crm-tiers",
-        "title": "Data Architect SM-1a: License Types to Standard and Custom Objects: CRM Tiers, Platform License, Object Access per License",
-        "series": "salesforce-data-architect",
-        "lesson": 17,
-        "excerpt": "The single most common cost and access mistake in Salesforce data architecture is buying every user a full CRM license when most of them only touch custom objects. This lesson teaches how CRM-edition licenses differ from Platform licenses in their access to standard and custom objects, how Experience Cloud licenses restrict external users, why integration jobs can run on cheaper Platform or Integration licenses, and how to map each user group to the cheapest license that still reaches every object it actually needs.",
-        "date": "September 28, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "17 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "License",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-18-sm-1b-license-and-object-scenarios",
-        "title": "Data Architect SM-1b: License and Object Scenarios: Matching Licenses to Standard and Custom Objects for Cost, Access, and Platform Limits",
-        "series": "salesforce-data-architect",
-        "lesson": 18,
-        "excerpt": "How to design licenses from a customer scenario, not from a cost default: build a user-group to object-need matrix, split mixed workloads into separate license pools, put external collaborators on Experience Cloud licenses with sharing sets, and secure API-only automation users on dedicated integration or Platform licenses with Named Credentials. Includes the architectural trade-off of re-modeling onto custom objects versus upgrading a license, why a license is a ceiling and not record visibility, the three exam traps, and a worked scenario.",
-        "date": "September 29, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "18 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "License",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-19-sm-2a-data-consistency-validation-rules-required-fields",
-        "title": "Data Architect SM-2a: Data Consistency: Validation Rules, Required Fields, Picklists, Unique Constraints, Lookup Filters, Duplicate Rules, and External IDs",
-        "series": "salesforce-data-architect",
-        "lesson": 19,
-        "excerpt": "How to keep data persisted consistently no matter how many users and integrations write to it: the difference between field-level required and layout required (and why one is a data-consistency gap), validation rules for conditional business logic, dependent and restricted picklists, unique constraints and external IDs as hard keys, lookup filters for referential integrity, and duplicate rules for fuzzy matches. Includes a worked customer scenario, when each layer applies and when it is bypassed, the three exam traps, and a configuration walkthrough.",
-        "date": "September 30, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "19 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Data Management",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-20-sm-2b-persistence-consistency-scenarios-keys-natural-key",
-        "title": "Data Architect SM-2b: Persistence-Consistency Scenarios: Keys, Natural Keys, Idempotent Writes, and Upsert",
-        "series": "salesforce-data-architect",
-        "lesson": 20,
-        "excerpt": "How to make cross-system persistence consistent: the difference between surrogate and natural keys, why the Salesforce record Id is not a cross-org identity, using external IDs as stable keys, composite keys for multi-source consistency, and upsert as the canonical idempotent write so re-running a failed load never duplicates records. Includes a worked customer scenario, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.",
-        "date": "October 1, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "21 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Data Management",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-21-sm-3a-single-view-of-the-customer-across-systems-integra",
-        "title": "Data Architect SM-3a: Single View of the Customer Across Systems: Integration, Master Record, and Change Data Capture",
-        "series": "salesforce-data-architect",
-        "lesson": 21,
-        "excerpt": "How to represent one authoritative view of a customer when the data lives across many systems: the four approaches to a single view, per-attribute system of record, shared identity through external IDs and cross-references, the integration patterns that propagate changes, and Change Data Capture for near-real-time synchronization. Includes a worked multi-system scenario, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.",
-        "date": "October 2, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "22 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Data Management",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-22-sm-3b-single-customer-view-scenarios-merging-deduplicati",
-        "title": "Data Architect SM-3b: Single-Customer-View Scenarios: Merging and Deduplication",
-        "series": "salesforce-data-architect",
-        "lesson": 22,
-        "excerpt": "What to do when the single view is already broken: how merging consolidates duplicate Accounts, Contacts, and Leads into one surviving record, how it reparents related records and deletes the losers, why it is not reversible, how bulk deduplication finds duplicates with reports and merges them with native or third-party tooling, why prevention with duplicate and matching rules beats cleanup, and how to propagate the surviving record's ID downstream so the view does not fragment again. Includes a worked household scenario, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.",
-        "date": "October 3, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "21 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Data Management",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-23-sm-4a-consolidating-leveraging-multiple-salesforce-insta",
-        "title": "Data Architect SM-4a: Consolidating and Leveraging Multiple Salesforce Instances",
-        "series": "salesforce-data-architect",
-        "lesson": 23,
-        "excerpt": "How enterprises end up with many Salesforce orgs and what the architect does about it: when to consolidate into one org versus integrate separate orgs and sync data, the three consolidation options (merge into one, incremental, hub and spoke) and their cutover profiles, how to sync shared entities with a per-entity master and external IDs so you avoid update loops, and how Data Pipelines and Data Connect provide managed integration and zero-copy sharing when you want shared truth without merging everything. Includes a worked multi-org scenario, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.",
-        "date": "October 4, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "22 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Data Management",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-24-sm-4b-multi-org-data-scenarios-when-to-consolidate-vs-in",
-        "title": "Data Architect SM-4b: Multi-Org Data Scenarios: When to Consolidate vs Integrate",
-        "series": "salesforce-data-architect",
-        "lesson": 24,
-        "excerpt": "Given a customer scenario, decide whether to consolidate multiple Salesforce orgs or keep them separate and integrate. Covers the decision inputs you score each scenario against (process commonality, residency and compliance, data volume, release alignment, cost, and the target timeline), the two forces that pull you toward those answers, phased and hub-and-spoke consolidation when you do merge, the reporting-only case where Data Connect or a shared warehouse gives you a unified view without merging orgs at all, the global customer key that stitches identities across orgs, the cost and effort trade-off between a heavy one-time migration and an ongoing integration surface, and why there is no universally right answer, only the design that minimizes risk for a specific customer's constraints. Includes a worked multi-org scenario, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.",
-        "date": "October 5, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "25 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Data Management",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-25-gv-1a-gdpr-compliant-data-model-identify-classify-protec",
-        "title": "Data Architect GV-1a: GDPR-Compliant Data Model: Identify, Classify, and Protect Personal Data",
-        "series": "salesforce-data-architect",
-        "lesson": 25,
-        "excerpt": "Given a customer scenario, recommend an approach for designing a GDPR-compliant data model, discussing the options to identify, classify, and protect personal and sensitive information, including the right to erasure. Covers how GDPR defines personal and special-category data and why the model must know where that data lives and under what legal basis, the discipline of building a data inventory that finds data in structured fields and in free text, sensitivity tiers you maintain as metadata, the protection layer made from field-level security and permission sets, Shield and Classic encryption with their search trade-offs, audit trails and event monitoring, and Data Mask for sandboxes, consent and lawful-basis modeling, retention schedules, and the four erasure patterns with when each fits. Includes a worked erasure scenario, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.",
-        "date": "October 6, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "26 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Data Governance",
-          "GDPR"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-26-gv-1b-gdpr-scenarios-consent-retention-field-level-contr",
-        "title": "Data Architect GV-1b: GDPR Scenarios: Consent, Retention, Field-Level Controls, Encryption, Deletion Patterns",
-        "series": "salesforce-data-architect",
-        "lesson": 26,
-        "excerpt": "Given a customer scenario, recommend an approach for a GDPR-compliant data model, applying consent management, retention scheduling, field-level controls, encryption, and deletion/anonymization patterns to real design decisions. Covers how to model consent so it can be recorded and withdrawn and processing actually stops, how to set a retention period per data category and enforce it with scheduled purge and archive jobs, how to use FLS, permission sets, Platform Encryption, and Data Mask to keep sensitive fields from the wrong eyes, the honest trade-offs of encryption (some filters, sorts, roll-ups, and searches change behavior; deterministic encryption buys exact matches within limits), the four deletion patterns that reach files, notes, logs, and downstream warehouses rather than stopping at the record, the subject-access and portability extract that depends on knowing every object and field holding a subject's data, and why GDPR is operationalized through a governance program, not a one-time config. Includes a worked consumer-consent scenario, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.",
-        "date": "October 7, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "26 min read",
-        "tags": [
-          "Salesforce",
-          "Data Architecture",
-          "Data Governance",
-          "GDPR",
-          "Certification"
-        ],
-        "status": "published"
-      }
-    ],
-    "totalLessons": 26,
-    "curriculumLessons": 42
   },
   {
     "slug": "sf-omni-consultant",
@@ -7033,6 +7050,23 @@ export const learnLessons: LearnLesson[] = [
       "CTA",
       "Integration",
       "Certifications"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-27-gv-2a-enterprise-data-governance-program-framework-stewa",
+    "title": "Data Architect GV-2a: Enterprise Data Governance Program: Framework, Stewardship, Policies",
+    "series": "salesforce-data-architect",
+    "lesson": 27,
+    "excerpt": "Compare and contrast various approaches and considerations for designing and implementing an enterprise data governance program, including the operating framework, stewardship roles, policies, standards, and metrics. Covers what data governance actually is (a set of decision rights and accountabilities, not a tool), the building blocks of a governance framework (scope and domains, policy, standards, processes, and roles), the difference between the data owner, the data steward, and the custodian, the centralized, federated, and hybrid operating models and why hybrid is the common enterprise choice, the policies and standards that must be defined (classification and handling, naming conventions, retention, quality thresholds, access principles, issue management) and why standards must be enforceable and auditable to be meaningful, the quality metrics that turn governance from aspiration into a managed program, why governance must be embedded in the SDLC as a delivery gate rather than run as a parallel bureaucracy, and the maturity path that starts with a pilot domain and proves value before expanding. Includes a worked retail governance example, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.",
+    "date": "October 8, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "27 min read",
+    "tags": [
+      "Salesforce",
+      "Data Architecture",
+      "Data Governance",
+      "Certification"
     ],
     "status": "published"
   },
