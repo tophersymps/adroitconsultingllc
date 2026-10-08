@@ -114,6 +114,7 @@ export const articleAudio: ArticleAudio[] = [
   { slug: "scalable-react-2026", voice: "af_heart", storagePath: "blog/scalable-react-2026/af_heart.mp3", timingsStoragePath: "blog/scalable-react-2026/af_heart.timing.json" },
   { slug: "scrum-ceremonies-ai-agents-2026", voice: "af_heart", storagePath: "blog/scrum-ceremonies-ai-agents-2026/af_heart.mp3", timingsStoragePath: "blog/scrum-ceremonies-ai-agents-2026/af_heart.timing.json" },
   { slug: "secret-sprawl-machine-identity-2026", voice: "af_heart", storagePath: "blog/secret-sprawl-machine-identity-2026/af_heart.mp3", timingsStoragePath: "blog/secret-sprawl-machine-identity-2026/af_heart.timing.json" },
+  { slug: "semantic-caching-llm-agents-2026", voice: "af_heart", storagePath: "blog/semantic-caching-llm-agents-2026/af_heart.mp3", timingsStoragePath: "blog/semantic-caching-llm-agents-2026/af_heart.timing.json" },
   { slug: "sprint-planning-routing-review-2026", voice: "af_heart", storagePath: "blog/sprint-planning-routing-review-2026/af_heart.mp3", timingsStoragePath: "blog/sprint-planning-routing-review-2026/af_heart.timing.json" },
   { slug: "sse-vs-websockets-2026", voice: "af_heart", storagePath: "blog/sse-vs-websockets-2026/af_heart.mp3", timingsStoragePath: "blog/sse-vs-websockets-2026/af_heart.timing.json" },
   { slug: "stakeholder-management-delivery-bottleneck-2026", voice: "af_heart", storagePath: "blog/stakeholder-management-delivery-bottleneck-2026/af_heart.mp3", timingsStoragePath: "blog/stakeholder-management-delivery-bottleneck-2026/af_heart.timing.json" },
