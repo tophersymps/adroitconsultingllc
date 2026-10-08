@@ -7,6 +7,7 @@ import type { ArticleAudio } from "@/lib/audio/contracts";
 
 export const articleAudio: ArticleAudio[] = [
   { slug: "a2a-agent-coordination-2026", voice: "af_heart", storagePath: "blog/a2a-agent-coordination-2026/af_heart.mp3", timingsStoragePath: "blog/a2a-agent-coordination-2026/af_heart.timing.json" },
+  { slug: "acceptance-gate-consulting-delivery-2026", voice: "af_heart", storagePath: "blog/acceptance-gate-consulting-delivery-2026/af_heart.mp3", timingsStoragePath: "blog/acceptance-gate-consulting-delivery-2026/af_heart.timing.json" },
   { slug: "accessibility-testing-layers-ci-2026", voice: "af_heart", storagePath: "blog/accessibility-testing-layers-ci-2026/af_heart.mp3", timingsStoragePath: "blog/accessibility-testing-layers-ci-2026/af_heart.timing.json" },
   { slug: "agent-autonomy-governance-2026", voice: "af_heart", storagePath: "blog/agent-autonomy-governance-2026/af_heart.mp3", timingsStoragePath: "blog/agent-autonomy-governance-2026/af_heart.timing.json" },
   { slug: "agent-durable-execution-state-machines-2026", voice: "af_heart", storagePath: "blog/agent-durable-execution-state-machines-2026/af_heart.mp3", timingsStoragePath: "blog/agent-durable-execution-state-machines-2026/af_heart.timing.json" },
