@@ -809,6 +809,274 @@ describe("figure catalog", () => {
   });
 });
 
+/* ------------------------------------------------------------------ */
+/*  Catalog accuracy — the audit's findings, pinned                    */
+/* ------------------------------------------------------------------ */
+
+/** Undirected link set as "a-b" with a < b, keyed by star name prefix. */
+function linksByName(figureName: string): Set<string> {
+  const f = figureByName(figureName)!;
+  const key = (i: number) => f.stars[i]!.name;
+  return new Set(
+    f.connections.map(([a, b]) => {
+      const [p, q] = [key(a), key(b)].sort();
+      return `${p}|${q}`;
+    }),
+  );
+}
+
+const hasLink = (links: Set<string>, a: string, b: string) => {
+  for (const l of links) {
+    const [p, q] = l.split("|");
+    if ((p!.includes(a) && q!.includes(b)) || (p!.includes(b) && q!.includes(a))) return true;
+  }
+  return false;
+};
+
+describe("figure catalog — standard stick figures", () => {
+  /*
+   * The Keystone is the one asterism everybody knows in Hercules, and the old
+   * catalog drew it on the wrong corner (γ instead of ε). γ Her sits by
+   * Kornephoros on the club arm, nowhere near the torso.
+   */
+  it("draws the Hercules keystone as ε–ζ–η–π", () => {
+    const links = linksByName("Hercules");
+    expect(hasLink(links, "ε Her", "ζ Her")).toBe(true);
+    expect(hasLink(links, "ζ Her", "η Her")).toBe(true);
+    expect(hasLink(links, "η Her", "π Her")).toBe(true);
+    expect(hasLink(links, "π Her", "ε Her")).toBe(true);
+    // The old, wrong corner.
+    expect(hasLink(links, "γ Her", "η Her")).toBe(false);
+    expect(hasLink(links, "π Her", "γ Her")).toBe(false);
+    // Head and shoulders hang off the keystone the standard way.
+    expect(hasLink(links, "δ Her", "α¹ Her")).toBe(true);
+    expect(hasLink(links, "β Her", "ζ Her")).toBe(true);
+    expect(hasLink(links, "δ Her", "ε Her")).toBe(true);
+  });
+
+  /*
+   * The river is a single chain from source to mouth. A branch anywhere would
+   * put a tributary on the plate where the sky has none.
+   */
+  it("draws Eridanus as one unbranched river", () => {
+    const f = figureByName("Eridanus")!;
+    const degree = new Array<number>(f.stars.length).fill(0);
+    for (const [a, b] of f.connections) {
+      degree[a]!++;
+      degree[b]!++;
+    }
+    expect(f.connections.length).toBe(f.stars.length - 1);
+    expect(degree.filter((d) => d === 1)).toHaveLength(2);
+    expect(degree.every((d) => d === 1 || d === 2)).toBe(true);
+    // Cursa near the source, Achernar at the mouth.
+    const ends = degree.flatMap((d, i) => (d === 1 ? [f.stars[i]!.name] : []));
+    expect(ends.some((n) => n.includes("α Eri"))).toBe(true);
+  });
+
+  it("closes the Ophiuchus body with α–β and ζ–η–β", () => {
+    const links = linksByName("Ophiuchus");
+    expect(hasLink(links, "α Oph", "β Oph")).toBe(true);
+    expect(hasLink(links, "ζ Oph", "η Oph")).toBe(true);
+    expect(hasLink(links, "η Oph", "β Oph")).toBe(true);
+  });
+
+  it("draws Virgo as the Y through Porrima, not a stalk from Spica", () => {
+    const links = linksByName("Virgo");
+    expect(hasLink(links, "γ Vir", "η Vir")).toBe(true);
+    expect(hasLink(links, "γ Vir", "δ Vir")).toBe(true);
+    expect(hasLink(links, "δ Vir", "ε Vir")).toBe(true);
+    expect(hasLink(links, "α Vir", "ζ Vir")).toBe(true);
+    expect(hasLink(links, "α Vir", "τ Vir")).toBe(false);
+  });
+
+  it("gives Centaurus its forelegs α–β–ε and its back ζ–γ–σ–δ–π–λ", () => {
+    const links = linksByName("Centaurus");
+    for (const [a, b] of [
+      ["α Cen", "β Cen"],
+      ["β Cen", "ε Cen"],
+      ["ε Cen", "ζ Cen"],
+      ["ζ Cen", "γ Cen"],
+      ["γ Cen", "σ Cen"],
+      ["σ Cen", "δ Cen"],
+      ["δ Cen", "π Cen"],
+      ["π Cen", "λ Cen"],
+      ["η Cen", "κ Cen"],
+    ]) {
+      expect(hasLink(links, a!, b!), `${a}–${b}`).toBe(true);
+    }
+    expect(hasLink(links, "δ Cen", "ε Cen")).toBe(false);
+  });
+
+  it("gives Cetus a closed head pentagon and a body that loops back to Diphda", () => {
+    const links = linksByName("Cetus");
+    for (const [a, b] of [
+      ["α Cet", "λ Cet"],
+      ["λ Cet", "μ Cet"],
+      ["μ Cet", "ξ² Cet"],
+      ["ξ² Cet", "γ Cet"],
+      ["γ Cet", "α Cet"],
+      ["γ Cet", "δ Cet"],
+      ["δ Cet", "ο Cet"],
+      ["τ Cet", "β Cet"],
+      ["η Cet", "β Cet"],
+      ["θ Cet", "ζ Cet"],
+    ]) {
+      expect(hasLink(links, a!, b!), `${a}–${b}`).toBe(true);
+    }
+  });
+
+  it("applies the audit's one-link fixes", () => {
+    expect(hasLink(linksByName("Cepheus"), "β Cep", "ι Cep")).toBe(true);
+    expect(hasLink(linksByName("Leo"), "θ Leo", "β Leo")).toBe(true);
+    expect(hasLink(linksByName("Aquila"), "ζ Aql", "δ Aql")).toBe(true);
+    expect(hasLink(linksByName("Aquila"), "ζ Aql", "γ Aql")).toBe(false);
+    expect(hasLink(linksByName("Pegasus"), "μ Peg", "β Peg")).toBe(true);
+    expect(hasLink(linksByName("Pegasus"), "η Peg", "μ Peg")).toBe(false);
+    expect(hasLink(linksByName("Hydra"), "δ Hya", "ε Hya")).toBe(true);
+    expect(hasLink(linksByName("Hydra"), "δ Hya", "η Hya")).toBe(false);
+    expect(hasLink(linksByName("Hydra"), "η Hya", "ε Hya")).toBe(false);
+    expect(hasLink(linksByName("Taurus"), "λ Tau", "ο Tau")).toBe(true);
+    expect(hasLink(linksByName("Taurus"), "ξ Tau", "ο Tau")).toBe(false);
+    expect(figureByName("Lyra")!.stars.some((s) => s.name.startsWith("ε Lyr"))).toBe(false);
+  });
+
+  it("puts λ Gem where Hipparcos has it", () => {
+    const lam = figureByName("Gemini")!.stars.find((s) => s.name === "λ Gem")!;
+    expect(lam.raH).toBeCloseTo(7.3016, 4);
+    expect(lam.decDeg).toBeCloseTo(16.54, 2);
+  });
+
+  it("uses IAU proper names and does not misattribute Fuyue or Atik", () => {
+    const names = CONSTELLATION_FIGURES.flatMap((f) => f.stars.map((s) => s.name));
+    for (const expected of [
+      "Aljanah (ε Cyg)",
+      "Biham (θ Peg)",
+      "Ras Elased Australis (ε Leo)",
+      "Acrab (β Sco)",
+      "Diphda (β Cet)",
+      "Minelauva (δ Vir)",
+      "Prima Hyadum (γ Tau)",
+      "Secunda Hyadum (δ Tau)",
+    ]) {
+      expect(names, expected).toContain(expected);
+    }
+    for (const wrong of [
+      "Fuyue",
+      "Atik",
+      "Gienah (ε Cyg)",
+      "Baham",
+      "Algenubi (ε Leo)",
+      "Graffias",
+      "Deneb Kaitos",
+      "Auva",
+      "Hyadum I",
+      "Hyadum II",
+    ]) {
+      expect(names.some((n) => n.includes(wrong)), wrong).toBe(false);
+    }
+  });
+});
+
+describe("projectFigure — true sky shape", () => {
+  /*
+   * One hour of RA is 15° at the equator and 7.5° at 60° north. A projection
+   * that reads RA as x without cos(dec) draws this figure twice as wide as it
+   * is tall; on the sky it is a near-square (slightly wider along its southern
+   * edge, 8.3° at 56° than 6.6° at 64°).
+   */
+  it("scales RA by cos(dec), so a square patch of sky projects near-square", () => {
+    const square = {
+      name: "Square",
+      stars: [
+        { name: "a", raH: 10.0, decDeg: 56.25, spectralClass: "A" as const, magnitude: 3 },
+        { name: "b", raH: 11.0, decDeg: 56.25, spectralClass: "A" as const, magnitude: 3 },
+        { name: "c", raH: 10.0, decDeg: 63.75, spectralClass: "A" as const, magnitude: 3 },
+        { name: "d", raH: 11.0, decDeg: 63.75, spectralClass: "A" as const, magnitude: 3 },
+      ],
+      connections: [[0, 1], [1, 3], [3, 2], [2, 0]] as const,
+    };
+    const p = projectFigure(square);
+    const xs = p.map((s) => s.position[0]);
+    const ys = p.map((s) => s.position[1]);
+    const w = Math.max(...xs) - Math.min(...xs);
+    const h = Math.max(...ys) - Math.min(...ys);
+    expect(w / h).toBeGreaterThan(1.0);
+    expect(w / h).toBeLessThan(1.2);
+  });
+
+  it("keeps a wide figure wide — the longer side spans the box, the shorter side does not", () => {
+    // Sagitta is a near-horizontal arrow: ~4.2° of sky wide, ~2° tall.
+    const p = projectFigure(figureByName("Sagitta")!);
+    const xs = p.map((s) => s.position[0]);
+    const ys = p.map((s) => s.position[1]);
+    const w = Math.max(...xs) - Math.min(...xs);
+    const h = Math.max(...ys) - Math.min(...ys);
+    expect(w).toBeCloseTo(6.5, 1);
+    expect(w / h).toBeGreaterThan(1.6);
+    expect(w / h).toBeLessThan(2.6);
+  });
+
+  it("does not smear figures near the pole", () => {
+    // Ursa Minor runs 2.5h → 17.5h in RA but is only ~18° across on the sky.
+    const p = projectFigure(figureByName("Ursa Minor")!);
+    const xs = p.map((s) => s.position[0]);
+    const ys = p.map((s) => s.position[1]);
+    const w = Math.max(...xs) - Math.min(...xs);
+    const h = Math.max(...ys) - Math.min(...ys);
+    const aspect = Math.max(w, h) / Math.min(w, h);
+    expect(aspect).toBeLessThan(3.5);
+    expect(aspect).toBeGreaterThan(1);
+  });
+
+  it("puts east on the left and north up", () => {
+    // Betelgeuse (α Ori) is north-east of Rigel (β Ori): higher RA, higher Dec.
+    const p = projectFigure(figureByName("Orion")!);
+    const betelgeuse = p.find((s) => s.name.startsWith("Betelgeuse"))!;
+    const rigel = p.find((s) => s.name.startsWith("Rigel"))!;
+    expect(betelgeuse.position[0]).toBeLessThan(rigel.position[0]);
+    expect(betelgeuse.position[1]).toBeGreaterThan(rigel.position[1]);
+  });
+
+  /*
+   * A per-figure rotation exists so Hercules can be drawn head-up. It must be a
+   * rigid rotation: every star-to-star distance kept, and never a mirror, or
+   * the figure would stop being the asterism.
+   */
+  it("rotation preserves every star-to-star distance and never mirrors", () => {
+    const base = { ...figureByName("Hercules")!, rotationDeg: 0 };
+    for (const deg of [37, 90, 180, 270]) {
+      const a = projectFigure(base);
+      const b = projectFigure({ ...base, rotationDeg: deg });
+      // Both are normalised to the same span only when the bounding box is
+      // unchanged, so compare distance *ratios*, which rotation must keep.
+      const dist = (p: typeof a, i: number, j: number) =>
+        Math.hypot(
+          p[i]!.position[0] - p[j]!.position[0],
+          p[i]!.position[1] - p[j]!.position[1],
+        );
+      const ratio = dist(b, 0, 1) / dist(a, 0, 1);
+      for (let i = 0; i < a.length; i++) {
+        for (let j = i + 1; j < a.length; j++) {
+          expect(dist(b, i, j), `${deg}°: ${i}-${j}`).toBeCloseTo(dist(a, i, j) * ratio, 2);
+        }
+      }
+      // Orientation (signed area of a triangle) keeps its sign: det +1.
+      const area = (p: typeof a) => {
+        const [o, u, v] = [p[0]!.position, p[1]!.position, p[2]!.position];
+        return (u[0] - o[0]) * (v[1] - o[1]) - (u[1] - o[1]) * (v[0] - o[0]);
+      };
+      expect(Math.sign(area(b)), `${deg}° mirrored`).toBe(Math.sign(area(a)));
+    }
+  });
+
+  it("turns Hercules head-up: Rasalgethi above the feet", () => {
+    const p = projectFigure(figureByName("Hercules")!);
+    const head = p.find((s) => s.name.startsWith("Rasalgethi"))!;
+    const foot = p.find((s) => s.name === "τ Her")!;
+    expect(head.position[1]).toBeGreaterThan(foot.position[1]);
+  });
+});
+
 describe("chartLayout", () => {
   it("returns one slot per course", () => {
     expect(chartLayout(7)).toHaveLength(7);

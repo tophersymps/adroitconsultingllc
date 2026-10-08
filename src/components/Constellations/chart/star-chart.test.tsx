@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { StarChart } from "./StarChart";
 import { buildChartFigure, buildChartFigures } from "@/lib/chart";
+import { figureByName, projectFigure } from "./figure-catalog";
 import type { ConstellationState } from "@/shared/contracts-constellations";
 
 function course(
@@ -277,6 +278,38 @@ describe("StarChart — single variant", () => {
   it("hides the coming-soon caption when the course is fully published", () => {
     renderSingle(); // curriculum == totalStars
     expect(screen.queryByTestId("chart-coming-soon")).not.toBeInTheDocument();
+  });
+});
+
+describe("StarChart — placement keeps the sky's shape", () => {
+  /*
+   * Normalising x and y separately forced every figure into a square: Sagitta,
+   * which is twice as wide as it is tall in the sky, was drawn 1:1. One scale
+   * for both axes keeps the proportion, so the plate's arrow can lie on it.
+   */
+  it("draws a wide figure wide — the stars' bounding box keeps the projected aspect", () => {
+    const sagitta = figureByName("Sagitta")!;
+    const fig = buildChartFigure(course("arrow", 1, 4, "Arrow"), { figure: sagitta });
+    render(
+      <StarChart figures={[fig]} variant="single" focusSlug={null} onFocusChange={() => {}} />,
+    );
+    const root = document.querySelector('[data-testid="cxc-figure-arrow"]')!;
+    const pts = [...root.querySelectorAll(".cxc-dot, .cxc-exam-dot")].map((n) => [
+      Number(n.getAttribute("cx")),
+      Number(n.getAttribute("cy")),
+    ]);
+    expect(pts).toHaveLength(4);
+    const xs = pts.map((p) => p[0]!);
+    const ys = pts.map((p) => p[1]!);
+    const drawnAspect = (Math.max(...xs) - Math.min(...xs)) / (Math.max(...ys) - Math.min(...ys));
+
+    const projected = projectFigure(sagitta);
+    const px = projected.map((s) => s.position[0]);
+    const py = projected.map((s) => s.position[1]);
+    const trueAspect = (Math.max(...px) - Math.min(...px)) / (Math.max(...py) - Math.min(...py));
+
+    expect(trueAspect).toBeGreaterThan(1.5);
+    expect(drawnAspect).toBeCloseTo(trueAspect, 1);
   });
 });
 
