@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "semantic-caching-llm-agents-2026",
+    "title": "Similar Is Not the Same: The Risk Hidden in Semantic Caching",
+    "excerpt": "Semantic caching reuses similar answers, not just identical ones, cutting cost and latency. The threshold and scope decide whether it saves money or leaks data.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "October 08, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "AI Infrastructure",
+      "Semantic Caching",
+      "Cost Optimization",
+      "LLM Gateway",
+      "Agents",
+      "Vector Search"
+    ],
+    "bannerImage": "/banners/semantic-caching-llm-agents-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "acceptance-gate-consulting-delivery-2026",
     "title": "The Acceptance Gate: Where 'Done' Becomes Profit",
     "excerpt": "A team can ship perfectly against its Definition of Done and still deliver nothing the client accepts. The acceptance gate is where consulting value closes.",
