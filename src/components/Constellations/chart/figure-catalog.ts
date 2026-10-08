@@ -20,7 +20,11 @@
  * a hundredth of an hour and a tenth of a degree. The chart projects these and
  * then normalises the result into a bounding box, so what survives to the screen
  * is the figure's *shape*; small absolute errors are invisible. `connections`
- * traces the traditional recognizable figure, not lesson order.
+ * traces the standard IAU / Stellarium "modern" stick figure, not lesson order.
+ * Where the standard figure passes through stars that are not members, the link
+ * skips to the next member (a shortcut). Where a member is not in the standard
+ * figure at all, it hangs off its nearest member so it is still drawn; those
+ * cases are called out on the figure.
  *
  * Every figure here draws all of its members — `chart.test.ts` enforces that, so
  * a member can never become an orphan dot floating outside the outline.
@@ -49,6 +53,16 @@ export interface ConstellationFigure {
   stars: CatalogStar[];
   /** Pairs of indices into `stars`, tracing the traditional figure. */
   connections: ReadonlyArray<readonly [number, number]>;
+  /**
+   * Counter-clockwise rotation applied to the projected figure, in degrees.
+   *
+   * The chart is north-up, east-left, which leaves some figures head-down
+   * (Hercules' head, Rasalgethi, is his southernmost bright star). A rotation
+   * turns the whole figure rigidly — every star-to-star distance and angle is
+   * kept, and nothing is mirrored — so the figure reads upright on its plate
+   * while staying the true asterism.
+   */
+  rotationDeg?: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -170,20 +184,21 @@ const CEPHEUS: ConstellationFigure = {
     { name: "ι Cep", raH: 22.8288, decDeg: 66.2, spectralClass: "K", magnitude: 3.52 },
     { name: "ζ Cep", raH: 22.1809, decDeg: 58.2, spectralClass: "K", magnitude: 3.35 },
   ],
-  // The house.
+  // The house: square α–β–ι–ζ with the roof peak at γ.
   connections: [
     [4, 0],
     [0, 1],
     [1, 2],
     [2, 3],
     [3, 4],
+    [1, 3],
   ],
 };
 
-/* ------------------------------------------------------------------ */
-/*  6 stars                                                            */
-/* ------------------------------------------------------------------ */
-
+/**
+ * Vega and the parallelogram. ε Lyr (the Double Double) sits beside Vega but no
+ * standard figure draws a line to it, so it is not a member here.
+ */
 const LYRA: ConstellationFigure = {
   name: "Lyra",
   stars: [
@@ -192,7 +207,6 @@ const LYRA: ConstellationFigure = {
     { name: "Sheliak (β Lyr)", raH: 18.8347, decDeg: 33.36, spectralClass: "B", magnitude: 3.52 },
     { name: "Sulafat (γ Lyr)", raH: 18.9822, decDeg: 32.69, spectralClass: "B", magnitude: 3.24 },
     { name: "δ² Lyr", raH: 18.9, decDeg: 36.9, spectralClass: "M", magnitude: 4.3 },
-    { name: "ε Lyr", raH: 18.7392, decDeg: 39.67, spectralClass: "A", magnitude: 4.6 },
   ],
   connections: [
     [0, 1],
@@ -200,9 +214,12 @@ const LYRA: ConstellationFigure = {
     [2, 3],
     [3, 4],
     [4, 1],
-    [0, 5],
   ],
 };
+
+/* ------------------------------------------------------------------ */
+/*  6 stars                                                            */
+/* ------------------------------------------------------------------ */
 
 const CORONA_BOREALIS: ConstellationFigure = {
   name: "Corona Borealis",
@@ -229,7 +246,7 @@ const CYGNUS: ConstellationFigure = {
     { name: "Deneb (α Cyg)", raH: 20.6905, decDeg: 45.28, spectralClass: "A", magnitude: 1.25 },
     { name: "Sadr (γ Cyg)", raH: 20.3705, decDeg: 40.26, spectralClass: "F", magnitude: 2.23 },
     { name: "δ Cyg", raH: 19.7495, decDeg: 45.13, spectralClass: "B", magnitude: 2.87 },
-    { name: "Gienah (ε Cyg)", raH: 20.7702, decDeg: 33.97, spectralClass: "K", magnitude: 2.48 },
+    { name: "Aljanah (ε Cyg)", raH: 20.7702, decDeg: 33.97, spectralClass: "K", magnitude: 2.48 },
     { name: "Albireo (β Cyg)", raH: 19.5121, decDeg: 27.96, spectralClass: "K", magnitude: 3.08 },
     { name: "ζ Cyg", raH: 21.2149, decDeg: 30.23, spectralClass: "G", magnitude: 3.2 },
   ],
@@ -352,10 +369,11 @@ const AQUILA: ConstellationFigure = {
     { name: "η Aql", raH: 19.8735, decDeg: 1.01, spectralClass: "F", magnitude: 3.87 },
     { name: "ε Aql", raH: 18.9939, decDeg: 15.07, spectralClass: "K", magnitude: 4.02 },
   ],
+  // Altair between Tarazed and Alshain; the wing ζ–ε hangs off δ, not off γ.
   connections: [
     [1, 0],
     [0, 2],
-    [1, 4],
+    [4, 3],
     [4, 7],
     [0, 3],
     [3, 6],
@@ -371,7 +389,8 @@ const PERSEUS: ConstellationFigure = {
     { name: "γ Per", raH: 3.0797, decDeg: 53.51, spectralClass: "G", magnitude: 2.93 },
     { name: "δ Per", raH: 3.715, decDeg: 47.79, spectralClass: "B", magnitude: 3.01 },
     { name: "ε Per", raH: 3.9642, decDeg: 40.01, spectralClass: "B", magnitude: 2.89 },
-    { name: "Atik (ζ Per)", raH: 3.9022, decDeg: 31.88, spectralClass: "B", magnitude: 2.85 },
+    // The IAU gave the name Atik to ο Per; ζ Per has no proper name.
+    { name: "ζ Per", raH: 3.9022, decDeg: 31.88, spectralClass: "B", magnitude: 2.85 },
     { name: "Miram (η Per)", raH: 2.8447, decDeg: 55.9, spectralClass: "K", magnitude: 3.76 },
     { name: "ρ Per", raH: 3.0805, decDeg: 38.84, spectralClass: "M", magnitude: 3.39, isRedGiantAccent: true },
   ],
@@ -395,13 +414,14 @@ const PEGASUS: ConstellationFigure = {
     { name: "Enif (ε Peg)", raH: 21.7364, decDeg: 9.88, spectralClass: "K", magnitude: 2.38 },
     { name: "Homam (ζ Peg)", raH: 22.691, decDeg: 10.83, spectralClass: "B", magnitude: 3.4 },
     { name: "Matar (η Peg)", raH: 22.7169, decDeg: 30.22, spectralClass: "G", magnitude: 2.94 },
-    { name: "Baham (θ Peg)", raH: 22.17, decDeg: 6.2, spectralClass: "A", magnitude: 3.53 },
+    { name: "Biham (θ Peg)", raH: 22.17, decDeg: 6.2, spectralClass: "A", magnitude: 3.53 },
     { name: "Sadalbari (μ Peg)", raH: 22.83, decDeg: 24.6, spectralClass: "G", magnitude: 3.48 },
   ],
+  // The Great Square's west side, the neck to Enif, and the forelegs η and μ off Scheat.
   connections: [
     [0, 1],
     [1, 5],
-    [5, 7],
+    [7, 1],
     [0, 4],
     [4, 6],
     [6, 3],
@@ -458,10 +478,10 @@ const LEO: ConstellationFigure = {
     { name: "Chertan (θ Leo)", raH: 11.2372, decDeg: 15.43, spectralClass: "A", magnitude: 3.33 },
     { name: "Adhafera (ζ Leo)", raH: 10.2782, decDeg: 23.42, spectralClass: "F", magnitude: 3.44 },
     { name: "η Leo", raH: 10.1222, decDeg: 16.76, spectralClass: "A", magnitude: 3.51 },
-    { name: "Algenubi (ε Leo)", raH: 9.7643, decDeg: 23.77, spectralClass: "G", magnitude: 2.98 },
+    { name: "Ras Elased Australis (ε Leo)", raH: 9.7643, decDeg: 23.77, spectralClass: "G", magnitude: 2.98 },
     { name: "Rasalas (μ Leo)", raH: 9.8792, decDeg: 26.01, spectralClass: "K", magnitude: 3.88 },
   ],
-  // The Sickle, then the hindquarters triangle.
+  // The Sickle, then the hindquarters triangle δ–θ–β.
   connections: [
     [0, 6],
     [6, 2],
@@ -471,6 +491,7 @@ const LEO: ConstellationFigure = {
     [0, 4],
     [4, 3],
     [3, 1],
+    [4, 1],
     [3, 2],
   ],
 };
@@ -491,7 +512,7 @@ const GEMINI: ConstellationFigure = {
     { name: "Propus (η Gem)", raH: 6.2478, decDeg: 22.51, spectralClass: "M", magnitude: 3.28, isRedGiantAccent: true },
     { name: "Tejat (μ Gem)", raH: 6.3826, decDeg: 22.51, spectralClass: "M", magnitude: 2.87 },
     { name: "Alzirr (ξ Gem)", raH: 6.7549, decDeg: 12.9, spectralClass: "F", magnitude: 3.36 },
-    { name: "λ Gem", raH: 7.429, decDeg: 16.54, spectralClass: "A", magnitude: 3.58 },
+    { name: "λ Gem", raH: 7.3016, decDeg: 16.54, spectralClass: "A", magnitude: 3.58 },
   ],
   connections: [
     [0, 1],
@@ -516,8 +537,8 @@ const TAURUS: ConstellationFigure = {
     { name: "Aldebaran (α Tau)", raH: 4.5987, decDeg: 16.51, spectralClass: "K", magnitude: 0.85, isRedGiantAccent: true },
     { name: "Elnath (β Tau)", raH: 5.4382, decDeg: 28.61, spectralClass: "B", magnitude: 1.65 },
     { name: "Tianguan (ζ Tau)", raH: 5.6274, decDeg: 21.14, spectralClass: "B", magnitude: 3.0 },
-    { name: "Hyadum I (γ Tau)", raH: 4.3299, decDeg: 15.63, spectralClass: "K", magnitude: 3.65 },
-    { name: "Hyadum II (δ Tau)", raH: 4.382, decDeg: 17.54, spectralClass: "K", magnitude: 3.76 },
+    { name: "Prima Hyadum (γ Tau)", raH: 4.3299, decDeg: 15.63, spectralClass: "K", magnitude: 3.65 },
+    { name: "Secunda Hyadum (δ Tau)", raH: 4.382, decDeg: 17.54, spectralClass: "K", magnitude: 3.76 },
     { name: "Ain (ε Tau)", raH: 4.4776, decDeg: 19.18, spectralClass: "K", magnitude: 3.53 },
     { name: "θ Tau", raH: 4.4784, decDeg: 15.87, spectralClass: "A", magnitude: 3.4 },
     { name: "λ Tau", raH: 4.0113, decDeg: 12.49, spectralClass: "B", magnitude: 3.47 },
@@ -525,7 +546,11 @@ const TAURUS: ConstellationFigure = {
     { name: "ο Tau", raH: 3.4131, decDeg: 9.03, spectralClass: "G", magnitude: 3.61 },
     { name: "ν Tau", raH: 4.0455, decDeg: 5.99, spectralClass: "A", magnitude: 3.91 },
   ],
-  // The Hyades V, the two horns, and the forelegs.
+  /*
+   * The Hyades V, the two horns, and the forelegs. Both ξ and ο hang from the
+   * knee at λ (the standard figure runs λ–ο; λ–ξ is the S&T line). ν Tau has no
+   * line in any reference figure; it stays on λ so the member is drawn.
+   */
   connections: [
     [0, 5],
     [5, 1],
@@ -536,7 +561,7 @@ const TAURUS: ConstellationFigure = {
     [0, 2],
     [3, 7],
     [7, 8],
-    [8, 9],
+    [7, 9],
     [7, 10],
   ],
 };
@@ -561,20 +586,24 @@ const OPHIUCHUS: ConstellationFigure = {
     { name: "Yed Posterior (ε Oph)", raH: 16.3053, decDeg: -4.69, spectralClass: "G", magnitude: 3.23 },
     { name: "Sabik (η Oph)", raH: 17.173, decDeg: -15.73, spectralClass: "A", magnitude: 2.43 },
   ],
-  // The serpent-bearer: head at Rasalhague, the Yed hands, body to Sinistra.
+  /*
+   * The IAU figure: the body is the ring α–κ–λ–δ–ε–ζ–η–β–α (head at Rasalhague,
+   * the Yed hands at δ/ε), with β–γ–ν down one arm and η–θ down the leg. ι Oph
+   * is not in the standard figure and sits a degree off κ, so it hangs there.
+   */
   connections: [
     [0, 1],
-    [1, 2],
+    [1, 8],
+    [8, 9],
+    [9, 10],
+    [10, 6],
+    [6, 11],
+    [11, 2],
+    [2, 0],
     [2, 3],
     [3, 4],
-    [4, 5],
-    [0, 6],
-    [6, 7],
-    [7, 8],
-    [2, 10],
-    [10, 9],
-    [9, 4],
-    [8, 11],
+    [11, 5],
+    [1, 7],
   ],
 };
 
@@ -586,14 +615,15 @@ const SCORPIUS: ConstellationFigure = {
   name: "Scorpius",
   stars: [
     { name: "Antares (α Sco)", raH: 16.4901, decDeg: -26.43, spectralClass: "M", magnitude: 1.06, isRedGiantAccent: true },
-    { name: "Graffias (β Sco)", raH: 16.0906, decDeg: -19.81, spectralClass: "B", magnitude: 2.56 },
+    { name: "Acrab (β Sco)", raH: 16.0906, decDeg: -19.81, spectralClass: "B", magnitude: 2.56 },
     { name: "Dschubba (δ Sco)", raH: 16.0056, decDeg: -22.62, spectralClass: "B", magnitude: 2.29 },
     { name: "Fang (π Sco)", raH: 15.981, decDeg: -26.11, spectralClass: "B", magnitude: 2.89 },
     { name: "Alniyat (σ Sco)", raH: 16.3536, decDeg: -25.59, spectralClass: "B", magnitude: 2.9 },
     { name: "Paikauhale (τ Sco)", raH: 16.5981, decDeg: -28.22, spectralClass: "B", magnitude: 2.82 },
     { name: "Larawag (ε Sco)", raH: 16.8361, decDeg: -34.29, spectralClass: "K", magnitude: 2.29 },
     { name: "Xamidimura (μ Sco)", raH: 16.8642, decDeg: -38.05, spectralClass: "B", magnitude: 3.0 },
-    { name: "Fuyue (ζ Sco)", raH: 16.913, decDeg: -42.36, spectralClass: "B", magnitude: 3.62 },
+    // Fuyue is the IAU name of G Sco, not ζ. These are ζ² Sco's position, class and magnitude.
+    { name: "ζ² Sco", raH: 16.913, decDeg: -42.36, spectralClass: "K", magnitude: 3.62 },
     { name: "η Sco", raH: 17.2029, decDeg: -43.24, spectralClass: "F", magnitude: 3.32 },
     { name: "Sargas (θ Sco)", raH: 17.6221, decDeg: -42.99, spectralClass: "F", magnitude: 1.86 },
     { name: "Apollyon (ι Sco)", raH: 17.7932, decDeg: -40.13, spectralClass: "F", magnitude: 2.99 },
@@ -676,26 +706,29 @@ const HERCULES: ConstellationFigure = {
     { name: "ε Her", raH: 17.0048, decDeg: 30.93, spectralClass: "A", magnitude: 3.92 },
     { name: "Maasym (λ Her)", raH: 17.5123, decDeg: 26.11, spectralClass: "K", magnitude: 4.41 },
   ],
-  // The keystone quadrilateral of the torso, head at Rasalgethi, limbs fanned out.
+  /*
+   * The IAU figure. Keystone ε–ζ–η–π for the torso; head δ–α¹; shoulders δ–ε
+   * and β–ζ; the club arm β–γ; the lion-skin arm δ–λ–μ–ξ–ο; legs π–θ–ι (ρ
+   * skipped) and η–τ (σ skipped).
+   */
   connections: [
-    [8, 6],
-    [6, 1],
-    [1, 3],
-    [3, 8],
-    [3, 9],
-    [9, 12],
-    [3, 2],
+    [13, 1],
+    [1, 6],
+    [6, 3],
+    [3, 13],
     [2, 4],
-    [8, 0],
-    [0, 13],
-    [13, 6],
-    [0, 5],
-    [5, 14],
-    [14, 7],
+    [2, 13],
+    [0, 1],
+    [0, 8],
+    [2, 14],
+    [14, 5],
+    [5, 7],
     [7, 10],
-    [7, 11],
+    [3, 11],
     [11, 9],
+    [6, 12],
   ],
+  rotationDeg: 180,
 };
 
 /* ------------------------------------------------------------------ */
@@ -709,7 +742,7 @@ const VIRGO: ConstellationFigure = {
     { name: "Porrima (γ Vir)", raH: 12.6944, decDeg: -1.45, spectralClass: "F", magnitude: 2.74 },
     { name: "Vindemiatrix (ε Vir)", raH: 13.0363, decDeg: 10.96, spectralClass: "G", magnitude: 2.85 },
     { name: "Heze (ζ Vir)", raH: 13.5783, decDeg: -0.6, spectralClass: "A", magnitude: 3.38 },
-    { name: "Auva (δ Vir)", raH: 12.9268, decDeg: 3.4, spectralClass: "M", magnitude: 3.39, isRedGiantAccent: true },
+    { name: "Minelauva (δ Vir)", raH: 12.9268, decDeg: 3.4, spectralClass: "M", magnitude: 3.39, isRedGiantAccent: true },
     { name: "Zavijava (β Vir)", raH: 11.8448, decDeg: 1.77, spectralClass: "F", magnitude: 3.59 },
     { name: "Maenalus (109 Vir)", raH: 14.7708, decDeg: 1.89, spectralClass: "A", magnitude: 3.73 },
     { name: "Rijl al Awwa (μ Vir)", raH: 14.7177, decDeg: -5.66, spectralClass: "F", magnitude: 3.87 },
@@ -722,24 +755,27 @@ const VIRGO: ConstellationFigure = {
     { name: "θ Vir", raH: 13.1658, decDeg: -5.54, spectralClass: "A", magnitude: 4.38 },
     { name: "Khambalia (λ Vir)", raH: 14.3185, decDeg: -13.37, spectralClass: "A", magnitude: 4.52 },
   ],
-  // The stalk of the ear of wheat: Spica up through Kang and Syrma to Vindemiatrix.
+  /*
+   * The IAU Y: the stem Spica–θ–γ, the arms γ–η–β–ν and γ–δ–ε, the second
+   * stem Spica–ζ–τ–109 with ζ–ι–μ. κ, λ and ο Vir are not in the standard
+   * figure; they hang off their nearest member (ι–κ–λ, ν–ο) so they are drawn.
+   */
   connections: [
-    [0, 12],
-    [12, 10],
-    [10, 7],
-    [10, 14],
-    [10, 13],
-    [13, 2],
-    [2, 6],
-    [12, 3],
-    [3, 4],
-    [4, 8],
-    [8, 11],
-    [11, 5],
+    [0, 14],
+    [14, 1],
+    [1, 8],
+    [8, 5],
     [5, 9],
-    [3, 1],
-    [8, 1],
-    [0, 15],
+    [1, 4],
+    [4, 2],
+    [0, 3],
+    [3, 13],
+    [13, 6],
+    [3, 10],
+    [10, 7],
+    [10, 12],
+    [12, 15],
+    [9, 11],
   ],
 };
 
@@ -768,11 +804,10 @@ const HYDRA: ConstellationFigure = {
     { name: "π Hya", raH: 14.1062, decDeg: -26.68, spectralClass: "K", magnitude: 3.25 },
     { name: "τ² Hya", raH: 9.533, decDeg: -1.18, spectralClass: "A", magnitude: 4.54 },
   ],
-  // The snake's head ring, then the long body down to the last coil.
+  // The snake's head ring ζ–ε–δ–σ–η–ρ, then the long body down to the last coil.
   connections: [
     [0, 1],
-    [1, 2],
-    [2, 3],
+    [1, 3],
     [3, 4],
     [4, 2],
     [2, 5],
@@ -787,7 +822,6 @@ const HYDRA: ConstellationFigure = {
     [12, 13],
     [13, 14],
     [14, 15],
-    [7, 16],
     [16, 8],
   ],
 };
@@ -818,25 +852,30 @@ const CENTAURUS: ConstellationFigure = {
     { name: "σ Cen", raH: 12.4673, decDeg: -50.23, spectralClass: "B", magnitude: 3.91 },
     { name: "υ¹ Cen", raH: 13.978, decDeg: -44.8, spectralClass: "B", magnitude: 3.87 },
   ],
-  // The centaur's upper body running south-east through the torso to the feet.
+  /*
+   * The IAU figure. Forelegs α–β–ε up to the chest at ζ; the back and rump
+   * ζ–γ–σ–δ–π–λ; the human torso ζ–υ¹–μ–ν with the head at θ and the raised
+   * hand at ι; the spear arm ν–φ–η–κ. τ Cen is not in the standard figure and
+   * sits half a degree from γ, so it hangs there.
+   */
   connections: [
-    [0, 1],
+    [11, 10],
+    [10, 1],
     [1, 2],
     [2, 3],
-    [3, 4],
-    [4, 5],
-    [5, 6],
-    [6, 7],
-    [7, 8],
-    [8, 9],
-    [9, 11],
-    [11, 10],
-    [3, 12],
+    [3, 16],
+    [16, 0],
+    [0, 12],
     [12, 13],
-    [7, 14],
+    [2, 17],
+    [17, 14],
+    [14, 7],
+    [7, 5],
     [7, 15],
-    [4, 16],
-    [8, 17],
+    [7, 8],
+    [8, 6],
+    [6, 9],
+    [3, 4],
   ],
 };
 
@@ -857,7 +896,7 @@ const CETUS: ConstellationFigure = {
     { name: "π Cet", raH: 2.7354, decDeg: -13.86, spectralClass: "B", magnitude: 4.24 },
     { name: "χ Cet", raH: 1.8264, decDeg: -10.69, spectralClass: "F", magnitude: 4.66 },
     { name: "Baten Kaitos (ζ Cet)", raH: 1.8577, decDeg: -10.33, spectralClass: "K", magnitude: 3.74 },
-    { name: "Deneb Kaitos (β Cet)", raH: 0.7265, decDeg: -17.99, spectralClass: "K", magnitude: 2.04 },
+    { name: "Diphda (β Cet)", raH: 0.7265, decDeg: -17.99, spectralClass: "K", magnitude: 2.04 },
     { name: "Hydor (2 Cet)", raH: 0.0623, decDeg: -17.34, spectralClass: "B", magnitude: 4.55 },
     { name: "Schemali (ι Cet)", raH: 0.3238, decDeg: -8.82, spectralClass: "K", magnitude: 3.56 },
     { name: "Thanih (θ Cet)", raH: 1.4004, decDeg: -8.18, spectralClass: "K", magnitude: 3.6 },
@@ -867,27 +906,33 @@ const CETUS: ConstellationFigure = {
     { name: "Deneb Algenubi (η Cet)", raH: 1.1431, decDeg: -10.18, spectralClass: "K", magnitude: 3.46 },
     { name: "ξ¹ Cet", raH: 2.2167, decDeg: 8.85, spectralClass: "G", magnitude: 4.36 },
   ],
-  // The sea-monster: head at Menkar, down through the jaw to the knot of the tail.
+  /*
+   * The Stellarium "modern" figure. Head pentagon α–λ–μ–ξ²–γ–α with the neck
+   * γ–δ–ο; from Mira the body fans at ε into the back ε–ζ–θ–η–β and the belly
+   * ε–π–τ–β, with ι off Diphda. χ, υ, 2 Cet and ξ¹ are not in the standard
+   * figure; each hangs off its nearest member so it is drawn.
+   */
   connections: [
-    [0, 1],
+    [0, 5],
+    [5, 4],
+    [4, 3],
+    [3, 1],
+    [1, 0],
     [1, 2],
-    [2, 3],
-    [3, 4],
-    [4, 5],
-    [2, 6],
+    [2, 16],
+    [16, 6],
+    [6, 9],
+    [9, 13],
+    [13, 17],
+    [17, 10],
     [6, 7],
-    [7, 8],
-    [8, 9],
-    [9, 10],
-    [10, 11],
-    [11, 12],
-    [12, 13],
-    [13, 14],
-    [14, 9],
+    [7, 14],
+    [14, 10],
+    [10, 12],
+    [9, 8],
     [14, 15],
-    [15, 16],
-    [16, 17],
-    [17, 18],
+    [10, 11],
+    [3, 18],
   ],
 };
 
@@ -919,22 +964,28 @@ const ERIDANUS: ConstellationFigure = {
     { name: "χ Eri", raH: 1.9325, decDeg: -51.61, spectralClass: "G", magnitude: 3.69 },
     { name: "Achernar (α Eri)", raH: 1.6285, decDeg: -57.24, spectralClass: "B", magnitude: 0.45 },
   ],
-  // The river meandering from Cursa at the source down to Achernar at the mouth.
+  /*
+   * One river, source to mouth: 53–λ–β–ν–ο¹–γ–δ–ε–η–τ³–τ⁴–τ⁶–υ²–υ⁴–θ¹–ι–κ–φ–χ–α.
+   * Stellarium opens the river at Sceptrum and λ before Cursa; the stars the
+   * standard chain passes through that are not members (ω, μ, π, ζ, τ¹, τ², τ⁵,
+   * τ⁸, τ⁹, υ¹, 43, and the run from υ⁴ to Acamar) are simply skipped, so some
+   * reaches are long.
+   */
   connections: [
-    [0, 1],
-    [1, 2],
-    [2, 3],
-    [3, 4],
-    [4, 5],
-    [0, 6],
-    [6, 7],
-    [7, 8],
-    [8, 9],
-    [8, 10],
-    [10, 11],
-    [11, 12],
+    [3, 1],
+    [1, 0],
+    [0, 2],
+    [2, 6],
+    [6, 9],
+    [9, 8],
+    [8, 7],
     [7, 13],
-    [13, 14],
+    [13, 11],
+    [11, 12],
+    [12, 10],
+    [10, 4],
+    [4, 5],
+    [5, 14],
     [14, 15],
     [15, 16],
     [16, 17],
