@@ -1117,6 +1117,317 @@ export const learnSeries: LearningSeries[] = [
     "curriculumLessons": 90
   },
   {
+    "slug": "ai-adoption",
+    "name": "AI Adoption",
+    "description": "The Level 3 capstone of the AI at Work arc, for the person who owns AI in an organization. Lead, govern, and scale a company's AI use: adoption metrics, change management, policy, data safety, vendor evaluation, security and privacy ownership, budgeting, ROI, and the ongoing program. Vendor-agnostic for a non-technical owner.",
+    "gradient": "from-emerald-500 to-purple-600",
+    "lessons": [
+      {
+        "slug": "the-adoption-owners-job-from-rollout-to-running-program",
+        "title": "Lesson 1: The Adoption Owner's Job: From Rollout to Running Program",
+        "series": "ai-adoption",
+        "lesson": 1,
+        "excerpt": "Someone in your organization has to own AI, not just launch it. This first lesson draws the line between a rollout, a bounded project with a finish line, and a running program, an ongoing discipline with no end date. It defines the adoption owner's real job, walks through one person making that shift, and ends with a try-it exercise that maps who owns AI in your organization today.",
+        "date": "September 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Adoption",
+          "Leadership"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "where-ai-already-creates-value-in-an-org",
+        "title": "Lesson 2: Where AI Already Creates Value in an Org (and Where It Does Not)",
+        "series": "ai-adoption",
+        "lesson": 2,
+        "excerpt": "AI use is nearly universal but enterprise value stays rare, and the gap is not random. This lesson gives you a way to read any piece of work and judge whether AI can genuinely improve it. It defines the characteristics of value-ready work, shows where the survey data says value actually concentrates, draws both a worked example and a try-it exercise that score your own organization's functions, and ends with the next lesson on measuring outcomes.",
+        "date": "September 23, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "LLMs",
+          "AI Adoption",
+          "Leadership"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "measuring-what-matters-time-saved-quality-usage-churn",
+        "title": "Lesson 3: Measuring What Matters: Time Saved, Quality, Usage, and Churn",
+        "series": "ai-adoption",
+        "lesson": 3,
+        "excerpt": "Almost every organization uses AI and almost none can prove it is paying off. This lesson gives you the four metrics that turn adoption from a belief into a number: time saved, quality, usage, and churn. It defines each one, separates outcome metrics from activity metrics, shows why speed without quality is the fastest road to confident error, and builds a worked example that measures one pilot against all four. It ends with the next lesson on auditing where your organization actually is.",
+        "date": "September 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "LLMs",
+          "AI Adoption",
+          "Leadership"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "the-adoption-baseline-audit-where-your-org-actually-is",
+        "title": "Lesson 4: The Adoption Baseline: Audit Where Your Organization Actually Is",
+        "series": "ai-adoption",
+        "lesson": 4,
+        "excerpt": "Almost everyone in your organization may already be using AI, and almost none of it may be sanctioned, measured, or visible to leadership. Before you can set goals, govern use, or prove value, you need an honest baseline. This lesson defines the adoption audit, shows why the gap between what leaders believe and what workers do is so wide, and gives you the four tracks that map where your org actually is.",
+        "date": "September 25, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "LLMs",
+          "AI Adoption",
+          "Leadership"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "setting-realistic-goals-and-a-north-star-metric",
+        "title": "Lesson 5: Setting Realistic Goals and a North-Star Metric",
+        "series": "ai-adoption",
+        "lesson": 5,
+        "excerpt": "A goal like 'we want more people to use AI' is a wish, not a plan. This lesson gives you the vocabulary to do better: goals, metrics, targets, a north-star metric, and a guardrail that keeps the whole system honest. You will learn how to pick one number that captures whether AI is actually moving the organization, how to set targets that are ambitious enough to matter and honest enough to hit, and how to ground every number in the baseline you built in Lesson 4.",
+        "date": "September 27, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "LLMs",
+          "AI Adoption",
+          "Leadership"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "change-management-past-the-30-day-on-ramp",
+        "title": "Lesson 6: Change Management Past the 30-Day On-Ramp",
+        "series": "ai-adoption",
+        "lesson": 6,
+        "excerpt": "The launch is over and the novelty is fading. This is where most AI programs quietly die, not because the tool is bad but because nobody planned for the change to stick. This lesson gives you the change-management toolkit for the period after the on-ramp: why a 30-day window is far too short, how to create short-term wins, consolidate gains, and anchor the new way of working into how your organization actually operates.",
+        "date": "September 27, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Change Management"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "sustaining-momentum-when-novelty-wears-off",
+        "title": "Lesson 7: Sustaining Momentum When Novelty Wears Off",
+        "series": "ai-adoption",
+        "lesson": 7,
+        "excerpt": "The first few weeks of an AI rollout are easy to misread. Usage spikes, everyone is curious, and it looks like the program is working. Then the novelty fades and the numbers start to slide. Most leaders treat that slide as a failure. It is not. It is the normal shape of adoption, and whether the program survives depends on what you do at that exact moment. This lesson defines the novelty effect, shows you how to tell a real gain in momentum from a one-time spike, and gives you a four-part cadence for keeping adoption alive after enthusiasm wears off.",
+        "date": "September 28, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Momentum"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "champions-and-power-users-building-an-internal-support-network",
+        "title": "Lesson 8: Champions and Power Users: Building an Internal Support Network",
+        "series": "ai-adoption",
+        "lesson": 8,
+        "excerpt": "Adoption that depends on one owner's energy is fragile, and adoption that depends on the launch team's enthusiasm ends when the project ends. The organizations that make AI stick build a human support network inside their own walls: a small group of peers who are trusted, who model the new way of working, and who answer questions the way a colleague would. This lesson defines the roles, explains why peer support outlives authority, and gives you a buildable plan for selecting, structuring, and sustaining your champions and power users past go-live.",
+        "date": "September 29, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Champions"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "communicating-ai-wins-and-setbacks-honestly",
+        "title": "Lesson 9: Communicating AI Wins (and Setbacks) Honestly",
+        "series": "ai-adoption",
+        "lesson": 9,
+        "excerpt": "How an organization talks about AI is a load-bearing part of adoption. Overstate the wins and people stop trusting what you say. Hide the setbacks and they stop bringing you problems until it is too late. This lesson defines what honest AI communication actually means, shows you why both failure modes damage the program, and gives you a reporting cadence that reports wins and losses with the same plain accuracy, so the trust you build survives the first real failure.",
+        "date": "September 30, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Communication"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "addressing-fear-and-skepticism-as-a-leader",
+        "title": "Lesson 10: Addressing Fear and Skepticism as a Leader",
+        "series": "ai-adoption",
+        "lesson": 10,
+        "excerpt": "Most of your workforce is not neutral about AI. Roughly half are worried about what it means for their jobs, and a meaningful share are quietly hostile to the whole idea. This lesson separates the two reactions you actually face, fear and skepticism, shows why arguing either one away backfires, and gives you a practical way to address the concern underneath before it hardens into resistance that stalls your program.",
+        "date": "October 1, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Change Management"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "training-that-scales-beyond-the-initial-rollout",
+        "title": "Lesson 11: Training That Scales: Beyond the Initial Rollout",
+        "series": "ai-adoption",
+        "lesson": 11,
+        "excerpt": "The launch training is not the training. People sit through the onboarding sessions, nod, use the tool for a week, and then drift back to the old way of working, not because they are resistant but because a one-time training event was never designed to change a daily habit. This lesson defines the transfer gap, the difference between learning a skill in a session and applying it on the job, and shows why cramming everyone into one training push produces weak retention. It gives you two scalable methods to replace the one-time event: spaced reinforcement that re-engages people after the classroom moment has passed, and a training model that builds the capability to teach inside your own teams instead of depending on you or an outside vendor. By the end you will have a plan for training that survives contact with the real working week.",
+        "date": "October 2, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Training"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "handling-the-it-failed-me-once-recovery",
+        "title": "Lesson 12: Handling the 'It Failed Me Once' Recovery",
+        "series": "ai-adoption",
+        "lesson": 12,
+        "excerpt": "A person tries the tool. It gives them a bad answer. They conclude the whole thing does not work, and they quietly retreat. This is not stubbornness. It is a documented psychological pattern called algorithm aversion, in which people give up on a machine after a single error more readily than they would forgive a human for the same mistake. This lesson defines that pattern, shows why one failure can cost you the trust that weeks of training built, and gives you a recovery playbook: calibrate expectations before the first use, reframe the failure honestly, and rebuild confidence through low-stakes, explained retries. It ends with the next lesson, on feedback loops that learn from what people actually use.",
+        "date": "October 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Trust"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "feedback-loops-learning-from-what-people-actually-use",
+        "title": "Lesson 13: Feedback Loops: Learning from What People Actually Use",
+        "series": "ai-adoption",
+        "lesson": 13,
+        "excerpt": "Most adoption owners run their program on what people say they will do, or say they are doing, and that is not the same thing as what they actually do. This lesson defines the feedback loop, the discipline of learning from real behavior instead of stated intention. It shows you why self-reports and surveys routinely overstate use, how the signals users leave while they work (and stop working) are more honest than anything they tell you, and how to close the loop so the program improves instead of going stale. It ends with the next lesson, on setting the bar for human supervision of AI output.",
+        "date": "October 4, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Feedback"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "the-human-in-the-loop-supervision-bar",
+        "title": "Lesson 14: The Human-in-the-Loop Supervision Bar for Your Org",
+        "series": "ai-adoption",
+        "lesson": 14,
+        "excerpt": "The most common AI oversight failure is not too little supervision. It is supervision that is scattered, unlabeled, and left to each employee to decide. This lesson gives you a supervision bar: a risk-based line that decides when an AI output needs a human sign-off before it leaves your org, and when it can run on its own. You will learn the difference between reviewing every output and reviewing the right outputs, how to set the bar so people actually check instead of rubber-stamp, and how to make the bar enforceable without adding bureaucracy nobody follows.",
+        "date": "October 5, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "writing-an-ai-policy-a-non-technical-owner-can-own",
+        "title": "Lesson 15: Writing an AI Policy a Non-Technical Owner Can Own",
+        "series": "ai-adoption",
+        "lesson": 15,
+        "excerpt": "Most companies do not actually have a usable AI policy. A 2025 survey found that only 36% of employees say their company has a formal AI policy at all, and only 41% tell a manager or seek permission before using AI on the job. Even when a policy exists, it is often a dense legal document that nobody reads and nobody can update. This lesson gives you a policy you can actually own: a plain-language AI acceptable use policy built from five pillars, a data rule your team can remember, and a review rhythm that keeps it current when the tools change.",
+        "date": "October 6, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "data-safety-what-employees-can-and-cannot-put-in-tools",
+        "title": "Lesson 16: Data Safety: What Employees Can and Cannot Put in Tools",
+        "series": "ai-adoption",
+        "lesson": 16,
+        "excerpt": "The single most important thing to understand about an AI tool is that whatever you put into it leaves your building. A pasted paragraph travels to the vendor's servers, where it may be stored, retained, and used to train the model. This lesson gives you the mental model that decides what employees can and cannot put into a tool, built on a four-level data classification you can teach in ten minutes. You will learn what PII is and why it is the first thing to protect, why a free public tool and an approved enterprise tool are not the same risk, and a simple decision routine your team can run before they paste anything.",
+        "date": "October 7, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Data"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "vendor-evaluation-assessing-ai-tools-before-purchase",
+        "title": "Lesson 17: Vendor Evaluation: Assessing AI Tools Before Purchase",
+        "series": "ai-adoption",
+        "lesson": 17,
+        "excerpt": "Most AI purchases are decided by a demo and signed before anyone asks the questions that actually matter: where does our data go, what does it cost to leave, and what obligations land on us after the signature? This lesson treats vendor evaluation as a risk decision, not comparison shopping. It defines the terms you need, walks through a weighted evaluation rubric applied to two real candidates for the same use case, and ends with a try-it exercise that scores a tool under consideration in your own organization against criteria that reflect your risk posture rather than a vendor's marketing.",
+        "date": "October 8, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Procurement"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "licensing-and-procurement-what-you-are-actually-buying",
+        "title": "Lesson 18: Licensing and Procurement: What You Are Actually Buying",
+        "series": "ai-adoption",
+        "lesson": 18,
+        "excerpt": "The demo ended and the contract arrived. This lesson is about what you are actually buying when you sign for an AI tool: a bundle of rights, costs, and risks that no sales call will show you. It defines the licensing models you will be quoted (per seat, per token, per activity, per outcome, and the hybrid most vendors actually sell), walks a worked example that prices the same assistant three different ways and shows how wildly the annual bill and its predictability can differ, then takes you clause by clause through the contract language that hides the real deal: who owns the outputs, whether your data trains the model, who pays when the output is wrong, and what happens when the vendor changes the model or silently renews the term. It ends with a try-it exercise that reads the AI agreement your organization is actually considering and decides, before you sign, what you are really buying.",
+        "date": "October 9, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Procurement"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 18,
+    "curriculumLessons": 40
+  },
+  {
     "slug": "salesforce-architect",
     "name": "Salesforce System Architect Primer",
     "description": "A practical deep dive into Flow design, Apex patterns, and platform architecture for teams scaling on Salesforce.",
@@ -3116,300 +3427,6 @@ export const learnSeries: LearningSeries[] = [
     ],
     "totalLessons": 27,
     "curriculumLessons": 36
-  },
-  {
-    "slug": "ai-adoption",
-    "name": "AI Adoption",
-    "description": "The Level 3 capstone of the AI at Work arc, for the person who owns AI in an organization. Lead, govern, and scale a company's AI use: adoption metrics, change management, policy, data safety, vendor evaluation, security and privacy ownership, budgeting, ROI, and the ongoing program. Vendor-agnostic for a non-technical owner.",
-    "gradient": "from-emerald-500 to-purple-600",
-    "lessons": [
-      {
-        "slug": "the-adoption-owners-job-from-rollout-to-running-program",
-        "title": "Lesson 1: The Adoption Owner's Job: From Rollout to Running Program",
-        "series": "ai-adoption",
-        "lesson": 1,
-        "excerpt": "Someone in your organization has to own AI, not just launch it. This first lesson draws the line between a rollout, a bounded project with a finish line, and a running program, an ongoing discipline with no end date. It defines the adoption owner's real job, walks through one person making that shift, and ends with a try-it exercise that maps who owns AI in your organization today.",
-        "date": "September 22, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Adoption",
-          "Leadership"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "where-ai-already-creates-value-in-an-org",
-        "title": "Lesson 2: Where AI Already Creates Value in an Org (and Where It Does Not)",
-        "series": "ai-adoption",
-        "lesson": 2,
-        "excerpt": "AI use is nearly universal but enterprise value stays rare, and the gap is not random. This lesson gives you a way to read any piece of work and judge whether AI can genuinely improve it. It defines the characteristics of value-ready work, shows where the survey data says value actually concentrates, draws both a worked example and a try-it exercise that score your own organization's functions, and ends with the next lesson on measuring outcomes.",
-        "date": "September 23, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "LLMs",
-          "AI Adoption",
-          "Leadership"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "measuring-what-matters-time-saved-quality-usage-churn",
-        "title": "Lesson 3: Measuring What Matters: Time Saved, Quality, Usage, and Churn",
-        "series": "ai-adoption",
-        "lesson": 3,
-        "excerpt": "Almost every organization uses AI and almost none can prove it is paying off. This lesson gives you the four metrics that turn adoption from a belief into a number: time saved, quality, usage, and churn. It defines each one, separates outcome metrics from activity metrics, shows why speed without quality is the fastest road to confident error, and builds a worked example that measures one pilot against all four. It ends with the next lesson on auditing where your organization actually is.",
-        "date": "September 24, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "LLMs",
-          "AI Adoption",
-          "Leadership"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "the-adoption-baseline-audit-where-your-org-actually-is",
-        "title": "Lesson 4: The Adoption Baseline: Audit Where Your Organization Actually Is",
-        "series": "ai-adoption",
-        "lesson": 4,
-        "excerpt": "Almost everyone in your organization may already be using AI, and almost none of it may be sanctioned, measured, or visible to leadership. Before you can set goals, govern use, or prove value, you need an honest baseline. This lesson defines the adoption audit, shows why the gap between what leaders believe and what workers do is so wide, and gives you the four tracks that map where your org actually is.",
-        "date": "September 25, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "LLMs",
-          "AI Adoption",
-          "Leadership"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "setting-realistic-goals-and-a-north-star-metric",
-        "title": "Lesson 5: Setting Realistic Goals and a North-Star Metric",
-        "series": "ai-adoption",
-        "lesson": 5,
-        "excerpt": "A goal like 'we want more people to use AI' is a wish, not a plan. This lesson gives you the vocabulary to do better: goals, metrics, targets, a north-star metric, and a guardrail that keeps the whole system honest. You will learn how to pick one number that captures whether AI is actually moving the organization, how to set targets that are ambitious enough to matter and honest enough to hit, and how to ground every number in the baseline you built in Lesson 4.",
-        "date": "September 27, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "LLMs",
-          "AI Adoption",
-          "Leadership"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "change-management-past-the-30-day-on-ramp",
-        "title": "Lesson 6: Change Management Past the 30-Day On-Ramp",
-        "series": "ai-adoption",
-        "lesson": 6,
-        "excerpt": "The launch is over and the novelty is fading. This is where most AI programs quietly die, not because the tool is bad but because nobody planned for the change to stick. This lesson gives you the change-management toolkit for the period after the on-ramp: why a 30-day window is far too short, how to create short-term wins, consolidate gains, and anchor the new way of working into how your organization actually operates.",
-        "date": "September 27, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Change Management"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "sustaining-momentum-when-novelty-wears-off",
-        "title": "Lesson 7: Sustaining Momentum When Novelty Wears Off",
-        "series": "ai-adoption",
-        "lesson": 7,
-        "excerpt": "The first few weeks of an AI rollout are easy to misread. Usage spikes, everyone is curious, and it looks like the program is working. Then the novelty fades and the numbers start to slide. Most leaders treat that slide as a failure. It is not. It is the normal shape of adoption, and whether the program survives depends on what you do at that exact moment. This lesson defines the novelty effect, shows you how to tell a real gain in momentum from a one-time spike, and gives you a four-part cadence for keeping adoption alive after enthusiasm wears off.",
-        "date": "September 28, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Momentum"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "champions-and-power-users-building-an-internal-support-network",
-        "title": "Lesson 8: Champions and Power Users: Building an Internal Support Network",
-        "series": "ai-adoption",
-        "lesson": 8,
-        "excerpt": "Adoption that depends on one owner's energy is fragile, and adoption that depends on the launch team's enthusiasm ends when the project ends. The organizations that make AI stick build a human support network inside their own walls: a small group of peers who are trusted, who model the new way of working, and who answer questions the way a colleague would. This lesson defines the roles, explains why peer support outlives authority, and gives you a buildable plan for selecting, structuring, and sustaining your champions and power users past go-live.",
-        "date": "September 29, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Champions"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "communicating-ai-wins-and-setbacks-honestly",
-        "title": "Lesson 9: Communicating AI Wins (and Setbacks) Honestly",
-        "series": "ai-adoption",
-        "lesson": 9,
-        "excerpt": "How an organization talks about AI is a load-bearing part of adoption. Overstate the wins and people stop trusting what you say. Hide the setbacks and they stop bringing you problems until it is too late. This lesson defines what honest AI communication actually means, shows you why both failure modes damage the program, and gives you a reporting cadence that reports wins and losses with the same plain accuracy, so the trust you build survives the first real failure.",
-        "date": "September 30, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Communication"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "addressing-fear-and-skepticism-as-a-leader",
-        "title": "Lesson 10: Addressing Fear and Skepticism as a Leader",
-        "series": "ai-adoption",
-        "lesson": 10,
-        "excerpt": "Most of your workforce is not neutral about AI. Roughly half are worried about what it means for their jobs, and a meaningful share are quietly hostile to the whole idea. This lesson separates the two reactions you actually face, fear and skepticism, shows why arguing either one away backfires, and gives you a practical way to address the concern underneath before it hardens into resistance that stalls your program.",
-        "date": "October 1, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Change Management"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "training-that-scales-beyond-the-initial-rollout",
-        "title": "Lesson 11: Training That Scales: Beyond the Initial Rollout",
-        "series": "ai-adoption",
-        "lesson": 11,
-        "excerpt": "The launch training is not the training. People sit through the onboarding sessions, nod, use the tool for a week, and then drift back to the old way of working, not because they are resistant but because a one-time training event was never designed to change a daily habit. This lesson defines the transfer gap, the difference between learning a skill in a session and applying it on the job, and shows why cramming everyone into one training push produces weak retention. It gives you two scalable methods to replace the one-time event: spaced reinforcement that re-engages people after the classroom moment has passed, and a training model that builds the capability to teach inside your own teams instead of depending on you or an outside vendor. By the end you will have a plan for training that survives contact with the real working week.",
-        "date": "October 2, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Training"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "handling-the-it-failed-me-once-recovery",
-        "title": "Lesson 12: Handling the 'It Failed Me Once' Recovery",
-        "series": "ai-adoption",
-        "lesson": 12,
-        "excerpt": "A person tries the tool. It gives them a bad answer. They conclude the whole thing does not work, and they quietly retreat. This is not stubbornness. It is a documented psychological pattern called algorithm aversion, in which people give up on a machine after a single error more readily than they would forgive a human for the same mistake. This lesson defines that pattern, shows why one failure can cost you the trust that weeks of training built, and gives you a recovery playbook: calibrate expectations before the first use, reframe the failure honestly, and rebuild confidence through low-stakes, explained retries. It ends with the next lesson, on feedback loops that learn from what people actually use.",
-        "date": "October 3, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Trust"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "feedback-loops-learning-from-what-people-actually-use",
-        "title": "Lesson 13: Feedback Loops: Learning from What People Actually Use",
-        "series": "ai-adoption",
-        "lesson": 13,
-        "excerpt": "Most adoption owners run their program on what people say they will do, or say they are doing, and that is not the same thing as what they actually do. This lesson defines the feedback loop, the discipline of learning from real behavior instead of stated intention. It shows you why self-reports and surveys routinely overstate use, how the signals users leave while they work (and stop working) are more honest than anything they tell you, and how to close the loop so the program improves instead of going stale. It ends with the next lesson, on setting the bar for human supervision of AI output.",
-        "date": "October 4, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Feedback"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "the-human-in-the-loop-supervision-bar",
-        "title": "Lesson 14: The Human-in-the-Loop Supervision Bar for Your Org",
-        "series": "ai-adoption",
-        "lesson": 14,
-        "excerpt": "The most common AI oversight failure is not too little supervision. It is supervision that is scattered, unlabeled, and left to each employee to decide. This lesson gives you a supervision bar: a risk-based line that decides when an AI output needs a human sign-off before it leaves your org, and when it can run on its own. You will learn the difference between reviewing every output and reviewing the right outputs, how to set the bar so people actually check instead of rubber-stamp, and how to make the bar enforceable without adding bureaucracy nobody follows.",
-        "date": "October 5, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Governance"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "writing-an-ai-policy-a-non-technical-owner-can-own",
-        "title": "Lesson 15: Writing an AI Policy a Non-Technical Owner Can Own",
-        "series": "ai-adoption",
-        "lesson": 15,
-        "excerpt": "Most companies do not actually have a usable AI policy. A 2025 survey found that only 36% of employees say their company has a formal AI policy at all, and only 41% tell a manager or seek permission before using AI on the job. Even when a policy exists, it is often a dense legal document that nobody reads and nobody can update. This lesson gives you a policy you can actually own: a plain-language AI acceptable use policy built from five pillars, a data rule your team can remember, and a review rhythm that keeps it current when the tools change.",
-        "date": "October 6, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Governance"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "data-safety-what-employees-can-and-cannot-put-in-tools",
-        "title": "Lesson 16: Data Safety: What Employees Can and Cannot Put in Tools",
-        "series": "ai-adoption",
-        "lesson": 16,
-        "excerpt": "The single most important thing to understand about an AI tool is that whatever you put into it leaves your building. A pasted paragraph travels to the vendor's servers, where it may be stored, retained, and used to train the model. This lesson gives you the mental model that decides what employees can and cannot put into a tool, built on a four-level data classification you can teach in ten minutes. You will learn what PII is and why it is the first thing to protect, why a free public tool and an approved enterprise tool are not the same risk, and a simple decision routine your team can run before they paste anything.",
-        "date": "October 7, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Data"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "vendor-evaluation-assessing-ai-tools-before-purchase",
-        "title": "Lesson 17: Vendor Evaluation: Assessing AI Tools Before Purchase",
-        "series": "ai-adoption",
-        "lesson": 17,
-        "excerpt": "Most AI purchases are decided by a demo and signed before anyone asks the questions that actually matter: where does our data go, what does it cost to leave, and what obligations land on us after the signature? This lesson treats vendor evaluation as a risk decision, not comparison shopping. It defines the terms you need, walks through a weighted evaluation rubric applied to two real candidates for the same use case, and ends with a try-it exercise that scores a tool under consideration in your own organization against criteria that reflect your risk posture rather than a vendor's marketing.",
-        "date": "October 8, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Procurement"
-        ],
-        "status": "published"
-      }
-    ],
-    "totalLessons": 17,
-    "curriculumLessons": 40
   },
   {
     "slug": "ai-power-user",
@@ -7179,6 +7196,23 @@ export const learnLessons: LearnLesson[] = [
       "Fine-tuning",
       "RAG",
       "Retrieval Augmented Generation"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "licensing-and-procurement-what-you-are-actually-buying",
+    "title": "Lesson 18: Licensing and Procurement: What You Are Actually Buying",
+    "series": "ai-adoption",
+    "lesson": 18,
+    "excerpt": "The demo ended and the contract arrived. This lesson is about what you are actually buying when you sign for an AI tool: a bundle of rights, costs, and risks that no sales call will show you. It defines the licensing models you will be quoted (per seat, per token, per activity, per outcome, and the hybrid most vendors actually sell), walks a worked example that prices the same assistant three different ways and shows how wildly the annual bill and its predictability can differ, then takes you clause by clause through the contract language that hides the real deal: who owns the outputs, whether your data trains the model, who pays when the output is wrong, and what happens when the vendor changes the model or silently renews the term. It ends with a try-it exercise that reads the AI agreement your organization is actually considering and decides, before you sign, what you are really buying.",
+    "date": "October 9, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Learn",
+      "AI",
+      "Leadership",
+      "Procurement"
     ],
     "status": "published"
   },
