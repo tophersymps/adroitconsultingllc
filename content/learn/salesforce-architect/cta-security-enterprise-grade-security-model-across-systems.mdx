@@ -1,0 +1,133 @@
+---
+title: "Lesson 63: CTA Security: Designing an Enterprise-Grade Security Model Across Systems"
+slug: cta-security-enterprise-grade-security-model-across-systems
+series: "salesforce-architect"
+lesson: 63
+excerpt: "The CTA security domain as a design discipline: drawing the shared responsibility line, making one identity provider the single source of truth, applying the four-layer access model, choosing an encryption strategy, and layering controls so a hub that aggregates five systems is not only as safe as its weakest credential."
+date: "October 09, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Salesforce, Architecture, CTA, Security, Certifications]
+---
+
+Lesson 62 built the integration strategy from its decisions: system of record, hub versus middleware versus point-to-point, the synchronous and asynchronous seams, the canonical model, and governance. This lesson takes the next CTA domain to the same depth. The security domain is where the integration strategy you just designed has to prove it can be defended, because every system you connected in the last lesson is now a surface an attacker can reach. The goal here is not to memorize a list of security features. It is to learn how to design one security model that governs every system in an enterprise, on purpose, and to be able to justify each control to a board.
+
+Let me be direct about what this domain actually tests. When you are asked to secure a single app, you turn on the obvious controls and move on. When you are asked to design an enterprise-grade security model across systems, you are answering a different set of questions: who is responsible for what, where identity lives, how a user is granted access at every layer, how data is protected at rest and in transit, and how the whole thing holds together when one system is compromised. Those are architecture questions, not feature questions, and the board judges your answers to them. [^1]
+
+## What an enterprise-grade security model actually is
+
+An **enterprise-grade security model** is the set of standing decisions about how every system in an enterprise authenticates users, authorizes access, and protects data. The word "standing" matters the same way it did for integration. A security model is not a per-project choice; it is the policy that makes per-project choices consistent. When a new application joins the estate and needs to read customer records, the model should already answer how that application proves who it is, what it is allowed to see, and how the data it touches is protected. The team building the new app then works inside those answers instead of re-deciding security each time.
+
+The reason this is a CTA domain and not an admin task is that the model has to span systems that do not share a security vocabulary. Salesforce has its own identity and access model. The ERP has another. The data warehouse has a third. An enterprise-grade model is the discipline of making those systems agree on the fundamentals: one identity, one set of access rules, one data protection posture. When the board asks you why a user can reach the same customer record through three different systems with three different levels of protection, you should be able to answer in terms of the model, not in terms of which system happened to be configured first.
+
+Salesforce frames this as a shared responsibility model, and that framing is the right place to start because it draws the line between what the platform guarantees and what you must design. [^2]
+
+![The enterprise security model: identity, authentication, authorization, and data protection applied consistently across every system in the enterprise, with the CRM, ERP, warehouse, billing, and data warehouse all governed by the same security band](</diagrams/cta-security-enterprise-grade-security-model-across-systems/1-enterprise-security-model.png>)
+
+## The shared responsibility line
+
+The **shared responsibility model** is the division of security duties between the cloud provider and the customer. Salesforce secures the cloud: the infrastructure, the network, the encryption services, the platform, and the application itself, against global standards such as ISO 27001, SOC 2, and the General Data Protection Regulation (GDPR). The customer secures what happens in the cloud: defining access, enforcing privacy, managing integrations, and implementing strong identity and access management that grants only necessary access. [^2]
+
+That line is the first thing you draw in any security scenario, because it tells you which controls you are responsible for designing and which you can assume. You do not design the network perimeter or the physical data center. You do design who can log in, what they can do, how data is classified, and how integrations authenticate. A common failure in board answers is a candidate who treats security as something the platform does for you. The platform secures the cloud; you secure the org. The moment you blur that line, you inherit responsibility for controls you never designed.
+
+The practical consequence is that your security model is built from the controls on your side of the line. Those controls fall into four groups, and the rest of this lesson is about designing them consistently across every system: identity, authentication, authorization, and data protection.
+
+## Identity and authentication across systems
+
+**Identity** is who a user is. **Authentication** is proving it. In an enterprise with many systems, the first design decision is where identity lives, and the answer should be one place.
+
+The pattern is **federated identity with single sign-on (SSO)**. One identity provider becomes the single source of truth for who a user is, and every system trusts it rather than maintaining its own user directory. When a user signs in to the identity provider, that session is shared across the systems that trust it, so the user signs in once and reaches every connected system without re-entering credentials. [^2] This is not a convenience feature. It is a security control. When identity is federated, you can revoke a user in one place and they lose access everywhere. When each system keeps its own directory, a departing employee keeps access to every system you forgot to deprovision, and you will forget some.
+
+Authentication itself needs a second factor. Salesforce's guidance is explicit that enforcing two-factor authentication (2FA) is part of the customer's responsibility, and the same principle applies to every system in the model. [^2] A password alone is a credential an attacker can steal or guess. A second factor, a one-time code, a hardware key, or a biometric, means a stolen password is not enough to get in. In an enterprise model, MFA is not optional per system; it is the standing rule for every system that holds customer data.
+
+The model also needs **adaptive and conditional access**. This is the idea that the strength of authentication scales with the risk of the request. A user on a known device from the office network gets a normal sign-in. The same user from an unfamiliar device in a new country gets a step-up challenge. [^2] This is where the security model starts to look like a design rather than a checklist, because you are deciding the conditions under which access is granted, not just whether a password is correct.
+
+For system-to-system access, the same discipline applies but the actors are not people. An integration that reads customer data is an identity too, and it must authenticate with a service credential, an OAuth flow, or a named credential, never with a shared human password. The Data 360 security architecture makes this concrete: connectors authenticate with OAuth 2.0, API keys, or private-key authentication depending on the target system, and data moves over encrypted channels. [^3] The principle is that every actor, human or machine, has an identity and proves it.
+
+## Authorization: the four-layer access model
+
+**Authorization** is what a user is allowed to do after they are authenticated. This is where Salesforce's model is genuinely a design discipline, because access is not one decision. It is four decisions stacked on top of each other, and a user must be granted at every layer to reach a record.
+
+The **four-layer access model** is the way Salesforce structures authorization: organization, object, field, and record. [^1]
+
+- **Organization level.** The outermost layer. It controls who can get into the org at all: license types, login IP ranges, and login hours. A user who is not allowed in at this layer never reaches the data.
+- **Object level.** The next layer. It controls what a user can do with a whole object, the create, read, update, and delete (CRUD) permissions granted through profiles and permission sets. A user with no read permission on the Account object sees no accounts anywhere.
+- **Field level.** The next layer. Field-level security controls whether a user can see and edit each individual field. A user can read an Account but not its credit card number, because the field is hidden at this layer.
+- **Record level.** The innermost layer. It controls which individual records a user can see, through organization-wide defaults (OWDs), the role hierarchy, sharing rules, and manual sharing. A user can read Accounts but only the ones their role and sharing rules expose.
+
+The load-bearing idea is that access is additive. A user must be granted at every layer to reach a record, and the most restrictive layer wins. [^1] This is why you cannot secure an org by setting one permission. You can give a user full object access and still hide every record from them with a restrictive OWD. You can give them record access and still hide the sensitive field. The model only works when you design all four layers together, and the board question is usually about whether you can name which layer stops a given user from seeing a given piece of data.
+
+![The four-layer access model: organization, object, field, and record, nested from outermost to innermost, with access granted additively at every layer before a user reaches a record](</diagrams/cta-security-enterprise-grade-security-model-across-systems/2-four-layer-access-model.png>)
+
+The same layered thinking applies across systems, and this is where the CTA adds value. Salesforce's own guidance describes the move from role-based access control (RBAC), where access is granted by a user's role, toward attribute-based access control (ABAC), where access is granted by attributes of the user, the resource, and the context. [^2] In a multi-system model, you want the access rules to be consistent even though the enforcement mechanisms differ. A user who can see a customer record in Salesforce should be governed by the same policy when that record is activated in the data platform. The model is the policy; each system is just the enforcement point.
+
+The governing principle at every layer is **least privilege**: grant only the access a user needs to do their job, and no more. [^2] Least privilege is not a single setting. It is the standing rule that every grant, at every layer, in every system, is justified by a need. When you cannot justify a grant, you do not make it.
+
+## Data protection: encryption, masking, and residency
+
+The fourth group of controls protects the data itself, and it has three parts: encryption, masking, and residency.
+
+**Encryption at rest and in transit** is the baseline. Data is encrypted while it sits in storage and while it moves between systems. Salesforce's guidance treats this as the foundation of the data lifecycle: from the moment data is ingested, it is encrypted, validated, and classified under enterprise policies, and outbound flows are protected through encrypted channels. [^2] In a multi-system model, you must verify that every system in the chain encrypts data at rest and that every hop between systems uses an encrypted channel, typically TLS. A single unencrypted hop is a hole in the model.
+
+The encryption strategy is a real design decision, not a default. Salesforce's Trust guidance frames it as a choice between volume-level encryption and field-level encryption. [^1] Volume-level encryption is always on and uses a Salesforce-managed key; it protects the whole org at rest. Field-level encryption, delivered through Shield Platform Encryption, protects specific fields with keys you can manage, and it is the right choice when a compliance, contractual, or classification obligation requires more than the baseline. Within field-level encryption you choose a scheme: **probabilistic** encryption, which is the most secure but limits filtering and sorting, or **deterministic** encryption, which allows exact-match filtering but is weaker because identical values encrypt to identical ciphertext. [^1] The standing rule is to encrypt probabilistically by default and reserve deterministic encryption for fields you must filter or sort on.
+
+![The encryption strategy decision: volume-level encryption is the always-on baseline, and Shield Platform Encryption with a probabilistic or deterministic scheme is added only when a compliance, contractual, or classification obligation requires more](</diagrams/cta-security-enterprise-grade-security-model-across-systems/4-encryption-strategy.png>)
+
+**Data masking** is the second part. Masking hides sensitive values from users who should not see them, while leaving the data usable for the systems that need it. The Data 360 architecture describes dynamic data masking as part of its governance framework, applied consistently across all data consumption. [^2] The design question is which fields are masked for which roles, and the answer should follow the same least-privilege logic as access: a support agent who needs a customer's name but not their full card number gets the masked value.
+
+**Data residency** is the third part. Residency is where data is allowed to live, and it is driven by regulation and contract. Some data must stay in a specific region, and the model must ensure that data does not move to a region where it is not allowed. In a multi-system model, residency is a constraint on the whole data path, not just the source system. If a record must stay in the EU, then every system that touches it, including the data platform and any analytics, must keep it in the EU.
+
+## Defense in depth and the weakest link
+
+The controls above are layered, and that layering is itself the design. **Defense in depth** is the principle that you do not rely on any single control to protect the estate. You layer preventive, detective, and responsive controls so that a failure in one layer does not compromise the whole. [^1]
+
+- **Preventive controls** stop access before it happens: CRUD and field-level security, transaction security policies, and the access model you just designed.
+- **Detective controls** tell you when something is wrong: event monitoring, audit trails, and feeds into a security information and event management (SIEM) system.
+- **Responsive controls** act when a threat is detected: step-up authentication, session termination, and an incident response plan.
+
+The reason defense in depth matters in this domain is the weakest-link problem, and it is the single most important idea in this lesson. A hub that aggregates five systems is only as safe as its weakest credential. [^1] You can build a fortress around Salesforce, but if the ERP that feeds it uses a shared password, the attacker does not need to break your fortress. They walk in through the ERP. The enterprise security model is only as strong as the least protected system in the chain, so the model has to be applied consistently, not just to the systems you like.
+
+![Defense in depth: preventive, detective, and responsive controls layered around an integration hub that aggregates five systems, so one failure does not compromise the whole](</diagrams/cta-security-enterprise-grade-security-model-across-systems/3-defense-in-depth.png>)
+
+This is where the security model and the integration strategy from lesson 62 have to agree. The integration strategy decided which systems talk to each other and how. The security model decides how those connections are protected. A hub that aggregates five systems concentrates both data and risk, so the security model around the hub has to be stronger, not weaker, precisely because the integration strategy made it the center of the estate.
+
+## Worked example: Meridian's enterprise security model
+
+Meridian is the company from lesson 62. It runs Salesforce as the front office, an ERP for fulfillment, a data warehouse for analytics, and a billing system. The integration strategy made Salesforce the hub: the quote and the sales order flow out to the ERP, and order status and inventory flow back. Now Meridian needs the security model that governs all of it.
+
+Start with the shared responsibility line. Meridian assumes Salesforce secures the cloud: the infrastructure, the network, the platform, and the application, against ISO 27001, SOC 2, and GDPR. Meridian designs everything on its side of the line: who can log in, what they can do, how data is classified, and how the integrations authenticate.
+
+Identity and authentication. Meridian picks one identity provider as the single source of truth and federates every system to it. Users sign in once and reach Salesforce, the ERP, the warehouse, and billing without re-entering credentials. Meridian enforces MFA on every system that holds customer data, and it turns on adaptive access so a sign-in from an unfamiliar device gets a step-up challenge. For system-to-system access, the integration hub authenticates to the ERP and the warehouse with OAuth 2.0 and named credentials, never with a shared human password.
+
+Authorization. Meridian applies the four-layer access model in Salesforce. A support agent has object access to Accounts and Cases, field-level security that hides the card number, and record access limited by role and sharing rules to the accounts they serve. The same policy governs the data platform: when a customer record is activated for analytics, the access rules follow it, so a user who cannot see a field in Salesforce cannot see it in the warehouse either. Every grant follows least privilege.
+
+Data protection. Meridian encrypts data at rest and in transit across every system. It uses volume-level encryption as the baseline and adds Shield Platform Encryption for the card number and other regulated fields, encrypted probabilistically because Meridian does not need to filter on them. It masks the card number for support roles that need the customer's name but not the full number. And it enforces residency: records that must stay in the EU never leave the EU region, including in the warehouse and analytics.
+
+Defense in depth. Meridian layers preventive controls (the access model, transaction security), detective controls (event monitoring, audit trails, SIEM feeds), and responsive controls (step-up authentication, incident response). And it applies the model to every system, not just Salesforce, because the hub is only as safe as the weakest credential among the five systems it aggregates.
+
+That is the whole model in one pass. Notice what it did not do. It did not list security features. It made four standing decisions, identity, authorization, data protection, and defense in depth, and applied them consistently across every system. That is the CTA security domain.
+
+## The pitfall to avoid
+
+The most common failure in this domain is treating security as a per-system checklist instead of a model. A candidate who says "Salesforce has MFA, the ERP has MFA, the warehouse has MFA" has not designed a security model; they have listed features. The model is the standing decision that makes those features consistent: one identity provider, one access policy, one data protection posture, applied everywhere. The board question is not whether each system has controls. It is whether the controls add up to a coherent model, and whether the weakest system in the chain is protected as well as the strongest.
+
+The second failure is forgetting the shared responsibility line and assuming the platform secures the org. The platform secures the cloud. You secure the org. If you cannot name which controls are yours, you have not designed the model.
+
+## Try it
+
+Take the Meridian scenario and design the security model yourself, on paper, without looking back at my version. Do it in four steps:
+
+1. Draw the shared responsibility line and list the controls on Meridian's side of it.
+2. Decide identity and authentication: where identity lives, how users sign in across systems, and how the integration hub authenticates to the ERP and the warehouse.
+3. Apply the four-layer access model to a support agent who needs to see a customer's name but not their card number, and state which layer stops each piece of data.
+4. Choose the encryption strategy for the card number and justify the scheme, then state how residency is enforced across the data path.
+
+When you are done, compare each decision against the criterion the board applies: does it name the control it is responding to, and does it stay consistent with the other three decisions? If your identity decision contradicts your data protection decision (for example, an identity provider that does not enforce MFA on the system holding the card numbers), the model is incoherent and a judge will find the seam.
+
+## What's next
+
+This lesson built the security model from its decisions: the shared responsibility line, federated identity, the four-layer access model, encryption and masking, and defense in depth. Lesson 64 takes the next CTA domain to the same depth: CTA data, covering data strategy, governance, quality, and lineage. You will learn how an enterprise decides what data it needs, how that data is governed and kept trustworthy, and how lineage makes every transformation traceable. That is where the security model and the data strategy have to agree, because the access controls this lesson designed are only as good as the governance that decides who owns each piece of data and how it may be used.
+
+[^1]: Salesforce Architects. [Trust](https://architect.salesforce.com/docs/architect/well-architected/guide/trust.html). The Well-Architected Trust pillar covers the shared responsibility model, the four-layer access model, least privilege, defense in depth, and the encryption strategy (volume-level versus field-level, probabilistic versus deterministic).
+[^2]: Salesforce Architects. [Data 360 Security Architecture](https://architect.salesforce.com/docs/architect/fundamentals/guide/data360_security_architecture). Describes the shared responsibility model, federated identity and single sign-on, adaptive and conditional access, two-factor authentication, the move from RBAC to ABAC, encryption at rest and in transit, dynamic data masking, and API security.
+[^3]: Salesforce Architects. [Data 360 Security Architecture: Securing System-to-System Integration](https://architect.salesforce.com/docs/architect/fundamentals/guide/data360_security_architecture#secure-system-to-system-integration-data-integration-in-data-360). Connectors authenticate with OAuth 2.0, API keys, or private-key authentication depending on the target system, and data moves over encrypted channels.
