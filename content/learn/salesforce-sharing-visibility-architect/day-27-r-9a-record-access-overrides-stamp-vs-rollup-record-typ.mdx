@@ -1,0 +1,143 @@
+---
+title: "Record Access Overrides: Stamp vs Rollup (Record Type, Field Update, Formula)"
+slug: day-27-r-9a-record-access-overrides-stamp-vs-rollup-record-typ
+series: salesforce-sharing-visibility-architect
+lesson: 27
+excerpt: "How to override a record's access by stamping a security-relevant value onto it (record type, custom field, picklist) or computing it (formula, rollup), then driving a criteria-based sharing rule from that value."
+date: 2026-10-09
+author: Jimmy Olsen
+readTime: "14 min read"
+tags: [salesforce, sharing, visibility, architect, access-overrides, sharing-rules, record-types, formula-fields, rollup-summary, stamp]
+---
+
+# Record Access Overrides: Stamp vs Rollup (Record Type, Field Update, Formula)
+
+The last few lessons built access from the ground up: OWD set the baseline, the role hierarchy granted ownership-based access, sharing rules granted group-based access, and relationship-based tools handled accounts and external users. Every one of those mechanisms decides access for a class of records using a rule you wrote once. This lesson is about the other side of the coin, the override, where a single record's access has to be different from what the general rules would produce, and where the value that drives that difference gets onto the record in one of two very different ways: a stored stamp or a computed value.
+
+The exam objective r-9a asks you, given a scenario, to determine how record access overrides support the record access requirements. That is a decision question. You will be handed a requirement ("the Finance team sees only the records stamped for Finance, and only after recalc") and asked which override pattern produces it declaratively. The answer almost always comes down to the same judgment call you will make all day as an architect: do you store a value onto the record so a criteria rule can read it, or do you compute the value so it stays correct without anyone maintaining it? This lesson teaches you to name each approach, work the trade-offs, and pick the one the scenario rewards.[^1]
+
+## Define the terms
+
+**Record access override.** Any mechanism that changes the access a specific record gets beyond what the org-wide defaults, role hierarchy, and standard sharing rules would otherwise give it. Overrides are how you carve out the exception: a record the whole team should see, or a record only one group may touch. They come in declarative forms (sharing rules driven by a stamped field, manual sharing, manual share via hierarchy) and programmatic forms (Apex Managed Sharing). This requirement is about the declarative override patterns and when each is the right tool.[^1]
+
+**Stamp (stamped field / stamping).** The act of copying or deriving a security-relevant value onto a record so that a rule or a formula can later read it and decide access. The term comes from the idea that you are pressing a label onto the record, like a stamp on an envelope, that a sorter can read at a glance. The value you stamp is often the identity of a group or role that the record should be shared with, or a category (region, process, tier) that a criteria rule maps to a group. A stamp is a stored value: it lives in a real, writable field on the record, so it persists, it queries fast, and something has to keep it current.[^2]
+
+**Stored vs computed.** This is the central axis of the whole lesson. A stored value is written once and stays until something rewrites it; a later process can read it instantly and cheaply. A computed value is derived on demand from other values, so it cannot go stale relative to its inputs, but it costs work to produce every time it is read and it only exists while it is being evaluated. Record access stamps store, and record access rollups and formulas compute. Almost every scenario question in this requirement is an exercise in weighing these two properties.
+
+**Record type.** A field on every record that splits an object's data, page layouts, picklist values, and business processes into named streams (for example, a Standard Case and a High-Priority Case). Because the record type is a real, queryable field, a criteria-based sharing rule can reference it directly. Setting the record type is the process-based stamp: you point the record at the business process it belongs to, and sharing follows that process.[^3]
+
+**Criteria-based sharing rule.** A sharing rule that selects records by a condition on field values (for example, Record Type equals High-Priority) and grants a group access to every record that matches. Unlike an ownership-based rule, which selects by owner, a criteria rule reads the record's fields, which means whatever value your stamp or rollup produces has to be present and current for the rule to act on it. The rule's grants are materialized as sharing rows, and they go stale until recalculation runs.[^2][^4]
+
+**Formula field / rollup.** A field whose value Salesforce computes from other fields or related records rather than storing. A roll-up summary field aggregates detail records on a master (sum, count, max across the related children). A formula field computes from fields on that record, from a parent record, or, with a cross-object formula, from a field several hops away. Both are computed, which means they stay correct when their inputs change, and neither one needs a flow or a trigger to stay in sync. For record access, that "stays correct automatically" property is exactly what you are buying, and the compute cost is what you pay.[^5][^6]
+
+**Override scenario.** The concrete situation the exam hands you: a business requirement that a subset of records be accessible to a group in a way the baseline does not produce, with the constraint that you should reach that outcome in the declarative model rather than writing Apex. Your job is to choose the stamp (or rollup) and wire the criteria rule so the requirement is met with the least machinery and the least risk of going stale.
+
+## Why it matters for the exam and for real builds
+
+Every architect eventually faces the requirement that one team sees a slice of records that OWD and the role hierarchy do not hand them, and that the slice is defined by something the business thinks of as a category ("the finance-process deals," "the high-priority cases," "the partner-tier accounts"). If you try to meet it by relaxing OWD or by giving the team View All, you over-grant and quietly break least privilege. If you try to meet it with a heavier mechanism than the requirement calls for, you pay maintenance and licensing cost you did not need to pay.
+
+The stamp-then-share pattern is the adjustable middle ground. You pick the value that encodes the requirement (a record type, a custom field, a picklist), you keep it on the record, and you point a criteria rule at it. When the business asks "can we also let the Compliance group see the compliance-flagged records?", you add a group, a value, and a rule, and you do not touch OWD or the default model. This is the entire reason the exam tests overrides under "Access to Records": the override is how you customize access at the per-record or per-criteria level without abandoning the shared model underneath.[^1]
+
+The architect-specific nuance the exam watches for is that stamps and formulas have opposite failure modes. A stamp fails by going stale when nothing updates it. A formula fails by costing too much or by being too limited for sharing. The correct answer in a scenario is the one whose failure mode the requirement can tolerate, and a big part of this lesson is learning to name that trade-off cleanly.
+
+## Two ways a value reaches the record: stamp or compute
+
+Everything in this requirement rests on one distinction, so make it instinctive before you touch any configuration.
+
+A **stamp** is a stored value that a process writes. You can query it, you can index it, criteria rules read it instantly, and its value persists until a flow or trigger covers it. The cost: you must keep the stamp in sync. If a record changes category and nothing rewrites the stamp, the record keeps advertising the old category and sharing acts on the wrong value. Syncing is a real, ongoing operational duty, not a one-time setup.
+
+A **computed value** (formula or rollup) is derived on demand. Because it recomputes from its inputs every time it is evaluated, it can never disagree with those inputs, so there is no sync duty. The cost: computing a value on every record scan is work, and a criteria-based sharing rule does exactly that, it evaluates the condition across records. Formulas have functional limits on what they can aggregate, and a roll-up summary field only works over a master-detail relationship. So the computed approach buys correctness and pays compute and reach.
+
+The four-word exam slogan to carry: **stored stamps need sync, computed values cost compute.** Every question in this requirement, and every design decision behind it, is a restatement of that trade-off. We will spend the rest of the lesson proving it with the three concrete mechanisms.
+
+## Mechanism one: record-type stamping (process-based access)
+
+The cleanest stamp is the one Salesforce already gives every record: the record type. It is a real, required-in-effect field that splits an object into named business processes, and because it is a field, a criteria-based sharing rule can read it.[^3]
+
+The pattern is direct. You define the record types that encode your business processes. You drive records to the right type, either through the page layouts and picklist values each type exposes to users, through an assignment rule that sets the type when a record is created, or programmatically when a scenario calls for it. Then you build a criteria-based sharing rule that selects records where Record Type equals the type whose access you want to grant, and you target the group of users who should see that process's records.
+
+Why this works as an override: the record type travels with the record and is almost always kept current, because it drives the page layout, the picklist values, and the workflow the user sees. A case that is urgent is set to the urgent process, and the record type being correct is a feature of the business process, not an add-on duty for the flow. That means the stamp stays in sync for free, a genuine advantage over a custom field you have to remember to maintain.
+
+The trade-off is baked into the mechanism. Record types divide an object into a handful of streams, they are not meant to be a fine-grained access matrix. If your requirement is "grant this group access to 3 of 200 categories," record types will fight you, because you would be inventing a type per category and polluting the business-process design with a security construct. Record-type stamping is for requirements that align with actual business processes, and it is the first thing to reach for when they do, because it is the least machinery of any override.[^3]
+
+A worked example: an org runs a Support object with two record types, Standard and Priority. The priority team must see every Priority case regardless of who owns it, while everyone else sees the default. The architect creates a criteria-based sharing rule on Case where Record Type equals Priority, targeting the priority team at Read/Write. No custom field, no flow, no trigger. Priority cases are already stamped with the type by the support process, the rule reads it, and the override exists.[^2]
+
+## Mechanism two: field-update stamping (the stamp-then-share pattern)
+
+When the requirement does not align with a record type, you stamp a value into a dedicated field and point a criteria rule at it. This is the pattern the exam calls the custom-field stamp, and in practice it is the most common override you will build.
+
+You add a custom field that encodes the access-relevant category, commonly a picklist or a text field named something like `Visibility_Group__c` or `Sharing_Group__c`, the name matters less than the discipline of using one field for one access decision. A flow or a workflow field update writes the value to that field. The field then drives a criteria-based sharing rule, which grants the matching group access to every record stamped with their value. Change the stamp, change the group that sees the record, and the rule does the rest after recalculation.[^2]
+
+The critical difference from a record type: this field's value is not maintained by any business process, it exists only for sharing. That makes sync an explicit duty. Something has to keep `Visibility_Group__c` correct when the underlying facts change, and that something is a flow or a trigger you own. The flow has to fire on the right record changes, write the right value, and handle the case where the record stops qualifying (which means clearing or changing the stamp so the rule stops granting). A stamp that is never cleared is a grant that never ends.
+
+A worked example: an org wants the Finance group to see every Opportunity whose value clears a threshold and belongs to a finance-process deal. A record type is too coarse (Finance is not a business process, it is an access category), so the architect adds `Opportunity_Access_Group__c` as a picklist. A before-save Flow evaluates the deal and writes "Finance" into the field when the criteria hold and blanks it when they do not. A criteria-based sharing rule selects Opportunities where `Opportunity_Access_Group__c` equals Finance and grants the Finance group Read Only. The flow is the sync duty; the rule is the grant; together they produce per-record override access declaratively.[^2]
+
+This is the pattern to memorize as "stamp then share by criteria." Identify the criteria, stamp the value onto the record, write the rule that shares by that value, keep the stamp in sync, and test both the stamped and unstamped cases. We formalize it as numbered steps later in this lesson because it is the spine of the whole requirement.
+
+## Mechanism three: formula and rollup (computed access)
+
+The third mechanism skips the stamp entirely. Instead of writing a value, you compute it from existing data, and the computed value drives sharing. This is the rollup and the formula, and it is the answer whenever the access label can be derived from the record's own fields or from a related record, rather than having to be separately authored.
+
+A **roll-up summary field** aggregates detail records on a master: the sum, count, min, or max across the related children. For access, the useful case is a rollup that surfaces information from line items or child records onto the parent so a criteria rule can act on it. Imagine an object with children, and the access decision depends on what the children contain, for example "show the Account to a team when any of its related Opportunities is a finance deal." A roll-up summary field on Account can expose that, for instance a count or a max over the Opportunities, and the criteria rule reads it. The key property: Salesforce recomputes the rollup when the related children change, so it stays correct without a flow, no sync duty.[^5]
+
+A **formula field** computes from the record itself, from its parent, or across the relationship graph. The requirement's deep dive calls out the MAX case: a formula can expose the maximum access level among line items or child records so sharing can grant the strongest access a related record earns. Because a formula reads data and returns a value on demand, it can drive a criteria rule the same way a stamped field does, but with nothing to maintain.[^6]
+
+The trade-off is where the exam leans. Formulas and rollups are computed, so they cannot go stale, but computing them across a large data set is expensive, and criteria-based sharing rules evaluate conditions across records, which multiplies the cost. Salesforce also limits what formulas and rollups can aggregate and how sharing rules can use them. Roll-up summary fields require a master-detail relationship, so a lookup-based child cannot feed one. Formula fields have their own ceiling on complexity and on cross-object reach. And recall the platform rule Quest: a roll-up summary field cannot aggregate across a cross-object formula, so the most flexible derived values can bolt onto sharing only with care.[^5][^7]
+
+A worked example: an org wants the team that deals with any high-value quote line to see the whole Quote. Instead of stamping each Quote with a "high value" flag, the architect adds a roll-up summary field on Quote that computes the maximum line amount across all `QuoteLineItem` children, then a criteria-based sharing rule selects Quotes where that max exceeds the threshold and grants the team access. The rollup recomputes automatically as lines change, so a line added later automatically includes the Quote, no flow, no stale flag, and the negative case (removing the qualifying line) also un-grants after recalc because the computed value drops below the threshold.[^5]
+
+## The trade-off, stated precisely
+
+The exam wants you to reason, not just recognize patterns, so hold the three-way comparison explicitly.
+
+A **stored stamp** (record type, custom field) is fast to query and stable, because the value sits in an indexed, real field that criteria rules read instantly. Its cost is the sync duty: a flow or trigger must keep it correct, and a stamp that goes stale produces grants that persist past the reason for them. Stamps also work in any relationship shape, because a stored field exists on the record regardless of how the record is related.
+
+A **formula or rollup** is computed, so it can never disagree with the data it derives from, and it needs no sync. Its cost is compute, which scales with the rows a rule scans, and its aggregation limits, because rollups need a master-detail relationship and formulas cannot do everything. For access, a computed value is effectively limited: it can aggregate a fixed set of math (sum, count, max, min) and it cannot, for example, drive the deep per-record logic that a maintained stamp can encode.
+
+The decision rule the exam rewards: choose the stamp when the requirement is maintained by an existing process (a record type, a field the business already keeps current) or when queries must be fast at scale, and choose the formula or rollup when the label derives cleanly from existing data, stales dangerously when not recomputed, and the data volume is small enough that the compute cost is acceptable. When in doubt, a stored stamp on a process-maintained field is the safer default, and a computed value is the cleaner default when the data volume is low and correctness matters more than query cost.
+
+## Numbered configuration walkthrough
+
+Walk these steps for the stamp-then-share pattern, which is the requirement's canonical declarative override. The order matters, because the rule can only grant on a value that is present and current.
+
+**Step 1: Identify the criteria that should define access.** Write down, in a sentence, which records should reach which group, from a source the platform can read. That is either an existing field (Record Type, Region, Status) or a category you will compute (a rollup over children, a formula over the record). Name the group that should receive access. The sentence "records where X equals Y go to group Z" is your whole design; everything after is wiring.
+
+**Step 2: Choose the stamp.** Based on what step 1 named, pick record type for process-aligned access, a custom field updated by flow or trigger for a maintained category, or a formula or rollup for a value you can derive. This single choice sets every requirement that follows: record type and stored field need a sync mechanism; formula and rollup do not. If you picked a computed value, confirm the data volume and the relationship shape can support it before you commit.
+
+**Step 3: Reference the stamped field in a criteria-based sharing rule.** In Sharing Settings, create a criteria-based sharing rule for the object. In the criteria, reference the stamped or computed field (Record Type equals Priority, `Visibility_Group__c` equals Finance, or Max_Line_Amount greater than the threshold). Select the group to grant, choose the access level (Read or Read/Write), and save. The rule materializes share rows for the records that match at save time.[^2]
+
+**Step 4: Keep the stamp in sync and plan the recalculation.** If you chose a stored stamp, build the flow or trigger that writes it on create and on the field changes that should move a record to a different category, and clear it when the record stops qualifying. Recognizing the reality of criteria rules: their grants can go stale until recalculation runs, because the rule does not re-scan every record on every field edit. When a data change must take effect immediately for a security audit, trigger Recalculate from Sharing Settings, or rely on a computed value that separates the grant from any manual maintenance.[^4]
+
+**Step 5: Test the positive and the negative.** Log in as a member of the target group. Confirm the records stamped to that group appear, that records stamped to another group do not, and that a record whose stamp or computed value puts it outside the rule stays invisible. Then change a record's stamp (or its inputs, for a computed value), run Recalculate, and confirm the grant appears or disappears as the new value dictates. The negative test is the one that proves the override is scoped correctly; a stamp that is never cleared or a rule that cannot distinguish categories will fail it loudly.[^4]
+
+## Exam traps to avoid
+
+**Trap: a stored stamp goes stale when nothing updates it.** The field holds the value that sharing reads, but the value is only as current as the flow or trigger that writes it. If a record qualifies for a group and the flow does not fire (wrong trigger, a bypass, a field edited outside the flow's path), the record either misses a grant it should have or keeps a grant it no longer justifies. Treat the sync mechanism as part of the override, not as an afterthought, and test the path that changes a record's category, not just the happy path.[^2][^4]
+
+**Trap: a criteria rule cannot act on a value that is stale or absent.** The rule evaluates fields on the records that exist at save time, and its grants persist until recalculation. A record stamped with the matching value after the rule ran will not be shared instantly; the grant appears only after the platform recalculates, and a rule whose stamps are not maintained never produces the current answer. Since criteria evaluation and recalculation are asynchronous, expect the window and design for it, do not be surprised by it.[^4]
+
+**Trap: reaching for a rollup or formula to drive sharing at scale.** Computed values are correct but expensive, and a criteria rule that evaluates a rollup across a large data set can hammer the platform, plus rollups only aggregate over a master-detail relationship, and a cross-object formula cannot feed a rollup. The requirement to remember: weigh the compute cost and the aggregation limits against a stored stamp, and pick the stored stamp when volume is high or the relationship will not support a rollup.[^5][^7]
+
+**Trap: over-granting to avoid the override.** Giving the group View All, relaxing OWD, or throwing an Account Team at a requirement that calls for a stamped field destroys the model the override was supposed to protect. Overrides exist precisely so you can create precise access without over-granting; if the answer to a scenario relaxes the baseline, it is almost always the wrong answer.[^1]
+
+## Try it yourself
+
+In a sandbox, add a custom picklist field `Visibility_Group__c` to a custom object (or to Account) and create two public groups, Team Alpha and Team Beta. Build a before-save Flow that writes Team Alpha into the field when one condition holds and Team Beta when another does, and clears it otherwise. Create a criteria-based sharing rule that shares records where `Visibility_Group__c` equals Team Alpha with Team Alpha at Read Only, and the matching rule for Team Beta. Create a record stamped Team Alpha, log in as a Team Alpha member, and confirm you see it and not the Beta record. Now change the Alpha record's stamp to Beta, and before recalculation notice whether it stays visible to Alpha; run Recalculate and watch the grant move. Then, to feel the computed alternative, add a roll-up summary field that computes a MAX over a child object and drive a second criteria rule from it, add a child that changes the MAX, and confirm the rule picks the record up without any flow having touched the parent. You have just built both a stored stamp and a computed rollup, and watched the async recalc behavior that separates them.
+
+## When to pick which, in one screen
+
+Keep a short decision frame for the scenario questions. If the label already lives in a process-maintained field (record type, region, status), use that field as the stamp, no field and no flow to build. If the label does not exist and must be maintained, add a `Visibility_Group__c` style field and the flow or trigger that keeps it current. If the label can be derived from existing data (a MAX over children, a count, a threshold on related records), use a formula or rollup and skip the sync duty, provided the data volume is small and the relationship can support it. And if none of the declarative mechanisms reaches the requirement cleanly, the honest escalation is Apex Managed Sharing, which the curriculum covers in the programmatic lessons, not a relaxation of the baseline.[^1][^5]
+
+This decision frame is exactly what Lesson 28 sharpens next, so keep it vivid in your head.
+
+## What's next
+
+Tomorrow is lesson 28, Override Scenarios: Manual Sharing vs Stamp vs Custom Logic, which completes this requirement. Where today gave you the two mechanisms, a stored stamp and a computed rollup, and tore apart the trade-off between them, lesson 28 pushes you into full scenario territory: when an override on an individual record should be a manual share, when it should be a maintained stamp, and when the requirement outgrows the declarative model and needs custom logic. Bring today's trade-off and today's decision frame, because every scenario next is an applied test of the distinction you just built.[^1]
+
+[^1]: Salesforce, "Salesforce Certified Platform Sharing and Visibility Architect Exam Guide," Salesforce Help, https://help.salesforce.com/s/articleView?id=005298977&language=en_US&type=1
+[^2]: Salesforce, "Create Criteria-Based Sharing Rules," Salesforce Help, https://help.salesforce.com/s/articleView?id=platform.security_sharing_rules_criteria.htm&type=5
+[^3]: Salesforce, "Create Record Types," Salesforce Help, https://help.salesforce.com/s/articleView?id=platform.creating_record_types.htm&language=en_US&type=5
+[^4]: Salesforce, "Considerations for Making Sharing Updates," Salesforce Help, https://help.salesforce.com/s/articleView?id=platform.security_sharing_update_considerations.htm&type=5
+[^5]: Salesforce, "Roll-Up Summary Field," Salesforce Help, https://help.salesforce.com/s/articleView?language=en_US&id=platform.fields_about_roll_up_summary_fields.htm&type=5
+[^6]: Salesforce, "Build a Formula Field," Salesforce Help, https://help.salesforce.com/s/articleView?language=en_US&id=platform.customize_formulas.htm&type=5
+[^7]: Salesforce, "Formula Operators and Functions by Context," Salesforce Help, https://help.salesforce.com/s/articleView?id=platform.customize_functions.htm&type=5
