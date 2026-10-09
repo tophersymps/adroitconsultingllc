@@ -2,6 +2,30 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "localization-layout-design-systems-2026",
+    "title": "Your Design System Speaks One Language. That Is a Bug.",
+    "excerpt": "English-first layouts break when a German word grows, an Arabic word reads right to left, or a Chinese string grows taller. Fixing that is design engineering.",
+    "category": "UI/UX",
+    "categoryColor": "ux",
+    "categoryGradient": "from-violet to-violet-dark",
+    "date": "October 9, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "UI/UX",
+      "Design Systems",
+      "Localization",
+      "Internationalization",
+      "RTL",
+      "Accessibility",
+      "Design Engineering"
+    ],
+    "bannerImage": "/banners/localization-layout-design-systems-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "semantic-caching-llm-agents-2026",
     "title": "Similar Is Not the Same: The Risk Hidden in Semantic Caching",
     "excerpt": "Semantic caching reuses similar answers, not just identical ones, cutting cost and latency. The threshold and scope decide whether it saves money or leaks data.",
@@ -123,7 +147,7 @@ export const posts: BlogPost[] = [
   {
     "slug": "salesforce-data-cloud-strategy-guide",
     "title": "Salesforce Data Cloud Strategy Guide",
-    "excerpt": "Data Cloud is Salesforce's hyperscale data platform, and it changes how you think about the data layer. A pragmatic strategy for getting from proof-of-concept to production.",
+    "excerpt": "Data Cloud is Salesforce's hyperscale data platform, and it changes how you think about the data layer. A pragmatic path from proof-of-concept to production.",
     "category": "Salesforce",
     "categoryColor": "sf",
     "categoryGradient": "from-sky to-sky-dark",
