@@ -2,6 +2,28 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "cross-team-dependency-coordination-2026",
+    "title": "The Dependency Is the Delivery: Coordinating Teams",
+    "excerpt": "Every team can hit its sprint goal and the program still slips. The schedule lives in the seams between teams, the risk most plans never write down.",
+    "category": "Project Management",
+    "categoryColor": "pm",
+    "categoryGradient": "from-teal to-teal-dark",
+    "date": "October 09, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "11 min read",
+    "featured": false,
+    "tags": [
+      "Project Management",
+      "Delivery",
+      "Agile",
+      "Scaling",
+      "Consulting"
+    ],
+    "bannerImage": "/banners/cross-team-dependency-coordination-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "localization-layout-design-systems-2026",
     "title": "Your Design System Speaks One Language. That Is a Bug.",
     "excerpt": "English-first layouts break when a German word grows, an Arabic word reads right to left, or a Chinese string grows taller. Fixing that is design engineering.",
