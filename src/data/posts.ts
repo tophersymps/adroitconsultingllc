@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "llm-judge-truth-vs-format-2026",
+    "title": "The Reviewer Cannot See the Truth",
+    "excerpt": "An 84% agreement LLM judge still measures format, not truth. Chance-corrected agreement tells a truer story. Add the source-fidelity review layer.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "October 10, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "11 min read",
+    "featured": false,
+    "tags": [
+      "AI Agents",
+      "LLM-as-Judge",
+      "Evaluation",
+      "AI Reliability",
+      "AI Infrastructure",
+      "Quality Assurance"
+    ],
+    "bannerImage": "/banners/llm-judge-truth-vs-format-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "salesforce-observability-2026",
     "title": "You Cannot Fix What You Cannot See",
     "excerpt": "A modern Salesforce org fails across six layers that each log somewhere different. Observability means watching each one where the failure actually appears.",
