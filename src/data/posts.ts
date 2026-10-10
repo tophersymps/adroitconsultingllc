@@ -600,6 +600,30 @@ export const posts: BlogPost[] = [
     "status": "published"
   },
   {
+    "slug": "progressive-disclosure-2026",
+    "title": "Progressive Disclosure: Show Less, Reveal the Rest",
+    "excerpt": "Progressive disclosure shows the essentials first and reveals the rest on demand, cutting cognitive load without hiding anything.",
+    "category": "UI/UX",
+    "categoryColor": "ux",
+    "categoryGradient": "from-violet to-violet-dark",
+    "date": "September 23, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "10 min read",
+    "featured": false,
+    "tags": [
+      "Progressive Disclosure",
+      "Interface Patterns",
+      "UX",
+      "Design Systems",
+      "Accessibility",
+      "Wizards",
+      "UI/UX"
+    ],
+    "bannerImage": "/banners/progressive-disclosure-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "project-risk-register-2026",
     "title": "The Risk Register Is Not Paperwork",
     "excerpt": "Only 31 percent of projects deliver on time, on budget, and in scope. The gap is not luck. It is whether you run risk as a weekly habit or file it at kickoff.",
