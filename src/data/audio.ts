@@ -85,6 +85,7 @@ export const articleAudio: ArticleAudio[] = [
   { slug: "pmi-pulse-complexity-2026", voice: "af_heart", storagePath: "blog/pmi-pulse-complexity-2026/af_heart.mp3", timingsStoragePath: "blog/pmi-pulse-complexity-2026/af_heart.timing.json" },
   { slug: "postgres-connection-pooling-serverless-2026", voice: "af_heart", storagePath: "blog/postgres-connection-pooling-serverless-2026/af_heart.mp3", timingsStoragePath: "blog/postgres-connection-pooling-serverless-2026/af_heart.timing.json" },
   { slug: "production-rag-retrieval-quality-2026", voice: "af_heart", storagePath: "blog/production-rag-retrieval-quality-2026/af_heart.mp3", timingsStoragePath: "blog/production-rag-retrieval-quality-2026/af_heart.timing.json" },
+  { slug: "progressive-disclosure-2026", voice: "af_heart", storagePath: "blog/progressive-disclosure-2026/af_heart.mp3", timingsStoragePath: "blog/progressive-disclosure-2026/af_heart.timing.json" },
   { slug: "project-risk-register-2026", voice: "af_heart", storagePath: "blog/project-risk-register-2026/af_heart.mp3", timingsStoragePath: "blog/project-risk-register-2026/af_heart.timing.json" },
   { slug: "prompt-caching-ai-infrastructure-2026", voice: "af_heart", storagePath: "blog/prompt-caching-ai-infrastructure-2026/af_heart.mp3", timingsStoragePath: "blog/prompt-caching-ai-infrastructure-2026/af_heart.timing.json" },
   { slug: "react-19-2-activity-useeffectevent", voice: "af_heart", storagePath: "blog/react-19-2-activity-useeffectevent/af_heart.mp3", timingsStoragePath: "blog/react-19-2-activity-useeffectevent/af_heart.timing.json" },
