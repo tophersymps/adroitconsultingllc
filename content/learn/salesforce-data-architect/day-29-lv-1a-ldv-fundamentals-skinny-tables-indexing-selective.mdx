@@ -1,0 +1,185 @@
+---
+title: "Data Architect LV-1A: LDV Fundamentals: Skinny Tables, Indexing, Selective SOQL, Record Types, Picklists"
+slug: day-29-lv-1a-ldv-fundamentals-skinny-tables-indexing-selective
+series: salesforce-data-architect
+lesson: 29
+excerpt: "Given a customer scenario, design a data model that scales considering large data volume and solution performance, applying skinny tables, custom indexes, selective queries, and caution with record types and picklist proliferation. Covers what large data volume (LDV) actually means and why an object grows past the low millions of records, what makes a query selective and why a non-selective query fails or times out in reports and bulk operations, the selectivity thresholds the query optimizer applies to standard versus custom indexes, which fields the platform indexes by default, how to request a custom index from Salesforce Support, what a skinny table is and why it must be support-enabled and refreshed, why record type proliferation fragments data and adds overhead, picklist proliferation and the reason multi-select picklists cannot be efficiently indexed, and the other LDV levers of wide objects, formula fields, roll-up summaries, and ownership skew. Includes a worked example, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.\"
+date: "October 10, 2026"
+author: "Adroit Consulting"
+readTime: "22 min read"
+tags: [Salesforce, Data Architecture, Large Data Volume, Certification]
+---
+
+Lesson 28 finished the governance side of data architecture. This lesson turns to the other half of the job, volume and performance. It is requirement lv-1a of the Large Data Volume (LDV) Considerations domain, and it asks you to take a customer scenario and design a data model that scales, applying skinny tables, custom indexes, selective queries, and caution with record types and picklist proliferation. [^1]
+
+The exam frames this as a scenario problem. You are handed a customer whose object has grown to five million records, whose reports time out, whose list views crawl, whose nightly batch job fails with a non-selective query error, and you are asked what to do about it. The answer is rarely one thing. It is a set of design choices, index the fields your queries filter on, keep objects narrow, keep queries selective, control the proliferation of record types and picklists, move the data that belongs elsewhere off the working object, and each of those choices maps to one of the concepts in this lesson. The thread that ties them all together is selectivity. Everything in LDV design is an attempt to make the query, the report, or the list view touch as few records as possible.
+
+Hold onto that. The exam's LDV domain is really one idea wearing several coats. If you understand what makes a query selective, why a growing object stops being fast, and which levers a data architect pulls to keep queries selective, you can reason through most of the scenario questions without memorizing a single list.
+
+## What large data volume actually means
+
+Large data volume, LDV for short, is not a hard number that Salesforce publishes as a switch. It is a description of what happens when an object, and usually the whole org, holds enough records that the default performance assumptions stop holding. The Salesforce large data volumes best practices guide is explicit that performance can degrade as your volume of data increases, and that the design goal is to reduce the number of records the system must process. [^2]
+
+In practice the line, and the number the exam leans on, is the low millions of records. An Account object with 200,000 rows is comfortably fast. The same object at three to five million rows starts to expose problems that a small org never sees. Reports that filter on an unindexed field run a full scan of millions of rows and time out. A list view sorts the same huge candidate set on every open. A batch class that queries without a selective filter hits a non-selective query error or a timeout, because the platform refuses to let a transaction chew through millions of rows in a synchronous window.
+
+The important mental shift is that LDV is a property of the interaction between the object's size and the query being run, not of the object alone. The same two-million-row object is fine when every query against it filters on an indexed field that narrows to a few thousand rows, and unusable when a report filters on an unindexed custom text field and forces a scan of everything. That is why the entire discipline is about selectivity. You cannot stop the object from growing, or at least you should not bet your architecture on it. You design so that growth does not take down the queries people actually run.
+
+Why does it degrade? Under the hood Salesforce keeps standard fields and custom fields in separate physical tables that require a join to combine, and a non-selective query against a big object forces the database to scan rows instead of walking an index. The platform even shields custom fields from direct indexing by placing their data in a separate index table, which is why custom fields need explicit index treatment. You will hear the phrase full table scan, and it is exactly what it sounds like, the platform reading through the records one by one to find matches, expensive on a large object no matter how few matches exist. [^3]
+
+## Selective queries: the concept the whole lesson hangs on
+
+A query is selective when it contains a filter on an indexed field that narrows the result set below the selectivity threshold. A query with no selective filter is non-selective, and a non-selective SOQL query requires a full table scan. That definition, from Salesforce's own guidance on making queries selective, is the single most load-bearing sentence in this domain. [^4]
+
+Parse it carefully, because the exam tests it exactly. Three things must be true for a filter to make a query selective. The filter must be on an indexed field. It must return fewer records than the threshold for that index type. And the query optimizer must actually pick that index. Break any one and the query is non-selective regardless of what else is in the WHERE clause.
+
+The field must be indexed. A filter on an unindexed custom field is invisible to the optimizer; it is not even considered. So the first question for any query, report, or list view is whether the filter field has an index. If it does not, no matter how few records the filter would return, the query optimizer has nothing to walk.
+
+The result set must stay under the threshold. Here are the numbers the exam expects you to know, both from the index and selectivity guidance. For a standard index, the filter is selective if it matches less than 30 percent of the first million records and less than 15 percent of the records beyond the first million, with the standard-index threshold capping at a million total targeted records. For a custom index, the filter is selective if it matches under 10 percent of the first million records and under 5 percent beyond that, capping at about 333,000 targeted records. [^4][^5] These are the rule-of-thumb numbers Salesforce publishes, and a scenario question will hand you an object size and a filter cardinality and ask you to judge selectivity.
+
+Run a concrete case. A custom object holds five million records, and a query filters on a custom field that has a custom index. The custom index threshold: 10 percent of the first million is 100,000, plus 5 percent of the remaining four million is 200,000, for a working ceiling of about 300,000. If the filter matches 250,000 records, the query is selective and the index is used. If the filter matches 1.2 million records, it blows past the threshold, the optimizer discards the index, and the query degrades into a scan.
+
+The platform makes this visible. The Query Plan view in the Developer Console is the tool architects use to confirm whether a query is selective, which fields it used, and how much of the object it touched. When you tune a non-selective query, the first move is to open its query plan and see what the optimizer decided. [^4]
+
+The consequence of a non-selective query is not cosmetic. In a trigger, a batch class, or report that crosses large volume, a non-selective filter can cause a SOQL query to fail or time out outright. Salesforce's guidance is direct about this: a non-selective query may cause programmatic elements like a trigger or batch class to fail. [^4] That is the exam's Q1 framing in a nutshell, a report on a five-million-row object times out because it filters on an unindexed custom text field.
+
+## Which fields are natively indexed
+
+Because a selective filter has to run on an indexed field, the exam expects you to know, cold, which fields the platform indexes by default. The large data volumes index guidance lists them: the unique record ID (the primary key), Name, the relationship foreign keys, CreatedDate, SystemModstamp (which backs LastModifiedDate), RecordTypeId, Division, and Email for contacts and leads. Lookups and master-detail relationship fields carry a foreign key index automatically. [^5]
+
+That list is the standard index set, and it answers the exam's recurring question about which fields are natively indexed. It also explains why OwnerId and CreatedDate, the sort of fields that show up as selective filters all over real queries, work out of the box, while a free-form custom text field holding notes does not. The free-form text field is exactly the case that breaks a selective query: nothing indexes it, so any filter on it forces a full scan. [^4]
+
+Two special cases are worth naming because the exam uses them as traps. An external ID field, a custom field marked as external ID or unique, creates an index automatically, because the platform treats an external ID as a candidate for uniqueness. You can create external IDs on auto-number, email, number, and text fields. [^5][^3] And a custom index is a different thing from a standard index entirely, which is the next concept.
+
+## Custom indexes: making an unindexed filter field selective
+
+When a filter field is not natively indexed, you have two options. You can redesign the query to filter on an indexed field, or you can give the field an index. The second is a custom index, and this is where the exam expects you to know the exact mechanism.
+
+A custom index is created on a field at Salesforce's direction, and the request goes through Salesforce Customer Support, not through a Setup toggle you flip yourself. The index and selectivity article lays out the workflow plainly: to custom index a field, you create a support case and provide the affected SOQL query, the values of any binding variables, a user for testing, error messages, and steps to reproduce. [^4] The field eligibility matters too. Custom indexes are supported on custom fields, with a defined set of exclusions, and you must contact Support for other field types including standard fields. [^3][^5]
+
+Which fields can take a custom index and which cannot is a quiet trap. Salesforce supports custom indexes on custom fields except for long text areas, rich text areas, non-deterministic formula fields, and encrypted text fields. [^3][^5] A custom index can be created on a deterministic formula field, but not a non-deterministic one, because a non-deterministic formula's value can change out from under the index. Multi-select picklists are on the non-indexable list, a fact that matters enough to get its own section later in this lesson. [^3]
+
+Now the selectivity threshold for a custom index. Recall the numbers: under 10 percent of the first million records and under 5 percent beyond, capping around 333,000. The example Salesforce gives is a five-million-record table where a custom-indexed filter matches 300,000 or fewer records. [^3][^4] A custom index is stricter than a standard index, meaning the field must be more selective for the optimizer to use the custom index. That asymmetry is a favorite exam detail.
+
+One more property worth knowing: custom indexes must be requested and are a support interaction through the lifecycle. You do not create them on a whim, and asking for an index on a field that is not actually selective, or that the query plan shows would not use it, can make queries slower rather than faster. The guidance warns that custom indexes, when used improperly, can actually slow query results, and that adding additional selective filters is often the safer first step than an index. [^3][^4]
+
+## Skinny tables: a flattened read-only helper
+
+A skinny table is the other big index-adjacent lever, and the exam's Q3 tests your precise understanding of what it is and is not. Get the definition right.
+
+A skinny table is a separate, flattened, denormalized database table that Salesforce maintains behind the scenes. It contains a subset of frequently used fields from a standard or custom base object, combining the standard and custom fields that the platform normally keeps in separate physical tables, so a query that touches only skinny-table fields avoids the join. It is read-only from your perspective; you never write to it. Salesforce can create skinny tables to contain frequently used fields and to avoid joins, improving the performance of read-only operations. [^6]
+
+Here is what the exam wants you to understand about skinny tables, and each of these maps to a true or false distractor in Q3.
+
+Skinny tables are enabled and maintained by Salesforce Support, not by you. You contact Customer Support to have one created, and when the source object or the fields change, you contact Support again to update the definition. The docs are explicit: you cannot create, access, or modify skinny tables yourself, and if the report, list view, or query you are optimizing changes, you need Salesforce to update the skinny table definition. [^6] That directly answers the "they are written to directly by users" trap, which is false.
+
+They are not a Big Object feature. A skinny table is an optimization on a regular object, and it is most useful precisely on objects with millions of records that you want to keep as standard objects. It is not a way to move data, and it is not a reason to reach for Big Objects. [^6][^2]
+
+They complement indexing, they do not replace it. A skinny table makes read-only reporting queries faster by avoiding joins and soft-deleted rows, and custom indexes on the base table are replicated into the skinny table and usually perform better because of the reduced joins. But it does not make an otherwise non-selective query selective; a skinny table that still filters on an unindexed field gives you nothing on the filter side. [^6]
+
+They help exactly the workloads where selectivity matters most: reports and list views and SOQL on large objects. The docs say skinny tables are most useful with tables containing millions of records to improve the performance of read-only operations such as reports. [^6] The classic worked example is a report that filters on a year. Instead of computing an expensive date range every run, you put a Year field in the skinny table and filter on Year equals 2011, which turns a repeated computation into a cheap lookup. [^6]
+
+The refresh requirement is the operational catch. Because a skinny table is a copy, it only helps if it reflects the fields you actually query. Add a field to the report, and the skinny table no longer helps until Support re-creates it with that field included. So the architect's rule is to define the skinny table for the exact reporter workload up front, keep it minimal, and plan the support interaction for every field change. [^6]
+
+Skinny tables can be created on custom objects and on Account, Contact, Opportunity, Lead, and Case. They support a defined set of field types, including checkbox, currency, date, date-time, email, number, percent, phone, picklist including multi-select, text, text area, text area long, and URL. [^6] Note that multi-select picklists can sit inside a skinny table for reporting even though they cannot be indexed, a nuance the exam sometimes surfaces. [^6]
+
+## Applied: the report that times out
+
+Now put the concepts together with the exam's Q1 scenario, because it is the cleanest demonstration of the whole lesson. A report on a five-million-row object times out because it filters on an unindexed custom text field. What is the most direct fix?
+
+Work through the options. Adding more fields to the report only makes it heavier; it does nothing about the filter. Reducing the report's columns likewise changes nothing about the filter; the report still scans the whole object because the filter field is unindexed. Enabling Big Objects would require moving the data entirely, a big architectural change that is not the direct response to a single slow filter. The direct fix is to give the filter field an index, which is a custom index requested from support, or to add a skinny table for the reported fields that includes such a field, so the report filters on an indexed field in the lean helper table instead of scanning the fat base object. [^4][^6]
+
+That is the reasoning pattern the exam rewards. Selectivity is the problem, so the answer is whatever makes the filter selective, an index on the filter field or a skinny table, and anything that merely trims the output or relocates the data misses the point.
+
+## Record types: fragmenting a big object with overhead
+
+The next two levers are about what you add to an object, record types and picklists, and the exam frames both as proliferation problems. Start with record types.
+
+A record type does two things on a Salesforce object. It restricts which picklist values are valid for that record's context, which is the genuine business value, and it carries a page layout and, for many objects, its own sharing and validation behavior. Each record type you add to an object multiplies the administrative surface and, on a very large object, the performance surface. A record type does not inherently slow every query, but an enormous number of record types on a huge object fragments the data and inflates the metadata and the validations the platform applies for each record. [^7]
+
+The architect's caution, and the exam's expectation, is that record types should exist only where there is a genuine process difference worth modeling, not as a general-purpose way to distinguish cosmetic variants. Each business process that truly needs distinct picklist value sets, page layouts, or assignment rules earns its own record type. Two record types that share the same picklist values and differ only in label are a candidate for consolidation.
+
+Why does this matter at LDV? Record proliferation adds overhead per record in the form of validation and layout resolution, and it fragments a large object's data across many type buckets, which complicates reporting and querying. A customer object with 400 record types is a monitoring and maintenance problem as much as a performance one. The data architect reviews the record type count the way they review the field count, and consolidates down to the record types that represent real process boundaries. The standard to apply is driven by genuine process differences, not by organizational habit. [^7]
+
+## Picklists: proliferation and the multi-select trap
+
+Picklists are the second proliferation lever, and they carry two distinct problems the exam tests separately.
+
+The first is picklist proliferation: an object carrying several very large picklist fields, ones with thousands of values, and many picklist fields in total. Large picklists slow page load, because the metadata for each picklist field, its full value set, ships to the client for rendering, and they consume storage. A governing practice is to keep picklist value sets lean, restrict global picklist value sets so they do not balloon, and avoid using a picklist where a more appropriate reference type, a related object or a standard field, would work. When a picklist genuinely needs many values, consider whether a many-to-many or lookup model is a better fit than a fat picklist. [^7]
+
+The second is the multi-select picklist trap, and it is one of the most commonly overlooked LDV gotchas in the exam. A multi-select picklist is stored as a string, a semicolon-delimited blob of the selected values, and because of how it is stored it cannot be efficiently indexed the same way a single-value field can. The large data volumes index guidance is explicit that multi-select picklists are among the formula fields and field types the platform cannot index. [^3] A filter on a multi-select picklist, or a report grouping by one, cannot rely on an index, so on a large object it pushes the query toward a non-selective scan.
+
+The practical rule: keep multi-select picklists out of LDV filter and report fields. If you must filter or report on those values, restructure, store the selections in a related child object you can index and query, or move the reporting to a skinny table that can carry multi-select picklist values for read-only reporting. The docs note skinny tables can include multi-select picklist fields, [^6] which is the architect's escape hatch when a multi-select must appear in a report.
+
+## Other LDV levers: wide objects, formulas, roll-ups, ownership
+
+The remaining design choices round out the discipline, and each is a one-sentence exam point.
+
+Keep objects narrow. A wide object, one carrying hundreds of fields, slows record rendering and page layout, inflates storage, and makes every full-table operation touch more bytes. The same handling of the candidate set, reduce it, applies to fields: fewer fields is a faster object. [^2]
+
+Avoid formula fields that reference many parent records. A formula that computes across a deep parent chain is evaluated on read, which means every time the record renders or is queried, the platform recomputes it by following the relationships. On a huge object, expensive on-read formulas add significant cost to queries and list views that would otherwise be cheap. [^2]
+
+Minimize roll-up summaries on huge relationships. A roll-up summary maintains an aggregate by locking and recomputing the parent whenever a child changes. On a relationship where a parent has millions of children, that lock and recompute storm is a direct path to row-lock timeouts, the same failure mode the data skew lesson (day 9 and day 10) covers in depth.
+
+Design ownership to avoid skew. If one owner, one integration user, or one queue holds a disproportionate share of records, every shared record update serializes on that owner's lock. This is ownership skew, and it is covered thoroughly in day 9, but it belongs in the LDV design checklist too, because a selectively queried object collapses just the same when writes serialize on a hotspot.
+
+## Big Objects and External Objects: when the data belongs elsewhere
+
+A recurring part of LDV design is recognizing when data should not be on the working object at all. Big Objects store massive, append-heavy, low-DML data at scale without the standard object's metadata overhead. External Objects virtualize data that lives in an external system, so you query it in place. For both, referencing them here is a pointer to later lessons rather than a full treatment, but the design reflex matters: moving eligible data off the working object, or archiving it, keeps the object that the hot queries and reports actually touch small. [^2] The best practices guidance makes the underlying goal plain, reduce the amount of data kept active, archiving or discarding data at the same rate it arrives prevents the degradation that comes with unbounded growth. [^2]
+
+So the LDV design toolkit is genuinely a set of levers the architect pulls together, not one button. Index the filter fields. Put heavy reporting on a skinny table. Keep the object narrow. Let the query optimizer do its job with selective filters. Consolidate record types and picklists. Move data that belongs elsewhere or archive it. Design ownership so writes do not serialize.
+
+## Config walkthrough: designing a scaling data model
+
+Here is the numbered walkthrough the exam expects you to be able to reason through when handed a scenario.
+
+1. Analyze the heavy queries and reports and identify the filter fields. Collect the SOQL, reports, and list views that run against the large object, and for each, write down the fields in the WHERE clause and the group-by or filter columns. The goal is a complete map of which fields actually drive selectivity. A field that appears in a filter but nowhere as a column is the highest-value index candidate, because indexing it costs little and changes the query path.
+
+2. Ensure every filter field maps to an indexed field. For each filter field, confirm it is natively indexed, or mark it for a custom index or a skinny table. If a filter field is a multi-select picklist or a non-indexable type, redesign the query onto an indexable field before reaching for an index, because you cannot index a multi-select picklist effectively.
+
+3. Request a custom index on frequently filtered fields that are not natively indexed. Open a Support case per the standard workflow, providing the affected SOQL query with its bind values, a test user, and reproduction steps. Use the Query Plan view to confirm the filter is selective enough (under 10 percent / 5 percent for a custom index) that the optimizer will actually use the index, and prefer adding selective filters to a query over indexing a poorly-selective field.
+
+4. Request skinny tables for heavy reporting fields on very large objects. Define the skinny table around the exact fields your read-only reports and list views touch, keep it minimal, and plan the Support interaction for every field change, because adding a field to the report requires Salesforce to re-create the table.
+
+5. Review record type count and consolidate to genuine process differences. Audit the record types on the object and merge any that share the same picklist value sets and differ only in label or layout cosmetics. Keep only the record types that model a real process boundary.
+
+6. Audit picklist sizes and multi-select usage. Govern global picklist value sets, trim very large picklists, and identify any multi-select picklist used as an LDV filter or report field. Restructure those to a related child object or a skinny table so queries can be selective.
+
+7. Move eligible data to a Big Object or External Object or archive it to keep the working object small. Separate append-heavy historical data from the active working set, and establish an archive cadence that keeps the large object from growing without bound.
+
+## The three exam traps
+
+Trap one, relying on a query that filters on an unindexed field. On an object at LDV, a filter on a free-form or otherwise unindexed field is a full table scan, and reports, list views, and bulk operations that depend on it fail or time out. The exam's Q1 is exactly this, and the fix is an index on the filter field (custom index) or a skinny table, never trimming columns or adding fields.
+
+Trap two, assuming multi-select picklists index efficiently. They are stored as strings and cannot be indexed the same way, which makes them non-selective filter and report fields at LDV. Keep them out of the filter path or restructure them, and remember that a skinny table can carry them for read-only reporting even though the base object cannot index them.
+
+Trap three, creating a custom index or skinny table and expecting it to appear the moment you request it, or to update itself. Both require Salesforce Support enablement, and a skinny table must be refreshed when the underlying fields change. A custom index the optimizer will not use, because the filter is not selective enough, can make queries slower instead of faster.
+
+## Try it for yourself
+
+In a Developer Edition org or sandbox, build a small demonstration of the LDV concepts. Create a custom object and add a page of reference data, then open the Developer Console and run a couple of SOQL queries against it with the Query Plan view enabled, one filtering on an indexed field like CreatedDate and one on an unindexed custom text field. Compare the query plans and note whether the second shows a scan. Next, look at the field's setup details and confirm you cannot flag a custom text area or multi-select picklist for an index yourself, which is why the Support workflow exists. Then open the Query Plan for a filter on the object's Creator owner or CreatedDate and observe the selective plan. The point is to see the difference between a filter the optimizer can drive and one it must scan, because that difference, reproduced on a five-million-row object, is the entire reason this lesson's levers exist.
+
+## What's next
+
+You can now design a data model that scales under large data volume. You know that LDV means performance degrades as an object grows past roughly the low millions of records, that a query is selective when it filters on an indexed field under the selectivity threshold, and the exact thresholds: 30 percent / 15 percent for standard indexes, 10 percent / 5 percent for custom indexes. You can name the natively indexed fields, Id, Name, OwnerId, relationship foreign keys, CreatedDate, SystemModstamp, RecordTypeId, Division, and email, and you know a custom index and a skinny table are both support-enabled helpers that must be requested, with a skinny table that must be refreshed as fields change. You understand why record type proliferation and picklist proliferation hurt a big object, and the specific multi-select picklist trap, stored as a string and not efficiently indexable. Lesson 30 of 42 is up next: LDV data-model and query design scenarios (lv-1b). Where this lesson gave you the fundamentals and the levers, lesson 30 makes you apply them in scenario form: it walks the design patterns and trade-offs you reason through when a customer hands you a large-data-volume data model and asks why it is slow and how to fix it. That is the lv-1b requirement, and it is where the concepts in this lesson turn into the applied judgments the exam rewards.
+
+## Related Requirements
+
+- Lesson 30 of 42 (lv-1b): LDV data-model and query design scenarios
+- Lesson 09 of 42 (dm-5a): Data skew fundamentals: ownership skew, lookup skew, record locking
+- Lesson 10 of 42 (dm-5b): Data skew scenarios: avoidance and design patterns
+
+## References
+
+[^1]: Platform Data Architect exam guide, Salesforce. Outlines the Large Data Volume Considerations (20%) domain and the objective to design a data model that scales considering large data volume and solution performance, applying skinny tables, custom indexes, selective queries, and caution with record types and picklist proliferation. [trailhead.salesforce.com](https://trailhead.salesforce.com/credentials/platformdataarchitect)
+
+[^2]: Best Practices for Deployments with Large Data Volumes, Salesforce Developers. States that performance can degrade as data volume increases, and frames the main approaches as reducing the number of records the system must process, narrowing or selecting queries, and reducing the amount of data kept active through archiving. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/salesforce-large-data-volumes-bp/guide/ldv-deployments-best-practices.html)
+
+[^3]: Indexes, Salesforce Developers Large Data Volumes guide. Lists the platform-maintained fields (RecordTypeId, Division, CreatedDate, SystemModstamp, Name, Email, relationship foreign keys, record ID), notes custom indexes are created through Support or the Metadata API, and lists what cannot be indexed including multi-select picklists and non-deterministic formulas. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/salesforce-large-data-volumes-bp/guide/ldv-deployments-infrastructure-indexes.html)
+
+[^4]: Make Salesforce Platform SOQL Query Selective, Salesforce Help. Defines a selective query as one with a selective filter on an indexed field, details the standard and custom index selectivity thresholds, explains that a non-selective query may cause triggers or batch classes to fail, and documents the Support workflow for requesting a custom index. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000385218&language=en_US&type=1)
+
+[^5]: Standard and Custom Indexed Fields with selectivity thresholds, Salesforce Developers Large Data Volumes guide. Documents that standard filters must match under 30 percent of the first million records and 15 percent beyond, custom filters under 10 percent and 5 percent, with the worked five-million-record example of 300,000 or fewer matches for a custom index. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/salesforce-large-data-volumes-bp/guide/ldv-deployments-infrastructure-indexes.html)
+
+[^6]: Skinny Tables, Salesforce Developers Large Data Volumes guide. Defines skinny tables as Support-enabled denormalized tables that contain frequently used fields to avoid joins, notes they are read-only, must be refreshed via Support when fields change, are most useful on objects with millions of records for reports and list views, and can contain multi-select picklist fields. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/salesforce-large-data-volumes-bp/guide/ldv-deployments-infrastructure-skinny-tables.html)
+
+[^7]: Optimize Large Data Set Queries & Searches, Trailhead. Covers using selective list views, reports, and SOQL, the query optimizer's use of index statistics, and the skinny table approach for speeding up read-only operations on large objects. [trailhead.salesforce.com](https://trailhead.salesforce.com/content/learn/modules/large-data-volumes/conduct-data-queries-and-searches)
