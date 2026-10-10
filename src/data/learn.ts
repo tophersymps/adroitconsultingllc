@@ -1112,6 +1112,457 @@ export const learnSeries: LearningSeries[] = [
     "curriculumLessons": 90
   },
   {
+    "slug": "salesforce-sharing-visibility-architect",
+    "name": "Platform Sharing and Visibility Architect Certification",
+    "description": "A one-stop prep course for the Salesforce Certified Platform Sharing and Visibility Architect exam. All 18 official objectives split into 36 focused lessons, with config walkthroughs, sharing-model trade-offs, exam traps, and practice questions.",
+    "gradient": "from-violet to-purple-600",
+    "lessons": [
+      {
+        "slug": "day-01-p-1a-object-permissions-crud-system-vs-object-profiles",
+        "title": "Sharing & Visibility Architect P-1a: Object Permissions: CRUD, System vs Object, Profiles vs Permission Sets",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 1,
+        "excerpt": "The bluntest control in the Salesforce security stack: what Read, Create, Edit, and Delete actually grant, why View All Records and Modify All Records are a different decision, how system permissions differ from object permissions, and how a profile baseline plus additive permission sets and permission set groups produce a user's effective access. Includes a worked scenario, a setup walkthrough, and the exam traps.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "18 min read",
+        "tags": [
+          "Salesforce",
+          "Sharing and Visibility",
+          "Permissions",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-02-p-1b-object-permission-scenarios-and-mass-assign-licens",
+        "title": "Sharing & Visibility Architect P-1b: Object-Permission Scenarios and Mass-Assign / License-Based Patterns",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 2,
+        "excerpt": "How an object-permission grant scales from one user to a population: permission set groups as the packaging layer, dynamic assignment so joiners and leavers are covered without manual clicks, and the license rules that decide which object permissions an org can grant at all. Includes a worked 400-user scenario, a setup walkthrough, and the exam traps around mass assignment and license errors. Day 2 of the Platform Sharing and Visibility Architect exam prep.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "19 min read",
+        "tags": [
+          "Salesforce",
+          "Security",
+          "Sharing",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-03-p-2a-field-level-security-fundamentals-field-permission",
+        "title": "Sharing & Visibility Architect P-2a: Field-Level Security Fundamentals: Field Permissions, Standard vs Custom Fields",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 3,
+        "excerpt": "Field-level security in full: the three field permission states and why Hidden is the only one that removes a field from view, how FLS sits independently on top of object permissions, where FLS is honored and where it silently is not, and the programmatic mirror in schema describe, user mode, and stripInaccessible. Includes a worked scenario, a setup walkthrough, and the exam traps. Day 3 of the Platform Sharing and Visibility Architect exam prep.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "18 min read",
+        "tags": [
+          "Salesforce",
+          "Security",
+          "Sharing",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-04-p-2b-fls-scenarios-restricting-standard-fields-fls-vs-r",
+        "title": "Sharing & Visibility Architect P-2b: FLS Scenarios: Restricting Standard Fields, FLS vs Record Types",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 4,
+        "excerpt": "Field-level security in scenario form: how to restrict standard fields like Phone, Name, and Owner when you cannot simply hide them, why read-only is a different requirement from hidden, what a page layout does and does not revoke, and how record types differ from FLS as a control. Includes a worked Phone scenario, a setup walkthrough, the exam traps, and a sandbox try-it. Day 4 of the Platform Sharing and Visibility Architect exam prep.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "Salesforce",
+          "Security",
+          "Sharing",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-05-p-3a-ui-level-hiding-record-types-page-layouts-lightnin",
+        "title": "Sharing & Visibility Architect P-3a: UI-Level Hiding: Record Types, Page Layouts, Lightning Apps, Compact Layouts, Dynamic Forms",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 5,
+        "excerpt": "Every surface that renders a field, and what each one is actually capable of hiding: page layouts and where they stop, record types as the router between profiles, layouts, and picklists, Lightning app navigation and tab visibility, compact layouts and the highlights-panel leak, and dynamic forms as record-page variation beyond the classic layout model. Includes a worked report-leak scenario, a setup walkthrough, and the exam traps. Day 5 of the Platform Sharing and Visibility Architect exam prep.",
+        "date": "September 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "Salesforce",
+          "Security",
+          "Sharing",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-06-p-3b-ui-hiding-vs-real-security-defense-in-depth-field",
+        "title": "Sharing & Visibility Architect P-3b: UI Hiding vs Real Security (Defense in Depth), Field Accessibility in Apex",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 6,
+        "excerpt": "Why hiding a field on a page layout protects nothing on its own, and how programmatic enforcement closes the gap: schema accessibility checks with isAccessible and isUpdateable, WITH SECURITY_ENFORCED and its all-or-nothing behavior, Security.stripInaccessible for graceful degradation, the AuraEnabled boundary, and why without sharing and system mode do not enforce field permissions. Includes a worked scenario across four access paths, a five-step configuration walkthrough, exam traps, and a version note on the Summer '26 Apex security default change. Day 6 of the Platform Sharing and Visibility Architect exam prep.",
+        "date": "September 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "18 min read",
+        "tags": [
+          "Salesforce",
+          "Security",
+          "Sharing",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-07-p-4a-sensitive-data-identify-classify-pci-pii-hipaa-shi",
+        "title": "Sharing & Visibility Architect P-4a: Sensitive Data, PCI, PII, HIPAA, Shield Platform Encryption, Field History, and Data Protection",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 7,
+        "excerpt": "Why objective p-4a starts with the data instead of the user: identifying and classifying fields as PCI, PII, or PHI with the Data Classification metadata, what Shield Platform Encryption protects at rest and what it deliberately does not do to user visibility, how probabilistic and deterministic encryption change search and filtering, field history tracking against Shield Field Audit Trail retention, where the Data Protection and Privacy surfaces actually live in Setup, and the additive classify, restrict, encrypt, audit, mask model. Includes a worked healthcare payments scenario, a six-step configuration walkthrough, exam traps, and a try-it exercise. Day 7 of the Platform Sharing and Visibility Architect exam prep.",
+        "date": "September 18, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Salesforce",
+          "Security",
+          "Sharing",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-08-p-4b-access-controls-to-protect-sensitive-data-restrict",
+        "title": "Sharing & Visibility Architect P-4b: Access Controls to Protect Sensitive Data, Restriction Rules, Data Classification Policies, and Retention",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 8,
+        "excerpt": "Why objective p-4b turns the classification from lesson 7 into enforcement: restriction rules that carve a sensitive subset of records back out of a user's view even when sharing grants the object, the rule structure of user criteria and record criteria, the limits an architect signs for (object types, edition caps, the EQUALS-only operator, one active rule per user per object), data classification policies that drive masking and alerts, retention policies that delete aged PII and shrink breach scope, and the access review and time-boxed grant controls that keep the sensitive attack surface small. Includes a worked HR payroll scenario, a five-step configuration walkthrough, exam traps, and a try-it exercise. Day 8 of the Platform Sharing and Visibility Architect exam prep.",
+        "date": "September 19, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Salesforce",
+          "Security",
+          "Sharing",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-09-p-5a-programmatic-enforcement-crud-fls-in-apex-stripina",
+        "title": "Sharing & Visibility Architect P-5a: Programmatic Enforcement, CRUD/FLS in Apex, stripInaccessible, and Without Sharing",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 9,
+        "excerpt": "Why objective p-5a exists: the Salesforce UI enforces object permissions, field-level security, and record sharing for you, but Apex does not do that by default, so custom automation is where security can silently leak. This lesson teaches the programmatic enforcement stack an architect owns: the Schema.SObjectType and field accessibility checks that guard CRUD and FLS, the WITH SECURITY_ENFORCED query keyword (renamed WITH USER_MODE at API v67) that enforces object and field permissions all-or-nothing, Security.stripInaccessible for reads and for inbound writes that closes the mass-assignment gap, and the real meaning of a without sharing class, which ignores record sharing but never bypasses the CRUD/FLS checks you write. Includes a worked Lightning-controller scenario, a five-step configuration walkthrough, exam traps, and a try-it exercise. Day 9 of the Platform Sharing and Visibility Architect exam prep.",
+        "date": "September 20, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "21 min read",
+        "tags": [
+          "Salesforce",
+          "Security",
+          "Sharing",
+          "Certification",
+          "Apex"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-10-p-5b-programmatic-with-without-sharing-runas-user-vs-sy",
+        "title": "Sharing & Visibility Architect P-5b: Programmatic with/without Sharing, runAs, User vs System Mode, and When Apex Sharing Is Needed",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 10,
+        "excerpt": "Why objective p-5b exists: the class sharing keywords and the runAs method are the two levers an architect pulls when code must behave differently from the declarative sharing model. This lesson teaches the exact runtime meaning of with sharing and without sharing, why the class keyword never changes who the running user is, how system mode and user mode differ for record access and for CRUD/FLS, how System.runAs lets a test verify the security model from another user's perspective, and the decision rule for when Apex Managed Sharing is the right tool instead of a sharing rule. Includes a worked queueable scenario, a five-step configuration walkthrough, exam traps, and a try-it exercise. Day 10 of the Platform Sharing and Visibility Architect exam prep.",
+        "date": "September 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "21 min read",
+        "tags": [
+          "Salesforce",
+          "Security",
+          "Sharing",
+          "Certification",
+          "Apex"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-11-r-1a-organization-wide-defaults-fundamentals-the-matrix",
+        "title": "Sharing & Visibility Architect R-1a: Organization-Wide Defaults Fundamentals, the Matrix, Per-Object Defaults, and Public/Private/Controlled by Parent",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 11,
+        "excerpt": "Why requirement r-1a exists: organization-wide defaults are the floor of the entire record-sharing model, the single most restrictive baseline every other sharing mechanism can only open wider. This lesson teaches the OWD matrix in Sharing Settings, what each of Private, Public Read Only, Public Read/Write, and Controlled by Parent actually means at runtime, why lookup children cannot be Controlled by Parent while master-detail children must be, how standard objects ship with defaults that you should deliberately revisit, and why you cannot set different OWDs per group. Includes a worked requirement-to-default selection, a numbered configuration walkthrough, exam traps, and a try-it exercise. Day 11 of the Platform Sharing and Visibility Architect exam prep.",
+        "date": "September 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "21 min read",
+        "tags": [
+          "Salesforce",
+          "Security",
+          "Sharing",
+          "Certification",
+          "OWD"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-12-r-1b-owd-scenarios-and-interplay-with-role-hierarchy-sh",
+        "title": "Sharing & Visibility Architect R-1b: OWD Scenarios and Interplay with Role Hierarchy and Sharing Rules, Recalculation Triggers",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 12,
+        "excerpt": "Why requirement r-1b exists: organization-wide defaults are only the floor, and the exam wants you to prove you can sequence the layers above it. This lesson teaches the full sharing stack, how OWD, the role hierarchy, and sharing rules compose additively, when and why sharing recalculation fires, and how to sequence an OWD change so no required access is lost. Includes a worked requirement-to-stack example, a numbered configuration walkthrough, exam traps, and a try-it exercise. Day 12 of the Platform Sharing and Visibility Architect exam prep.",
+        "date": "September 23, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "22 min read",
+        "tags": [
+          "Salesforce",
+          "Security",
+          "Sharing",
+          "Certification",
+          "OWD",
+          "Sharing Rules",
+          "Recalculation"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-13-r-2a-role-hierarchy-how-it-grants-record-access-role-vs",
+        "title": "Sharing & Visibility Architect R-2a: Role Hierarchy, How It Grants Record Access, Role vs Territory, Implicit Access",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 13,
+        "excerpt": "Requirement r-2a is where the exam asks you to design with the role hierarchy, not just name it. This lesson teaches exactly how the hierarchy grants record access: upward-only implicit access, gated per object by Grant Access Using Hierarchies, distinct from territory and from relationship-based implicit access. Includes a worked scenario, a numbered configuration walkthrough, exam traps, and a try-it exercise. Day 13 of the Platform Sharing and Visibility Architect exam prep.",
+        "date": "September 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "21 min read",
+        "tags": [
+          "Salesforce",
+          "Security",
+          "Sharing",
+          "Certification",
+          "Role Hierarchy",
+          "Implicit Access"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-14-r-2b-role-hierarchy-scenarios-and-when-not-to-use-it-ld",
+        "title": "When NOT to Use the Role Hierarchy: Scenarios, LDV Risk, and Opportunity Access",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 14,
+        "excerpt": "Decide when the role hierarchy is the right sharing mechanism and when it over-grants or bloats the sharing table. Covers criteria-based requirements, LDV risk, and Opportunity-specific behavior.",
+        "date": "2026-09-25",
+        "author": "Adroit Learning",
+        "readTime": "14",
+        "tags": [],
+        "status": "published"
+      },
+      {
+        "slug": "day-15-r-3a-sharing-rules-criteria-based-and-ownership-based-i",
+        "title": "Sharing Rules: Criteria-Based and Ownership-Based, In Depth",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 15,
+        "excerpt": "Build precise record access with sharing rules. Covers ownership-based vs criteria-based rules, the two sides of a rule, target groups and access levels, related-record granularity, and the additive model that layers above OWD.",
+        "date": "2026-09-27",
+        "author": "Adroit Learning",
+        "readTime": "15",
+        "tags": [],
+        "status": "published"
+      },
+      {
+        "slug": "day-16-r-3b-sharing-rule-scenarios-guest-user-sharing-rules-li",
+        "title": "Sharing-Rule Scenarios, Guest-User Sharing Rules, Limits, and Recalculation",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 16,
+        "excerpt": "Apply sharing rules to full scenarios: guest-user sharing rules for Experience sites, the real sharing-rule count limits, and when and how recalculation makes grants current. Covers the async delay on criteria rules and the separate configuration guest access demands.",
+        "date": "2026-09-28",
+        "author": "Adroit Learning",
+        "readTime": "15",
+        "tags": [],
+        "status": "published"
+      },
+      {
+        "slug": "day-17-r-4a-groups-public-groups-queues-group-membership-when",
+        "title": "Groups: Public Groups, Queues, Group Membership, When to Use",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 17,
+        "excerpt": "Learn how public groups and queues aggregate users into named sets that sharing rules, permission sets, and workflows can target. Covers group membership options, the shape of a queue, and the decision of when a group is the right container for a recurring set of users.",
+        "date": "2026-09-29",
+        "author": "Adroit Learning",
+        "readTime": "15",
+        "tags": [],
+        "status": "published"
+      },
+      {
+        "slug": "day-18-r-4b-group-sharing-scenarios-sharing-sets-groups-vs-tea",
+        "title": "Group Sharing Scenarios: Sharing Sets, Groups vs Teams",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 18,
+        "excerpt": "Given a scenario, determine how groups and sharing sets support record access, and contrast groups with teams. Covers sharing sets for Experience Cloud external users, sharing groups in portals, the per-record nature of teams, and the routing decision between teams and groups by audience and scale.",
+        "date": "2026-09-30",
+        "author": "Adroit Learning",
+        "readTime": "15",
+        "tags": [],
+        "status": "published"
+      },
+      {
+        "slug": "day-19-r-5a-teams-account-teams-sales-teams-case-teams-team-ba",
+        "title": "Teams: Account Teams, Sales Teams, Case Teams, Team-Based Record Access",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 19,
+        "excerpt": "Learn how Account Teams, Sales (Opportunity) Teams, and Case Teams grant per-record, owner-managed access with roles and access levels. Covers the additive share row teams create, the Use Account Teams setting on Opportunity that can over-share, and the decision of when a team beats a group, a rule, or a permission set.",
+        "date": "2026-10-01",
+        "author": "Adroit Learning",
+        "readTime": "16",
+        "tags": [],
+        "status": "published"
+      },
+      {
+        "slug": "day-20-r-5b-team-vs-role-vs-group-trade-offs-and-scenarios",
+        "title": "Team vs Role vs Group Trade-Offs and Scenarios",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 20,
+        "excerpt": "Given a scenario, recommend teams, roles, or groups (and their trade-offs) to satisfy record access requirements. Covers the decision rule that maps a reporting line to the role hierarchy, a recurring population to a group plus a sharing rule, and per-record collaboration to a team, plus the scalability and maintainability cost of each choice.",
+        "date": "2026-10-02",
+        "author": "Adroit Learning",
+        "readTime": "16",
+        "tags": [],
+        "status": "published"
+      },
+      {
+        "slug": "day-21-r-6a-object-relationships-and-sharing-parent-child-mast",
+        "title": "Object Relationships and Sharing: Parent-Child, Master-Detail Rollups, Lookups, Implicit Sharing",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 21,
+        "excerpt": "Given a scenario, determine the correct object relationships that support record access sharing requirements. Covers master-detail (Controlled by Parent) versus lookup (independent sharing), implicit sharing for standard relationships, roll-up summary data exposure, and the conversion rules that make relationship choice a security decision.",
+        "date": "2026-10-03",
+        "author": "Adroit Learning",
+        "readTime": "16",
+        "tags": [],
+        "status": "published"
+      },
+      {
+        "slug": "day-22-r-6b-relationship-scenarios-which-relationships-propaga",
+        "title": "Relationship Scenarios: Which Relationships Propagate Access, Cumulative Impact, Record Types",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 22,
+        "excerpt": "Given a scenario, determine which relationships propagate access, assess the cumulative sharing impact of multiple access layers, and understand the role of record types. Covers master-detail and related-record propagation, Account-to-Contact/Opportunity access settings, the union of all grant sources, and why record types shape presentation without touching the sharing table.",
+        "date": "2026-10-04",
+        "author": "Adroit Learning",
+        "readTime": "17",
+        "tags": [],
+        "status": "published"
+      },
+      {
+        "slug": "day-23-r-7a-programmatic-sharing-apex-managed-sharing-apex-sha",
+        "title": "Programmatic Sharing: Apex Managed Sharing, Apex Sharing Reasons, the Share Object",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 23,
+        "excerpt": "Given a scenario, determine how programmatic sharing supports record access requirements. Covers Apex managed sharing, the Share object (AccountShare, CustomObject__Share), the required RowCause field and custom sharing reasons, the Modify All Data requirement, why managed sharing can only grant and never restrict, and the governance needed to keep the sharing table bounded.",
+        "date": "2026-10-05",
+        "author": "Adroit Learning",
+        "readTime": "16",
+        "tags": [],
+        "status": "published"
+      },
+      {
+        "slug": "day-24-r-7b-programmatic-sharing-scenarios-recalculation-limit",
+        "title": "Programmatic-Sharing Scenarios, Recalculation, Limits, and When Declarative Fails",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 24,
+        "excerpt": "Given a scenario, determine when programmatic sharing is required and how to keep it correct and bounded. Covers when declarative sharing fails and Apex managed sharing is the only answer, why recalculation of managed shares is the code's responsibility, the DML and governor limits that bound the work, and the compute-diff-reconcile design pattern that keeps the sharing table minimal.",
+        "date": "2026-10-06",
+        "author": "Adroit Learning",
+        "readTime": "16",
+        "tags": [],
+        "status": "published"
+      },
+      {
+        "slug": "day-25-r-8a-external-users-guest-user-experience-cloud-licensi",
+        "title": "External Users: Guest User, Experience Cloud Licensing, Sharing Sets and Sharing Groups",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 25,
+        "excerpt": "Given a scenario, determine what sharing mechanism is appropriate to share records with external users. Covers how Experience Cloud represents external users through a license and profile, the difference between an authenticated external user and the anonymous guest user, why sharing sets and sharing groups replace OWD-based public sharing for portals, and how the license tier gates which features and objects external users can reach.",
+        "date": "2026-10-07",
+        "author": "Adroit Learning",
+        "readTime": "16",
+        "tags": [],
+        "status": "published"
+      },
+      {
+        "slug": "day-26-r-8b-external-user-scenarios-portal-roles-account-conta",
+        "title": "External-User Scenarios: Portal Roles, Account and Contact Access, Data Protection",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 26,
+        "excerpt": "How to configure portal roles and account and contact access for external users while keeping their data exposure to the least the relationship requires.",
+        "date": "2026-10-08",
+        "author": "Jimmy Olsen",
+        "readTime": "13 min read",
+        "tags": [
+          "salesforce",
+          "sharing",
+          "visibility",
+          "architect",
+          "external-users",
+          "portal-roles",
+          "sharing-sets",
+          "field-security",
+          "data-protection"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-27-r-9a-record-access-overrides-stamp-vs-rollup-record-typ",
+        "title": "Record Access Overrides: Stamp vs Rollup (Record Type, Field Update, Formula)",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 27,
+        "excerpt": "How to override a record's access by stamping a security-relevant value onto it (record type, custom field, picklist) or computing it (formula, rollup), then driving a criteria-based sharing rule from that value.",
+        "date": "2026-10-09",
+        "author": "Jimmy Olsen",
+        "readTime": "14 min read",
+        "tags": [
+          "salesforce",
+          "sharing",
+          "visibility",
+          "architect",
+          "access-overrides",
+          "sharing-rules",
+          "record-types",
+          "formula-fields",
+          "rollup-summary",
+          "stamp"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-28-r-9b-override-scenarios-manual-sharing-vs-stamp-vs-cust",
+        "title": "Override Scenarios: Manual Sharing vs Stamp vs Custom Logic",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 28,
+        "excerpt": "How to pick the right record access override for a given scenario: manual sharing for one-off human grants, a stamp plus criteria rule for repeatable value-based access, and Apex Managed Sharing when the access depends on runtime computation a field cannot represent.",
+        "date": "2026-10-10",
+        "author": "Jimmy Olsen",
+        "readTime": "14 min read",
+        "tags": [
+          "salesforce",
+          "sharing",
+          "visibility",
+          "architect",
+          "manual-sharing",
+          "sharing-rules",
+          "apex-managed-sharing",
+          "rowcause",
+          "stamp",
+          "override"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 28,
+    "curriculumLessons": 36
+  },
+  {
     "slug": "agentic-ai",
     "name": "Agentic AI Implementation Path",
     "description": "From single-agent prototypes to multi-agent orchestration, a practitioner's curriculum for shipping agentic systems.",
@@ -3315,434 +3766,6 @@ export const learnSeries: LearningSeries[] = [
     ],
     "totalLessons": 28,
     "curriculumLessons": 42
-  },
-  {
-    "slug": "salesforce-sharing-visibility-architect",
-    "name": "Platform Sharing and Visibility Architect Certification",
-    "description": "A one-stop prep course for the Salesforce Certified Platform Sharing and Visibility Architect exam. All 18 official objectives split into 36 focused lessons, with config walkthroughs, sharing-model trade-offs, exam traps, and practice questions.",
-    "gradient": "from-violet to-purple-600",
-    "lessons": [
-      {
-        "slug": "day-01-p-1a-object-permissions-crud-system-vs-object-profiles",
-        "title": "Sharing & Visibility Architect P-1a: Object Permissions: CRUD, System vs Object, Profiles vs Permission Sets",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 1,
-        "excerpt": "The bluntest control in the Salesforce security stack: what Read, Create, Edit, and Delete actually grant, why View All Records and Modify All Records are a different decision, how system permissions differ from object permissions, and how a profile baseline plus additive permission sets and permission set groups produce a user's effective access. Includes a worked scenario, a setup walkthrough, and the exam traps.",
-        "date": "September 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "18 min read",
-        "tags": [
-          "Salesforce",
-          "Sharing and Visibility",
-          "Permissions",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-02-p-1b-object-permission-scenarios-and-mass-assign-licens",
-        "title": "Sharing & Visibility Architect P-1b: Object-Permission Scenarios and Mass-Assign / License-Based Patterns",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 2,
-        "excerpt": "How an object-permission grant scales from one user to a population: permission set groups as the packaging layer, dynamic assignment so joiners and leavers are covered without manual clicks, and the license rules that decide which object permissions an org can grant at all. Includes a worked 400-user scenario, a setup walkthrough, and the exam traps around mass assignment and license errors. Day 2 of the Platform Sharing and Visibility Architect exam prep.",
-        "date": "September 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "19 min read",
-        "tags": [
-          "Salesforce",
-          "Security",
-          "Sharing",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-03-p-2a-field-level-security-fundamentals-field-permission",
-        "title": "Sharing & Visibility Architect P-2a: Field-Level Security Fundamentals: Field Permissions, Standard vs Custom Fields",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 3,
-        "excerpt": "Field-level security in full: the three field permission states and why Hidden is the only one that removes a field from view, how FLS sits independently on top of object permissions, where FLS is honored and where it silently is not, and the programmatic mirror in schema describe, user mode, and stripInaccessible. Includes a worked scenario, a setup walkthrough, and the exam traps. Day 3 of the Platform Sharing and Visibility Architect exam prep.",
-        "date": "September 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "18 min read",
-        "tags": [
-          "Salesforce",
-          "Security",
-          "Sharing",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-04-p-2b-fls-scenarios-restricting-standard-fields-fls-vs-r",
-        "title": "Sharing & Visibility Architect P-2b: FLS Scenarios: Restricting Standard Fields, FLS vs Record Types",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 4,
-        "excerpt": "Field-level security in scenario form: how to restrict standard fields like Phone, Name, and Owner when you cannot simply hide them, why read-only is a different requirement from hidden, what a page layout does and does not revoke, and how record types differ from FLS as a control. Includes a worked Phone scenario, a setup walkthrough, the exam traps, and a sandbox try-it. Day 4 of the Platform Sharing and Visibility Architect exam prep.",
-        "date": "September 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "17 min read",
-        "tags": [
-          "Salesforce",
-          "Security",
-          "Sharing",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-05-p-3a-ui-level-hiding-record-types-page-layouts-lightnin",
-        "title": "Sharing & Visibility Architect P-3a: UI-Level Hiding: Record Types, Page Layouts, Lightning Apps, Compact Layouts, Dynamic Forms",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 5,
-        "excerpt": "Every surface that renders a field, and what each one is actually capable of hiding: page layouts and where they stop, record types as the router between profiles, layouts, and picklists, Lightning app navigation and tab visibility, compact layouts and the highlights-panel leak, and dynamic forms as record-page variation beyond the classic layout model. Includes a worked report-leak scenario, a setup walkthrough, and the exam traps. Day 5 of the Platform Sharing and Visibility Architect exam prep.",
-        "date": "September 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "17 min read",
-        "tags": [
-          "Salesforce",
-          "Security",
-          "Sharing",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-06-p-3b-ui-hiding-vs-real-security-defense-in-depth-field",
-        "title": "Sharing & Visibility Architect P-3b: UI Hiding vs Real Security (Defense in Depth), Field Accessibility in Apex",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 6,
-        "excerpt": "Why hiding a field on a page layout protects nothing on its own, and how programmatic enforcement closes the gap: schema accessibility checks with isAccessible and isUpdateable, WITH SECURITY_ENFORCED and its all-or-nothing behavior, Security.stripInaccessible for graceful degradation, the AuraEnabled boundary, and why without sharing and system mode do not enforce field permissions. Includes a worked scenario across four access paths, a five-step configuration walkthrough, exam traps, and a version note on the Summer '26 Apex security default change. Day 6 of the Platform Sharing and Visibility Architect exam prep.",
-        "date": "September 17, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "18 min read",
-        "tags": [
-          "Salesforce",
-          "Security",
-          "Sharing",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-07-p-4a-sensitive-data-identify-classify-pci-pii-hipaa-shi",
-        "title": "Sharing & Visibility Architect P-4a: Sensitive Data, PCI, PII, HIPAA, Shield Platform Encryption, Field History, and Data Protection",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 7,
-        "excerpt": "Why objective p-4a starts with the data instead of the user: identifying and classifying fields as PCI, PII, or PHI with the Data Classification metadata, what Shield Platform Encryption protects at rest and what it deliberately does not do to user visibility, how probabilistic and deterministic encryption change search and filtering, field history tracking against Shield Field Audit Trail retention, where the Data Protection and Privacy surfaces actually live in Setup, and the additive classify, restrict, encrypt, audit, mask model. Includes a worked healthcare payments scenario, a six-step configuration walkthrough, exam traps, and a try-it exercise. Day 7 of the Platform Sharing and Visibility Architect exam prep.",
-        "date": "September 18, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "20 min read",
-        "tags": [
-          "Salesforce",
-          "Security",
-          "Sharing",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-08-p-4b-access-controls-to-protect-sensitive-data-restrict",
-        "title": "Sharing & Visibility Architect P-4b: Access Controls to Protect Sensitive Data, Restriction Rules, Data Classification Policies, and Retention",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 8,
-        "excerpt": "Why objective p-4b turns the classification from lesson 7 into enforcement: restriction rules that carve a sensitive subset of records back out of a user's view even when sharing grants the object, the rule structure of user criteria and record criteria, the limits an architect signs for (object types, edition caps, the EQUALS-only operator, one active rule per user per object), data classification policies that drive masking and alerts, retention policies that delete aged PII and shrink breach scope, and the access review and time-boxed grant controls that keep the sensitive attack surface small. Includes a worked HR payroll scenario, a five-step configuration walkthrough, exam traps, and a try-it exercise. Day 8 of the Platform Sharing and Visibility Architect exam prep.",
-        "date": "September 19, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "20 min read",
-        "tags": [
-          "Salesforce",
-          "Security",
-          "Sharing",
-          "Certification"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-09-p-5a-programmatic-enforcement-crud-fls-in-apex-stripina",
-        "title": "Sharing & Visibility Architect P-5a: Programmatic Enforcement, CRUD/FLS in Apex, stripInaccessible, and Without Sharing",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 9,
-        "excerpt": "Why objective p-5a exists: the Salesforce UI enforces object permissions, field-level security, and record sharing for you, but Apex does not do that by default, so custom automation is where security can silently leak. This lesson teaches the programmatic enforcement stack an architect owns: the Schema.SObjectType and field accessibility checks that guard CRUD and FLS, the WITH SECURITY_ENFORCED query keyword (renamed WITH USER_MODE at API v67) that enforces object and field permissions all-or-nothing, Security.stripInaccessible for reads and for inbound writes that closes the mass-assignment gap, and the real meaning of a without sharing class, which ignores record sharing but never bypasses the CRUD/FLS checks you write. Includes a worked Lightning-controller scenario, a five-step configuration walkthrough, exam traps, and a try-it exercise. Day 9 of the Platform Sharing and Visibility Architect exam prep.",
-        "date": "September 20, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "21 min read",
-        "tags": [
-          "Salesforce",
-          "Security",
-          "Sharing",
-          "Certification",
-          "Apex"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-10-p-5b-programmatic-with-without-sharing-runas-user-vs-sy",
-        "title": "Sharing & Visibility Architect P-5b: Programmatic with/without Sharing, runAs, User vs System Mode, and When Apex Sharing Is Needed",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 10,
-        "excerpt": "Why objective p-5b exists: the class sharing keywords and the runAs method are the two levers an architect pulls when code must behave differently from the declarative sharing model. This lesson teaches the exact runtime meaning of with sharing and without sharing, why the class keyword never changes who the running user is, how system mode and user mode differ for record access and for CRUD/FLS, how System.runAs lets a test verify the security model from another user's perspective, and the decision rule for when Apex Managed Sharing is the right tool instead of a sharing rule. Includes a worked queueable scenario, a five-step configuration walkthrough, exam traps, and a try-it exercise. Day 10 of the Platform Sharing and Visibility Architect exam prep.",
-        "date": "September 21, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "21 min read",
-        "tags": [
-          "Salesforce",
-          "Security",
-          "Sharing",
-          "Certification",
-          "Apex"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-11-r-1a-organization-wide-defaults-fundamentals-the-matrix",
-        "title": "Sharing & Visibility Architect R-1a: Organization-Wide Defaults Fundamentals, the Matrix, Per-Object Defaults, and Public/Private/Controlled by Parent",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 11,
-        "excerpt": "Why requirement r-1a exists: organization-wide defaults are the floor of the entire record-sharing model, the single most restrictive baseline every other sharing mechanism can only open wider. This lesson teaches the OWD matrix in Sharing Settings, what each of Private, Public Read Only, Public Read/Write, and Controlled by Parent actually means at runtime, why lookup children cannot be Controlled by Parent while master-detail children must be, how standard objects ship with defaults that you should deliberately revisit, and why you cannot set different OWDs per group. Includes a worked requirement-to-default selection, a numbered configuration walkthrough, exam traps, and a try-it exercise. Day 11 of the Platform Sharing and Visibility Architect exam prep.",
-        "date": "September 22, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "21 min read",
-        "tags": [
-          "Salesforce",
-          "Security",
-          "Sharing",
-          "Certification",
-          "OWD"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-12-r-1b-owd-scenarios-and-interplay-with-role-hierarchy-sh",
-        "title": "Sharing & Visibility Architect R-1b: OWD Scenarios and Interplay with Role Hierarchy and Sharing Rules, Recalculation Triggers",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 12,
-        "excerpt": "Why requirement r-1b exists: organization-wide defaults are only the floor, and the exam wants you to prove you can sequence the layers above it. This lesson teaches the full sharing stack, how OWD, the role hierarchy, and sharing rules compose additively, when and why sharing recalculation fires, and how to sequence an OWD change so no required access is lost. Includes a worked requirement-to-stack example, a numbered configuration walkthrough, exam traps, and a try-it exercise. Day 12 of the Platform Sharing and Visibility Architect exam prep.",
-        "date": "September 23, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "22 min read",
-        "tags": [
-          "Salesforce",
-          "Security",
-          "Sharing",
-          "Certification",
-          "OWD",
-          "Sharing Rules",
-          "Recalculation"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-13-r-2a-role-hierarchy-how-it-grants-record-access-role-vs",
-        "title": "Sharing & Visibility Architect R-2a: Role Hierarchy, How It Grants Record Access, Role vs Territory, Implicit Access",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 13,
-        "excerpt": "Requirement r-2a is where the exam asks you to design with the role hierarchy, not just name it. This lesson teaches exactly how the hierarchy grants record access: upward-only implicit access, gated per object by Grant Access Using Hierarchies, distinct from territory and from relationship-based implicit access. Includes a worked scenario, a numbered configuration walkthrough, exam traps, and a try-it exercise. Day 13 of the Platform Sharing and Visibility Architect exam prep.",
-        "date": "September 24, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "21 min read",
-        "tags": [
-          "Salesforce",
-          "Security",
-          "Sharing",
-          "Certification",
-          "Role Hierarchy",
-          "Implicit Access"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-14-r-2b-role-hierarchy-scenarios-and-when-not-to-use-it-ld",
-        "title": "When NOT to Use the Role Hierarchy: Scenarios, LDV Risk, and Opportunity Access",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 14,
-        "excerpt": "Decide when the role hierarchy is the right sharing mechanism and when it over-grants or bloats the sharing table. Covers criteria-based requirements, LDV risk, and Opportunity-specific behavior.",
-        "date": "2026-09-25",
-        "author": "Adroit Learning",
-        "readTime": "14",
-        "tags": [],
-        "status": "published"
-      },
-      {
-        "slug": "day-15-r-3a-sharing-rules-criteria-based-and-ownership-based-i",
-        "title": "Sharing Rules: Criteria-Based and Ownership-Based, In Depth",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 15,
-        "excerpt": "Build precise record access with sharing rules. Covers ownership-based vs criteria-based rules, the two sides of a rule, target groups and access levels, related-record granularity, and the additive model that layers above OWD.",
-        "date": "2026-09-27",
-        "author": "Adroit Learning",
-        "readTime": "15",
-        "tags": [],
-        "status": "published"
-      },
-      {
-        "slug": "day-16-r-3b-sharing-rule-scenarios-guest-user-sharing-rules-li",
-        "title": "Sharing-Rule Scenarios, Guest-User Sharing Rules, Limits, and Recalculation",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 16,
-        "excerpt": "Apply sharing rules to full scenarios: guest-user sharing rules for Experience sites, the real sharing-rule count limits, and when and how recalculation makes grants current. Covers the async delay on criteria rules and the separate configuration guest access demands.",
-        "date": "2026-09-28",
-        "author": "Adroit Learning",
-        "readTime": "15",
-        "tags": [],
-        "status": "published"
-      },
-      {
-        "slug": "day-17-r-4a-groups-public-groups-queues-group-membership-when",
-        "title": "Groups: Public Groups, Queues, Group Membership, When to Use",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 17,
-        "excerpt": "Learn how public groups and queues aggregate users into named sets that sharing rules, permission sets, and workflows can target. Covers group membership options, the shape of a queue, and the decision of when a group is the right container for a recurring set of users.",
-        "date": "2026-09-29",
-        "author": "Adroit Learning",
-        "readTime": "15",
-        "tags": [],
-        "status": "published"
-      },
-      {
-        "slug": "day-18-r-4b-group-sharing-scenarios-sharing-sets-groups-vs-tea",
-        "title": "Group Sharing Scenarios: Sharing Sets, Groups vs Teams",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 18,
-        "excerpt": "Given a scenario, determine how groups and sharing sets support record access, and contrast groups with teams. Covers sharing sets for Experience Cloud external users, sharing groups in portals, the per-record nature of teams, and the routing decision between teams and groups by audience and scale.",
-        "date": "2026-09-30",
-        "author": "Adroit Learning",
-        "readTime": "15",
-        "tags": [],
-        "status": "published"
-      },
-      {
-        "slug": "day-19-r-5a-teams-account-teams-sales-teams-case-teams-team-ba",
-        "title": "Teams: Account Teams, Sales Teams, Case Teams, Team-Based Record Access",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 19,
-        "excerpt": "Learn how Account Teams, Sales (Opportunity) Teams, and Case Teams grant per-record, owner-managed access with roles and access levels. Covers the additive share row teams create, the Use Account Teams setting on Opportunity that can over-share, and the decision of when a team beats a group, a rule, or a permission set.",
-        "date": "2026-10-01",
-        "author": "Adroit Learning",
-        "readTime": "16",
-        "tags": [],
-        "status": "published"
-      },
-      {
-        "slug": "day-20-r-5b-team-vs-role-vs-group-trade-offs-and-scenarios",
-        "title": "Team vs Role vs Group Trade-Offs and Scenarios",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 20,
-        "excerpt": "Given a scenario, recommend teams, roles, or groups (and their trade-offs) to satisfy record access requirements. Covers the decision rule that maps a reporting line to the role hierarchy, a recurring population to a group plus a sharing rule, and per-record collaboration to a team, plus the scalability and maintainability cost of each choice.",
-        "date": "2026-10-02",
-        "author": "Adroit Learning",
-        "readTime": "16",
-        "tags": [],
-        "status": "published"
-      },
-      {
-        "slug": "day-21-r-6a-object-relationships-and-sharing-parent-child-mast",
-        "title": "Object Relationships and Sharing: Parent-Child, Master-Detail Rollups, Lookups, Implicit Sharing",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 21,
-        "excerpt": "Given a scenario, determine the correct object relationships that support record access sharing requirements. Covers master-detail (Controlled by Parent) versus lookup (independent sharing), implicit sharing for standard relationships, roll-up summary data exposure, and the conversion rules that make relationship choice a security decision.",
-        "date": "2026-10-03",
-        "author": "Adroit Learning",
-        "readTime": "16",
-        "tags": [],
-        "status": "published"
-      },
-      {
-        "slug": "day-22-r-6b-relationship-scenarios-which-relationships-propaga",
-        "title": "Relationship Scenarios: Which Relationships Propagate Access, Cumulative Impact, Record Types",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 22,
-        "excerpt": "Given a scenario, determine which relationships propagate access, assess the cumulative sharing impact of multiple access layers, and understand the role of record types. Covers master-detail and related-record propagation, Account-to-Contact/Opportunity access settings, the union of all grant sources, and why record types shape presentation without touching the sharing table.",
-        "date": "2026-10-04",
-        "author": "Adroit Learning",
-        "readTime": "17",
-        "tags": [],
-        "status": "published"
-      },
-      {
-        "slug": "day-23-r-7a-programmatic-sharing-apex-managed-sharing-apex-sha",
-        "title": "Programmatic Sharing: Apex Managed Sharing, Apex Sharing Reasons, the Share Object",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 23,
-        "excerpt": "Given a scenario, determine how programmatic sharing supports record access requirements. Covers Apex managed sharing, the Share object (AccountShare, CustomObject__Share), the required RowCause field and custom sharing reasons, the Modify All Data requirement, why managed sharing can only grant and never restrict, and the governance needed to keep the sharing table bounded.",
-        "date": "2026-10-05",
-        "author": "Adroit Learning",
-        "readTime": "16",
-        "tags": [],
-        "status": "published"
-      },
-      {
-        "slug": "day-24-r-7b-programmatic-sharing-scenarios-recalculation-limit",
-        "title": "Programmatic-Sharing Scenarios, Recalculation, Limits, and When Declarative Fails",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 24,
-        "excerpt": "Given a scenario, determine when programmatic sharing is required and how to keep it correct and bounded. Covers when declarative sharing fails and Apex managed sharing is the only answer, why recalculation of managed shares is the code's responsibility, the DML and governor limits that bound the work, and the compute-diff-reconcile design pattern that keeps the sharing table minimal.",
-        "date": "2026-10-06",
-        "author": "Adroit Learning",
-        "readTime": "16",
-        "tags": [],
-        "status": "published"
-      },
-      {
-        "slug": "day-25-r-8a-external-users-guest-user-experience-cloud-licensi",
-        "title": "External Users: Guest User, Experience Cloud Licensing, Sharing Sets and Sharing Groups",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 25,
-        "excerpt": "Given a scenario, determine what sharing mechanism is appropriate to share records with external users. Covers how Experience Cloud represents external users through a license and profile, the difference between an authenticated external user and the anonymous guest user, why sharing sets and sharing groups replace OWD-based public sharing for portals, and how the license tier gates which features and objects external users can reach.",
-        "date": "2026-10-07",
-        "author": "Adroit Learning",
-        "readTime": "16",
-        "tags": [],
-        "status": "published"
-      },
-      {
-        "slug": "day-26-r-8b-external-user-scenarios-portal-roles-account-conta",
-        "title": "External-User Scenarios: Portal Roles, Account and Contact Access, Data Protection",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 26,
-        "excerpt": "How to configure portal roles and account and contact access for external users while keeping their data exposure to the least the relationship requires.",
-        "date": "2026-10-08",
-        "author": "Jimmy Olsen",
-        "readTime": "13 min read",
-        "tags": [
-          "salesforce",
-          "sharing",
-          "visibility",
-          "architect",
-          "external-users",
-          "portal-roles",
-          "sharing-sets",
-          "field-security",
-          "data-protection"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "day-27-r-9a-record-access-overrides-stamp-vs-rollup-record-typ",
-        "title": "Record Access Overrides: Stamp vs Rollup (Record Type, Field Update, Formula)",
-        "series": "salesforce-sharing-visibility-architect",
-        "lesson": 27,
-        "excerpt": "How to override a record's access by stamping a security-relevant value onto it (record type, custom field, picklist) or computing it (formula, rollup), then driving a criteria-based sharing rule from that value.",
-        "date": "2026-10-09",
-        "author": "Jimmy Olsen",
-        "readTime": "14 min read",
-        "tags": [
-          "salesforce",
-          "sharing",
-          "visibility",
-          "architect",
-          "access-overrides",
-          "sharing-rules",
-          "record-types",
-          "formula-fields",
-          "rollup-summary",
-          "stamp"
-        ],
-        "status": "published"
-      }
-    ],
-    "totalLessons": 27,
-    "curriculumLessons": 36
   },
   {
     "slug": "sf-omni-consultant",
@@ -7232,6 +7255,29 @@ export const learnLessons: LearnLesson[] = [
       "CTA",
       "Data",
       "Certifications"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-28-r-9b-override-scenarios-manual-sharing-vs-stamp-vs-cust",
+    "title": "Override Scenarios: Manual Sharing vs Stamp vs Custom Logic",
+    "series": "salesforce-sharing-visibility-architect",
+    "lesson": 28,
+    "excerpt": "How to pick the right record access override for a given scenario: manual sharing for one-off human grants, a stamp plus criteria rule for repeatable value-based access, and Apex Managed Sharing when the access depends on runtime computation a field cannot represent.",
+    "date": "2026-10-10",
+    "author": "Jimmy Olsen",
+    "readTime": "14 min read",
+    "tags": [
+      "salesforce",
+      "sharing",
+      "visibility",
+      "architect",
+      "manual-sharing",
+      "sharing-rules",
+      "apex-managed-sharing",
+      "rowcause",
+      "stamp",
+      "override"
     ],
     "status": "published"
   },
