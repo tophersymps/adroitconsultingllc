@@ -2,6 +2,31 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "salesforce-observability-2026",
+    "title": "You Cannot Fix What You Cannot See",
+    "excerpt": "A modern Salesforce org fails across six layers that each log somewhere different. Observability means watching each one where the failure actually appears.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "October 10, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "16 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "Observability",
+      "Event Monitoring",
+      "Agentforce",
+      "Data Cloud",
+      "Experience Cloud",
+      "Apex",
+      "Security"
+    ],
+    "bannerImage": "/banners/salesforce-observability-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "cross-team-dependency-coordination-2026",
     "title": "The Dependency Is the Delivery: Coordinating Teams",
     "excerpt": "Every team can hit its sprint goal and the program still slips. The schedule lives in the seams between teams, the risk most plans never write down.",

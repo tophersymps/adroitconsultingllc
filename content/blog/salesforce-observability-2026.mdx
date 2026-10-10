@@ -1,0 +1,112 @@
+---
+title: "You Cannot Fix What You Cannot See"
+slug: salesforce-observability-2026
+excerpt: "A modern Salesforce org fails across six layers that each log somewhere different. Observability means watching each one where the failure actually appears."
+category: "Salesforce"
+categoryColor: sf
+categoryGradient: "from-sky to-sky-dark"
+date: "October 10, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "16 min read"
+tags: [Salesforce, Observability, Event Monitoring, Agentforce, Data Cloud, Experience Cloud, Apex, Security]
+bannerImage: /banners/salesforce-observability-2026.png
+---
+
+![Six-layer observability map: Flow, Agentforce, Data Cloud, Experience Cloud, Apex, and the API/security boundary, each with the specific place its runtime failures surface](</diagrams/salesforce-observability-2026/1-stack-failure-map.png>)
+
+Ask an office full of Salesforce admins how they know the org is healthy and you will get a list of places, not a plan: the debug log of the Apex that just threw, the flow error email that lands in the shared inbox, the login history screen when someone complains they cannot get in. Each of those is a real signal. None of them is connected to the others, and most of them only surface when the phone rings.[^1]
+
+Here is the uncomfortable fact that this article is built on: the modern org runs on six layers, and each layer fails in a different place and is visible in a different place. A Flow that breaks, an Agentforce interaction that goes down the wrong path, a Data Cloud stream that silently drops rows, a guest user on an Experience Cloud site who sees a record they should not, an Apex call that times out, an API integration still hitting an endpoint about to retire. These are six different failure signatures with six different homes in the platform. The teams that only watch the code layer are effectively blind to the five layers that now do most of the work.
+
+This is the article the stack companions left open. The [stack testing](/field-notes/salesforce-stack-testing-2026) piece showed how to know a change is safe before it ships. This one is the runtime half: how you know, from the moment it goes live, that it is working, and where you look the moment it stops. Testing answers "is this safe to deploy?" Observability answers "is this still working, and if not, why, without a customer having to tell me?"
+
+## The event backbone under everything
+
+The good news is that Salesforce does not leave you with debug logs and hope. Under the whole platform sits Event Monitoring, and it captures activity in three separate frameworks with different strengths. Understanding the difference between the three is the single highest-leverage idea in this article, because it tells you what latency you can expect from each kind of question.[^2]
+
+The first is the **Event Log File** framework, the oldest and the broadest. Salesforce copies transactions your org makes and exposes them as CSV files through a standard object called `EventLogFile`. It supports seventy-four event types, from logins and report exports to the exact SOQL a user ran. The cost of that breadth is freshness: the copy runs asynchronously, so it lands hourly or daily, and current events can take up to an hour to appear. Data is retained for up to one year. This is your forensic archive, the place you go to answer "what actually happened last Tuesday at scale?"[^2]
+
+The second is the **Event Log Object** framework. Same family of data, but surfaced as queryable standard objects instead of raw CSV, so you can SOQL against them. It currently supports forty-three event types, and data is available to query within 25 to 45 minutes of the event, retained for 30 days. This is your mid-tier: fresher than the file framework, queryable, but still minutes behind.[^2]
+
+The third is the **Real-Time Event Monitoring** framework, which is where the word "real-time" stops being marketing. It streams twenty event types (fourteen from user activity plus six from anomaly detection) over Salesforce's enterprise messaging platform, which is backed by Apache Kafka. This is the one that powers alerting, because the events arrive within a bounded time budget rather than on an hourly cron. It is also the framework that likely matters most to you, because most of its value sits in security: threat detection pushes events for credential stuffing, session hijacking, login anomalies, API anomalies, guest user anomalies, and report anomalies. Real-time events stored in Big Objects or standard objects are retained for six months (ten years for some identity events).[^2]
+
+A useful way to hold all three in your head: Event Log Files are the archive (broad, slow, a year deep), Event Log Objects are the query tier (fresh enough for investigation), and Real-Time Event Monitoring is the alarm (fast enough to act on). You need all three, because you cannot alert on the archive and you cannot audit with the alarm.
+
+![Three Event Monitoring frameworks: Event Log File for the broad one-year archive, Event Log Object for 30-day queryable data, and Real-Time Event Monitoring for streaming near-real-time alarms, each with its event count and freshness](</diagrams/salesforce-observability-2026/2-event-frameworks.png>)
+
+## Flow: failures surface as interviews, not exceptions
+
+Flow is the layer where the observability story is most often missed, because the standard edition tools predate the boom in declarative automation. Most teams do not even know what the failure surface looks like, so they never build a habit around it.
+
+A Flow does not throw an exception the way an Apex class does. When a flow run fails, the platform sends an email naming the flow, the version, and the element that caused the error, and it leaves a paused or failed interview in a list view you can open in Setup. Paused interviews are the classic silent killer: a flow that hits a waiting condition (a record that never appears, an approval that never comes back) sits paused indefinitely, holding a session, and nothing tells you it is stuck until a backlog of them builds up. Monitoring Flows in Setup shows you your org's usage and the list of paused and scheduled interviews.[^3]
+
+The deeper discipline has two halves. First, treat the failed-interview list as a queue you triage on a schedule, not as a noise channel. Every interview carries the element that broke and a link to debug it in Flow Builder, so "why did this flow fail at 2 a.m.?" becomes a ten-minute investigation instead of a guess. Second, learn which platform event fires for agent-driven flows. The `Invocable Action` event in Event Monitoring logs actions invoked during Agentforce flows, which is how you connect a declarative automation to a specific agent interaction. That is the seam between the Flow layer and the agent layer, and most orgs never turn it on.[^2]
+
+## Agentforce: from black box to trace tree
+
+Agents are the layer that frightens architects the most, and rightly, because for a long time they were the least observable. The announcement of deep observability in Agentforce Studio was built on exactly that problem: once agents start handling real transactions, teams could see the outcome but not why the agent chose the path it did, and tuning an unseeable system is guesswork.[^4]
+
+That changed in two complementary ways, and knowing which one to use is the practical skill.
+
+The first is **session tracing**, which lives at the planner level. It captures the conversational arc: what the user said, which subagent handled it, and what the agent returned. This is the tool for questions about the interaction itself, like "why did the agent answer this customer with a return policy instead of a shipping question?" Session data lands in the `AiAgentInteraction` data model object in Data 360.[^5]
+
+The second is **Agent Platform Tracing**, which is newer and markedly deeper. It captures every agent action execution as an OpenTelemetry trace tree stored in Data 360, recording every LLM call, flow execution, and Apex invocation in the chain, with timing and a status code on each span. Enabling it is a two-minute toggle in Setup (Setup, Agent Platform Tracing), assuming Data 360 is provisioned, and spans start populating within minutes. There is no backfill, so you want it on before you need it.[^5]
+
+The trace tree is the reason this layer is finally tractable. A single user utterance to an agent can cascade into a flow that runs, an Apex class that never returns, and a model step that takes a second. A top-level error message does not tell you which part broke. The tree does: it shows each span, how long it took, and whether it returned OK or ERROR, so you can see that the "failure" was actually a flow that ran fine, queried an account, found zero rows (`db.rows_affected=0`), and quietly continued on a fallback path. Without the span attributes you would see a failed action and have no idea whether the flow touched the database or what it found there.[^5]
+
+Both DMOs share the same trace ID, so you can join the conversational session to the back-end execution and answer the whole chain: what the agent decided to do, and exactly which service did it, in a couple of minutes of SOQL.[^5]
+
+![Agent Platform Tracing tree: a user utterance that cascades into LLM steps, a topic, an Apex action calling a Flow that queries an account and finds zero rows, each span carrying timing and an OK or ERROR status](</diagrams/salesforce-observability-2026/3-agent-trace-tree.png>)
+
+## Data Cloud: watch the stream, not the sink
+
+Data Cloud is the layer where the testing article's warning lands hardest, because a data pipeline failure is silent by nature. A stream that could not keep up, a mapping rule that dropped a field, a transform that errored mid-batch: none of these raise an exception a user ever sees. The pipeline just stops moving data, and the denial of service is slow and invisible. An order that never reconciles, a segment that never grows, a record that never arrives.
+
+The monitoring surface is where the stream is, not where it lands. The status of a streaming data transform records how many records were processed, failed, and removed in each refresh, and data sync jobs surface in the Jobs Monitor with a refresh action and per-job detail. The habit to build is a reconciliation check, a count-and-compare between what your source systems put out and what Data Cloud actually stored, run on a schedule. An ingested count foundation in Data Cloud reports success and failure counts per stream and ingestion run, which turns "the data stopped moving" from a slowly-growing hunch into a number you can see on a dashboard.[^6] The same frugality that governs [choosing a data strategy](/field-notes/salesforce-data-cloud-strategy-guide) applies to monitoring it: watch the few numbers that tell you whether the pipe is flowing before you build the ten-dashboard suite.
+
+The connection to the rest of the stack matters too: Event Monitoring data can be imported into Data Cloud itself through the platform events connector, which is the pattern that unifies security signals with your business data in one queryable place. That is how the observability of every other layer becomes joinable with the data layer.[^2]
+
+## The security boundary: where the anomalies live
+
+Observability stops being about uptime and becomes about defense at the two layers the public can reach: Experience Cloud and the API surface. This is the layer that made national news in early 2026, and the reason the guidance is worth quoting directly.
+
+Salesforce's security organization tracked a threat-actor campaign exploiting overly permissive guest user configurations on public-facing Experience Cloud sites. The actor used a modified version of an open-source tool, Aura Inspector, to mass-scan sites for misconfigured guest-user access and extract data directly from CRM objects without logging in. Salesforce was explicit that this was not a platform vulnerability but a customer-configuration problem: the guest user profile was granting unauthenticated visitors access to objects and fields that were never meant to be public. Data harvested this way feeds targeted phishing and "vishing" campaigns.[^7]
+
+The defense is not a secret. It is a four-layer check, because Experience Cloud evaluates access through four sequential layers, and access denied at any layer stops the user: object access, record access, field-level security, and field value masking. Salesforce's immediate-action list is concrete and auditable: audit the guest user profile and reduce it to the minimum (start from zero access and restore only what tested functionality needs), set org-wide defaults for external users to private, disable guest access to public APIs (the single highest-impact change, because it closes the Aura endpoint the campaign exploited), restrict portal and site user visibility, and disable self-registration unless it is genuinely required.[^7]
+
+Here is where observability turns this into an automated defense rather than a manual audit. Real-Time Event Monitoring streams a `GuestUserAnomaly` event that builds profiles of guest user data access and flags access that deviates from normal behavior. Paired with a Transaction Security policy, you can go from "we hope the guest profile is tight" to "the platform evaluated this access and blocked it" as an actual action. Transaction Security lets you create policies, declaratively with Condition Builder or in Apex, that block a transaction or force multi-factor authentication when a configured condition fires, and it captures fourteen event types synchronously. A policy that says "a guest export of more than a threshold of rows from a sensitive object is blocked and an admin is notified" is observability that does something about the problem instead of logging it after the fact.[^2]
+
+The API layer is the same story a year out. The cohort of retirements that the stack map flagged is still the deadline that decides your work, and the API anomaly event flags user activity that deviates from that same user's history. Monitoring the API surface means watching for clients still calling the versions being phased out, before enforcement lands, not after.[^2]
+
+![Guest user security model: the four access layers fielded in sequence (object access, record access, field-level security, value masking) with the guest-user and API anomaly events flagging a misconfigured profile before data is exposed](</diagrams/salesforce-observability-2026/4-guest-user-security.png>)
+
+## Building the observability floor
+
+None of this helps if it is a list of tools rather than a plan. The practical build has four steps, and they run cheapest-to-most-expensive so the floor exists within a day.
+
+First, turn on the free and near-free signals. Enable the Real-Time Event Monitoring events that matter to you (login, login-as, guest user, API anomaly, report, permission update) in the Event Manager. They store in Big Objects, they stream to whatever channel you pick, and if you have ever wondered who viewed a record or exported a report, these are the events that answer it. In the standard editions, the free tier gives you seven Event Log Files with one-day retention, which is enough to start building the habit.[^2]
+
+Second, enable Agent Platform Tracing the day you deploy an agent. There is no backfill, so the cheapest time is before you need it. Spans land in Data 360 within minutes, and the trace tree gives you the runtime story no dashboard will. If you are also running the event pipeline, pick a model for triage: session tracing for "why did the agent answer that way," platform tracing for "which service broke under it," and the `Invocable Action` event for the Flow underneath.[^5]
+
+Third, wire the alarms to something with a page someone answers. The real-time events stream over the Kafka-backed messaging bus, and Transaction Security can take the blocking action itself. The org that merely stores the events has a nicer log. The org that streams the guest-user, login, and API anomalies into an alerting channel has a defense. This is the one decision that separates "observability" from "we have the data somewhere."
+
+Fourth, turn the audit into a standing habit. Recheck the guest user profile and external org-wide defaults every release, the same way you recheck your test coverage. Recheck inverted. Confidence decays by default, not by accident, and a site that was tight in March can drift broad by June as someone adds a permissions set to make a page work.[^9]
+
+The unifying idea is the same across every layer: pick the freshest signal that answers the question, watch the failure where it actually surfaces, and act on it. An Apex exception needs the debug log. A broken flow needs the interview list. A wrong-path agent needs the trace tree. A silent pipeline needs the stream status. An exposed guest user needs the anomaly event and a policy that blocks. Watch all six where they fail, and the phone stops being how you find out.
+
+[^1]: "An Architect's Guide to Event Monitoring," Salesforce, September 2025. [Salesforce](https://salesforce.com/blog/architect-guide-event-monitoring/). Traces the monitoring services in standard editions, the three Event Monitoring frameworks, and why triage with data beats trial and error.
+
+[^2]: "An Architect's Guide to Event Monitoring," Salesforce, September 2025. [Salesforce](https://salesforce.com/blog/architect-guide-event-monitoring/). Seventy-four Event Log File event types with hourly/daily delivery and up to one year of retention; forty-three Event Log Objects queryable within 25 to 45 minutes, retained 30 days; twenty Real-Time Event Monitoring events (fourteen user activity plus six anomaly detection) streamed over a Kafka-backed bus; threat detection events including GuestUserAnomaly, LoginAnomaly, and ApiAnomaly; Transaction Security's fourteen synchronous event types with Block or MFA actions; the Event Monitoring Data Cloud platform-events connector; and the free-tier seven Event Log Files with one-day retention.
+
+[^3]: "Managing and Monitoring Flows," Salesforce Help. [Salesforce Help](https://help.salesforce.com/s/articleView?id=platform.flow_monitor.htm). Pauses and failures surface as interviews; you can see your org's usage and a list of paused and failed interviews from Setup.
+
+[^4]: "Salesforce Announces Observability Tools in Agentforce Studio," Salesforce News & Insights, 2026. [Salesforce News](https://salesforce.com/news/stories/agentforce-studio-observability-tools-announcement/). Once agents handle real transactions they become black boxes; Agent Analytics, Agent Optimization, and Agent Health Monitoring close that gap; session-trace data is stored in Data 360.
+
+[^5]: "Agent Platform Tracing: Debug Agentforce with Trace Trees, SOQL, and Slack," Salesforce Developers Blog, May 2026. [Salesforce Developers](https://developer.salesforce.com/blogs/2026/05/agent-platform-tracing-debug-agentforce-with-trace-trees-soql-and-slack). Every Agentforce action execution is captured as an OpenTelemetry trace tree stored in Data 360 DMOs; session tracing (AiAgentInteraction) sits at the planner level while Agent Platform Tracing (TelemetryTraceSpan) captures LLM calls, Flow runs, and Apex invocations; the two share a trace ID so they join end to end; the db.rows_affected=0 example shows a flow ran querying an account with zero rows.
+
+[^6]: "Check the Status of a Streaming Data Transform," Salesforce Help, and "Data Cloud dashboard for Ingestion," Salesforce Trailblazer Community. [Salesforce Help](https://help.salesforce.com/s/articleView?id=data.c360_a_streaming_transform_check_data_transform_status.htm). Streaming data transforms report records processed, failed, and removed per refresh; ingestion success and failure counts per stream can be surfaced on a dashboard.
+
+[^7]: "Protecting Your Data: Essential Actions to Secure Experience Cloud Guest User Access," Salesforce, updated March 2026. [Salesforce](https://salesforce.com/blog/protecting-your-data-essential-actions-to-secure-experience-cloud-guest-user-access/). The threat-actor campaign leveraging a modified Aura Inspector against permissive guest user configs; the four-layer access model (object, record, FLS, value masking); and the recommended actions including disabling guest access to public APIs, private external org-wide defaults, restricting visibility, and disabling self-registration.
+
+[^9]: "Half Your Salesforce Stack Is Not Code," Adroit Consulting field note. [Adroit](https://adroit.io/field-notes/salesforce-stack-testing-2026). The companion piece on how to know a change is safe before it deploys; this article is the runtime-visibility half of the same stack map.
