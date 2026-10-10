@@ -36,7 +36,11 @@ The field must be indexed. A filter on an unindexed custom field is invisible to
 
 The result set must stay under the threshold. Here are the numbers the exam expects you to know, both from the index and selectivity guidance. For a standard index, the filter is selective if it matches less than 30 percent of the first million records and less than 15 percent of the records beyond the first million, with the standard-index threshold capping at a million total targeted records. For a custom index, the filter is selective if it matches under 10 percent of the first million records and under 5 percent beyond that, capping at about 333,000 targeted records. [^4][^5] These are the rule-of-thumb numbers Salesforce publishes, and a scenario question will hand you an object size and a filter cardinality and ask you to judge selectivity.
 
+![Standard and custom index selectivity thresholds: under 30 percent of the first million records and 15 percent beyond for a standard index, under 10 and 5 percent for a custom index, with caps near 1 million and 333,000 targeted records](</diagrams/day-29-lv-1a-ldv-fundamentals-skinny-tables-indexing-selective/1-selectivity-thresholds.png>)
+
 Run a concrete case. A custom object holds five million records, and a query filters on a custom field that has a custom index. The custom index threshold: 10 percent of the first million is 100,000, plus 5 percent of the remaining four million is 200,000, for a working ceiling of about 300,000. If the filter matches 250,000 records, the query is selective and the index is used. If the filter matches 1.2 million records, it blows past the threshold, the optimizer discards the index, and the query degrades into a scan.
+
+![Worked example on a five-million-record object: a custom-indexed filter matching 250,000 records is selective and the index is used, while one matching 1.2 million blows past the threshold and the optimizer discards the index into a scan](</diagrams/day-29-lv-1a-ldv-fundamentals-skinny-tables-indexing-selective/2-custom-index-worked-example.png>)
 
 The platform makes this visible. The Query Plan view in the Developer Console is the tool architects use to confirm whether a query is selective, which fields it used, and how much of the object it touched. When you tune a non-selective query, the first move is to open its query plan and see what the optimizer decided. [^4]
 
@@ -45,6 +49,8 @@ The consequence of a non-selective query is not cosmetic. In a trigger, a batch 
 ## Which fields are natively indexed
 
 Because a selective filter has to run on an indexed field, the exam expects you to know, cold, which fields the platform indexes by default. The large data volumes index guidance lists them: the unique record ID (the primary key), Name, the relationship foreign keys, CreatedDate, SystemModstamp (which backs LastModifiedDate), RecordTypeId, Division, and Email for contacts and leads. Lookups and master-detail relationship fields carry a foreign key index automatically. [^5]
+
+![Which fields are natively indexed: Id, Name, relationship foreign keys, CreatedDate, SystemModstamp, RecordTypeId, Division, and Email, plus external IDs indexed automatically, versus free-form custom text and the field types that cannot be custom-indexed](</diagrams/day-29-lv-1a-ldv-fundamentals-skinny-tables-indexing-selective/3-natively-indexed-fields.png>)
 
 That list is the standard index set, and it answers the exam's recurring question about which fields are natively indexed. It also explains why OwnerId and CreatedDate, the sort of fields that show up as selective filters all over real queries, work out of the box, while a free-form custom text field holding notes does not. The free-form text field is exactly the case that breaks a selective query: nothing indexes it, so any filter on it forces a full scan. [^4]
 
@@ -67,6 +73,8 @@ One more property worth knowing: custom indexes must be requested and are a supp
 A skinny table is the other big index-adjacent lever, and the exam's Q3 tests your precise understanding of what it is and is not. Get the definition right.
 
 A skinny table is a separate, flattened, denormalized database table that Salesforce maintains behind the scenes. It contains a subset of frequently used fields from a standard or custom base object, combining the standard and custom fields that the platform normally keeps in separate physical tables, so a query that touches only skinny-table fields avoids the join. It is read-only from your perspective; you never write to it. Salesforce can create skinny tables to contain frequently used fields and to avoid joins, improving the performance of read-only operations. [^6]
+
+![A skinny table flattens frequently used standard and custom fields into a read-only table so a query skips the join between the separate standard and custom field tables the platform normally keeps apart](</diagrams/day-29-lv-1a-ldv-fundamentals-skinny-tables-indexing-selective/4-skinny-table-mechanism.png>)
 
 Here is what the exam wants you to understand about skinny tables, and each of these maps to a true or false distractor in Q3.
 
@@ -153,6 +161,8 @@ Trap one, relying on a query that filters on an unindexed field. On an object at
 Trap two, assuming multi-select picklists index efficiently. They are stored as strings and cannot be indexed the same way, which makes them non-selective filter and report fields at LDV. Keep them out of the filter path or restructure them, and remember that a skinny table can carry them for read-only reporting even though the base object cannot index them.
 
 Trap three, creating a custom index or skinny table and expecting it to appear the moment you request it, or to update itself. Both require Salesforce Support enablement, and a skinny table must be refreshed when the underlying fields change. A custom index the optimizer will not use, because the filter is not selective enough, can make queries slower instead of faster.
+
+![The three exam traps: filtering on an unindexed field forces a full scan, assuming multi-select picklists index efficiently is wrong because they are stored as strings, and a custom index or skinny table does not appear instantly or update itself](</diagrams/day-29-lv-1a-ldv-fundamentals-skinny-tables-indexing-selective/5-three-exam-traps.png>)
 
 ## Try it for yourself
 
