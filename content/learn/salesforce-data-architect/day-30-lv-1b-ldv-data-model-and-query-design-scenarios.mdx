@@ -28,6 +28,8 @@ The entry point matters more than most architects realize. A report that starts 
 
 So the design reflex is: for every top query, write down the entry object, the filter fields, the sort fields, and the expected result size, and then check each against the selectivity rules from lesson 29. A filter on an indexed field that returns a bounded set is a good query. A filter on an unindexed field, or a filter that can return millions of rows, is a query that needs a design change, not a query you ship.
 
+![The query-first design method: for each top query or report, capture the entry object, filter fields, sort fields, and expected result size, then check each against the selectivity rules, so a filter on an indexed field that returns a bounded set ships while one on an unindexed field or that can return millions of rows needs a design change](</diagrams/day-30-lv-1b-ldv-data-model-and-query-design-scenarios/1-design-for-the-query.png>)
+
 ## Query patterns that force full scans
 
 The exam tests your ability to recognize the query shapes that force a full table scan, because those are the shapes that take down a large object. Lesson 29 covered the unindexed-field filter. This lesson adds the rest of the family, and each one is a distinct exam trap.
@@ -42,6 +44,8 @@ The fourth is a leading-wildcard LIKE query. A filter like `WHERE Name LIKE '%sm
 
 Here is the pattern that ties these together. A query is selective when it filters on an indexed field and returns a bounded set. Anything that breaks that, an unindexed field, an OR across unindexed fields, a negative filter whose complement is huge, or a leading wildcard, pushes the query toward a scan. When you review a customer's slow queries, you are looking for exactly these four shapes.
 
+![The query shapes that force a full scan: a selective filter on an indexed field with a bounded set, versus an unindexed text filter, an OR across unindexed fields, a negative filter whose complement is huge, and a leading-wildcard LIKE, each with why it scans and the fix](</diagrams/day-30-lv-1b-ldv-data-model-and-query-design-scenarios/2-query-patterns-that-force-full-scans.png>)
+
 ## Denormalize for read performance
 
 The next lever is denormalization, and it is the one that most directly changes the data model. The idea is to copy frequently filtered or reported values onto the object the query starts from, so the query does not have to traverse relationships to get them.
@@ -53,6 +57,8 @@ The classic example is a Case report that needs to show the Account's industry. 
 The trade-off is the one the exam wants you to weigh. A formula field is evaluated on read, so it costs nothing to store but recomputes every time the record renders or is queried. A stored field is written once and read cheaply, but you must maintain it, through a flow, a trigger, or a batch job, and it can drift out of sync with the source. The architect's judgment is to denormalize the values that are reported and filtered most often, and to choose the maintenance mechanism that matches the data's change rate. A value that changes rarely, like an account's industry, is a good stored denormalization candidate. A value that changes constantly is better as a formula, or not denormalized at all.
 
 The exam's Q2 tests this directly. Denormalizing frequently reported values onto the queried object is one of the two practices that improve LDV query performance. The other is indexing filter fields via a custom index or skinny table. The two anti-patterns in that question, filtering on unindexed text fields and using leading-wildcard LIKE queries, are the full-scan shapes from the previous section. [^2][^3]
+
+![Denormalizing for read performance: a Case report that joins to Account to filter on Account.Industry is a multi-hop join, while copying Industry onto Case makes the report single-object, with the trade-off between a formula field and a stored field](</diagrams/day-30-lv-1b-ldv-data-model-and-query-design-scenarios/3-denormalize-for-read-performance.png>)
 
 ## Distribute data to avoid skew and hot spots
 
@@ -118,6 +124,8 @@ Then you apply the levers. The list view's negative filter is non-selective, so 
 
 Each of those moves maps to one of the levers in this lesson, and together they turn a slow, unscalable model into one that handles the volume.
 
+![The worked example on a ten-million-row Case object: each symptom maps to a lever, a crawling list view to a positive filter plus archiving, a timing-out report to denormalization, a failing batch job to indexing, a write bottleneck to distributing ownership, and a wide object to a Case Detail child, then validate at ten million rows](</diagrams/day-30-lv-1b-ldv-data-model-and-query-design-scenarios/4-worked-example-ten-million-row-case.png>)
+
 ## Config walkthrough: designing a scaling data model
 
 Here is the numbered walkthrough the exam expects you to be able to reason through when handed a scenario.
@@ -139,6 +147,8 @@ Trap one, designing and testing at small volume. LDV problems only appear at sca
 Trap two, using negative or leading-wildcard filters on indexed fields. A negative filter like `Status != 'Closed'` runs on an indexed field but can be non-selective when the complement is huge, and a leading-wildcard LIKE cannot use an index at all. The fix is a positive indexed filter, which is exactly the exam's Q1.
 
 Trap three, building reports that traverse multiple lookups on huge objects instead of denormalizing the reported value. A multi-hop report is a join storm on a large object. The fix is to denormalize the reported value onto the entry object so the report is single-object, which is exactly the exam's Q2.
+
+![The three exam traps: designing and testing at small volume fixed by validating at representative volume, negative or leading-wildcard filters on indexed fields fixed by a positive indexed filter, and multi-lookup reports fixed by denormalizing the reported value](</diagrams/day-30-lv-1b-ldv-data-model-and-query-design-scenarios/5-three-exam-traps.png>)
 
 ## Try it for yourself
 
