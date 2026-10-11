@@ -2,6 +2,28 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "experience-cloud-access-model-2026",
+    "title": "Who Gets In: Choosing the Experience Cloud Access Model",
+    "excerpt": "Guest user, External Identity, or a community license. Each door changes what an external visitor can see and what it costs. Here is how to choose.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "October 11, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "10 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "Experience Cloud",
+      "Security",
+      "Licensing",
+      "Identity"
+    ],
+    "bannerImage": "/banners/experience-cloud-access-model-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "nextjs-16-4-cache-components-default-2026",
     "title": "Next.js 16.4 Turns Cache Components On: The Playbook",
     "excerpt": "Next.js 16.4 turns Cache Components on for new projects and recommends it for every app. Here is how existing codebases adopt it without a rewrite.",
