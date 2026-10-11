@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "nextjs-16-4-cache-components-default-2026",
+    "title": "Next.js 16.4 Turns Cache Components On: The Playbook",
+    "excerpt": "Next.js 16.4 turns Cache Components on for new projects and recommends it for every app. Here is how existing codebases adopt it without a rewrite.",
+    "category": "React & Web Dev",
+    "categoryColor": "react",
+    "categoryGradient": "from-emerald to-emerald-dark",
+    "date": "October 11, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "11 min read",
+    "featured": false,
+    "tags": [
+      "Next.js",
+      "React",
+      "Caching",
+      "Cache Components",
+      "ensureStatic",
+      "Web Development"
+    ],
+    "bannerImage": "/banners/nextjs-16-4-cache-components-default-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "llm-judge-truth-vs-format-2026",
     "title": "The Reviewer Cannot See the Truth",
     "excerpt": "An 84% agreement LLM judge still measures format, not truth. Chance-corrected agreement tells a truer story. Add the source-fidelity review layer.",
