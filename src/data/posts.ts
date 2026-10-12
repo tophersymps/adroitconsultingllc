@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "model-version-pinning-drift-2026",
+    "title": "Pinning a Model Is a Timer, Not a Lock",
+    "excerpt": "Pinning a model version is a timer, not a lock. Providers repoint aliases, swap infrastructure behind dated snapshots, and retire versions on a schedule.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "October 12, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "AI Infrastructure",
+      "Model Lifecycle",
+      "MLOps",
+      "Model Drift",
+      "Production AI",
+      "Reliability"
+    ],
+    "bannerImage": "/banners/model-version-pinning-drift-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "experience-cloud-access-model-2026",
     "title": "Who Gets In: Choosing the Experience Cloud Access Model",
     "excerpt": "Guest user, External Identity, or a community license. Each door changes what an external visitor can see and what it costs. Here is how to choose.",
