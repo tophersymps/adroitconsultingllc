@@ -2,6 +2,31 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "expand-contract-migrations-2026",
+    "title": "Expand and Contract: Zero-Downtime Database Changes",
+    "excerpt": "A rename, type change, or NOT NULL constraint cannot ship in one deploy. Expand and contract splits it into steps old and new code both survive.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "October 12, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "Database",
+      "Migrations",
+      "Zero-Downtime",
+      "DevOps",
+      "PostgreSQL",
+      "MySQL",
+      "Reliability",
+      "Infrastructure"
+    ],
+    "bannerImage": "/banners/expand-contract-migrations-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "model-version-pinning-drift-2026",
     "title": "Pinning a Model Is a Timer, Not a Lock",
     "excerpt": "Pinning a model version is a timer, not a lock. Providers repoint aliases, swap infrastructure behind dated snapshots, and retire versions on a schedule.",
