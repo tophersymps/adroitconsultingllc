@@ -59,6 +59,7 @@ export const articleAudio: ArticleAudio[] = [
   { slug: "experience-cloud-data-cloud-personalization-pattern", voice: "af_heart", storagePath: "blog/experience-cloud-data-cloud-personalization-pattern/af_heart.mp3", timingsStoragePath: "blog/experience-cloud-data-cloud-personalization-pattern/af_heart.timing.json" },
   { slug: "feature-flags-deploy-release-2026", voice: "af_heart", storagePath: "blog/feature-flags-deploy-release-2026/af_heart.mp3", timingsStoragePath: "blog/feature-flags-deploy-release-2026/af_heart.timing.json" },
   { slug: "figma-mcp-design-to-code-2026", voice: "af_heart", storagePath: "blog/figma-mcp-design-to-code-2026/af_heart.mp3", timingsStoragePath: "blog/figma-mcp-design-to-code-2026/af_heart.timing.json" },
+  { slug: "flow-metrics-consulting-delivery-2026", voice: "af_heart", storagePath: "blog/flow-metrics-consulting-delivery-2026/af_heart.mp3", timingsStoragePath: "blog/flow-metrics-consulting-delivery-2026/af_heart.timing.json" },
   { slug: "flow-orchestrates-agentforce", voice: "af_heart", storagePath: "blog/flow-orchestrates-agentforce/af_heart.mp3", timingsStoragePath: "blog/flow-orchestrates-agentforce/af_heart.timing.json" },
   { slug: "form-ux-design-2026", voice: "af_heart", storagePath: "blog/form-ux-design-2026/af_heart.mp3", timingsStoragePath: "blog/form-ux-design-2026/af_heart.timing.json" },
   { slug: "fullstack-type-safety-2026", voice: "af_heart", storagePath: "blog/fullstack-type-safety-2026/af_heart.mp3", timingsStoragePath: "blog/fullstack-type-safety-2026/af_heart.timing.json" },
