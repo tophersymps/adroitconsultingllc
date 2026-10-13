@@ -2,6 +2,30 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "measuring-design-systems-2026",
+    "title": "Design Systems Are Built. Almost Nobody Measures Them.",
+    "excerpt": "Adoption has topped design system teams' challenge list for five years running. The gap is not a missing component. It is an absent measurement layer.",
+    "category": "UI/UX",
+    "categoryColor": "ux",
+    "categoryGradient": "from-violet to-violet-dark",
+    "date": "October 13, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "13 min read",
+    "featured": false,
+    "tags": [
+      "UI/UX",
+      "Design Systems",
+      "Design Engineering",
+      "Adoption",
+      "Design Tokens",
+      "Governance",
+      "Metrics"
+    ],
+    "bannerImage": "/banners/measuring-design-systems-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "expand-contract-migrations-2026",
     "title": "Expand and Contract: Zero-Downtime Database Changes",
     "excerpt": "A rename, type change, or NOT NULL constraint cannot ship in one deploy. Expand and contract splits it into steps old and new code both survive.",
