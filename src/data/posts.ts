@@ -2,6 +2,28 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "flow-metrics-consulting-delivery-2026",
+    "title": "Delivery Runs on Waiting: Flow Metrics for Consulting",
+    "excerpt": "A consulting engagement is a flow system. Most of its lead time is waiting, and the firms that track flow efficiency find the wait that utilization hides.",
+    "category": "Project Management",
+    "categoryColor": "pm",
+    "categoryGradient": "from-teal to-teal-dark",
+    "date": "October 13, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "9 min read",
+    "featured": false,
+    "tags": [
+      "Project Management",
+      "Flow",
+      "Delivery",
+      "Kanban",
+      "Consulting"
+    ],
+    "bannerImage": "/banners/flow-metrics-consulting-delivery-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "measuring-design-systems-2026",
     "title": "Design Systems Are Built. Almost Nobody Measures Them.",
     "excerpt": "Adoption has topped design system teams' challenge list for five years running. The gap is not a missing component. It is an absent measurement layer.",
