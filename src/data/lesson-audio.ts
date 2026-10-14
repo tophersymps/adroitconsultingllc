@@ -6,6 +6,7 @@
 import type { LessonAudio } from "@/lib/audio/contracts";
 
 export const lessonAudio: LessonAudio[] = [
+  { series: "agentic-ai", slug: "agent-frameworks-build-buy-lock-in-escape-hatches", voice: "af_heart", storagePath: "learn/agentic-ai/agent-frameworks-build-buy-lock-in-escape-hatches/af_heart.mp3", timingsStoragePath: "learn/agentic-ai/agent-frameworks-build-buy-lock-in-escape-hatches/af_heart.timing.json" },
   { series: "agentic-ai", slug: "agent-frameworks-overview-langchain-langgraph-crewai-openai-claude", voice: "af_heart", storagePath: "learn/agentic-ai/agent-frameworks-overview-langchain-langgraph-crewai-openai-claude/af_heart.mp3", timingsStoragePath: "learn/agentic-ai/agent-frameworks-overview-langchain-langgraph-crewai-openai-claude/af_heart.timing.json" },
   { series: "agentic-ai", slug: "agent-identity-oauth-service-accounts-scoped-permissions", voice: "af_heart", storagePath: "learn/agentic-ai/agent-identity-oauth-service-accounts-scoped-permissions/af_heart.mp3", timingsStoragePath: "learn/agentic-ai/agent-identity-oauth-service-accounts-scoped-permissions/af_heart.timing.json" },
   { series: "agentic-ai", slug: "agent-loop-by-hand-no-framework", voice: "af_heart", storagePath: "learn/agentic-ai/agent-loop-by-hand-no-framework/af_heart.mp3", timingsStoragePath: "learn/agentic-ai/agent-loop-by-hand-no-framework/af_heart.timing.json" },
