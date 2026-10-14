@@ -24,6 +24,28 @@ export const posts: BlogPost[] = [
     "status": "published"
   },
   {
+    "slug": "lightning-web-components-best-practices",
+    "title": "Lightning Web Components Best Practices",
+    "excerpt": "Lightning Web Components are Salesforce's modern component model, but the best practices that keep a complex org healthy go far beyond the syntax. A field-tested playbook for structure, data, and performance.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "October 13, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "9 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "LWC",
+      "Lightning Web Components",
+      "Apex",
+      "JavaScript",
+      "Best Practices"
+    ],
+    "status": "published"
+  },
+  {
     "slug": "measuring-design-systems-2026",
     "title": "Design Systems Are Built. Almost Nobody Measures Them.",
     "excerpt": "Adoption has topped design system teams' challenge list for five years running. The gap is not a missing component. It is an absent measurement layer.",
