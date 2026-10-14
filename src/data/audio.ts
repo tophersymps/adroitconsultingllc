@@ -123,6 +123,7 @@ export const articleAudio: ArticleAudio[] = [
   { slug: "salesforce-stack-cost-modeling-2026", voice: "af_heart", storagePath: "blog/salesforce-stack-cost-modeling-2026/af_heart.mp3", timingsStoragePath: "blog/salesforce-stack-cost-modeling-2026/af_heart.timing.json" },
   { slug: "salesforce-stack-testing-2026", voice: "af_heart", storagePath: "blog/salesforce-stack-testing-2026/af_heart.mp3", timingsStoragePath: "blog/salesforce-stack-testing-2026/af_heart.timing.json" },
   { slug: "salesforce-summer-26-three-things", voice: "af_heart", storagePath: "blog/salesforce-summer-26-three-things/af_heart.mp3", timingsStoragePath: "blog/salesforce-summer-26-three-things/af_heart.timing.json" },
+  { slug: "salesforce-winter-27-headless-2026", voice: "af_heart", storagePath: "blog/salesforce-winter-27-headless-2026/af_heart.mp3", timingsStoragePath: "blog/salesforce-winter-27-headless-2026/af_heart.timing.json" },
   { slug: "scalable-react-2026", voice: "af_heart", storagePath: "blog/scalable-react-2026/af_heart.mp3", timingsStoragePath: "blog/scalable-react-2026/af_heart.timing.json" },
   { slug: "scrum-ceremonies-ai-agents-2026", voice: "af_heart", storagePath: "blog/scrum-ceremonies-ai-agents-2026/af_heart.mp3", timingsStoragePath: "blog/scrum-ceremonies-ai-agents-2026/af_heart.timing.json" },
   { slug: "secret-sprawl-machine-identity-2026", voice: "af_heart", storagePath: "blog/secret-sprawl-machine-identity-2026/af_heart.mp3", timingsStoragePath: "blog/secret-sprawl-machine-identity-2026/af_heart.timing.json" },
