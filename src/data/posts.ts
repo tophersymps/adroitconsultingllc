@@ -2,6 +2,28 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "salesforce-winter-27-headless-2026",
+    "title": "Winter '27 Went Headless: What Builds Change Now",
+    "excerpt": "Every Salesforce capability is now reachable as an API, an MCP tool, or a CLI command. Build it once and an app, a person, or an agent can all call it.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "October 14, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "Winter '27",
+      "Agentforce",
+      "Flow",
+      "Headless"
+    ],
+    "bannerImage": "/banners/salesforce-winter-27-headless-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "flow-metrics-consulting-delivery-2026",
     "title": "Delivery Runs on Waiting: Flow Metrics for Consulting",
     "excerpt": "A consulting engagement is a flow system. Most of its lead time is waiting, and the firms that track flow efficiency find the wait that utilization hides.",
