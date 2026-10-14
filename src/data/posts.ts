@@ -24,6 +24,29 @@ export const posts: BlogPost[] = [
     "status": "published"
   },
   {
+    "slug": "self-hosted-inference-decision-2026",
+    "title": "Which Inference Belongs on Hardware You Own",
+    "excerpt": "Owning the GPU feels cheaper than paying per token. For most workloads the math never crosses over. The decision is volume, utilization, and compliance.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "October 14, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "AI Infrastructure",
+      "Self-Hosted LLMs",
+      "Model Deployment",
+      "LLM Cost",
+      "Inference",
+      "Data Sovereignty"
+    ],
+    "bannerImage": "/banners/self-hosted-inference-decision-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "flow-metrics-consulting-delivery-2026",
     "title": "Delivery Runs on Waiting: Flow Metrics for Consulting",
     "excerpt": "A consulting engagement is a flow system. Most of its lead time is waiting, and the firms that track flow efficiency find the wait that utilization hides.",
