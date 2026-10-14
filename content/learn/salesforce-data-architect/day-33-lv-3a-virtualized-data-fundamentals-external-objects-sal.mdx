@@ -30,6 +30,8 @@ An External Object looks and feels like a custom object. It appears in tabs, lis
 
 By default External Object records are read-only. [^2] You can enable writable External Objects if the external data source supports writes, which turns on create, edit, and delete for users who have permission. But write support is adapter-dependent and not guaranteed. The OData adapter can support writes when the OData service supports them, the cross-org adapter can write back to the other org, and a custom Apex adapter can do whatever you code the Apex Connector Framework to do. [^4] For the exam, hold this baseline: external objects are read by default, each adapter decides whether writes are possible, and a read-only External Object is the common case.
 
+![How virtualization reaches external data: a user touches a list view, record page, related list, or SOQL query, Salesforce Connect maps it to an External Object, and a live callout fetches the data from the external source (ERP, warehouse, data lake, or another org) with no copy kept in the org](</diagrams/day-33-lv-3a-virtualized-data-fundamentals-external-objects-sal/1-how-virtualization-reaches-external-data.png>)
+
 ## The adapters: OData, cross-org, and custom
 
 Salesforce Connect does not talk to every external system the same way. It uses a protocol-specific adapter, and you choose the adapter when you define the external data source. [^2] The requirement names OData, cross-org, and custom adapters explicitly, so know all three and the scenarios each fits. [^1]
@@ -41,6 +43,8 @@ The cross-org adapter exposes objects from another Salesforce org as External Ob
 The custom adapter, built with the Apex Connector Framework, connects to any data store that none of the packaged adapters can reach. [^2] You write Apex that implements Salesforce Connect's interfaces, and you decide how the adapter pulls, queries, and (if you support it) writes the data. [^4] This is the most flexible adapter and the most work. The exam lists it as a valid option, but the practical guidance is to prefer a packaged adapter when one matches your source, and to reach for a custom adapter only when none does.
 
 Salesforce has since added other adapters that the exam guide, written against an earlier release, names more loosely. There is now an adapter for Amazon DynamoDB, an adapter for SQL sources such as Snowflake and Amazon Athena, an adapter for GraphQL, and adapters for Salesforce Archive and Privacy Center stores. [^2] The exam's list of "etc." admits these. Know the three named in the requirement cold, and recognize that Salesforce keeps extending the family as new external stores appear.
+
+![Choose the Salesforce Connect adapter by what the source is: OData 2.0/4.0/4.01 for any OData producer such as SAP and Microsoft, cross-org for another Salesforce org, custom Apex for any store no packaged adapter reaches, and newer adapters for DynamoDB, SQL, GraphQL, Archive, and Privacy Center](</diagrams/day-33-lv-3a-virtualized-data-fundamentals-external-objects-sal/2-choose-the-adapter.png>)
 
 ## The cross-org adapter in depth
 
@@ -66,6 +70,8 @@ The next constraint is performance, and it is the one people forget. An External
 
 There is a fuller list of unsupported features worth having in your head even though the exam will not ask about all of them: no validation rules, no formula fields, no record types, no merge fields, no Schema Builder, no activities, tasks, or events, no attachments, no roll-up summaries, no record-level security that lets you control external data access in the normal sharing sense, and no encrypted fields. [^4] Some of these flip on for the cross-org adapter specifically, which supports auto-number, currency, and picklists for synced objects. [^4] The point is not to memorize every line. It is to hold the pattern: an External Object trades the full object feature set for the ability to reach data you do not own, and the moment you rely on a feature that is not supported, you have built the wrong tool into the design.
 
+![The hard constraints of External Objects: they lack master-detail children, roll-up summaries, validation rules, formula fields, record types, activities, attachments, and standard record-level security, while every one requires an External ID and supports only lookup, external lookup, and indirect lookup relationships](</diagrams/day-33-lv-3a-virtualized-data-fundamentals-external-objects-sal/3-hard-constraints-of-external-objects.png>)
+
 ## When to virtualize, when to copy
 
 With the constraints laid out, the decision itself becomes clear. The exam tip for this lesson states it as a compact rule: virtualize volatile, remote, or residency-bound data, and copy stable data that needs native speed, validation, automation, and reporting. [^1] Expand that into the reasoning the scenario questions reward.
@@ -75,6 +81,8 @@ Virtualize when the data changes frequently in the source. A nightly copy of inv
 Copy when the platform needs to own the data natively at speed. If Salesforce must report on it at high performance, run validation and automation against it, or serve it to users in list views fast, a copied record in a custom object gives you native indexes, reporting, sharing, and flows that an External Object cannot. [^1] Copy when the data is stable and used heavily. Stable data does not lose value by sitting in a copy, and it gains all the native features the platform provides. Copy when the external source is slow or unreliable enough that a live dependency would degrade the user experience; a scheduled copy decouples Salesforce from the source's availability. [^1] Copy when the data genuinely must reside in Salesforce to be served or integrated.
 
 Notice where the boundary snap is. Volatile and remote trends push to virtualization. Stable, high-use, platform-critical data pushes to copying. Q1 and Q3 are built on exactly this tension, and the next section works both through worked scenarios.
+
+![Virtualize or copy: run each dataset through change frequency, residency, volume, and required features. Virtualize volatile, residency-bound, too-large-to-copy, or real-time data; copy stable, high-use, platform-critical data that needs native speed, validation, automation, and reporting](</diagrams/day-33-lv-3a-virtualized-data-fundamentals-external-objects-sal/4-virtualize-or-copy.png>)
 
 ## Data Connect: zero-copy analytics sharing
 
@@ -107,6 +115,8 @@ Trap one, expecting an External Object to behave like a native object. An archit
 Trap two, virtualizing data that the platform must automate, validate, or report on heavily at speed. If the requirement is native validation and automation, flows and triggers, or high-speed reporting over the data, virtualization gives you a live dependency instead of the native engine. [^1] External Objects have no validation rules and no roll-up summaries, and reports over large External Objects can be slow. [^4] Those needs argue for copying, and the scenario question is checking whether you see that. The exam's Q3 is this trap: the correct answer is the case where the platform must own stable data for speed, validation, automation, and reporting. [^1]
 
 Trap three, forgetting that external systems need an External ID and that latency surfaces in the UI. [^1] If you stand up an External Object without a unique external key, the integration has no anchor. If you ignore rate limits and source response time, your users experience the slowness on every lookup, list view, and report. [^4][^5] The fix is to establish the External ID up front and to design for latency: filtered queries, pagination, monitoring, and caching where the source cannot keep up. The exam's Q1 is the mirror image of good practice: live, volatile external data that changes constantly is exactly what virtualization (not a nightly copy, not a Big Object) is for. [^1]
+
+![The three exam traps: treating an External Object like a native object, virtualizing data the platform must own for speed and validation, and forgetting the External ID and the latency that surfaces in the UI, each with its fix](</diagrams/day-33-lv-3a-virtualized-data-fundamentals-external-objects-sal/5-the-three-exam-traps.png>)
 
 ## Worked example: live inventory from an OData source
 
