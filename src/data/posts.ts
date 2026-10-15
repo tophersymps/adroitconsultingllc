@@ -2,6 +2,30 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "supabase-declarative-schemas-pg-delta-2026",
+    "title": "Schema as Code: Supabase Declarative Schemas 2.0",
+    "excerpt": "Supabase's database schema now lives in your repo as SQL files, and pg-delta writes the migration. Here is what the engine captures and how to adopt it safely.",
+    "category": "React & Web Dev",
+    "categoryColor": "react",
+    "categoryGradient": "from-emerald to-emerald-dark",
+    "date": "October 15, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "11 min read",
+    "featured": false,
+    "tags": [
+      "Web Development",
+      "Supabase",
+      "PostgreSQL",
+      "SQL",
+      "Declarative Schemas",
+      "Migrations",
+      "Tooling"
+    ],
+    "bannerImage": "/banners/supabase-declarative-schemas-pg-delta-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "salesforce-winter-27-headless-2026",
     "title": "Winter '27 Went Headless: What Builds Change Now",
     "excerpt": "Every Salesforce capability is now reachable as an API, an MCP tool, or a CLI command. Build it once and an app, a person, or an agent can all call it.",
