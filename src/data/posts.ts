@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "salesforce-agent-access-scoping-2026",
+    "title": "An Agent Is a User: Scoping Machine Access on Salesforce",
+    "excerpt": "Every Flow, agent action, Apex class, and API call runs under one identity: the running user. Scope it right and the machine stays in its lane.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "October 15, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "13 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "Agentforce",
+      "Security",
+      "Flow",
+      "Apex",
+      "API"
+    ],
+    "bannerImage": "/banners/salesforce-agent-access-scoping-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "supabase-declarative-schemas-pg-delta-2026",
     "title": "Schema as Code: Supabase Declarative Schemas 2.0",
     "excerpt": "Supabase's database schema now lives in your repo as SQL files, and pg-delta writes the migration. Here is what the engine captures and how to adopt it safely.",
