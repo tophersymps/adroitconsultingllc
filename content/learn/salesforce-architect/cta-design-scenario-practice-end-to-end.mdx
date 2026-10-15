@@ -43,6 +43,8 @@ A scenario feels like a wall of text. The way through it is a fixed sequence, an
 
 Steps 2 and 3 could swap order in some cases, but step 2 is almost always first. You cannot decide what integration pattern to use until you know which system is the source of truth for what.
 
+![The CTA method as a fixed eight-step sequence, from reading for the why through fixing the system of record, the data model, integration seams, identity, the numbers, and the tradeoffs, ending in the board answer](</diagrams/cta-design-scenario-practice-end-to-end/1-cta-method-sequence.png>)
+
 ## Worked example: Aurora Manufacturing Group, walked end to end
 
 Let me run the method on a full scenario. I will invent this one in the shape a real board scenario takes.
@@ -57,6 +59,8 @@ I also note the constraints: the ERP stays, its API is flaky at volume, there is
 
 **Step 2: fix the system of record.** This is the decision everything hangs on. Salesforce becomes the system of record for accounts, opportunities, quotes, and service work orders, because that is where sales and service both need to operate and where the single customer view has to live. The ERP stays the system of record for inventory quantities, pricing master data on finished goods, and the order's financial fulfillment state. The spreadsheet data for service history migrates into Salesforce so service work order history is authoritative there. Three facts, three owners, no overlap. Any fact with two owners will drift apart and take the single customer view down with it. [^1]
 
+![Aurora Manufacturing system-of-record split: Salesforce owns accounts, opportunities, quotes, and service work orders; the ERP keeps inventory quantities, pricing master data, and order fulfillment state; spreadsheet service history migrates into Salesforce](</diagrams/cta-design-scenario-practice-end-to-end/2-system-of-record-ownership.png>)
+
 **Step 3: design the data model.** On the Salesforce side: Account is the anchor. Opportunity tracks the sale. Quote heads a quote for a configured product, and the configuration itself becomes a Quote Line Item tree holding each selected component and its option choices, so the configurator's output is queryable data, not a text blob. Work Order (standard field service object) carries the service history and links back to the related Order. Because guided selling needs real-time availability, inventory is not duplicated in Salesforce; it is fetched from the ERP at the moment of pricing. The standard objects are the first choice here, per the platform guidance to use the prebuilt model before inventing a custom one. [^3]
 
 **Step 4: design the integration seams, including failure.** The ERP's SOAP API, flaky under load, is the seam to protect. A synchronous call on every quote save is exactly what will burn it down at quarter end. So pricing availability is fetched via queueable Apex with a short freshness window, cached briefly, and the quote carries the availability snapshot it was priced against. Order placement, the highest-volume and highest-value operation, goes through an outbound message into a queue that the ERP polls in batches, so the ERP consumes at its own pace. Every handler is idempotent, keyed on a quote or order number, so a retried delivery cannot create a duplicate fulfillment. When a call fails, the work stays in the queue and a monitoring alert fires instead of the data silently vanishing. This is the seam designed for the failure case, not the happy path, and it is where the board will probe hardest. [^2]
@@ -66,6 +70,8 @@ I also note the constraints: the ERP stays, its API is flaky at volume, there is
 **Step 6: write the NFRs with numbers.** This is where vague words die. On the Salesforce side, the configurator must price a configuration in under four seconds on a typical connection at a peak of 1,500 concurrent sales users. Order placement must not fail or silently drop more than one in a thousand at peak, and any failed handoff to the ERP must recover automatically without data loss. Availability for the Salesforce platform, which is service-bound and business-hours for quoting, targets 99.5% during working hours. Recovery targets, owned by the ERP for fulfillment data, come from the disaster recovery pattern: the business accepts a defined RPO and an RTO it can answer for, and the plan is drilled, not just written. [^2] Every number here is chosen to fit the client's reality: quarterly peaks, business-hours users, and an old ERP that cannot take real-time load. A target that ignores the client's reality is a target the board will dismiss.
 
 **Step 7: record the tradeoffs.** Here is the heart of what you defend, and the honest costs of the design above. [^3]
+
+![Aurora Manufacturing tradeoffs: queue plus cache for ERP availability, standard objects first, no new middleware, and no customer portal in phase one, each with the cost accepted and the reason it was chosen](</diagrams/cta-design-scenario-practice-end-to-end/4-tradeoffs.png>)
 
 - **Real-time ERP availability via queue plus cache** instead of synchronous pricing on every save. Tradeoff accepted: availability data may be a few minutes stale, and stale pricing risks a quote issued on an outdated quantity. Chosen because the ERP cannot survive synchronous load; the fresh-snapshot tradeoff is recorded and the snapshot is shown on the quote.
 - **Standard objects first** instead of a custom order model. Tradeoff accepted: less custom flexibility, but far lower maintenance and standard reporting. Matches a cautious, budget-constrained stakeholder. [^3]
@@ -79,6 +85,8 @@ Each tradeoff names what was given up. That is what transforms a list of choices
 ## The failure modes the board punishes
 
 The worked example goes right. Let me name the ways it goes wrong, because recognizing them is half the exam.
+
+![The five failure modes the board punishes: two systems owning the same fact, designing only the happy path, NFRs with no numbers, tradeoffs presented as free, and solutioning the words instead of the why](</diagrams/cta-design-scenario-practice-end-to-end/3-failure-modes.png>)
 
 - **Two systems owning the same fact.** The instant you keep order status in both Salesforce and the ERP without a single owner, the single customer view drifts and the board has its first question. One fact, one owner.
 - **Designing only the happy path.** A design that assumes every API call succeeds is not a design. The ERP is flaky under load by the scenario's own words. The absence of a failure, retry, and reconciliation story is a fatal seam.
