@@ -54,6 +54,8 @@ This is the exact judgment quiz question one tests. An object holds 50 million r
 
 The design-intent rule is the same one from lesson 32, now applied: satisfy the requirement with the fewest share rows. Restrictive OWD for the baseline. Broad criteria rules to groups for the exceptions. Coarse boundaries instead of fine-grained per-record access. Every one of these is a decision to keep the product of records times grantees small, and on LDV that decision is the whole game.
 
+![The LDV sharing design pattern: a restrictive OWD baseline creates no share rows, then a few broad criteria rules to groups produce coarse group-level share rows that scale with the matching-record count, not with the number of people or manual decisions](</diagrams/day-33-i-1b-scalability-scenarios-ldv-and-sharing-design-index/1-ldv-design-pattern.png>)
+
 ## Avoid mechanisms that create per-record share rows on high-volume objects
 
 The flip side of the design rule is the list of mechanisms to avoid, but the list is really one idea repeated: anything that writes a per-record grant on a high-volume object multiplies rows with every record. Teams, manual shares, Apex shares written per record, and deep hierarchies are the four offenders, and the exam wants you to recognize each by its row multiplier.
@@ -68,6 +70,8 @@ Deep role hierarchies add the subtle one, because nobody consciously grants anyt
 
 The exam trap here is the contrast. Faced with a large-data-volume object and a requirement that several groups each see a subset, the per-record mechanisms all look like they solve the problem, and they all scale terribly. The correct answer is always to step back to the coarse boundary: restrictive OWD plus a few criteria rules to groups. Remember that the mechanisms exist and are useful at normal volume; the exam is testing whether you know they stop being useful the moment the record count climbs.
 
+![Row multiplier by mechanism: teams, manual sharing, deep role hierarchies, and per-record Apex shares each multiply rows with every record, while criteria rules to groups keep the table near the matching-record count](</diagrams/day-33-i-1b-scalability-scenarios-ldv-and-sharing-design-index/2-row-multiplier-comparison.png>)
+
 ## Recalc avoidance: keep criteria on stable fields, batch ownership, schedule the rebuild
 
 Table size is one half of the scalability story; recalculation frequency is the other, and this lesson's design work includes the specific moves that keep the platform from rebuilding the table constantly. Recalc avoidance is not an optional optimization, on LDV it is the difference between a model you can change and a model that punishes every change with a slow, lock-heavy recompute. Recalculations happen when OWD, sharing rules, groups, roles, or ownership change, because the platform has to re-derive the affected share rows. The way to avoid the cost is to control when those triggers fire.[^3]
@@ -80,6 +84,8 @@ The third move is to schedule large recalcs. When a large-scale maintenance oper
 
 The cost you are avoiding is real. Recalculation on large data volumes is CPU and I/O heavy, potentially slow enough to time out, and potentially lock-heavy enough to contend with the transactions trying to run at the same time. The point of the three moves is not to prevent recalculation forever, that is impossible, it is to make it rare, deliberate, and scheduled instead of constant, accidental, and concurrent with production traffic.[^3]
 
+![Three moves to avoid frequent recalculation: keep criteria rules on stable fields, batch ownership changes, and schedule large recalcs with Defer Sharing Calculations so the engine recomputes once instead of after every change](</diagrams/day-33-i-1b-scalability-scenarios-ldv-and-sharing-design-index/3-recalc-avoidance-moves.png>)
+
 ## Indexing and the share table: keep it lean so the indexes keep working
 
 The third pillar of this lesson is indexing, and the exam frames it as a warning you must internalize: a big, badly indexed sharing table degrades queries even when each individual grant looks reasonable. This is the subtle part of LDV design, because the failure is not visible in the data model as a wrong grant. Every grant is correct. The problem is that the table has grown so large that the mechanism the platform uses to enforce access stops being fast.
@@ -91,6 +97,8 @@ The problem is that an index is only as good as the table it points at. As the s
 This is quiz question three. Why does sharing-table bloat degrade query performance even on indexed fields? Not because indexes are disabled by sharing, and not because queries ignore sharing, which would be a security hole, and not because reports cache something. The reason is that queries must resolve sharing through the share table, and when the table has grown enormously, even indexed lookups slow down and the cost of the sharing join dominates. A bloated sharing table weakens the efficiency of the sharing-model joins and queries and can exceed the practical benefit of the indexes, so the discipline is to keep the table lean before the indexes stop working, not after.[^4]
 
 The practical read for the architect: index design is not an alternative to table-leanness, it depends on it. You cannot fix a fifty-million-row share table by adding an index and calling it done, because the index alone does not make the join short. You fix it by refusing to create the rows in the first place, with restrictive OWD and coarse criteria rules to groups, and by keeping per-record mechanisms and constant recalculation out of the design. The index is the reward for an already-lean table, not the rescue for a bloated one.
+
+![Index usefulness depends on table size: a lean share table keeps the sharing-model join short and the indexes selective, while a bloated table makes the sharing join dominate even on indexed fields](</diagrams/day-33-i-1b-scalability-scenarios-ldv-and-sharing-design-index/4-index-lean-vs-bloated.png>)
 
 ## Monitor: watch the share table grow after every change
 
@@ -111,6 +119,8 @@ The second is to partition the data. Where different populations must genuinely 
 The third is to move the access decision to Apex, where you control and reconcile the row volume. Apex managed sharing lets you express boundaries the declarative tools cannot, and because your code decides when and how many rows to insert, you can batch, coarse-grain, and reconcile the volume yourself. This is not a license to write per-record shares in a loop; that would multiply rows like any other per-record mechanism. It is a move to make when your code can express a boundary more cheaply than rows of declarative grants, and when you bind the row count through bulk inserts and reconciliation. Use it deliberately, with the volume under your control, and verify it in a sandbox before it touches production data.
 
 The escalation path is arranged by preference: reduce granularity first, partition second, and reach for Apex managed sharing only when the requirement genuinely needs it and you can keep the row volume reconciled. Name the option before you promise a timeline, because only that choice moves the model from collapsing to servable.[^2]
+
+![Escalation when a requirement cannot scale declaratively: reduce granularity first, partition the data second, and move the access decision to Apex managed sharing only when the requirement genuinely needs it and you can reconcile row volume](</diagrams/day-33-i-1b-scalability-scenarios-ldv-and-sharing-design-index/5-escalation-path.png>)
 
 ## Configuring a scalable LDV sharing design, step by step
 
