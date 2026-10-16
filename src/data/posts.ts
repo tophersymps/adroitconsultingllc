@@ -2,6 +2,28 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "multi-agent-contention-shared-resources-2026",
+    "title": "When Agents Collide: Contention in Multi-Agent Pipelines",
+    "excerpt": "A fleet of capable agents fails at load not because the models are weak, but because they share the same quota, state store, and queue. The taxonomy and fixes.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "October 16, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "11 min read",
+    "featured": false,
+    "tags": [
+      "AI Agents",
+      "Multi-Agent Pipelines",
+      "AI Infrastructure",
+      "Concurrency",
+      "Reliability"
+    ],
+    "bannerImage": "/banners/multi-agent-contention-shared-resources-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "salesforce-agent-access-scoping-2026",
     "title": "An Agent Is a User: Scoping Machine Access on Salesforce",
     "excerpt": "Every Flow, agent action, Apex class, and API call runs under one identity: the running user. Scope it right and the machine stays in its lane.",
