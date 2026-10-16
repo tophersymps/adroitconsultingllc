@@ -22,6 +22,8 @@ A quality migration runs the same six moves in the same order, and the order is 
 
 Why does this sequence produce high quality while a straight load does not? Because every bad record has a cheapest point of removal, and the sequence keeps removing records at that point. A malformed date is cheapest to fix in the extract, before it becomes a blocking error or a silent garbage value. A duplicate customer is cheapest to suppress in a staging table, before duplicate rules and manual merges have to untangle two live records. [^1] A missing required value is cheapest to catch in a pre-load check, before Data Loader rejects it in a batch and the failure wanders into an error file. When you skip a stage, you do not skip the cost of bad data. You move it later, where it is higher. That is the entire economic argument for this sequence, and you can lean on it in a scenario question.
 
+![The six-step quality sequence runs in a fixed order: profile the source, cleanse and normalize, deduplicate, transform, load through validation gates, and reconcile, with a validation gate at every step and hard dependencies between stages](</diagrams/day-35-mg-1a-data-quality-at-load-validation-dedup-transformati/1-six-step-sequence.png>)
+
 ## Profiling: learn the source's true state before you trust it
 
 The migration starts with a hard look at the source, and the honest name for it is profiling. [^1] You run diagnostics against the extract to answer the questions nobody can answer from the data dictionary alone: how many rows are actually complete, how many values are in the wrong format, how many times does the same customer appear, and how many records point at parents that are not there. Profiling is the reconnaissance that tells you what the cleansing and transformation rules need to handle and how much effort the whole migration is going to cost. [^1]
@@ -29,6 +31,8 @@ The migration starts with a hard look at the source, and the honest name for it 
 The specific findings you collect are the ones the exam expects you to name. Null rates, the share of rows missing a given field, tell you which required fields are not going to pass and which values you will need defaults for. Invalid values, such as a picklist field holding a free-text string or an email column full of typos, tell you where normalization has to map free text into controlled values. Format inconsistencies, the dates stored as 2024-13-01 in one system and 01-13-2024 in another, tell you which transforms you must run before anything can be compared. Duplicates tell you the scale of your deduplication problem. Orphaned references, child records whose parent key is missing from the parent extract, tell you about relationship and ordering risk before you create broken lookups in the org. [^1][^5]
 
 Profiling is not a formality. It drives concrete downstream decisions. A high null rate on a field the target marks required means you either populate defaults, map a value from another column, or exclude the rows, and you decide which before you transform. [^3] A high invalid-format rate on dates means your transformation rules need a date normalizer, and your effort estimate goes up. The profiling output becomes the input to the transformation rules and to the effort estimate, which is why the exam treats it as the first and non-negotiable step rather than an optional audit. [^1]
+
+![Profiling findings drive the plan: null rates, invalid values, format inconsistencies, duplicates, orphaned references, and row completeness each set a concrete downstream decision such as defaults, normalization rules, a date normalizer, or the scale of the dedup problem](</diagrams/day-35-mg-1a-data-quality-at-load-validation-dedup-transformati/2-profiling-findings.png>)
 
 ## Cleansing and normalization: make the data comparable
 
@@ -45,6 +49,8 @@ Deduplication is where the sequence earns its keep, and the single most importan
 Here is what loading first costs you. Salesforce gives you tools to manage duplicates after the fact, duplicate rules, matching rules, duplicate jobs, and record merges, but they all act on records that already live in the org, and they all require someone to review and resolve matches. [^8] A merge in Salesforce combines a small number of records by hand or by review, and at volume it becomes a large, risky, slow cleanup that runs on live data your users can see. [^8] Bad merges at volume can attach the wrong activity history to a customer or fold two distinct accounts together. [^1] Every duplicate you suppress before load is a merge you never had to run and a risk you never took.
 
 So the migration does deduplication as a pre-load step. You define match keys, the fields that identify a customer, such as an external ID, a normalized name and address, an email, or a phone number. [^8][^9] You run exact and fuzzy matching against those keys to group records that likely represent the same entity. [^5] And you decide the survivor, which record keeps its identity, and where the conflicting values in the losing records go. [^1] When the same customer arrives from two sources, the migration produces one row for the target, not two that Salesforce will later try to merge. That is the whole job, and doing it in staging is dramatically cheaper and safer than doing it after insertion. [^1]
+
+![Deduplicate before load, not after: loading first and deduplicating later runs duplicate rules and merges on live records that need review and risk bad merges at volume, while deduplicating in staging on match keys produces one clean row before a duplicate ever exists in Salesforce](</diagrams/day-35-mg-1a-data-quality-at-load-validation-dedup-transformati/3-dedup-timing.png>)
 
 ## Transformation and the mapping document: the migration contract
 
@@ -63,6 +69,8 @@ The target-side gates are the ones Salesforce enforces during load. [^3] Field-l
 The pre-load gates are the ones you run before data ever reaches the insert. You write checks that reject rows failing format, key, and completeness rules, and you send the rejects to a separate file rather than letting them fail inside the org's error stream. [^1] You plan a rejects/error file that captures every row the migration cannot load and why, so that rejected records are visible, classified, and fixable rather than silently dropped. [^1] And you reconcile, comparing the count of records in the source against the count loaded, and resolving every difference against the rejects file. [^1] A migration is not done when the loader reports success. It is done when the source count plus the rejects count equals the loaded count, and a sample of loaded values matches the source. [^1][^3]
 
 This is the gate pair the quiz tests, and holding it in one sentence is enough for the exam: a reliable quality gate is a versioned mapping document paired with count reconciliation and a rejects/error file. [^1][^3] The mapping guarantees the transformation is documented and reviewable. The reconciliation guarantees every row is accounted for and every discrepancy is explained. [^1]
+
+![Validation gates, rejects file, and reconciliation: target-side gates block bad rows at save time, pre-load gates reject them before the org, and a migration is done when source count plus rejects count equals loaded count](</diagrams/day-35-mg-1a-data-quality-at-load-validation-dedup-transformati/4-validation-gates.png>)
 
 ## Stewardship: who owns the quality outcome
 
@@ -99,6 +107,8 @@ Trap one, loading first and deduplicating later. [^1] The scenario shows an extr
 Trap two, migrating without a versioned mapping document. [^1] A scenario claims the team has been loading data for months straight from the source with no mapping. That is undocumented transformation logic, impossible to maintain and impossible to audit. The answer is a versioned source-to-target mapping document owned under change control. [^1][^4]
 
 Trap three, skipping validation gates and reconciliation. [^1] A scenario declares the migration successful because the loader reported no errors, but nobody reconciled counts or reviewed a rejects file. That is not success. Row-count and value mismatches surface only after go-live, where they become user-visible. The answer is the rejects file, count reconciliation, and spot-checking before cutover. [^1][^3]
+
+![The three exam traps: loading first and deduplicating later, migrating without a versioned mapping document, and skipping validation gates and reconciliation, each with the fix the cert rewards](</diagrams/day-35-mg-1a-data-quality-at-load-validation-dedup-transformati/5-exam-traps.png>)
 
 ## Worked example: the two-system customer migration
 
