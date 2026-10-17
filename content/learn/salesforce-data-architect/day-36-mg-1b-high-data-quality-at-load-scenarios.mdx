@@ -24,6 +24,8 @@ Then derive the control for each truth. No duplicate customers requires cross-so
 
 Each truth maps to one or more controls, and no control exists without a truth it serves. That reversed thinking is what separates a scenario answer from a checklist answer. A checklist answers with every technique it can recall. The scenario answer names the technique the specific situation needs and explains which truth it protects. [^2]
 
+![Each post-migration business truth derives a concrete quality control: no duplicate customers maps to cross-source identity resolution, every account with a valid owner to an owner completeness check with a fallback, intact history to parent-before-child load order with external ID lookup, and reconciling pipeline totals to a post-load aggregate check against each source's reported total.](</diagrams/day-36-mg-1b-high-data-quality-at-load-scenarios/1-truth-to-control.png>)
+
 ## Multi-source consolidation: resolve identity before you load
 
 The hardest scenario is multi-source consolidation, and the exam returns to it because it is where migrations create their own problems. When you merge customer data from three source systems into a single Salesforce Account object, the same customer will almost certainly appear in all three extracts, each carrying a slightly different view. [^1] If you load each source's rows as they arrive, you load the same company three times, and the migration itself becomes the cause of the duplicates. [^1][^3]
@@ -33,6 +35,8 @@ The fix is identity resolution applied across sources before loading. You establ
 Then you apply survivorship. Two records represent the same customer, and their fields conflict: one source has the current phone, the other an outdated one; one has the billing address, the other the HQ flag. [^3] Survivorship rules decide which source is authoritative for which field. The rule can be per-source, per-field, or per-confidence, and the mapping document records it. [^1] You load one golden record per entity, built from the surviving values, so the org holds one canonical customer with the best available data, not three partial views. [^1][^3]
 
 The stewardship connection is direct. When survivorship cannot decide, when two sources carry conflicting values that both look authoritative and there is no rule to break the tie, you do not guess. [^1] You route the record to a data steward who adjudicates the conflict before load. A pre-load review queue holds these rows out of production until a human with the domain knowledge decides the winner. [^12] This is what keeps bad data from entering the org, and it is a designed workflow, not an afterthought.
+
+![Three source extracts, each holding a slightly different view of the same customer, flow through a canonical model into cross-source matching by shared key or normalized fields, then survivorship picks the authoritative value per field, and one golden Account record is loaded per entity with undecidable conflicts routed to a steward before load.](</diagrams/day-36-mg-1b-high-data-quality-at-load-scenarios/2-identity-resolution.png>)
 
 ## Field mapping and transformation: map the picklists and resolve the lookups
 
@@ -44,6 +48,8 @@ Lookups are the second trap, and they fail on ordering and on key choice. To loa
 
 The mapping document is where all of this is recorded, and the exam treats it as the contract of the migration. [^4] For every source field it names the target object and field, the transformation rule, and the disposition of unmapped values. The picklist mappings and the external ID resolution live in it, versioned and owned under change control. [^4] Without it, transformation logic is undocumented, and anyone who touches the load later is guessing. [^1]
 
+![Parent objects load before children: Accounts load first with the source key stored in an external ID field, Contacts upsert by that external ID as the lookup key, then Cases resolve their lookup to the already-loaded Account, so every parent exists before any child points at it.](</diagrams/day-36-mg-1b-high-data-quality-at-load-scenarios/3-load-order.png>)
+
 ## Reject handling: every row is loaded, merged, or rejected with a reason
 
 A migration that drops rows silently is a migration that has lost data it does not yet know is missing. [^1] The rule the exam rewards is simple and absolute: every source row must be accounted for as loaded, merged, or rejected with a documented reason. [^1]
@@ -53,6 +59,8 @@ The wrapper for that rule is the rejects or error file. When a row fails validat
 The accounting next to the error file is reconciliation. After the load you compare counts by object and by source-system id, and you confirm that the sum of loaded plus merged plus rejected equals the source extract's total. [^1] You also validate the business aggregates that carry real consequences, such as the total open pipeline value, by object and by source, and you compare the loaded total to the source's reported total. [^1] A discrepancy means a partial load, a transformation bug, or a silently rejected batch, and the reconciliation is what surfaces it while you can still fix the plan, not after go-live where users see the loss. [^1]
 
 The clean statement to hold for the exam: the migration is complete when loaded plus merged plus rejected equals the source count, every reject carries a reason, and the key business aggregates reconcile to the source's own totals. [^1][^3]
+
+![The migration reconciles when loaded rows plus merged rows plus rejected rows equals the total in the source extract, rejected rows carry a documented reason and go to the error file, and key business aggregates like total open pipeline are checked by object and by source system against each source's reported total.](</diagrams/day-36-mg-1b-high-data-quality-at-load-scenarios/4-reconciliation.png>)
 
 ## Stewardship and the pre-load review queue
 
