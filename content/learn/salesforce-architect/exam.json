@@ -257,15 +257,15 @@
       "explanation": "Isolation is enforced at the physical layer too: all platform data, metadata, and pivot tables are partitioned by OrgID using native database partitioning."
     },
     {
-      "question": "An org relies only on monthly Data Export Service exports as its backup. The lesson identifies which achievable recovery reality from this arrangement?",
+      "question": "In the Aurora Manufacturing Group walkthrough, why does the order-placement integration use a queue that the ERP polls in batches rather than a synchronous call on every order save?",
       "options": [
-        "Automatic restoration of accidentally deleted records, because an export recovers the Recycle Bin",
-        "A worst case data loss of roughly a month, a 48 hour download window after each job, and deleted records excluded because the Recycle Bin is not exported",
-        "Real time recovery down to the last transactional second, since exports capture every change as it happens",
-        "Guaranteed restore within an hour, because export files are always immediately accessible on the platform"
+        "Because the lesson says synchronous calls are always an anti-pattern.",
+        "Because the ERP's SOAP API degrades badly under load, so the queue lets the ERP consume work at its own pace and protects the highest-volume operation.",
+        "Because Salesforce cannot send data to external systems in any other way.",
+        "Because the budget prohibits synchronous integration entirely."
       ],
       "correct_answer_index": 1,
-      "explanation": "Monthly exports carry a manual generation window of 29 days, files are only downloadable for 48 hours after completion, and data export excludes the Recycle Bin, so deleted records do not return through an export."
+      "explanation": "The ERP's SOAP API is reliable on small payloads but degrades under load. The highest-volume order-placement operation goes through a queue the ERP polls in batches, so the ERP consumes at its own pace, and every handler is idempotent so a retried delivery cannot create a duplicate fulfillment."
     },
     {
       "question": "During the design scenario, a candidate wants to keep the order view fresh by calling the ERP for order status every time a rep opens an account. Why does the lesson direct the candidate away from making this an unbounded synchronous fan-in?",
@@ -277,6 +277,17 @@
       ],
       "correct_answer_index": 0,
       "explanation": "The lesson states the platform limit explicitly: a single Apex transaction can make at most 100 callouts and 120 seconds of cumulative callout time. That constraint means the strategy assigns each flow a synchronous or asynchronous seam deliberately, and it is what pushes the unreliable ERP off the request path."
+    },
+    {
+      "question": "Meridian must protect a regulated field that it does not need to filter or sort on. Which encryption decision does the lesson direct the architect to make?",
+      "options": [
+        "Use volume-level encryption only, because it is always on and uses a Salesforce-managed key, and no field-level scheme is needed.",
+        "Add Shield Platform Encryption with a deterministic scheme, because deterministic encryption is the most secure option.",
+        "Add Shield Platform Encryption with a probabilistic scheme, because probabilistic encryption is the most secure and Meridian does not need to filter or sort on the field.",
+        "Skip encryption at rest and rely on encryption in transit, because the data only moves between systems."
+      ],
+      "correct_answer_index": 2,
+      "explanation": "The lesson says to encrypt probabilistically by default and reserve deterministic encryption for fields you must filter or sort on. Since Meridian does not need to filter or sort on the regulated field, probabilistic encryption is the right scheme, and it is the most secure because identical values do not encrypt to identical ciphertext."
     },
     {
       "question": "Which statement best reflects the lesson’s guidance?",
@@ -367,15 +378,15 @@
       "explanation": "The lesson is centered on: The Salesforce architect arc in one lesson: what System vs Application vs Technical Architects actually do, the certification ladder, and the CTA endgame."
     },
     {
-      "question": "Meridian Logistics asks for Salesforce to become the front office for orders and hand orders to a legacy ERP whose API is unreliable at high volume, on a fixed three-month timeline. Which move reflects the multiple-choice-style reasoning the CTA actually rewards?",
+      "question": "Meridian runs Salesforce as its quoting front office but fulfillment lives in a legacy ERP that is unreliable at high volume. When the strategy is drawn, which ownership and seam decision follows directly from those facts?",
       "options": [
-        "Design for the happy path first, then add a retry loop if time permits, since the core requirement is order entry",
-        "Locate the system of record early, design the failure seam (queue, idempotency, retry, reconciliation) for the unreliable ERP, and state the tradeoff the fixed timeline forces",
-        "Recruit the ERP API to be made reliable before any architecture work, since the handoff cannot work without it",
-        "Defer all identity and sharing decisions to phase two so the data model can be completed on time"
+        "The ERP owns fulfillment data, so order status flows back from the ERP to Salesforce, and the high-volume handoff must move off the synchronous path because the ERP cannot be relied on inside a callout budget.",
+        "Salesforce owns every order field, so the ERP is mirrored fully into Salesforce and fulfillment status is reconciled in both systems on every change.",
+        "The ERP owns fulfillment, so the order handoff should be a synchronous request-reply from the rep's click because real-time is always the correct seam.",
+        "Neither system owns order status, so a middleware platform is required purely to reconcile the two sources of truth."
       ],
-      "correct": 1,
-      "explanation": "The lesson's worked example emphasizes reframing requirements, designing the failure seam for the unreliable ERP, and naming the tradeoff the fixed timeline forces. It warns against designing only the happy path and against treating identity and sharing as deferrable afterthoughts."
+      "correct_answer_index": 0,
+      "explanation": "The lesson says ownership comes first: Salesforce owns the quote and sales order, the ERP owns fulfillment, and status flows back from the ERP. It also says the unreliable-at-high-volume ERP forces the handoff off the synchronous path, because a synchronous design must fit inside the callout budget."
     },
     {
       "question": "Per the lesson “Federated Data: Salesforce Connect, External Objects, and When Not to Use Them”, what does query pushdown actually do?",
@@ -488,26 +499,26 @@
       "explanation": "Context rot means longer context does not mean better recall, so something must always leave the window and the decision about what that is belongs to the architecture, not to the raw transcript."
     },
     {
-      "question": "An architect drafts an NFR that reads \"the order page should be fast.\" Based on the lesson, why does this fail as a non-functional requirement?",
+      "question": "An architect wants the build team to implement an order flow and realizes a stock check can fail or time out. Which sequence diagram technique from the lesson forces the architect to decide, on paper, what happens on the failure path?",
       "options": [
-        "Because it relates to functionality rather than a quality of the solution.",
-        "Because it names no quantity, number, and condition, so no test or reviewer can verify it.",
-        "Because the platform SLA already covers response time for customer-facing pages.",
-        "Because response time is not a quality that a Salesforce solution can control."
+        "Adding every participant as a lifeline in the \"instance name : class name\" form.",
+        "Including every return message on a dotted line with an open arrowhead.",
+        "Adding an alternative combined fragment labeled \"alt\" whose guards route to a confirmed path and a manual-review path.",
+        "Renaming the frame so it begins with \"sd\" instead of another diagram type."
       ],
-      "correct_answer_index": 1,
-      "explanation": "The lesson's test for a good NFR is that it names a quantity, a number, and a condition. \"Should be fast\" names none of them, so every reader interprets it differently and no test can be built for it. The measurable form is a target such as \"returns a confirmation within two seconds for ninety percent of users at expected peak volume.\""
+      "correct_answer_index": 2,
+      "explanation": "An alternative combined fragment, labeled \"alt\", models if-then-else logic: it sends one set of messages when a guard is true and a different set otherwise. Drawing the happy path and the failure path inside an alt fragment forces the architect to decide what happens when the third-party system is slow or down, which is the decision that is painful to make for the first time during an incident."
     },
     {
-      "question": "A support agent can read the Account object and its records, but the agent should see a customer's name and not the full card number. Which layer of the four-layer access model stops the card number from being visible?",
+      "question": "A lending bank stores the same customer across Salesforce (interactions), a core banking system (balances), and a warehouse (history). An automated loan agent now depends on a reliable view of that customer. What is the correct first move in the data strategy?",
       "options": [
-        "The record level, because a restrictive organization-wide default hides the specific record that contains the card number.",
-        "The field level, because field-level security controls whether a user can see and edit each individual field, so hiding the card number field at this layer blocks it regardless of object and record access.",
-        "The object level, because removing read permission on the Account object hides every field on it.",
-        "The organization level, because login IP ranges and hours determine which fields a user can see."
+        "Name a single source of truth for each business domain, so it is clear which system is authoritative for identity, balances, and history.",
+        "Unify all three copies into one master record and let the newest write overwrite the older values.",
+        "Move every customer attribute into the warehouse and treat it as the only store.",
+        "Give all three systems identical read and write rights so none can claim ownership."
       ],
-      "correct_answer_index": 1,
-      "explanation": "The lesson describes field-level security as the layer that controls whether a user can see and edit each individual field, and gives exactly this example: a user can read an Account but not its credit card number because the field is hidden at this layer. Access is additive, so the most restrictive layer wins."
+      "correct_answer_index": 0,
+      "explanation": "The strategy starts by naming the source of truth per domain so that when systems disagree, it is clear which one wins. Salesforce frames organized, trusted data as the product of deciding where each domain's canonical record lives."
     },
     {
       "question": "Which conclusion does the lesson support?",
@@ -609,15 +620,15 @@
       "explanation": "An unmanaged package is a one-time copy. Once installed, each component belongs to the target org, editable and deletable, with no link back to the source package and no way to push an upgrade. The managed-package traits of locked components, IP protection, and upgrade paths do not apply."
     },
     {
-      "question": "A board member asks how you keep an agent from calling the wrong tool or endpoint. Which response reflects the design discipline the lesson teaches for the tool-use layer?",
+      "question": "Meridian Logistics asks for Salesforce to become the front office for orders and hand orders to a legacy ERP whose API is unreliable at high volume, on a fixed three-month timeline. Which move reflects the multiple-choice-style reasoning the CTA actually rewards?",
       "options": [
-        "Rely on the model's strong reasoning so it will pick the correct tool on its own",
-        "Trust the evaluation at the outcome layer, since final results confirm correctness",
-        "Present the tool schemas and semantic descriptions you wrote, and the evaluation that exercises tool selection against realistic inputs",
-        "Disable tool calls in production to eliminate the failure mode entirely"
+        "Design for the happy path first, then add a retry loop if time permits, since the core requirement is order entry",
+        "Locate the system of record early, design the failure seam (queue, idempotency, retry, reconciliation) for the unreliable ERP, and state the tradeoff the fixed timeline forces",
+        "Recruit the ERP API to be made reliable before any architecture work, since the handoff cannot work without it",
+        "Defer all identity and sharing decisions to phase two so the data model can be completed on time"
       ],
-      "correct": 2,
-      "explanation": "The lesson explains that poorly defined tool schemas and vague semantic descriptions drive agents to invoke irrelevant APIs. The architect defends the tool contracts by showing the written schema and description for each tool and how tool selection was tested under realistic inputs."
+      "correct": 1,
+      "explanation": "The lesson's worked example emphasizes reframing requirements, designing the failure seam for the unreliable ERP, and naming the tradeoff the fixed timeline forces. It warns against designing only the happy path and against treating identity and sharing as deferrable afterthoughts."
     },
     {
       "question": "Per the lesson “Integration Fundamentals: REST, SOAP, Bulk APIs, and Picking the Right One”, what is the central focus?",
@@ -651,17 +662,6 @@
       ],
       "correct_answer_index": 0,
       "explanation": "The lesson is centered on: The three archetype integration patterns every Salesforce architect must recognize (request-reply, fire-and-forget, and batch data synchronization), plus the selection matrix, the limits that shape each choice, and a worked example that combines all three."
-    },
-    {
-      "question": "Which conclusion does the lesson support?",
-      "options": [
-        "The first rule is not to filter on an indexed field.",
-        "The lesson says the opposite: this should always be avoided.",
-        "The lesson claims this cannot be verified at all.",
-        "The first rule is to filter on an indexed field."
-      ],
-      "correct_answer_index": 3,
-      "explanation": "The first rule is to filter on an indexed field."
     }
   ]
 }
