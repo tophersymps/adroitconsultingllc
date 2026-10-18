@@ -2,6 +2,33 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "infrastructure-drift-detection-remediation-2026",
+    "title": "Infrastructure Drift: When the Cloud Stops Matching Code",
+    "excerpt": "A security group rule opened during an incident, an instance type changed in the console, an S3 bucket flipped to public. None of it reaches your code.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "October 16, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "14 min read",
+    "featured": false,
+    "tags": [
+      "DevOps",
+      "Infrastructure-as-Code",
+      "Terraform",
+      "OpenTofu",
+      "GitOps",
+      "Kubernetes",
+      "Drift-Detection",
+      "Security",
+      "Reliability",
+      "Infrastructure"
+    ],
+    "bannerImage": "/banners/infrastructure-drift-detection-remediation-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "multi-agent-contention-shared-resources-2026",
     "title": "When Agents Collide: Contention in Multi-Agent Pipelines",
     "excerpt": "A fleet of capable agents fails at load not because the models are weak, but because they share the same quota, state store, and queue. The taxonomy and fixes.",
@@ -140,7 +167,7 @@ export const posts: BlogPost[] = [
   {
     "slug": "lightning-web-components-best-practices",
     "title": "Lightning Web Components Best Practices",
-    "excerpt": "Lightning Web Components are Salesforce's modern component model, but the best practices that keep a complex org healthy go far beyond the syntax. A field-tested playbook for structure, data, and performance.",
+    "excerpt": "Lightning Web Components are Salesforce's modern component model, but the practices that keep a complex org healthy go far beyond the syntax.",
     "category": "Salesforce",
     "categoryColor": "sf",
     "categoryGradient": "from-sky to-sky-dark",
@@ -157,6 +184,7 @@ export const posts: BlogPost[] = [
       "JavaScript",
       "Best Practices"
     ],
+    "bannerImage": "/banners/lightning-web-components-best-practices.png",
     "status": "published"
   },
   {
