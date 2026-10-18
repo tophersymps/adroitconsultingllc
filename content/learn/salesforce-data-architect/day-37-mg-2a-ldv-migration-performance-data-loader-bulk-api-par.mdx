@@ -26,6 +26,8 @@ The reason the exam keeps hammering this choice is that people reach for the API
 
 Data Loader, the native client, sits on top of this choice. [^7] It reads CSV files, maps fields, and sends records to whichever API you select. By default it uses the SOAP-based API, which is fine for small files. When you enable the Use Bulk API option, it drives the Bulk API and the loads get substantially faster, because the same file is processed asynchronously in large batches instead of one record at a time. [^7] It also runs from the command line, which is what makes it schedulable and scriptable for a migration that runs overnight. [^8] The threshold the vendor gives is practical: use the Bulk mode when records total in the hundreds of thousands or more. [^7]
 
+![The load-API decision ladder: route volumes above about 2,000 records to the asynchronous Bulk API and smaller jobs to bulkified synchronous SOAP or REST calls, then use Data Loader's Use Bulk API option once records reach the hundreds of thousands.](</diagrams/day-37-mg-2a-ldv-migration-performance-data-loader-bulk-api-par/1-choose-load-api.png>)
+
 ## Parallel versus serial mode
 
 The Bulk API's concurrency modes decide how many batches run at once, and that decision sits inside the job definition, not the client. [^2]
@@ -38,6 +40,8 @@ So the trade-off is exact, and the exam tests it directly. Parallel is faster bu
 
 There is a class of operations that force the serial question, because they are structurally prone to locking. Creating users, updating ownership of records under private sharing, updating user roles, and updating territory hierarchies all lock shared rows. [^2] If your migration touches these, plan a separate job for them and run that job in serial mode, rather than folding them into a parallel load and watching them fail. [^2]
 
+![Parallel versus serial mode: parallel batches run concurrently for a faster load but risk record-lock contention on shared parents, while serial batches run one at a time to avoid contention at the cost of speed, with user-role, territory, and sharing operations forcing the serial question.](</diagrams/day-37-mg-2a-ldv-migration-performance-data-loader-bulk-api-par/2-parallel-vs-serial.png>)
+
 ## Tune the batch size
 
 Batch size is where the abstract API decision becomes a concrete number, and the number moves two ways at once. [^2]
@@ -48,6 +52,8 @@ The balancing act is to measure, not to guess. [^2] Salesforce's guidance is exp
 
 There is a second limit inside the job, the one that bites when you misjudge contention. The Bulk API waits a few seconds for a lock to release, and if a batch has trouble acquiring locks on more than a hundred records, it puts the rest of the batch back in the queue. [^2] The API retries the batch up to ten times, and records already marked failed are not retried. [^2] So a batch that repeatedly stalls on locks is not a batch that eventually succeeds; it is a batch that eventually fails, with the orphaned records waiting for you to resubmit them. [^2] That is why tuning for contention is not optional polish. It is the difference between a load that completes and one that spawns a cleanup project.
 
+![Tune the batch size between two risks: larger batches near the 10,000-record maximum cut per-batch overhead but widen the blast radius of a 200-record-chunk failure, while smaller batches isolate failures but spend the daily batch allocation faster.](</diagrams/day-37-mg-2a-ldv-migration-performance-data-loader-bulk-api-par/4-batch-size-tuning.png>)
+
 ## Why parent lock contention breaks parallel loads, and how to fix it
 
 Here is the failure that the first quiz question is built around, so follow it closely. [^3]
@@ -55,6 +61,8 @@ Here is the failure that the first quiz question is built around, so follow it c
 You are migrating twelve million Contacts and their parent Accounts. You launch the Account load and the Contact load concurrently, both in parallel mode, because you want everything done fast. The load fails with `unable to obtain row lock`. [^9] Every time a Contact inserts or updates, Salesforce locks that Contact's parent Account for the duration of the transaction, because every child edit re-locks the parent. [^9] When two parallel batches contain Contacts that point at the same Account, both batches try to lock that Account at the same time. One wins, the other waits, and after ten seconds it gives up. [^9]
 
 The first quiz option is a trap: increase the batch size. That makes it worse. [^2][^9] Bigger batches put more children of the same parent into contention, not less. The correct fix is to remove the collision. [^9]
+
+![Why parent lock contention breaks a parallel load: concurrent Contact and Account loads re-lock shared parent Accounts, throwing unable to obtain row lock, fixed by loading parents first, grouping children by parent into the same batch, and falling back to serial mode when necessary.](</diagrams/day-37-mg-2a-ldv-migration-performance-data-loader-bulk-api-par/3-parent-lock-contention.png>)
 
 The fix has three parts, and you can use any of them alone or together. [^9]
 
