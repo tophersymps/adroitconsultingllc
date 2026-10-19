@@ -46,6 +46,7 @@ export const articleAudio: ArticleAudio[] = [
   { slug: "daily-standup-coordination-ai-2026", voice: "af_heart", storagePath: "blog/daily-standup-coordination-ai-2026/af_heart.mp3", timingsStoragePath: "blog/daily-standup-coordination-ai-2026/af_heart.timing.json" },
   { slug: "dark-mode-accessibility-2026", voice: "af_heart", storagePath: "blog/dark-mode-accessibility-2026/af_heart.mp3", timingsStoragePath: "blog/dark-mode-accessibility-2026/af_heart.timing.json" },
   { slug: "data-360-implementation-patterns", voice: "af_heart", storagePath: "blog/data-360-implementation-patterns/af_heart.mp3", timingsStoragePath: "blog/data-360-implementation-patterns/af_heart.timing.json" },
+  { slug: "decision-log-consulting-delivery-2026", voice: "af_heart", storagePath: "blog/decision-log-consulting-delivery-2026/af_heart.mp3", timingsStoragePath: "blog/decision-log-consulting-delivery-2026/af_heart.timing.json" },
   { slug: "definition-of-done-ai-agents-2026", voice: "af_heart", storagePath: "blog/definition-of-done-ai-agents-2026/af_heart.mp3", timingsStoragePath: "blog/definition-of-done-ai-agents-2026/af_heart.timing.json" },
   { slug: "design-debt-paydown-2026", voice: "af_heart", storagePath: "blog/design-debt-paydown-2026/af_heart.mp3", timingsStoragePath: "blog/design-debt-paydown-2026/af_heart.timing.json" },
   { slug: "design-system-release-discipline-2026", voice: "af_heart", storagePath: "blog/design-system-release-discipline-2026/af_heart.mp3", timingsStoragePath: "blog/design-system-release-discipline-2026/af_heart.timing.json" },
