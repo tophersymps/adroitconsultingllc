@@ -24,6 +24,8 @@ An incremental migration moves data in waves. [^3] You split the population by r
 
 There is a natural instinct to read those as "big-bang is bad, incremental is good." That is not what the exam wants. [^2] The two approaches suit different scenarios, and the objective is to know which one a given migration calls for. [^3]
 
+![Comparison of the two migration families: big-bang moves all records in one cutover window with the highest risk and no sync burden, while incremental moves data in waves with a lower risk and an ongoing sync burden, each suited to a different scenario](</diagrams/day-38-mg-2b-ldv-migration-scenarios-incremental-vs-big-bang-cu/1-big-bang-vs-incremental.png>)
+
 ## Big-bang: when one window is the right answer
 
 Big-bang migrates every record in a single cutover event, and it is the right tool for a narrower set of situations than people admit. [^3]
@@ -54,6 +56,8 @@ The pattern has two halves. First you do an initial full load of the entire data
 
 The reason this matters is the freeze window. In a big-bang, the freeze covers the entire load. [^3] With an initial full load plus continuous delta sync, the full volume is already in Salesforce long before go-live, so the only thing the freeze has to cover is the final delta, the changes that accumulated since the last sync. [^3] For a large, business-critical migration that cannot tolerate a long downtime, that is the whole point: the freeze shrinks from days to the time it takes to sync the final delta. [^3]
 
+![Initial full load plus continuous delta sync: the full volume loads ahead of go-live, continuous delta keeps Salesforce current with the legacy system, and the freeze at cutover covers only the final delta instead of the entire load](</diagrams/day-38-mg-2b-ldv-migration-scenarios-incremental-vs-big-bang-cu/2-full-load-plus-delta-sync.png>)
+
 The quiz builds its hardest question directly on this. [^2] A business-critical migration cannot tolerate a long downtime but has 40 million records. A single big-bang load on a cutover weekend needs a long freeze, because all 40 million records move in that window. [^3] An initial full load plus continuous delta sync moves the 40 million records ahead of time, so the go-live freeze only has to cover the final delta, which is a fraction of the volume. [^3] Manual weekend re-entry and loading only current-year data do not meet the requirement at all, the first because it is not a real migration and the second because it abandons history. [^2] The continuous-delta answer wins because it is the only one that both moves the full volume and keeps the freeze short.
 
 ### Capturing the delta
@@ -80,6 +84,8 @@ The cutover is the moment all this preparation serves, and it is an event, not a
 
 A sound cutover plan has a defined shape: the freeze window, the final delta sync, the go/no-go checks, the user communications, and the rollback plan. [^3] Let us name each element, because the quiz asks which two belong in a sound plan, and the two wrong answers are the ones that sound tempting.
 
+![The cutover plan sequence: freeze window, final delta sync, go/no-go checks, user communications, and rollback plan, with a rehearsed final delta and go/no-go checks as the two essential elements](</diagrams/day-38-mg-2b-ldv-migration-scenarios-incremental-vs-big-bang-cu/3-cutover-plan.png>)
+
 The freeze window is the block of time during which the legacy system stops accepting writes. [^3] It has a start and an end, and every user who touches the source system needs to know it is coming. The final delta sync is the last application of changed data before go-live, and it is the load that actually determines whether the cutover fits in the freeze. [^3] Say the freeze is four hours. The final delta must finish inside those four hours, or the cutover pushes and the freeze extends. That is why the final delta has to be rehearsed and timed, not assumed. [^3] Its duration depends directly on the change volume since the last sync, so a rehearsed run tells you how long a given volume of changes takes to apply, and that number is what you budget against the freeze. [^3]
 
 The go/no-go checks are the explicit conditions that must be true before you commit. [^3] Counts reconcile at the record level, field samples match, relationships resolved, key reports return the expected totals. [^3] Each check has an owner and a pass threshold, and the cutover does not proceed until they pass. [^3] The user communications are the plan for telling people what is happening: freeze start, expected downtime, when to stop entering data in the legacy system, what to expect on the first day in Salesforce. [^3] Communicating is not optional polish. Users who keep typing into the frozen legacy system create changes that never reach Salesforce and confusion about which system holds the truth.
@@ -102,6 +108,8 @@ At cutover, the legacy system has the data as of the final freeze. [^3] That mak
 
 The window is finite and deliberate. [^3] After the agreed number of days, the team confirms the migration has held, and the legacy system is decommissioned. [^3] Decommissioning is a single, explicit decision made after the rollback window closes, and it is the opposite of the exam trap that decommissions immediately at cutover. [^3][^2] Immediate decommission looks decisive and reads as confidence, but it eliminates the only path back if something critical surfaces. The architect's discipline is to preserve that path for a defined window and to close it on purpose when the period is up.
 
+![Rollback window timeline: the legacy system stays read-only for a defined window after cutover, then is decommissioned on purpose, preserving a path back instead of decommissioning on day one](</diagrams/day-38-mg-2b-ldv-migration-scenarios-incremental-vs-big-bang-cu/5-rollback-window.png>)
+
 ## Continuous sync technologies: matching the tool to the volume
 
 The delta you sync is only as good as the machinery that moves it, and the choice of machinery depends on volume, latency, and whether the source supports change capture. [^7]
@@ -115,6 +123,8 @@ Change Data Capture change events. When the change stream is on the Salesforce s
 Salesforce Data Pipelines. When you want to consolidate and prepare data inside the Salesforce ecosystem, Data Pipelines can sync data into connected objects and supports incremental sync by default, meaning only changed data is synced rather than the whole set. [^8] It is the native option that keeps large volumes of external and Salesforce data in the trusted environment, and its incremental sync aligns with the continuous-delta pattern this lesson describes. [^8][^9]
 
 The decision rule the exam rewards is scenario-based. [^2] Very high volume from an external database headed into Salesforce: ETL with CDC against the source, driving the Bulk API. [^7] Near-real-time replication of Salesforce changes to a data warehouse: Change Data Capture. [^4] Consolidating data across systems without leaving the Salesforce trust boundary: Data Pipelines with its incremental sync. [^8]
+
+![Decision tree for continuous sync technology: ETL with CDC driving the Bulk API for very high volume from an external database into Salesforce, Change Data Capture for near-real-time Salesforce to warehouse, and Data Pipelines for consolidation inside the Salesforce trust boundary](</diagrams/day-38-mg-2b-ldv-migration-scenarios-incremental-vs-big-bang-cu/4-sync-technology-decision.png>)
 
 ## Performance during migration waves
 
