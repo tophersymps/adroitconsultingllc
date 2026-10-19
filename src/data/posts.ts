@@ -2,6 +2,30 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "decision-log-consulting-delivery-2026",
+    "title": "Decisions Are the Deliverable: A Consulting Decision Log",
+    "excerpt": "Most decisions in a consulting engagement evaporate when the meeting ends. A six-field decision log turns that drift into memory the whole team can trust.",
+    "category": "Project Management",
+    "categoryColor": "pm",
+    "categoryGradient": "from-teal to-teal-dark",
+    "date": "October 17, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "Project Management",
+      "Delivery",
+      "Decision Log",
+      "ADR",
+      "Collaboration",
+      "Client Management",
+      "Agile"
+    ],
+    "bannerImage": "/banners/decision-log-consulting-delivery-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "infrastructure-drift-detection-remediation-2026",
     "title": "Infrastructure Drift: When the Cloud Stops Matching Code",
     "excerpt": "A security group rule opened during an incident, an instance type changed in the console, an S3 bucket flipped to public. None of it reaches your code.",
