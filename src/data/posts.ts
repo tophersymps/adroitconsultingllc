@@ -2,6 +2,28 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "salesforce-duplicate-data-strategy-2026",
+    "title": "Duplicate Data Is a Design Problem",
+    "excerpt": "Duplicates are designed in before the first rule runs. Matching rules, duplicate rules, org-wide jobs, and a Data Cloud identity model fix it.",
+    "category": "Salesforce",
+    "categoryColor": "#0ea5e9",
+    "categoryGradient": "from-sky-500 to-sky-600",
+    "date": "October 18, 2026",
+    "author": "Jimmy Olsen",
+    "authorInitials": "JO",
+    "readTime": "12",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "Data Quality",
+      "Duplicate Management",
+      "Matching Rules",
+      "Data Cloud"
+    ],
+    "bannerImage": "/banners/salesforce-duplicate-data-strategy-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "decision-log-consulting-delivery-2026",
     "title": "Decisions Are the Deliverable: A Consulting Decision Log",
     "excerpt": "Most decisions in a consulting engagement evaporate when the meeting ends. A six-field decision log turns that drift into memory the whole team can trust.",
