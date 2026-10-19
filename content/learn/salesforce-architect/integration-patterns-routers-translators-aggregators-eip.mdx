@@ -1,0 +1,120 @@
+---
+title: "Lesson 73: Enterprise Integration Patterns: Routers, Translators, Aggregators, and EIP"
+slug: integration-patterns-routers-translators-aggregators-eip
+series: "salesforce-architect"
+lesson: 73
+excerpt: "The shared vocabulary of enterprise integration: what the Enterprise Integration Patterns (EIP) catalog is, how a Message Router decides where a message goes without changing it, how a Message Translator adapts one format or contract to another, and how an Aggregator combines several related messages into one result. A worked example routes, translates, and aggregates an order across ERP, billing, and shipping, and a try-it prompt gets you sketching the same three shapes for an integration you own."
+date: "October 19, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Salesforce, Architecture, Integration, EIP]
+---
+
+# Lesson 73: Enterprise Integration Patterns: Routers, Translators, Aggregators, and EIP
+
+Every integration you have ever touched is built from the same handful of moves. Data leaves one system, travels to another, gets pointed in the right direction, gets reshaped so the receiver can read it, and often gets combined with data that came from somewhere else. The moves repeat so often that architects gave them names, and the names became a shared language. That language is the **Enterprise Integration Patterns**, usually shortened to **EIP**, from Gregor Hohpe and Bobby Woolf's 2003 book of the same name and its companion website. [^1]
+
+Lesson 72 handled the operational layer around a single API: the gateway, throttling, versioning, observability. This lesson zooms one level up, away from any one product, and teaches the shapes that connect systems. The Salesforce-specific plumbing you already know, callouts, Named Credentials, platform events, Composite API, fits inside these shapes. When you can name the shape, design reviews get faster and more honest, because you and the reviewer are no longer describing geometry in prose. You say "this is a content-based router" and everyone pictures the same thing.
+
+## What EIP actually is
+
+A pattern, in the EIP sense, is a named solution to a problem that recurs. The value is not the novelty; it is the shared name. Integration is full of decisions where the first answer that comes to mind is not the one that survives contact with a second and third system. A pattern captures the trade-offs that experienced architects made, so a newcomer does not have to relive every mistake. [^1]
+
+The EIP catalog groups these named solutions into a few families. **Message Construction** covers how you wrap data into a message, such as a Command Message, Document Message, or Event Message, and how you attach routing metadata like a Correlation Identifier or a Return Address. **Message Routing** covers where a message goes: the Message Router and its special cases, the Content-Based Router, Message Filter, Splitter, Aggregator, and Resequencer. **Message Transformation** covers how a message is reshaped: the Message Translator, Content Enricher, Content Filter, Normalizer, and Canonical Data Model. Around these sit the channels messages travel on, the endpoints that send and receive them, and the system-management patterns that watch the whole flow. [^2]
+
+Do not memorize the whole catalog at once. The starting point for an architect is the three families you will actually use in nearly every Salesforce integration: routing, transformation, and the combine step that sits between them. Those are this lesson's three named patterns.
+
+![The EIP catalog as it applies to a Salesforce integration: a message crosses channels, passes through the Routing family, the Transformation family, and the Aggregation step, and finally lands through an endpoint, with system management watching from below](</diagrams/integration-patterns-routers-translators-aggregators-eip/1-eip-catalog.png>)
+
+## The Message Router: deciding where a message goes
+
+The **Message Router** is a special filter that consumes a message from one channel and republishes it to a different channel depending on a set of conditions. [^3] Two properties of the router define everything else about it.
+
+First, **the router does not modify the message contents.** It makes a decision about the destination and forwards the message as-is. This is the discipline that keeps routing rules simple and testable: the router answers one question, "where does this go?", and never pretends to also answer "what should it look like?" If the message needs changes, that is a separate concern handled by a translator later in the flow. [^3]
+
+Second, **the routing rules live in one place.** This is the load-bearing benefit. When a new message type appears, or a new downstream system joins, or the rules change, you change the router logic and every other component stays untouched. Because every message passes through the single router, they are also processed one at a time in order, which removes a whole class of race conditions you get when destinations decide their own routing. [^3]
+
+The most common special case is the **Content-Based Router**, which reads a field inside the message, the "content," and routes on it. A message carrying an order for the US goes to one queue, an order for the EU to another. The router inspects the destination country on the message and chooses the channel. [^2]
+
+In Salesforce terms, the router shape shows up wherever one incoming thing must go one of several places based on what it is. A Flow decision that routes an inbound Case to different queues by region is a content-based router. An Apex switch on the record type of an inbound payload that calls a different integration class is a content-based router. The pattern name does not change the implementation, but naming it forces you to keep the routing criteria in the decision element, not scattered across the case-assignment rules, a trigger, and a Flow all reading the same field.
+
+![A content-based router in action: one Order Message enters the router, which reads the destination field and fans it to either the US queue, the EU queue, or the warehouse queue without changing the message body](</diagrams/integration-patterns-routers-translators-aggregators-eip/2-content-based-router.png>)
+
+## The Message Translator: reshaping for the receiver
+
+Integration never happens between systems that speak the same data format. A CRM stores a customer's phone and address; an accounting system stores tax IDs. Each system is built around its own data model, and each expects to receive messages that mimic its own internal format. [^4] The **Message Translator** is the answer: a filter placed between components that translates one data format into another. It is the messaging equivalent of the Adapter pattern from object-oriented design. [^4]
+
+The translator earns its keep in a Salesforce org whenever an integration's shape on the wire differs from the shape Salesforce wants. Consider an inbound REST payload from a partner that sends dates as `DD-MM-YYYY` strings, amounts as strings with currency symbols, and a nested structure, while the target Salesforce object wants ISO dates, decimals, and a flat record. Someone has to do that conversion, and if it is not in a named translator, it happens in line inside a trigger or a Flow, unlabeled and untested. Naming the translator means giving the conversion its own home and its own contract.
+
+Two refinements matter to an architect. A **Content Enricher** adds data to a message that the sender did not provide, by looking it up elsewhere, because the receiver needs more than arrived. [^2] A **Normalizer** routes messages that arrive in different formats into a single canonical format, so downstream consumers see one shape regardless of which source produced the message. [^2]
+
+That is where the **Canonical Data Model** comes in. Rather than translate every source directly to every target, which is N-times-M translations, you translate each source to one canonical model and each target from it, which is N plus M. The org defines one contract for, say, an Order, and every system maps to that contract. [^2] This is the same idea the integration-hub lesson met in Lesson 53 as the aggregation response shape; here it is the translator family's organizing principle.
+
+In Salesforce, External Services and Apex are where translators live. External Services takes an external service described by an OpenAPI spec and generates an invocable action, so a Flow can call a named external operation without hand-writing the HTTP layer. [^5] Your translator sits beneath that action, mapping the Apex or Flow object to the field names the external system expects. A well-built translator isolates that mapping so a change to the partner's schema touches one class, not a trigger that happens to do some JSON handling.
+
+## The Aggregator: combining related messages
+
+Sometimes the hard part is not where a message goes or what it looks like, but that the answer requires several messages that arrive at different times. The **Aggregator** is the pattern for exactly that. It is a stateful filter that collects and stores individual messages until a complete set of related messages has arrived, then publishes a single message distilled from them. [^6]
+
+Designing an aggregator means answering three questions, and the EIP catalog names them precisely. [^6]
+
+**Correlation: which incoming messages belong together?** You need a rule that says these five responses are all about order 4123. In a Salesforce integration that is almost always a correlation key on the message, the Order ID or a Correlation Identifier you stamped on the outbound fan-out, so responses can find their way home. [^2]
+
+**Completeness condition: when is the set complete?** This is where aggregators diverge most. The approaches have names: *wait for all*, stop only when every expected response has arrived; *time out*, wait a fixed window and then evaluate what arrived; *first best*, take the first response and ignore the rest, useful in a bidding or quoting scenario where speed dominates. [^6] The choice is architectural because it trades completeness against latency, and it decides what happens to an order that is missing a piece.
+
+**Aggregation algorithm: how do you combine what arrived into the result?** Concatenation, summation, taking the highest score, whatever the business needs. This is the code that produces the final message.
+
+The aggregator is the mirror image of the **Splitter**, which takes one message and breaks it into several, and it pairs with the **Resequencer**, which reorders messages that arrived out of order. Together they form the **Scatter-Gather** shape when the aggregator fans work out and combines results back in. [^2] In Salesforce, this is exactly the fan-in side of the integration hub from Lesson 53: the hub fans out callouts, gathers the responses, and the code that correlates responses to the originating record and decides when it is "done" is your aggregator.
+
+![The aggregator shape: responses from the ERP, billing, and shipping systems each carry an Order ID, the aggregator correlates them by that key, waits for the set or a timeout, then combines them into one complete order record](</diagrams/integration-patterns-routers-translators-aggregators-eip/3-worked-example-order-lifecycle.png>)
+
+## A worked example: order lifecycle through all three shapes
+
+Put the patterns together with a concrete case. A manufacturer receives an order in Salesforce and must push inventory, billing, and shipping information to three separate external systems, then combine their acknowledgements back into a single view of the order's state.
+
+The outbound leg is a router at work. When the order is confirmed, the content to route on is the region and the fulfillment type. A content-based router, a Flow decision, reads the order's region and routes a Command Message to the regional ERP, a second message to the billing system, and a third to the warehouse. The messages are not modified by the routing step; each just carries the order data and an Order ID we stamped as a Correlation Identifier when the routing began, so the three systems can answer back and be matched.
+
+Each of the three systems speaks a different format. The ERP wants XML with order lines grouped by warehouse; the billing system wants a flat JSON invoice; the warehouse wants a minimal CSV keyed by SKU. Three translators sit between the router and each system, and each maps from the org's canonical order model to the format that system expects. This is where the Canonical Data Model pays for itself: you write the three translators against one internal contract, not three bespoke structures invented per integration.
+
+The inbound leg is the aggregator. The ERP, billing, and warehouse each push an acknowledgement carrying the Order ID. An asynchronous consumer in Salesforce, a platform event subscriber or a Queueable polling a completion topic, correlates the three acknowledgements by Order ID, then applies its completeness condition. The architect chose the *wait for all with a timeout* posture, because a half-confirmed order is not meaningful, but an endless wait is worse; if the shipping system has not answered within its window, the aggregator releases the result anyway and marks the order's shipping leg as incomplete rather than blocking the whole record forever. [^6]
+
+Now read the system's failure behavior through the patterns, the way a review does. If the shipping system never answers, the router is not the problem, routing only decided where the message went. The translators are not the problem, each mapped its contract cleanly. The aggregator is doing its designed job: it honored its completeness condition and published an order with a visibly incomplete shipping leg, exactly the behavior the architect specified. The named patterns tell you where to look and what to expect, and they make the review about the decisions, not the code.
+
+## The patterns you should carry forward
+
+Keep three habits from this lesson, and they will serve every integration you design.
+
+**Reach for the content-based router before you scatter routing logic.** When one incoming thing must go one of several places, name the router, put the criteria in one decision, and keep the message unchanged through the decision. The one-place property is the whole point; scattered routing is how a second system joins and three separate rules each need their own edit.
+
+**Reach for the canonical data model before you map everything to everything.** Every source-to-target pair you add is a mapping you will maintain. Defining one internal contract and translating each external system to and from it converts N-times-M mappings into N plus M, and it is what makes a translator family maintainable at all.
+
+**Reach for the aggregator with an explicit completeness condition, never an implicit one.** The moment work fans out and answers come back separately, someone has decided when the result is "done." Make that decision a named one. Write down whether you wait for all, time out, or take the first best, and write down what missing pieces mean for the published result. The failure is never "the aggregator got stuck"; the failure is an aggregator with no agreed completeness condition, which is an order that waits forever and nobody knows why.
+
+## Common mistakes
+
+**Routing by modifying the message.** A router that also rewrites the payload stops being a router and becomes a router plus a stealth translator. You still need the translation, but it should be a named, testable step, not a side effect of the routing decision. Keep the router's job to the destination. [^3]
+
+**Translating inline instead of in a named component.** A trigger that parses a JSON payload and maps fields, then a second trigger for the other inbound format, is a Normalizer without a name. Give the translation a home, and the Canonical Data Model a contract, before the second format arrives. That is also when the N plus M math starts to matter.
+
+**An aggregator with no completeness decision.** The hardest part of an aggregator is not the correlation key; it is agreeing on when to stop waiting. If the design doc says "gather the responses" and nothing else, you have deferred the decision that decides whether the system can ever finish. Time out, release with incomplete, and say which pieces may be missing.
+
+## Try it
+
+1. Draw a content-based router for an inbound Case that must be routed by priority to a high-priority queue or a normal queue, and by product line to a different team. Identify the content field the router reads and confirm the message body is untouched.
+2. You integrate with a legacy ERP that requires XML while Salesforce uses JSON. Sketch the Canonical Data Model for a Customer, then draw the two translators you need: ERP-to-canonical and canonical-to-ERP.
+3. A quoting service fans a request to three banks and needs the best rate. Per this lesson, name the completeness condition that trades completeness for speed, and explain why that is the right choice for a quote.
+4. The shipping system never acknowledges an order. Walk the three patterns in sequence and state, in one sentence each, what the router does, what the translators do, and what the aggregator's completeness condition says about the final record.
+5. A review asks why you did not just read the destination and reshape the message in the same step. Give the two reasons from this lesson that routing and translation should stay separate.
+
+For scenario 4, the honest answer is that the aggregator publishes the order with the shipping leg marked incomplete, because that is the completeness condition the architect chose. The code that formats that partial result is the translator's job, and the record's destination was decided long ago by the router.
+
+## What's next
+
+This lesson treated the system diagram as the given: the routers, translators, and aggregators are the shapes, and the question is where they sit. The next lesson asks the bigger architectural question this one kept deferring. Lesson 74 covers **monolith versus microservices versus platform**, and specifically when Salesforce should be the integration hub rather than one system at the edge of the web. It weighs a single large system against many small services against a platform that mediates them all, and it gives you the reasoning for why Salesforce occupies the hub role in some enterprises and not others. Continue there to see the container the patterns of this lesson live in.
+
+[^1]: Hohpe and Woolf. [Enterprise Integration Patterns](https://www.enterpriseintegrationpatterns.com/), the canonical pattern catalog and the source of the named integration building blocks used throughout this lesson.
+[^2]: Hohpe and Woolf. [Integration Pattern Language](https://www.enterpriseintegrationpatterns.com/patterns/messaging/index.html), the full catalog grouped into Message Construction, Message Routing, Message Transformation, Messaging Endpoints, and System Management families, including Content-Based Router, Content Enricher, Normalizer, Canonical Data Model, Splitter, Resequencer, and Scatter-Gather.
+[^3]: Hohpe and Woolf. [Message Router](https://www.enterpriseintegrationpatterns.com/patterns/messaging/MessageRouter.html), which defines the router as a filter that consumes a message from one channel and republishes it to another based on conditions, does not modify the message contents, and keeps the decision criteria in a single location.
+[^4]: Hohpe and Woolf. [Message Translator](https://www.enterpriseintegrationpatterns.com/patterns/messaging/MessageTranslator.html), which defines the translator as a filter that converts one data format into another and notes it is the messaging equivalent of the Adapter pattern.
+[^5]: Salesforce Developers. [External Services](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_external_services.htm), which generates invocable actions from an external service so a Flow or Apex can call a named operation without hand-writing the HTTP layer.
+[^6]: Hohpe and Woolf. [Aggregator](https://www.enterpriseintegrationpatterns.com/patterns/messaging/Aggregator.html), which defines the aggregator as a stateful filter that collects related messages until a complete set has arrived, and names the three design questions (correlation, completeness condition, aggregation algorithm) plus the completeness strategies wait for all, time out, first best, time out with override, and external event.
