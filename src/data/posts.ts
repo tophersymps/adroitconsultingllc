@@ -2,11 +2,33 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "local-llm-concurrency-slots-2026",
+    "title": "One Server, One Slot: The Real Concurrency of Local LLMs",
+    "excerpt": "A self-hosted LLM is a fixed pool of slots, not a stateless API. Point a fleet at it, and the slot count plus the queue it hides decide your throughput.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "October 18, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "10 min read",
+    "featured": false,
+    "tags": [
+      "AI Infrastructure",
+      "Local LLMs",
+      "Multi-Agent Pipelines",
+      "Concurrency",
+      "Model Serving"
+    ],
+    "bannerImage": "/banners/local-llm-concurrency-slots-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "salesforce-duplicate-data-strategy-2026",
     "title": "Duplicate Data Is a Design Problem",
     "excerpt": "Duplicates are designed in before the first rule runs. Matching rules, duplicate rules, org-wide jobs, and a Data Cloud identity model fix it.",
     "category": "Salesforce",
-    "categoryColor": "#0ea5e9",
+    "categoryColor": "sf",
     "categoryGradient": "from-sky-500 to-sky-600",
     "date": "October 18, 2026",
     "author": "Jimmy Olsen",
