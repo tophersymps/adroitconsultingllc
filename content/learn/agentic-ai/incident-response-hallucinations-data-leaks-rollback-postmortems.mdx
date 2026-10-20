@@ -50,6 +50,8 @@ To fix that, the runbook reframes detection as a five-phase chain and measures t
 
 The mean time to detect is the elapsed time from phase 1 to phase 5. The point of writing it as a chain is that each gap is its own root cause. A fourteen-day delay concentrated between Action and Signal is missing instrumentation. Between Signal and Trigger, it is a tripwire that never fired. Between Page and Acknowledgement, it is alerting hygiene, an alert nobody read or a pager that did not page. The chain forces the postmortem to say which gap to close first instead of producing a vague "detection was too slow." [^2]
 
+![The five-phase detection chain runs Action to Signal to Trigger to Page to Acknowledgement, with each gap between phases mapped to its own root cause, and mean time to detect measured from the first phase to the last](</diagrams/incident-response-hallucinations-data-leaks-rollback-postmortems/1-mttd-detection-chain.png>)
+
 Tripwires are the rules that close the middle gaps. The agent runbook names four that consistently catch agent incidents inside the window. A cost-rate tripwire pages when per-agent spend exceeds twice the rolling seven-day median in any hour. An action-rate tripwire pages when per-agent API calls exceed three times the rolling median, or when a call hits a previously unused endpoint. An outcome tripwire pages when the agent produces a customer-visible artifact, an email sent, a ticket closed, a document published, where the human review step was bypassed or completed too fast. An authorization tripwire pages the security team when the agent invokes a tool or API not in its declared inventory. [^2] Each one is cheap to express and, crucially, each is decided in advance, because an operator deciding whether to page at 2 a.m. is an operator making the decision at the worst possible time.
 
 ## Triage: put the failure in the class that decides the first move
@@ -63,6 +65,8 @@ Prompt or behavioral regression. A shift in task success or output distribution 
 Tool or dependency outage. A rising failure rate on one specific tool, or every call to a dependency timing out. First move is a circuit breaker that switches the agent to a predefined degraded mode for that dependency, so every caller stops piling tired retries onto something that is down for a while.
 
 Security incident. Credentials appearing in a context window, tool calls to scopes the agent has never touched, data leaving through an unexpected channel. This one overrides the other three, because its containment, revoke credentials, disable the agent, preserve traces, takes priority no matter what else is failing. [^3]
+
+![The four failure classes each carry a different first move: runaway cost gets a kill switch and hard budget, a regression points traffic back at the last working version, a tool outage trips a circuit breaker into degraded mode, and a security incident overrides the rest with revoke, disable, and preserve](</diagrams/incident-response-hallucinations-data-leaks-rollback-postmortems/2-failure-class-triage.png>)
 
 The three fast signals the runbook checks to assign a class are spend velocity, the shape of errors and outputs, and whether anything looks compromised. The checks reuse trace and cost telemetry you already collect per run, read against a recent baseline rather than a threshold frozen months earlier. [^3]
 
@@ -83,6 +87,8 @@ The kill switch must be reachable by more than one role. If only the on-call eng
 - Per-tool-halt. Use when the failure is one tool the agent is calling wrong. Halt the tool, let the agent keep working with reduced capability.
 - Per-action-quarantine. Use when actions are queued for human approval rather than executed directly. Drain the queue and assess each pending action. [^2]
 
+![The kill switch scales from a full all-agents halt for high-blast-radius tools with an unclear failure, down through per-agent halt, per-tool halt, and per-action quarantine, and it must be reachable by the on-call engineer, the security on-call, and the business owner](</diagrams/incident-response-hallucinations-data-leaks-rollback-postmortems/3-kill-switch-levels.png>)
+
 A kill switch that has never been tested is not a kill switch. You built a circuit breaker in Lesson 53 and an approval gate in Lesson 17; this is the same discipline aimed at the whole agent. A Tier 1 alert nobody has ever tripped in a drill is an alert you cannot trust, and a kill switch the on-call rotation does not know how to reach is a button that does not work.
 
 ## Rollback, by action class
@@ -102,6 +108,8 @@ Code commits or deployments. A plain git revert if the commit has not deployed; 
 Identity or access changes. Provisioned access can be deprovisioned, but the audit question is what the agent did with that access during the window.
 
 Knowledge-base or vector-store writes. Embeddings, retrievals, fine-tune dataset additions. You can delete the records, but the audit question is what other agents already retrieved from the corrupted state, which needs days of downstream-effect monitoring. [^2]
+
+![The seven action classes split by reversibility: database writes, code, and access changes are reversible, external API calls, documents, and vector-store writes need a compensating action, and customer communications cannot be undone at all](</diagrams/incident-response-hallucinations-data-leaks-rollback-postmortems/4-rollback-by-action-class.png>)
 
 For each class the runbook captures the rollback procedure, the operator authorized to execute it, a time budget, the substitute action where rollback is impossible, and a verification step confirming the rollback succeeded. [^2]
 
@@ -144,6 +152,8 @@ Then the rollback-by-action-class table runs. The database writes from greeting 
 The postmortem runs the detection chain and produces three artifacts. An eval case is added covering the bereavement-retroactive prompt with the maliciously plausible retrieved policy, so CI fails loudly next time. A guardrail rule is added at the output checkpoint that blocks any refund-policy claim from auto-send. And the outcome tripwire is repaired so a direct-send email to a customer always requires review. Three changes, three gap closures, and the same incident class is now much harder to repeat. [^3]
 
 The emblematic move in that whole sequence is the one that costs the least and is easiest to skip: freezing the trace before the rollback. It is what lets the postmortem verify, instead of guess, which prompt change and which retrieval entry produced the lie.
+
+![The order-support agent incident runs from the Tuesday prompt change and refund-policy ingestion, through the Wednesday false bereavement promises and leaked account number, the 2:14 a.m. cost tripwire, the 30-second kill switch, the trace freeze before rollback, the compensating follow-up to forty customers, and the three postmortem artifacts](</diagrams/incident-response-hallucinations-data-leaks-rollback-postmortems/5-worked-example-timeline.png>)
 
 ## Build the runbook before you need it
 
