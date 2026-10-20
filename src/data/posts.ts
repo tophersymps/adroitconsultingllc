@@ -24,6 +24,29 @@ export const posts: BlogPost[] = [
     "status": "published"
   },
   {
+    "slug": "salesforce-apex-governor-limits-2026",
+    "title": "The Apex Budget: Governor Limits as a Design Discipline",
+    "excerpt": "Apex runs inside a fixed per-transaction resource envelope. Design against the budget and the LimitException stops being a surprise.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "October 19, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "13 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "Apex",
+      "Governor Limits",
+      "Performance",
+      "Architecture",
+      "SOQL"
+    ],
+    "bannerImage": "/banners/salesforce-apex-governor-limits-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "local-llm-concurrency-slots-2026",
     "title": "One Server, One Slot: The Real Concurrency of Local LLMs",
     "excerpt": "A self-hosted LLM is a fixed pool of slots, not a stateless API. Point a fleet at it, and the slot count plus the queue it hides decide your throughput.",
