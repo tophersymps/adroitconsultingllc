@@ -26,6 +26,8 @@ A **platform** is the third shape, and it is different in kind from the first tw
 
 Hold that distinction firmly. "Monolith versus microservices" is about the shape of one system's code. "Hub versus spoke" is about the shape of a network of systems. You can apply either answer on either axis independently. A Salesforce org can itself be architecturally monolith-like or split into services (often both, as you will see). And a set of systems can be mediated by a hub or left to talk to one another directly, whatever the code shape of each member happens to be. This lesson is mostly about the second axis, and it is the one the System Architect exam actually tests you on.
 
+![A two-by-two grid showing the two independent decisions: code shape (monolith vs microservices) on one axis and topology (direct connections vs a mediating hub) on the other, with a self-contained CRM monolith, a Salesforce-centered hub, a team's independently deployed services, and microservices wired point-to-point placed in their quadrants](</diagrams/monolith-vs-microservices-vs-platform-salesforce-integration-hub/1-two-axes-grid.png>)
+
 ## Salesforce's own journey settles the muddle
 
 The cleanest way to see the two axes at once is to look at what Salesforce did to its own platform. It started as a monolith: one runtime, one kernel, one database schema shared across every tenant. Over the past several years it evolved toward a structure of independent, metadata-driven services, while deliberately keeping the core runtime as the single system of record for application metadata because a monolithic core turns out to be the best shape for that one job. [^1]
@@ -33,6 +35,8 @@ The cleanest way to see the two axes at once is to look at what Salesforce did t
 Read that closely, because it is a real-world refusal of the "microservices everywhere" slogan. Salesforce did not throw the monolith out. It kept a monolith at the center, for the part of the system where coordination and one-version-of-truth actually matter (the metadata that describes every app), and it moved the parts that need the ability to scale and change independently out into their own services. It also described the communication between those services as asynchronous and brokered, which decouples them from each other and buffers load spikes between them. [^1]
 
 That is the architect's actual skill, and it is the same in miniature at a customer: decide, capability by capability, whether it belongs in a coherent whole where it can share transactions, or in its own unit where it can scale and fail independently. You do not answer "monolith or microservices" once for the enterprise. You answer it repeatedly, per capability, and you place the boundaries where coordination cost and independence value cross.
+
+![Salesforce's own journey from a monolith to a core plus independent services: it started as one runtime and one shared schema, kept a monolithic core as the single system of record for application metadata, and moved the parts that need to scale and change independently out into their own services with asynchronous, brokered communication](</diagrams/monolith-vs-microservices-vs-platform-salesforce-integration-hub/2-platform-journey.png>)
 
 ## The platform, the hub, and the system of record
 
@@ -58,11 +62,15 @@ Inside the hub, that translates to a per-transaction resource budget that you mu
 
 The reliability pillar gives you the named mechanisms: circuit breakers for all external integrations, retry with exponential backoff for transient failures, and timeouts matched to the operation, roughly five to ten seconds for user-facing calls and thirty to sixty seconds for asynchronous jobs. [^5] Bake those into the hub, and the hub stays a net addition instead of a single point of failure that the business leans on and then discovers is capped.
 
+![The real cost of centralizing: the limits budget, showing the per-transaction governor limits (100 synchronous and 200 asynchronous SOQL queries, 150 DML statements, and a 24-hour API budget licensed by edition) alongside the reliability mechanisms the architect owns (circuit breakers, retry with exponential backoff, and timeouts of 5-10 seconds for user-facing calls and 30-60 seconds for asynchronous jobs)](</diagrams/monolith-vs-microservices-vs-platform-salesforce-integration-hub/4-limits-budget.png>)
+
 ## Worked example: the manufacturer's order flow
 
 A manufacturer runs Salesforce as its front office. The ERP is the official system of record for orders and pricing. The WMS tracks each warehouse bin at full fidelity. The billing platform holds balances and credit. The ask: when a sales rep closes an order, the order must land in the ERP, the inventory must be reserved in the WMS, the billing platform must open a balance, and the rep must see a confirmation that ties it all together.
 
 The first decision is the system-of-record test. The order's authoritative home is the ERP, so Salesforce does not try to become the owner of the order; it becomes the orchestrator that convenes the participants. That is an honest hub role: it does not claim a truth it does not hold, but it holds the process that moves the work. Salesforce detects the order confirmation, fans out to the ERP to save the order, to the WMS to reserve inventory, and to billing to open the balance, and it coordinates the result that the rep sees. [^3]
+
+![The manufacturer's order flow with Salesforce as orchestrator, not owner: Salesforce detects the order confirmation and fans out to the ERP to save the order, to the WMS to reserve inventory, and to billing to open the balance, where the ERP and billing are write-side operations needing retry and idempotency while the high-frequency WMS reservation moves onto a platform event and an asynchronous consumer](</diagrams/monolith-vs-microservices-vs-platform-salesforce-integration-hub/3-manufacturer-order-flow.png>)
 
 The second decision is where each leg runs. Saving the order and opening the balance are write-side operations where a partial success is not acceptable; they need the retry, idempotency, and compensation behavior from the earlier integration-reliability lesson. The WMS reservation is high-frequency and latency-tolerant, so it moves onto a platform event and an asynchronous consumer rather than holding the rep's synchronous request hostage to a warehouse endpoint that can answer slowly. The confirmation the rep sees returns immediately with a "processing" state, and the event-driven leg updates it when the WMS actually confirms.
 
