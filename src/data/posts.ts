@@ -2,6 +2,28 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "nextjs-image-optimization-ssrf-2026",
+    "title": "Next.js SSRF: Your Image Allow-List Is a Security Boundary",
+    "excerpt": "Two Next.js security releases in two weeks turned a config nicety into a production gate. Here is the image-optimization SSRF and the patch pipeline it demands.",
+    "category": "React & Web Dev",
+    "categoryColor": "react",
+    "categoryGradient": "from-emerald to-emerald-dark",
+    "date": "October 19, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "11 min read",
+    "featured": false,
+    "tags": [
+      "Next.js",
+      "Security",
+      "SSRF",
+      "Patch Management",
+      "Web Development"
+    ],
+    "bannerImage": "/banners/nextjs-image-optimization-ssrf-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "local-llm-concurrency-slots-2026",
     "title": "One Server, One Slot: The Real Concurrency of Local LLMs",
     "excerpt": "A self-hosted LLM is a fixed pool of slots, not a stateless API. Point a fleet at it, and the slot count plus the queue it hides decide your throughput.",
