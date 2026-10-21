@@ -2,6 +2,31 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "incident-response-declare-early-2026",
+    "title": "Declare the Incident Early, Downgrade It Later",
+    "excerpt": "Incident response is a scripted skill, not a scramble. Declare early, contain before you diagnose, and turn every outage into action items that land.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "October 20, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "DevOps",
+      "Incident Response",
+      "SRE",
+      "Reliability",
+      "On-Call",
+      "Postmortem",
+      "SLO",
+      "Error Budget"
+    ],
+    "bannerImage": "/banners/incident-response-declare-early-2026.png",
+    "status": "published"
+  },
+  {
     "slug": "nextjs-image-optimization-ssrf-2026",
     "title": "Next.js SSRF: Your Image Allow-List Is a Security Boundary",
     "excerpt": "Two Next.js security releases in two weeks turned a config nicety into a production gate. Here is the image-optimization SSRF and the patch pipeline it demands.",
