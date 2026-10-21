@@ -24,6 +24,8 @@ Read that closely, because the word "agent" gets used for both, and the architec
 
 Anthropic's advice on when to use each one is the pragmatic counterweight to the hype. Start with the simplest solution, and only add complexity when needed. Agentic systems trade latency and cost for task performance, so you should consider when that trade makes sense. Where you do want them, workflows give you predictability and consistency for well-defined tasks, while agents are the right call when you need flexibility and model-driven decision making at scale. [^1] That maps cleanly onto the pattern language from lesson 5: a workflow is a fixed assembly of processing units, and an agent is a processing unit that selects its own pipeline.
 
+![Workflow vs. Agent: the control flow lives in your code for a workflow, with predefined paths and predictable results, while an agent keeps control flow partly in the model, which decides at runtime which tool to call next and whether to keep going or stop](</diagrams/agent-architecture-patterns-orchestration-planning-tool-use/1-workflow-vs-agent.png>)
+
 ## The building block: the augmented LLM
 
 Underneath every agent sits the same primitive, which Anthropic calls the **augmented LLM**: a language model enhanced with retrieval, tools, and memory. The model can generate its own search queries, select appropriate tools, and decide what information to retain. [^1]
@@ -60,6 +62,8 @@ When you do split, the dominant shape is the **orchestrator-worker** pattern, an
 
 This is where the architectural leverage of multi-agent systems actually lives. Anthropic's research finding is that multi-agent systems work mainly because they spend enough tokens to solve the problem: in its analysis of a browsing benchmark, token usage by itself explained 80 percent of performance variance. The architecture distributes work across agents with separate context windows to add capacity for parallel reasoning. [^2]
 
+![Orchestrator-Worker: a lead agent coordinates the process and delegates to specialized subagents that operate in parallel, each with its own context window and tools so it can investigate one slice of the problem in depth](</diagrams/agent-architecture-patterns-orchestration-planning-tool-use/4-orchestrator-worker.png>)
+
 But there is a real, and for this course, important, cost to that leverage. Anthropic's own data shows the token economics are harsh: agents typically use about 4x more tokens than plain chat interactions, and multi-agent systems use about 15x more tokens than chats. [^2] That single number is the reason orchestration choices and cost architecture (the very next lesson) are inseparable. More orchestration means more tokens, so the architecture has to earn the extra spend. Anthropic's own conclusion is blunt: multi-agent systems require tasks where the value is high enough to pay for the increased performance. [^2]
 
 ## Planning: the model's strategy
@@ -69,6 +73,8 @@ The third capability is planning, and it answers the coordination question that 
 Plan-and-execute splits the work into two components. A **planner** prompts an LLM to generate a multi-step plan to complete a large task. Then one or more **executors** take the user's query and one step of the plan, and invoke one or more tools to complete that step. [^4] The way these two coordinate is the architectural point. Because the planner is usually the largest, most expensive model, you do not want to call it on every tool invocation. You call it once to build the plan, hand the steps to a cheaper executor loop, and only go back to the planner when the plan needs re-planning. [^4]
 
 That last piece, the loop, is what makes this a genuine plan rather than a static list. Once execution completes, the agent is called again with a re-planning prompt, letting it decide whether to finish with a response or generate a follow-up plan when the first one did not have the desired effect. [^4] This is plan-and-act as a cycle, not a one-shot: plan, execute, observe, re-plan, and only stop when the result satisfies the goal.
+
+![Plan-and-Execute Loop: the planner, the largest and most expensive model, is called once to build a multi-step plan, then hands steps to a cheaper executor loop that invokes tools, and a re-planning loop calls the agent again to finish or generate a follow-up plan](</diagrams/agent-architecture-patterns-orchestration-planning-tool-use/2-plan-execute-loop.png>)
 
 LangChain's implementation takes this one step further into a form called **LLMCompiler**, and its shape is worth seeing because it previews how planning, orchestration, and tool use combine. The compiler has a planner that streams a directed acyclic graph of tasks, each task carrying a tool, its arguments, and a list of dependencies. A task-fetching unit schedules and executes tasks once their dependencies are met, and a joiner decides whether to respond with the final answer or pass progress back to the planner to continue. [^4] The paper behind it claims the extra parallelism grants a significant speedup, roughly 3.6x. [^4]
 
@@ -98,6 +104,8 @@ You have the pieces, so here is the sequence an architect actually runs, and it 
 4. If you split, prefer orchestrator-worker, and be explicit about what the extra context windows and parallel subagents buy. [^2]
 5. If the task needs real strategy, add a planner that builds a plan, hands steps to executors, and re-plans on new evidence. [^4]
 6. Account for the token cost of every step you added, because orchestration and planning are not free, and the next lesson is where that accounting lives.
+
+![The Architect's Decision Sequence: classify the task, define the tool surface first, start single-agent, prefer orchestrator-worker if you split, add a planner for real strategy, and account for the token cost of every step](</diagrams/agent-architecture-patterns-orchestration-planning-tool-use/3-decision-sequence.png>)
 
 ## Try it
 
