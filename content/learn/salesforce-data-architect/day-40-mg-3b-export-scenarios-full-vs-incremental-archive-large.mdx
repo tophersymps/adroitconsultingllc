@@ -48,6 +48,8 @@ The third is the object's support for time-based filtering at volume. A delta qu
 
 The result is the objective's default answer: a recurring feed to a warehouse uses incremental extraction by SystemModstamp (or CDC, covered next), not a full pull. [^1][^3]
 
+![Full exports are for initial seeds, one-off snapshots, and the gap case where change tracking is unavailable, while incremental exports by SystemModstamp are the default for recurring feeds, and a scheduled full large-data-volume export is the design to avoid because it degrades org-wide performance](</diagrams/day-40-mg-3b-export-scenarios-full-vs-incremental-archive-large/1-full-vs-incremental.png>)
+
 ## The delete gap: what last-modified queries cannot see
 
 Here is the hole in the incremental pattern, and it is the single most tested point in this lesson.
@@ -61,6 +63,8 @@ Option one is event-driven detection with Change Data Capture. CDC publishes cha
 Option two is periodic reconciliation. On a defined cadence, you compare the ID set in the destination against the ID set in Salesforce. The SOAP replication API supports this directly: getUpdated() and getDeleted() give you the IDs that changed or were deleted within a time window, so a reconciliation run can ask "what got deleted since the last check" instead of scanning everything. [^8] Bulk API queryAll gives you the same material in the other direction: it returns records that were deleted because of a merge or delete, along with archived Task and Event records, so a full id-set comparison against a previous extract will surface the holes. [^7] The tradeoff here is volume: comparing ID sets is cheap at the ID level, but a true full reconciliation means retrieving the authoritative list, and at LDV that is work in itself. [^1]
 
 The exam's split here is clean: CDC for near-real-time feeds that need deletes promptly, reconciliation for batch cadences and for catching what CDC missed. [^1][^6] Many production warehouse feeds run both: CDC for the day-to-day flow, a weekly reconciliation as the safety net. [^1]
+
+![A deleted record gets no new SystemModstamp, so a last-modified query never sees it and the external copy keeps a stale record; the two fixes are Change Data Capture delete events for near-real-time feeds and periodic id-set reconciliation for batch cadences, and many feeds run both](</diagrams/day-40-mg-3b-export-scenarios-full-vs-incremental-archive-large/2-delete-gap.png>)
 
 ## Does SystemModstamp tell you about undeletes?
 
@@ -89,6 +93,8 @@ Second, use Bulk API query jobs. Bulk query exists to query large data sets effi
 Third, chunk the extraction. Bound each job so it finishes inside the limits. Two chunking strategies cover most cases: date windows (export January, then February, then March) and ID ranges. [^1] For ID-range chunking at scale, the Bulk API's PK chunking exists for exactly this: it splits bulk queries on large tables into chunks based on the record IDs, or primary keys, of the queried records, so you get the benefit of many smaller jobs without hand-rolling the ranges. [^4] The exam's reason for chunking is the one the quiz states directly: chunking bounds job size, avoids timeouts, and stays within API limits. [^1] It does not improve data quality, and it does not remove the need for indexed filters. [^11]
 
 Fourth, schedule and provision for the run. Off-peak scheduling keeps an LDV export from competing with business users for the same server resources, which is the same reasoning that protects a recurring full reload from degrading org performance. [^3] On the destination side, plan storage for the full expected size before you start, because a 15 GB extraction into a store sized for 2 GB fails at the end, not at the beginning. [^1][^4] Include the intermediate space: CSV files, the staging copy, the loaded table, and headroom. [^1]
+
+![Large-volume export planning has four levers: scope by indexed filters to avoid the two-minute QUERY_TIMEOUT, use Bulk API query jobs for 2,000-plus records up to 15 GB in 15 files of 1 GB each, chunk by date window or ID range with PK chunking at scale, and schedule off-peak with destination storage sized for the full expected volume](</diagrams/day-40-mg-3b-export-scenarios-full-vs-incremental-archive-large/3-large-volume-planning.png>)
 
 ## Verification: prove the export before you trust it
 
@@ -130,6 +136,8 @@ ETL and data pipelines for ongoing warehouse feeds with transformation. When the
 
 The exam pattern: the scenario names the purpose, and you match the family. Scheduled backup points at Data Export. A defined slice points at Data Loader or Bulk API. An ongoing feed with transformation points at a pipeline. [^1]
 
+![The tool selection maps scenario to family: a scheduled full backup points at the Data Export service, a defined slice or delta points at Bulk API query jobs and Data Loader, and an ongoing warehouse feed with transformation points at an ETL data pipeline that owns the watermark, delete handling, and reconciliation](</diagrams/day-40-mg-3b-export-scenarios-full-vs-incremental-archive-large/5-tool-selection.png>)
+
 ## Configuration walkthrough: five decisions in order
 
 Work the scenario logic in this order, and each step resolves the one before it. [^1]
@@ -159,6 +167,8 @@ Step three: extract and verify. Each chunk lands, row counts are summed per obje
 Step four: delete from Salesforce. The eligible records are deleted in a batched, controlled pass, off-peak, so the hot object shrinks without a performance event for the live team. [^1][^3] The archive keeps serving compliance queries, and the org keeps the headroom on the object's storage and query performance. [^1]
 
 Step five: prove the archive still works, on a cadence, not just on day one. A yearly sample read from the archive confirms it is still queryable, which is the standing requirement for a store that is now the only copy of these records. [^1]
+
+![The archive-before-purge sequence at LDV runs five steps: scope the candidate population on an indexed eligibility field and record the count baseline, design a Bulk API job per object chunked by date window into a queryable warehouse schema, extract and verify by reconciling row counts and reading back a sample, delete from Salesforce in a batched off-peak pass, then prove the archive still works with a yearly sample read](</diagrams/day-40-mg-3b-export-scenarios-full-vs-incremental-archive-large/4-archive-before-purge.png>)
 
 Every failure this scenario could suffer is an exam trap, which is exactly why the traps section is next. [^1]
 
