@@ -60,6 +60,7 @@ for (const file of files) {
     featured: fm.featured || false,
     tags: fm.tags || [],
     bannerImage: fm.bannerImage || undefined,
+    ogImage: fm.ogImage || undefined,
     status,
   });
 }

@@ -23,7 +23,8 @@ export const posts: BlogPost[] = [
       "SLO",
       "Error Budget"
     ],
-    "bannerImage": "/banners/incident-response-declare-early-2026.png",
+    "bannerImage": "/banners/incident-response-declare-early-2026.webp",
+    "ogImage": "/banners/incident-response-declare-early-2026-og.jpg",
     "status": "published"
   },
   {
@@ -45,7 +46,8 @@ export const posts: BlogPost[] = [
       "Patch Management",
       "Web Development"
     ],
-    "bannerImage": "/banners/nextjs-image-optimization-ssrf-2026.png",
+    "bannerImage": "/banners/nextjs-image-optimization-ssrf-2026.webp",
+    "ogImage": "/banners/nextjs-image-optimization-ssrf-2026-og.jpg",
     "status": "published"
   },
   {
@@ -68,7 +70,8 @@ export const posts: BlogPost[] = [
       "Architecture",
       "SOQL"
     ],
-    "bannerImage": "/banners/salesforce-apex-governor-limits-2026.png",
+    "bannerImage": "/banners/salesforce-apex-governor-limits-2026.webp",
+    "ogImage": "/banners/salesforce-apex-governor-limits-2026-og.jpg",
     "status": "published"
   },
   {
@@ -90,7 +93,8 @@ export const posts: BlogPost[] = [
       "Concurrency",
       "Model Serving"
     ],
-    "bannerImage": "/banners/local-llm-concurrency-slots-2026.png",
+    "bannerImage": "/banners/local-llm-concurrency-slots-2026.webp",
+    "ogImage": "/banners/local-llm-concurrency-slots-2026-og.jpg",
     "status": "published"
   },
   {
@@ -112,7 +116,8 @@ export const posts: BlogPost[] = [
       "Matching Rules",
       "Data Cloud"
     ],
-    "bannerImage": "/banners/salesforce-duplicate-data-strategy-2026.png",
+    "bannerImage": "/banners/salesforce-duplicate-data-strategy-2026.webp",
+    "ogImage": "/banners/salesforce-duplicate-data-strategy-2026-og.jpg",
     "status": "published"
   },
   {
@@ -136,7 +141,8 @@ export const posts: BlogPost[] = [
       "Client Management",
       "Agile"
     ],
-    "bannerImage": "/banners/decision-log-consulting-delivery-2026.png",
+    "bannerImage": "/banners/decision-log-consulting-delivery-2026.webp",
+    "ogImage": "/banners/decision-log-consulting-delivery-2026-og.jpg",
     "status": "published"
   },
   {
@@ -163,7 +169,8 @@ export const posts: BlogPost[] = [
       "Reliability",
       "Infrastructure"
     ],
-    "bannerImage": "/banners/infrastructure-drift-detection-remediation-2026.png",
+    "bannerImage": "/banners/infrastructure-drift-detection-remediation-2026.webp",
+    "ogImage": "/banners/infrastructure-drift-detection-remediation-2026-og.jpg",
     "status": "published"
   },
   {
@@ -185,7 +192,8 @@ export const posts: BlogPost[] = [
       "Concurrency",
       "Reliability"
     ],
-    "bannerImage": "/banners/multi-agent-contention-shared-resources-2026.png",
+    "bannerImage": "/banners/multi-agent-contention-shared-resources-2026.webp",
+    "ogImage": "/banners/multi-agent-contention-shared-resources-2026-og.jpg",
     "status": "published"
   },
   {
@@ -208,7 +216,8 @@ export const posts: BlogPost[] = [
       "Apex",
       "API"
     ],
-    "bannerImage": "/banners/salesforce-agent-access-scoping-2026.png",
+    "bannerImage": "/banners/salesforce-agent-access-scoping-2026.webp",
+    "ogImage": "/banners/salesforce-agent-access-scoping-2026-og.jpg",
     "status": "published"
   },
   {
@@ -232,7 +241,8 @@ export const posts: BlogPost[] = [
       "Migrations",
       "Tooling"
     ],
-    "bannerImage": "/banners/supabase-declarative-schemas-pg-delta-2026.png",
+    "bannerImage": "/banners/supabase-declarative-schemas-pg-delta-2026.webp",
+    "ogImage": "/banners/supabase-declarative-schemas-pg-delta-2026-og.jpg",
     "status": "published"
   },
   {
@@ -254,7 +264,8 @@ export const posts: BlogPost[] = [
       "Flow",
       "Headless"
     ],
-    "bannerImage": "/banners/salesforce-winter-27-headless-2026.png",
+    "bannerImage": "/banners/salesforce-winter-27-headless-2026.webp",
+    "ogImage": "/banners/salesforce-winter-27-headless-2026-og.jpg",
     "status": "published"
   },
   {
@@ -277,7 +288,8 @@ export const posts: BlogPost[] = [
       "Inference",
       "Data Sovereignty"
     ],
-    "bannerImage": "/banners/self-hosted-inference-decision-2026.png",
+    "bannerImage": "/banners/self-hosted-inference-decision-2026.webp",
+    "ogImage": "/banners/self-hosted-inference-decision-2026-og.jpg",
     "status": "published"
   },
   {
@@ -299,7 +311,8 @@ export const posts: BlogPost[] = [
       "Kanban",
       "Consulting"
     ],
-    "bannerImage": "/banners/flow-metrics-consulting-delivery-2026.png",
+    "bannerImage": "/banners/flow-metrics-consulting-delivery-2026.webp",
+    "ogImage": "/banners/flow-metrics-consulting-delivery-2026-og.jpg",
     "status": "published"
   },
   {
@@ -322,7 +335,8 @@ export const posts: BlogPost[] = [
       "JavaScript",
       "Best Practices"
     ],
-    "bannerImage": "/banners/lightning-web-components-best-practices.png",
+    "bannerImage": "/banners/lightning-web-components-best-practices.webp",
+    "ogImage": "/banners/lightning-web-components-best-practices-og.jpg",
     "status": "published"
   },
   {
@@ -346,7 +360,8 @@ export const posts: BlogPost[] = [
       "Governance",
       "Metrics"
     ],
-    "bannerImage": "/banners/measuring-design-systems-2026.png",
+    "bannerImage": "/banners/measuring-design-systems-2026.webp",
+    "ogImage": "/banners/measuring-design-systems-2026-og.jpg",
     "status": "published"
   },
   {
@@ -371,7 +386,8 @@ export const posts: BlogPost[] = [
       "Reliability",
       "Infrastructure"
     ],
-    "bannerImage": "/banners/expand-contract-migrations-2026.png",
+    "bannerImage": "/banners/expand-contract-migrations-2026.webp",
+    "ogImage": "/banners/expand-contract-migrations-2026-og.jpg",
     "status": "published"
   },
   {
@@ -394,7 +410,8 @@ export const posts: BlogPost[] = [
       "Production AI",
       "Reliability"
     ],
-    "bannerImage": "/banners/model-version-pinning-drift-2026.png",
+    "bannerImage": "/banners/model-version-pinning-drift-2026.webp",
+    "ogImage": "/banners/model-version-pinning-drift-2026-og.jpg",
     "status": "published"
   },
   {
@@ -416,7 +433,8 @@ export const posts: BlogPost[] = [
       "Licensing",
       "Identity"
     ],
-    "bannerImage": "/banners/experience-cloud-access-model-2026.png",
+    "bannerImage": "/banners/experience-cloud-access-model-2026.webp",
+    "ogImage": "/banners/experience-cloud-access-model-2026-og.jpg",
     "status": "published"
   },
   {
@@ -439,7 +457,8 @@ export const posts: BlogPost[] = [
       "ensureStatic",
       "Web Development"
     ],
-    "bannerImage": "/banners/nextjs-16-4-cache-components-default-2026.png",
+    "bannerImage": "/banners/nextjs-16-4-cache-components-default-2026.webp",
+    "ogImage": "/banners/nextjs-16-4-cache-components-default-2026-og.jpg",
     "status": "published"
   },
   {
@@ -462,7 +481,8 @@ export const posts: BlogPost[] = [
       "AI Infrastructure",
       "Quality Assurance"
     ],
-    "bannerImage": "/banners/llm-judge-truth-vs-format-2026.png",
+    "bannerImage": "/banners/llm-judge-truth-vs-format-2026.webp",
+    "ogImage": "/banners/llm-judge-truth-vs-format-2026-og.jpg",
     "status": "published"
   },
   {
@@ -487,7 +507,8 @@ export const posts: BlogPost[] = [
       "Apex",
       "Security"
     ],
-    "bannerImage": "/banners/salesforce-observability-2026.png",
+    "bannerImage": "/banners/salesforce-observability-2026.webp",
+    "ogImage": "/banners/salesforce-observability-2026-og.jpg",
     "status": "published"
   },
   {
@@ -509,7 +530,8 @@ export const posts: BlogPost[] = [
       "Scaling",
       "Consulting"
     ],
-    "bannerImage": "/banners/cross-team-dependency-coordination-2026.png",
+    "bannerImage": "/banners/cross-team-dependency-coordination-2026.webp",
+    "ogImage": "/banners/cross-team-dependency-coordination-2026-og.jpg",
     "status": "published"
   },
   {
@@ -533,7 +555,8 @@ export const posts: BlogPost[] = [
       "Accessibility",
       "Design Engineering"
     ],
-    "bannerImage": "/banners/localization-layout-design-systems-2026.png",
+    "bannerImage": "/banners/localization-layout-design-systems-2026.webp",
+    "ogImage": "/banners/localization-layout-design-systems-2026-og.jpg",
     "status": "published"
   },
   {
@@ -556,7 +579,8 @@ export const posts: BlogPost[] = [
       "Agents",
       "Vector Search"
     ],
-    "bannerImage": "/banners/semantic-caching-llm-agents-2026.png",
+    "bannerImage": "/banners/semantic-caching-llm-agents-2026.webp",
+    "ogImage": "/banners/semantic-caching-llm-agents-2026-og.jpg",
     "status": "published"
   },
   {
@@ -581,7 +605,8 @@ export const posts: BlogPost[] = [
       "Stakeholders",
       "Consulting Delivery"
     ],
-    "bannerImage": "/banners/acceptance-gate-consulting-delivery-2026.png",
+    "bannerImage": "/banners/acceptance-gate-consulting-delivery-2026.webp",
+    "ogImage": "/banners/acceptance-gate-consulting-delivery-2026-og.jpg",
     "status": "published"
   },
   {
@@ -604,7 +629,8 @@ export const posts: BlogPost[] = [
       "WebSockets",
       "TypeScript"
     ],
-    "bannerImage": "/banners/realtime-presence-broadcast-2026.png",
+    "bannerImage": "/banners/realtime-presence-broadcast-2026.webp",
+    "ogImage": "/banners/realtime-presence-broadcast-2026-og.jpg",
     "status": "published"
   },
   {
@@ -630,7 +656,8 @@ export const posts: BlogPost[] = [
       "API",
       "Security"
     ],
-    "bannerImage": "/banners/salesforce-stack-testing-2026.png",
+    "bannerImage": "/banners/salesforce-stack-testing-2026.webp",
+    "ogImage": "/banners/salesforce-stack-testing-2026-og.jpg",
     "status": "published"
   },
   {
@@ -652,7 +679,8 @@ export const posts: BlogPost[] = [
       "LLM Optimization",
       "Edge Computing"
     ],
-    "bannerImage": "/banners/on-device-small-language-models-2026.png",
+    "bannerImage": "/banners/on-device-small-language-models-2026.webp",
+    "ogImage": "/banners/on-device-small-language-models-2026-og.jpg",
     "status": "published"
   },
   {
@@ -699,7 +727,8 @@ export const posts: BlogPost[] = [
       "Client Enablement",
       "Consulting Delivery"
     ],
-    "bannerImage": "/banners/handover-hypercare-exit-criteria-2026.png",
+    "bannerImage": "/banners/handover-hypercare-exit-criteria-2026.webp",
+    "ogImage": "/banners/handover-hypercare-exit-criteria-2026-og.jpg",
     "status": "published"
   },
   {
@@ -722,7 +751,8 @@ export const posts: BlogPost[] = [
       "WCAG",
       "Design Systems"
     ],
-    "bannerImage": "/banners/keyboard-navigation-focus-management-2026.png",
+    "bannerImage": "/banners/keyboard-navigation-focus-management-2026.webp",
+    "ogImage": "/banners/keyboard-navigation-focus-management-2026-og.jpg",
     "status": "published"
   },
   {
@@ -743,7 +773,8 @@ export const posts: BlogPost[] = [
       "Infrastructure",
       "CI/CD"
     ],
-    "bannerImage": "/banners/secret-sprawl-machine-identity-2026.png",
+    "bannerImage": "/banners/secret-sprawl-machine-identity-2026.webp",
+    "ogImage": "/banners/secret-sprawl-machine-identity-2026-og.jpg",
     "status": "published"
   },
   {
@@ -766,7 +797,8 @@ export const posts: BlogPost[] = [
       "AI Infrastructure",
       "LLM Orchestration"
     ],
-    "bannerImage": "/banners/agent-middleware-deterministic-glue-2026.png",
+    "bannerImage": "/banners/agent-middleware-deterministic-glue-2026.webp",
+    "ogImage": "/banners/agent-middleware-deterministic-glue-2026-og.jpg",
     "status": "published"
   },
   {
@@ -791,7 +823,8 @@ export const posts: BlogPost[] = [
       "Backend",
       "Web Development"
     ],
-    "bannerImage": "/banners/postgres-connection-pooling-serverless-2026.png",
+    "bannerImage": "/banners/postgres-connection-pooling-serverless-2026.webp",
+    "ogImage": "/banners/postgres-connection-pooling-serverless-2026-og.jpg",
     "status": "published"
   },
   {
@@ -814,7 +847,8 @@ export const posts: BlogPost[] = [
       "LLM Cost",
       "Inference"
     ],
-    "bannerImage": "/banners/test-time-compute-inference-scaling-2026.png",
+    "bannerImage": "/banners/test-time-compute-inference-scaling-2026.webp",
+    "ogImage": "/banners/test-time-compute-inference-scaling-2026-og.jpg",
     "status": "published"
   },
   {
@@ -835,7 +869,8 @@ export const posts: BlogPost[] = [
       "Product",
       "Consulting"
     ],
-    "bannerImage": "/banners/continuous-discovery-weekly-habit-2026.png",
+    "bannerImage": "/banners/continuous-discovery-weekly-habit-2026.webp",
+    "ogImage": "/banners/continuous-discovery-weekly-habit-2026-og.jpg",
     "status": "published"
   },
   {
@@ -857,7 +892,8 @@ export const posts: BlogPost[] = [
       "Dependencies",
       "Consulting"
     ],
-    "bannerImage": "/banners/critical-path-dependency-scheduling-2026.png",
+    "bannerImage": "/banners/critical-path-dependency-scheduling-2026.webp",
+    "ogImage": "/banners/critical-path-dependency-scheduling-2026-og.jpg",
     "status": "published"
   },
   {
@@ -879,7 +915,8 @@ export const posts: BlogPost[] = [
       "Model Deployment",
       "Canary Release"
     ],
-    "bannerImage": "/banners/model-registry-promotion-pipeline-2026.png",
+    "bannerImage": "/banners/model-registry-promotion-pipeline-2026.webp",
+    "ogImage": "/banners/model-registry-promotion-pipeline-2026-og.jpg",
     "status": "published"
   },
   {
@@ -923,7 +960,8 @@ export const posts: BlogPost[] = [
       "Web Development",
       "Hydration"
     ],
-    "bannerImage": "/banners/react-19-3-two-environment-apis-2026.png",
+    "bannerImage": "/banners/react-19-3-two-environment-apis-2026.webp",
+    "ogImage": "/banners/react-19-3-two-environment-apis-2026-og.jpg",
     "status": "published"
   },
   {
@@ -945,7 +983,8 @@ export const posts: BlogPost[] = [
       "Apex",
       "Data Access"
     ],
-    "bannerImage": "/banners/salesforce-record-sharing-model-2026.png",
+    "bannerImage": "/banners/salesforce-record-sharing-model-2026.webp",
+    "ogImage": "/banners/salesforce-record-sharing-model-2026-og.jpg",
     "status": "published"
   },
   {
@@ -968,7 +1007,8 @@ export const posts: BlogPost[] = [
       "SRE",
       "Automation"
     ],
-    "bannerImage": "/banners/agent-pipeline-repair-loop-2026.png",
+    "bannerImage": "/banners/agent-pipeline-repair-loop-2026.webp",
+    "ogImage": "/banners/agent-pipeline-repair-loop-2026-og.jpg",
     "status": "published"
   },
   {
@@ -993,7 +1033,8 @@ export const posts: BlogPost[] = [
       "Multi-Tenant",
       "Web Development"
     ],
-    "bannerImage": "/banners/realtime-rls-enforcement-boundary-2026.png",
+    "bannerImage": "/banners/realtime-rls-enforcement-boundary-2026.webp",
+    "ogImage": "/banners/realtime-rls-enforcement-boundary-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1015,7 +1056,8 @@ export const posts: BlogPost[] = [
       "API",
       "Integration"
     ],
-    "bannerImage": "/banners/salesforce-api-version-advance-2026.png",
+    "bannerImage": "/banners/salesforce-api-version-advance-2026.webp",
+    "ogImage": "/banners/salesforce-api-version-advance-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1037,7 +1079,8 @@ export const posts: BlogPost[] = [
       "Automation",
       "Bulkification"
     ],
-    "bannerImage": "/banners/salesforce-apex-trigger-framework.png",
+    "bannerImage": "/banners/salesforce-apex-trigger-framework.webp",
+    "ogImage": "/banners/salesforce-apex-trigger-framework-og.jpg",
     "status": "published"
   },
   {
@@ -1061,7 +1104,8 @@ export const posts: BlogPost[] = [
       "Wizards",
       "UI/UX"
     ],
-    "bannerImage": "/banners/progressive-disclosure-2026.png",
+    "bannerImage": "/banners/progressive-disclosure-2026.webp",
+    "ogImage": "/banners/progressive-disclosure-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1083,7 +1127,8 @@ export const posts: BlogPost[] = [
       "Agile",
       "Consulting"
     ],
-    "bannerImage": "/banners/project-risk-register-2026.png",
+    "bannerImage": "/banners/project-risk-register-2026.webp",
+    "ogImage": "/banners/project-risk-register-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1104,7 +1149,8 @@ export const posts: BlogPost[] = [
       "Feature Flags",
       "Platform Engineering"
     ],
-    "bannerImage": "/banners/feature-flags-deploy-release-2026.png",
+    "bannerImage": "/banners/feature-flags-deploy-release-2026.webp",
+    "ogImage": "/banners/feature-flags-deploy-release-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1127,7 +1173,8 @@ export const posts: BlogPost[] = [
       "Speech-to-Speech",
       "Latency Engineering"
     ],
-    "bannerImage": "/banners/realtime-voice-agents-latency-2026.png",
+    "bannerImage": "/banners/realtime-voice-agents-latency-2026.webp",
+    "ogImage": "/banners/realtime-voice-agents-latency-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1149,7 +1196,8 @@ export const posts: BlogPost[] = [
       "Data Fetching",
       "Web Development"
     ],
-    "bannerImage": "/banners/nextjs-16-cache-lifecycle-2026.png",
+    "bannerImage": "/banners/nextjs-16-cache-lifecycle-2026.webp",
+    "ogImage": "/banners/nextjs-16-cache-lifecycle-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1171,7 +1219,8 @@ export const posts: BlogPost[] = [
       "Integration",
       "Reliability"
     ],
-    "bannerImage": "/banners/salesforce-error-recovery-2026.png",
+    "bannerImage": "/banners/salesforce-error-recovery-2026.webp",
+    "ogImage": "/banners/salesforce-error-recovery-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1194,7 +1243,8 @@ export const posts: BlogPost[] = [
       "Design Ops",
       "UI/UX"
     ],
-    "bannerImage": "/banners/design-debt-paydown-2026.png",
+    "bannerImage": "/banners/design-debt-paydown-2026.webp",
+    "ogImage": "/banners/design-debt-paydown-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1218,7 +1268,8 @@ export const posts: BlogPost[] = [
       "Reliability",
       "Prompt Injection"
     ],
-    "bannerImage": "/banners/computer-use-agents-production-harness-2026.png",
+    "bannerImage": "/banners/computer-use-agents-production-harness-2026.webp",
+    "ogImage": "/banners/computer-use-agents-production-harness-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1239,7 +1290,8 @@ export const posts: BlogPost[] = [
       "CI/CD",
       "Platform Engineering"
     ],
-    "bannerImage": "/banners/kubernetes-rollout-strategies-2026.png",
+    "bannerImage": "/banners/kubernetes-rollout-strategies-2026.webp",
+    "ogImage": "/banners/kubernetes-rollout-strategies-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1262,7 +1314,8 @@ export const posts: BlogPost[] = [
       "Large Data Volumes",
       "Architecture"
     ],
-    "bannerImage": "/banners/salesforce-ldv-query-performance-2026.png",
+    "bannerImage": "/banners/salesforce-ldv-query-performance-2026.webp",
+    "ogImage": "/banners/salesforce-ldv-query-performance-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1284,7 +1337,8 @@ export const posts: BlogPost[] = [
       "Edge Functions",
       "Serverless"
     ],
-    "bannerImage": "/banners/supabase-edge-functions-2026.png",
+    "bannerImage": "/banners/supabase-edge-functions-2026.webp",
+    "ogImage": "/banners/supabase-edge-functions-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1307,7 +1361,8 @@ export const posts: BlogPost[] = [
       "FinOps",
       "Reliability"
     ],
-    "bannerImage": "/banners/agent-loop-spend-guardrails-2026.png",
+    "bannerImage": "/banners/agent-loop-spend-guardrails-2026.webp",
+    "ogImage": "/banners/agent-loop-spend-guardrails-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1330,7 +1385,8 @@ export const posts: BlogPost[] = [
       "Event Monitoring",
       "Integrations"
     ],
-    "bannerImage": "/banners/salesforce-oauth-token-governance-2026.png",
+    "bannerImage": "/banners/salesforce-oauth-token-governance-2026.webp",
+    "ogImage": "/banners/salesforce-oauth-token-governance-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1354,7 +1410,8 @@ export const posts: BlogPost[] = [
       "WIP Limits",
       "Delivery"
     ],
-    "bannerImage": "/banners/utilization-trap-capacity-planning-2026.png",
+    "bannerImage": "/banners/utilization-trap-capacity-planning-2026.webp",
+    "ogImage": "/banners/utilization-trap-capacity-planning-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1378,7 +1435,8 @@ export const posts: BlogPost[] = [
       "Testing",
       "CI/CD"
     ],
-    "bannerImage": "/banners/agent-eval-infrastructure-2026.png",
+    "bannerImage": "/banners/agent-eval-infrastructure-2026.webp",
+    "ogImage": "/banners/agent-eval-infrastructure-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1400,7 +1458,8 @@ export const posts: BlogPost[] = [
       "Kubernetes",
       "Platform Engineering"
     ],
-    "bannerImage": "/banners/backup-restore-validation-2026.png",
+    "bannerImage": "/banners/backup-restore-validation-2026.webp",
+    "ogImage": "/banners/backup-restore-validation-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1423,7 +1482,8 @@ export const posts: BlogPost[] = [
       "Real-Time",
       "Web Development"
     ],
-    "bannerImage": "/banners/realtime-subscription-lifecycle-supabase-2026.png",
+    "bannerImage": "/banners/realtime-subscription-lifecycle-supabase-2026.webp",
+    "ogImage": "/banners/realtime-subscription-lifecycle-supabase-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1448,7 +1508,8 @@ export const posts: BlogPost[] = [
       "Agentforce",
       "Security"
     ],
-    "bannerImage": "/banners/salesforce-release-discipline-2026.png",
+    "bannerImage": "/banners/salesforce-release-discipline-2026.webp",
+    "ogImage": "/banners/salesforce-release-discipline-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1471,7 +1532,8 @@ export const posts: BlogPost[] = [
       "Agents",
       "FinOps"
     ],
-    "bannerImage": "/banners/prompt-caching-ai-infrastructure-2026.png",
+    "bannerImage": "/banners/prompt-caching-ai-infrastructure-2026.webp",
+    "ogImage": "/banners/prompt-caching-ai-infrastructure-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1494,7 +1556,8 @@ export const posts: BlogPost[] = [
       "Pricing",
       "ROI"
     ],
-    "bannerImage": "/banners/salesforce-stack-cost-modeling-2026.png",
+    "bannerImage": "/banners/salesforce-stack-cost-modeling-2026.webp",
+    "ogImage": "/banners/salesforce-stack-cost-modeling-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1518,7 +1581,8 @@ export const posts: BlogPost[] = [
       "Delivery",
       "AI"
     ],
-    "bannerImage": "/banners/backlog-refinement-story-slicing-2026.png",
+    "bannerImage": "/banners/backlog-refinement-story-slicing-2026.webp",
+    "ogImage": "/banners/backlog-refinement-story-slicing-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1542,7 +1606,8 @@ export const posts: BlogPost[] = [
       "Interface Patterns",
       "UI/UX"
     ],
-    "bannerImage": "/banners/ux-writing-content-design-2026.png",
+    "bannerImage": "/banners/ux-writing-content-design-2026.webp",
+    "ogImage": "/banners/ux-writing-content-design-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1567,7 +1632,8 @@ export const posts: BlogPost[] = [
       "Code Execution",
       "Multi-Agent Pipelines"
     ],
-    "bannerImage": "/banners/agent-sandbox-scope-egress-state-2026.png",
+    "bannerImage": "/banners/agent-sandbox-scope-egress-state-2026.webp",
+    "ogImage": "/banners/agent-sandbox-scope-egress-state-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1589,7 +1655,8 @@ export const posts: BlogPost[] = [
       "Autoscaling",
       "Model Serving"
     ],
-    "bannerImage": "/banners/llm-inference-autoscaling-2026.png",
+    "bannerImage": "/banners/llm-inference-autoscaling-2026.webp",
+    "ogImage": "/banners/llm-inference-autoscaling-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1612,7 +1679,8 @@ export const posts: BlogPost[] = [
       "Web Development",
       "Full-Stack"
     ],
-    "bannerImage": "/banners/fullstack-type-safety-2026.png",
+    "bannerImage": "/banners/fullstack-type-safety-2026.webp",
+    "ogImage": "/banners/fullstack-type-safety-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1636,7 +1704,8 @@ export const posts: BlogPost[] = [
       "Experience Cloud",
       "Security"
     ],
-    "bannerImage": "/banners/salesforce-failure-patterns-2026.png",
+    "bannerImage": "/banners/salesforce-failure-patterns-2026.webp",
+    "ogImage": "/banners/salesforce-failure-patterns-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1660,7 +1729,8 @@ export const posts: BlogPost[] = [
       "AI Infrastructure",
       "Security"
     ],
-    "bannerImage": "/banners/agent-autonomy-governance-2026.png",
+    "bannerImage": "/banners/agent-autonomy-governance-2026.webp",
+    "ogImage": "/banners/agent-autonomy-governance-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1684,7 +1754,8 @@ export const posts: BlogPost[] = [
       "Apex",
       "Security"
     ],
-    "bannerImage": "/banners/salesforce-build-order-feb-2027.png",
+    "bannerImage": "/banners/salesforce-build-order-feb-2027.webp",
+    "ogImage": "/banners/salesforce-build-order-feb-2027-og.jpg",
     "status": "published"
   },
   {
@@ -1707,7 +1778,8 @@ export const posts: BlogPost[] = [
       "Coordination",
       "Delivery"
     ],
-    "bannerImage": "/banners/daily-standup-coordination-ai-2026.png",
+    "bannerImage": "/banners/daily-standup-coordination-ai-2026.webp",
+    "ogImage": "/banners/daily-standup-coordination-ai-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1730,7 +1802,8 @@ export const posts: BlogPost[] = [
       "Migration",
       "UI/UX"
     ],
-    "bannerImage": "/banners/design-system-release-discipline-2026.png",
+    "bannerImage": "/banners/design-system-release-discipline-2026.webp",
+    "ogImage": "/banners/design-system-release-discipline-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1755,7 +1828,8 @@ export const posts: BlogPost[] = [
       "AI Infrastructure",
       "Multi-Agent Pipelines"
     ],
-    "bannerImage": "/banners/agent-release-engineering-2026.png",
+    "bannerImage": "/banners/agent-release-engineering-2026.webp",
+    "ogImage": "/banners/agent-release-engineering-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1776,7 +1850,8 @@ export const posts: BlogPost[] = [
       "Platform Engineering",
       "Security"
     ],
-    "bannerImage": "/banners/ci-cache-infrastructure-2026.png",
+    "bannerImage": "/banners/ci-cache-infrastructure-2026.webp",
+    "ogImage": "/banners/ci-cache-infrastructure-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1799,7 +1874,8 @@ export const posts: BlogPost[] = [
       "Data Cloud",
       "security"
     ],
-    "bannerImage": "/banners/agentforce-determinism-ladder-2026.png",
+    "bannerImage": "/banners/agentforce-determinism-ladder-2026.webp",
+    "ogImage": "/banners/agentforce-determinism-ladder-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1822,7 +1898,8 @@ export const posts: BlogPost[] = [
       "Web Development",
       "Postgres"
     ],
-    "bannerImage": "/banners/realtime-write-conflicts-supabase-2026.png",
+    "bannerImage": "/banners/realtime-write-conflicts-supabase-2026.webp",
+    "ogImage": "/banners/realtime-write-conflicts-supabase-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1846,7 +1923,8 @@ export const posts: BlogPost[] = [
       "Idempotency",
       "Human-in-the-Loop"
     ],
-    "bannerImage": "/banners/agent-durable-execution-state-machines-2026.png",
+    "bannerImage": "/banners/agent-durable-execution-state-machines-2026.webp",
+    "ogImage": "/banners/agent-durable-execution-state-machines-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1870,7 +1948,8 @@ export const posts: BlogPost[] = [
       "Design Systems",
       "Project Management"
     ],
-    "bannerImage": "/banners/state-of-the-stack-september-2026.png",
+    "bannerImage": "/banners/state-of-the-stack-september-2026.webp",
+    "ogImage": "/banners/state-of-the-stack-september-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1894,7 +1973,8 @@ export const posts: BlogPost[] = [
       "Design Systems",
       "Automation"
     ],
-    "bannerImage": "/banners/accessibility-testing-layers-ci-2026.png",
+    "bannerImage": "/banners/accessibility-testing-layers-ci-2026.webp",
+    "ogImage": "/banners/accessibility-testing-layers-ci-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1916,7 +1996,8 @@ export const posts: BlogPost[] = [
       "Sprint Planning",
       "Delivery"
     ],
-    "bannerImage": "/banners/sprint-planning-routing-review-2026.png",
+    "bannerImage": "/banners/sprint-planning-routing-review-2026.webp",
+    "ogImage": "/banners/sprint-planning-routing-review-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1937,7 +2018,8 @@ export const posts: BlogPost[] = [
       "Model Routing",
       "Platform Engineering"
     ],
-    "bannerImage": "/banners/llm-gateway-model-routing-2026.png",
+    "bannerImage": "/banners/llm-gateway-model-routing-2026.webp",
+    "ogImage": "/banners/llm-gateway-model-routing-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1960,7 +2042,8 @@ export const posts: BlogPost[] = [
       "Reliability",
       "LLM Engineering"
     ],
-    "bannerImage": "/banners/structured-output-tool-calling-reliability-2026.png",
+    "bannerImage": "/banners/structured-output-tool-calling-reliability-2026.webp",
+    "ogImage": "/banners/structured-output-tool-calling-reliability-2026-og.jpg",
     "status": "published"
   },
   {
@@ -1981,7 +2064,8 @@ export const posts: BlogPost[] = [
       "Web Development",
       "Performance"
     ],
-    "bannerImage": "/banners/react-19-2-activity-useeffectevent.png",
+    "bannerImage": "/banners/react-19-2-activity-useeffectevent.webp",
+    "ogImage": "/banners/react-19-2-activity-useeffectevent-og.jpg",
     "status": "published"
   },
   {
@@ -2005,7 +2089,8 @@ export const posts: BlogPost[] = [
       "Apex",
       "Integration"
     ],
-    "bannerImage": "/banners/salesforce-integration-seams-2026.png",
+    "bannerImage": "/banners/salesforce-integration-seams-2026.webp",
+    "ogImage": "/banners/salesforce-integration-seams-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2025,7 +2110,8 @@ export const posts: BlogPost[] = [
       "Prompt Engineering",
       "AI Infrastructure"
     ],
-    "bannerImage": "/banners/agent-memory-context-engineering-2026.png",
+    "bannerImage": "/banners/agent-memory-context-engineering-2026.webp",
+    "ogImage": "/banners/agent-memory-context-engineering-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2046,7 +2132,8 @@ export const posts: BlogPost[] = [
       "Accessibility",
       "Web Development"
     ],
-    "bannerImage": "/banners/form-ux-design-2026.png",
+    "bannerImage": "/banners/form-ux-design-2026.webp",
+    "ogImage": "/banners/form-ux-design-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2066,7 +2153,8 @@ export const posts: BlogPost[] = [
       "Agile",
       "Delivery"
     ],
-    "bannerImage": "/banners/retrospective-follow-through-2026.png",
+    "bannerImage": "/banners/retrospective-follow-through-2026.webp",
+    "ogImage": "/banners/retrospective-follow-through-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2086,7 +2174,8 @@ export const posts: BlogPost[] = [
       "CI/CD",
       "Platform Engineering"
     ],
-    "bannerImage": "/banners/merge-queue-trunk-based-2026.png",
+    "bannerImage": "/banners/merge-queue-trunk-based-2026.webp",
+    "ogImage": "/banners/merge-queue-trunk-based-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2105,7 +2194,8 @@ export const posts: BlogPost[] = [
       "RAG",
       "AI Infrastructure"
     ],
-    "bannerImage": "/banners/production-rag-retrieval-quality-2026.png",
+    "bannerImage": "/banners/production-rag-retrieval-quality-2026.webp",
+    "ogImage": "/banners/production-rag-retrieval-quality-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2125,7 +2215,8 @@ export const posts: BlogPost[] = [
       "MCP",
       "Security"
     ],
-    "bannerImage": "/banners/agent-tool-attack-surface-2026.png",
+    "bannerImage": "/banners/agent-tool-attack-surface-2026.webp",
+    "ogImage": "/banners/agent-tool-attack-surface-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2147,7 +2238,8 @@ export const posts: BlogPost[] = [
       "Kubernetes",
       "Platform Engineering"
     ],
-    "bannerImage": "/banners/ebpf-kubernetes-observability-security-2026.png",
+    "bannerImage": "/banners/ebpf-kubernetes-observability-security-2026.webp",
+    "ogImage": "/banners/ebpf-kubernetes-observability-security-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2167,7 +2259,8 @@ export const posts: BlogPost[] = [
       "AI Agents",
       "Data Cloud"
     ],
-    "bannerImage": "/banners/agentforce-experience-cloud-portal-2026.png",
+    "bannerImage": "/banners/agentforce-experience-cloud-portal-2026.webp",
+    "ogImage": "/banners/agentforce-experience-cloud-portal-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2187,7 +2280,8 @@ export const posts: BlogPost[] = [
       "Performance",
       "Web Development"
     ],
-    "bannerImage": "/banners/react-compiler-automatic-memoization-2026.png",
+    "bannerImage": "/banners/react-compiler-automatic-memoization-2026.webp",
+    "ogImage": "/banners/react-compiler-automatic-memoization-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2210,7 +2304,8 @@ export const posts: BlogPost[] = [
       "Testing",
       "Consulting"
     ],
-    "bannerImage": "/banners/definition-of-done-ai-agents-2026.png",
+    "bannerImage": "/banners/definition-of-done-ai-agents-2026.webp",
+    "ogImage": "/banners/definition-of-done-ai-agents-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2230,7 +2325,8 @@ export const posts: BlogPost[] = [
       "Design Systems",
       "UI/UX"
     ],
-    "bannerImage": "/banners/visual-regression-testing-design-systems-2026.png",
+    "bannerImage": "/banners/visual-regression-testing-design-systems-2026.webp",
+    "ogImage": "/banners/visual-regression-testing-design-systems-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2252,7 +2348,8 @@ export const posts: BlogPost[] = [
       "LLMs",
       "Architecture"
     ],
-    "bannerImage": "/banners/ai-agent-observability-opentelemetry-2026.png",
+    "bannerImage": "/banners/ai-agent-observability-opentelemetry-2026.webp",
+    "ogImage": "/banners/ai-agent-observability-opentelemetry-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2273,7 +2370,8 @@ export const posts: BlogPost[] = [
       "Orchestration",
       "Delivery"
     ],
-    "bannerImage": "/banners/multi-agent-failure-structural-2026.png",
+    "bannerImage": "/banners/multi-agent-failure-structural-2026.webp",
+    "ogImage": "/banners/multi-agent-failure-structural-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2293,7 +2391,8 @@ export const posts: BlogPost[] = [
       "AI Agents",
       "Orchestration"
     ],
-    "bannerImage": "/banners/agentforce-multi-agent-orchestration-2026.png",
+    "bannerImage": "/banners/agentforce-multi-agent-orchestration-2026.webp",
+    "ogImage": "/banners/agentforce-multi-agent-orchestration-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2314,7 +2413,8 @@ export const posts: BlogPost[] = [
       "MCP",
       "AI Agents"
     ],
-    "bannerImage": "/banners/supabase-agent-skills-2026.png",
+    "bannerImage": "/banners/supabase-agent-skills-2026.webp",
+    "ogImage": "/banners/supabase-agent-skills-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2335,7 +2435,8 @@ export const posts: BlogPost[] = [
       "AI Agents",
       "Next.js"
     ],
-    "bannerImage": "/banners/test-drive-qwen-local.png",
+    "bannerImage": "/banners/test-drive-qwen-local.webp",
+    "ogImage": "/banners/test-drive-qwen-local-og.jpg",
     "status": "published"
   },
   {
@@ -2357,7 +2458,8 @@ export const posts: BlogPost[] = [
       "Consulting",
       "MCP"
     ],
-    "bannerImage": "/banners/agent-native-pm-tooling-consulting-2026.png",
+    "bannerImage": "/banners/agent-native-pm-tooling-consulting-2026.webp",
+    "ogImage": "/banners/agent-native-pm-tooling-consulting-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2378,7 +2480,8 @@ export const posts: BlogPost[] = [
       "Design Systems",
       "Web Development"
     ],
-    "bannerImage": "/banners/dark-mode-accessibility-2026.png",
+    "bannerImage": "/banners/dark-mode-accessibility-2026.webp",
+    "ogImage": "/banners/dark-mode-accessibility-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2399,7 +2502,8 @@ export const posts: BlogPost[] = [
       "UI/UX",
       "LLMs"
     ],
-    "bannerImage": "/banners/generative-ui-runtime-interfaces-2026.png",
+    "bannerImage": "/banners/generative-ui-runtime-interfaces-2026.webp",
+    "ogImage": "/banners/generative-ui-runtime-interfaces-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2421,7 +2525,8 @@ export const posts: BlogPost[] = [
       "AI Agents",
       "Consulting"
     ],
-    "bannerImage": "/banners/stakeholder-management-delivery-bottleneck-2026.png",
+    "bannerImage": "/banners/stakeholder-management-delivery-bottleneck-2026.webp",
+    "ogImage": "/banners/stakeholder-management-delivery-bottleneck-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2443,7 +2548,8 @@ export const posts: BlogPost[] = [
       "Testing",
       "Delivery"
     ],
-    "bannerImage": "/banners/agent-trajectory-evals-2026.png",
+    "bannerImage": "/banners/agent-trajectory-evals-2026.webp",
+    "ogImage": "/banners/agent-trajectory-evals-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2464,7 +2570,8 @@ export const posts: BlogPost[] = [
       "AI Infrastructure",
       "Kubernetes"
     ],
-    "bannerImage": "/banners/gpu-finops-ai-cost-allocation-2026.png",
+    "bannerImage": "/banners/gpu-finops-ai-cost-allocation-2026.webp",
+    "ogImage": "/banners/gpu-finops-ai-cost-allocation-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2485,7 +2592,8 @@ export const posts: BlogPost[] = [
       "Security",
       "AI Agents"
     ],
-    "bannerImage": "/banners/apex-summer-26-security-v67-migration.png",
+    "bannerImage": "/banners/apex-summer-26-security-v67-migration.webp",
+    "ogImage": "/banners/apex-summer-26-security-v67-migration-og.jpg",
     "status": "published"
   },
   {
@@ -2505,7 +2613,8 @@ export const posts: BlogPost[] = [
       "Next.js",
       "Web Development"
     ],
-    "bannerImage": "/banners/react-server-actions-mutations-2026.png",
+    "bannerImage": "/banners/react-server-actions-mutations-2026.webp",
+    "ogImage": "/banners/react-server-actions-mutations-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2524,7 +2633,8 @@ export const posts: BlogPost[] = [
       "Design Systems",
       "UI/UX"
     ],
-    "bannerImage": "/banners/headless-ui-component-libraries-2026.png",
+    "bannerImage": "/banners/headless-ui-component-libraries-2026.webp",
+    "ogImage": "/banners/headless-ui-component-libraries-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2545,7 +2655,8 @@ export const posts: BlogPost[] = [
       "AI Agents",
       "Delivery"
     ],
-    "bannerImage": "/banners/scrum-ceremonies-ai-agents-2026.png",
+    "bannerImage": "/banners/scrum-ceremonies-ai-agents-2026.webp",
+    "ogImage": "/banners/scrum-ceremonies-ai-agents-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2566,7 +2677,8 @@ export const posts: BlogPost[] = [
       "Orchestration",
       "Integration"
     ],
-    "bannerImage": "/banners/a2a-agent-coordination-2026.png",
+    "bannerImage": "/banners/a2a-agent-coordination-2026.webp",
+    "ogImage": "/banners/a2a-agent-coordination-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2585,7 +2697,8 @@ export const posts: BlogPost[] = [
       "DevOps",
       "Platform Engineering"
     ],
-    "bannerImage": "/banners/opentofu-vs-terraform-2026.png",
+    "bannerImage": "/banners/opentofu-vs-terraform-2026.webp",
+    "ogImage": "/banners/opentofu-vs-terraform-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2606,7 +2719,8 @@ export const posts: BlogPost[] = [
       "AI Agents",
       "Data"
     ],
-    "bannerImage": "/banners/salesforce-mcp-hosting-ga-2026.png",
+    "bannerImage": "/banners/salesforce-mcp-hosting-ga-2026.webp",
+    "ogImage": "/banners/salesforce-mcp-hosting-ga-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2625,7 +2739,8 @@ export const posts: BlogPost[] = [
       "Web Development",
       "LLMs"
     ],
-    "bannerImage": "/banners/sse-vs-websockets-2026.png",
+    "bannerImage": "/banners/sse-vs-websockets-2026.webp",
+    "ogImage": "/banners/sse-vs-websockets-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2646,7 +2761,8 @@ export const posts: BlogPost[] = [
       "Testing",
       "Consulting"
     ],
-    "bannerImage": "/banners/ai-in-ux-research-2026.png",
+    "bannerImage": "/banners/ai-in-ux-research-2026.webp",
+    "ogImage": "/banners/ai-in-ux-research-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2667,7 +2783,8 @@ export const posts: BlogPost[] = [
       "Delivery",
       "Agile"
     ],
-    "bannerImage": "/banners/ai-requirements-bottleneck-2026.png",
+    "bannerImage": "/banners/ai-requirements-bottleneck-2026.webp",
+    "ogImage": "/banners/ai-requirements-bottleneck-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2688,7 +2805,8 @@ export const posts: BlogPost[] = [
       "AI Infrastructure",
       "Platform Engineering"
     ],
-    "bannerImage": "/banners/kubernetes-llm-serving-2026.png",
+    "bannerImage": "/banners/kubernetes-llm-serving-2026.webp",
+    "ogImage": "/banners/kubernetes-llm-serving-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2708,7 +2826,8 @@ export const posts: BlogPost[] = [
       "AI Agents",
       "Reliability"
     ],
-    "bannerImage": "/banners/mcp-stateless-2026-07-28-production-agents.png",
+    "bannerImage": "/banners/mcp-stateless-2026-07-28-production-agents.webp",
+    "ogImage": "/banners/mcp-stateless-2026-07-28-production-agents-og.jpg",
     "status": "published"
   },
   {
@@ -2728,7 +2847,8 @@ export const posts: BlogPost[] = [
       "Data",
       "Data Cloud"
     ],
-    "bannerImage": "/banners/data-360-implementation-patterns.png",
+    "bannerImage": "/banners/data-360-implementation-patterns.webp",
+    "ogImage": "/banners/data-360-implementation-patterns-og.jpg",
     "status": "published"
   },
   {
@@ -2749,7 +2869,8 @@ export const posts: BlogPost[] = [
       "TypeScript",
       "Data Cloud"
     ],
-    "bannerImage": "/banners/supabase-pipelines-cdc-bigquery.png",
+    "bannerImage": "/banners/supabase-pipelines-cdc-bigquery.webp",
+    "ogImage": "/banners/supabase-pipelines-cdc-bigquery-og.jpg",
     "status": "published"
   },
   {
@@ -2771,7 +2892,8 @@ export const posts: BlogPost[] = [
       "Flow",
       "Delivery"
     ],
-    "bannerImage": "/banners/estimation-after-ai-2026.png",
+    "bannerImage": "/banners/estimation-after-ai-2026.webp",
+    "ogImage": "/banners/estimation-after-ai-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2792,7 +2914,8 @@ export const posts: BlogPost[] = [
       "UI/UX",
       "Platform Engineering"
     ],
-    "bannerImage": "/banners/figma-mcp-design-to-code-2026.png",
+    "bannerImage": "/banners/figma-mcp-design-to-code-2026.webp",
+    "ogImage": "/banners/figma-mcp-design-to-code-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2811,7 +2934,8 @@ export const posts: BlogPost[] = [
       "AI Agents",
       "Orchestration"
     ],
-    "bannerImage": "/banners/agent-framework-decision-2026.png",
+    "bannerImage": "/banners/agent-framework-decision-2026.webp",
+    "ogImage": "/banners/agent-framework-decision-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2831,7 +2955,8 @@ export const posts: BlogPost[] = [
       "Platform Engineering",
       "Kubernetes"
     ],
-    "bannerImage": "/banners/control-planes-infrastructure-delivery-2026.png",
+    "bannerImage": "/banners/control-planes-infrastructure-delivery-2026.webp",
+    "ogImage": "/banners/control-planes-infrastructure-delivery-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2852,7 +2977,8 @@ export const posts: BlogPost[] = [
       "Data",
       "Testing"
     ],
-    "bannerImage": "/banners/agentforce-production-implementation-patterns.png",
+    "bannerImage": "/banners/agentforce-production-implementation-patterns.webp",
+    "ogImage": "/banners/agentforce-production-implementation-patterns-og.jpg",
     "status": "published"
   },
   {
@@ -2873,7 +2999,8 @@ export const posts: BlogPost[] = [
       "Performance",
       "Web Development"
     ],
-    "bannerImage": "/banners/nextjs-16-3-instant-navigations.png",
+    "bannerImage": "/banners/nextjs-16-3-instant-navigations.webp",
+    "ogImage": "/banners/nextjs-16-3-instant-navigations-og.jpg",
     "status": "published"
   },
   {
@@ -2894,7 +3021,8 @@ export const posts: BlogPost[] = [
       "Agile",
       "Delivery"
     ],
-    "bannerImage": "/banners/complicated-vs-complex-delivery-diagnostic.png",
+    "bannerImage": "/banners/complicated-vs-complex-delivery-diagnostic.webp",
+    "ogImage": "/banners/complicated-vs-complex-delivery-diagnostic-og.jpg",
     "status": "published"
   },
   {
@@ -2915,7 +3043,8 @@ export const posts: BlogPost[] = [
       "Accessibility",
       "Web Development"
     ],
-    "bannerImage": "/banners/token-first-design-systems-2026.png",
+    "bannerImage": "/banners/token-first-design-systems-2026.webp",
+    "ogImage": "/banners/token-first-design-systems-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2935,7 +3064,8 @@ export const posts: BlogPost[] = [
       "Salesforce",
       "Automation"
     ],
-    "bannerImage": "/banners/ai-agents-salesforce.png",
+    "bannerImage": "/banners/ai-agents-salesforce.webp",
+    "ogImage": "/banners/ai-agents-salesforce-og.jpg",
     "status": "published"
   },
   {
@@ -2955,7 +3085,8 @@ export const posts: BlogPost[] = [
       "Digital Transformation",
       "Consulting"
     ],
-    "bannerImage": "/banners/ai-strategy-2026.png",
+    "bannerImage": "/banners/ai-strategy-2026.webp",
+    "ogImage": "/banners/ai-strategy-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2977,7 +3108,8 @@ export const posts: BlogPost[] = [
       "Data",
       "Enterprise"
     ],
-    "bannerImage": "/banners/digital-transformation-2026.png",
+    "bannerImage": "/banners/digital-transformation-2026.webp",
+    "ogImage": "/banners/digital-transformation-2026-og.jpg",
     "status": "published"
   },
   {
@@ -2998,7 +3130,8 @@ export const posts: BlogPost[] = [
       "Integration",
       "Security"
     ],
-    "bannerImage": "/banners/eaa-2027-accessibility-deadline.png",
+    "bannerImage": "/banners/eaa-2027-accessibility-deadline.webp",
+    "ogImage": "/banners/eaa-2027-accessibility-deadline-og.jpg",
     "status": "published"
   },
   {
@@ -3019,7 +3152,8 @@ export const posts: BlogPost[] = [
       "Flow",
       "Automation"
     ],
-    "bannerImage": "/banners/flow-orchestrates-agentforce.png",
+    "bannerImage": "/banners/flow-orchestrates-agentforce.webp",
+    "ogImage": "/banners/flow-orchestrates-agentforce-og.jpg",
     "status": "published"
   },
   {
@@ -3039,7 +3173,8 @@ export const posts: BlogPost[] = [
       "Architecture",
       "Delivery"
     ],
-    "bannerImage": "/banners/pmi-pulse-complexity-2026.png",
+    "bannerImage": "/banners/pmi-pulse-complexity-2026.webp",
+    "ogImage": "/banners/pmi-pulse-complexity-2026-og.jpg",
     "status": "published"
   },
   {
@@ -3059,7 +3194,8 @@ export const posts: BlogPost[] = [
       "Flow",
       "Apex"
     ],
-    "bannerImage": "/banners/salesforce-flow-patterns.png",
+    "bannerImage": "/banners/salesforce-flow-patterns.webp",
+    "ogImage": "/banners/salesforce-flow-patterns-og.jpg",
     "status": "published"
   },
   {
@@ -3080,7 +3216,8 @@ export const posts: BlogPost[] = [
       "Apex",
       "Automation"
     ],
-    "bannerImage": "/banners/salesforce-flow-vs-apex-when-to-use-which.png",
+    "bannerImage": "/banners/salesforce-flow-vs-apex-when-to-use-which.webp",
+    "ogImage": "/banners/salesforce-flow-vs-apex-when-to-use-which-og.jpg",
     "status": "published"
   },
   {
@@ -3101,7 +3238,8 @@ export const posts: BlogPost[] = [
       "Architecture",
       "Performance"
     ],
-    "bannerImage": "/banners/scalable-react-2026.png",
+    "bannerImage": "/banners/scalable-react-2026.webp",
+    "ogImage": "/banners/scalable-react-2026-og.jpg",
     "status": "published"
   },
   {
@@ -3124,7 +3262,8 @@ export const posts: BlogPost[] = [
       "MCP",
       "DevOps"
     ],
-    "bannerImage": "/banners/state-of-the-stack-august-2026.png",
+    "bannerImage": "/banners/state-of-the-stack-august-2026.webp",
+    "ogImage": "/banners/state-of-the-stack-august-2026-og.jpg",
     "status": "published"
   },
   {
@@ -3144,7 +3283,8 @@ export const posts: BlogPost[] = [
       "Security",
       "MCP"
     ],
-    "bannerImage": "/banners/ai-agent-identity-2026.png",
+    "bannerImage": "/banners/ai-agent-identity-2026.webp",
+    "ogImage": "/banners/ai-agent-identity-2026-og.jpg",
     "status": "published"
   },
   {
@@ -3164,7 +3304,8 @@ export const posts: BlogPost[] = [
       "CI/CD",
       "Security"
     ],
-    "bannerImage": "/banners/github-actions-supply-chain-security-2026.png",
+    "bannerImage": "/banners/github-actions-supply-chain-security-2026.webp",
+    "ogImage": "/banners/github-actions-supply-chain-security-2026-og.jpg",
     "status": "published"
   },
   {
@@ -3184,7 +3325,8 @@ export const posts: BlogPost[] = [
       "Data Cloud",
       "AI Agents"
     ],
-    "bannerImage": "/banners/experience-cloud-data-cloud-personalization-pattern.png",
+    "bannerImage": "/banners/experience-cloud-data-cloud-personalization-pattern.webp",
+    "ogImage": "/banners/experience-cloud-data-cloud-personalization-pattern-og.jpg",
     "status": "published"
   },
   {
@@ -3203,7 +3345,8 @@ export const posts: BlogPost[] = [
       "Web Development",
       "TypeScript"
     ],
-    "bannerImage": "/banners/supabase-realtime-binary-payloads.png",
+    "bannerImage": "/banners/supabase-realtime-binary-payloads.webp",
+    "ogImage": "/banners/supabase-realtime-binary-payloads-og.jpg",
     "status": "published"
   },
   {
@@ -3225,7 +3368,8 @@ export const posts: BlogPost[] = [
       "Delivery",
       "AI at Work"
     ],
-    "bannerImage": "/banners/ai-generated-code-cicd-guardrails.png",
+    "bannerImage": "/banners/ai-generated-code-cicd-guardrails.webp",
+    "ogImage": "/banners/ai-generated-code-cicd-guardrails-og.jpg",
     "status": "published"
   },
   {
@@ -3245,7 +3389,8 @@ export const posts: BlogPost[] = [
       "DevOps",
       "Performance"
     ],
-    "bannerImage": "/banners/local-llm-infrastructure-2026.png",
+    "bannerImage": "/banners/local-llm-infrastructure-2026.webp",
+    "ogImage": "/banners/local-llm-infrastructure-2026-og.jpg",
     "status": "published"
   },
   {
@@ -3264,7 +3409,8 @@ export const posts: BlogPost[] = [
       "AI Agents",
       "Reliability"
     ],
-    "bannerImage": "/banners/multi-agent-orchestration-production-lessons.png",
+    "bannerImage": "/banners/multi-agent-orchestration-production-lessons.webp",
+    "ogImage": "/banners/multi-agent-orchestration-production-lessons-og.jpg",
     "status": "published"
   },
   {
@@ -3284,7 +3430,8 @@ export const posts: BlogPost[] = [
       "Web Development",
       "Performance"
     ],
-    "bannerImage": "/banners/typescript-7-go-native-compiler.png",
+    "bannerImage": "/banners/typescript-7-go-native-compiler.webp",
+    "ogImage": "/banners/typescript-7-go-native-compiler-og.jpg",
     "status": "published"
   },
   {
@@ -3304,7 +3451,8 @@ export const posts: BlogPost[] = [
       "Flow",
       "AI Agents"
     ],
-    "bannerImage": "/banners/salesforce-summer-26-three-things.png",
+    "bannerImage": "/banners/salesforce-summer-26-three-things.webp",
+    "ogImage": "/banners/salesforce-summer-26-three-things-og.jpg",
     "status": "published"
   }
 ];
