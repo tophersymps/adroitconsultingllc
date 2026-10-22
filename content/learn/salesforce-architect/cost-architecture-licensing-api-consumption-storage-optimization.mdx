@@ -27,6 +27,9 @@ Most cost conversations collapse into "what does a license cost." That is one me
 
 Each meter has a different owner, a different unit, and a different failure mode. Seats fail at renewal. API allocation fails at 3am during a batch window. Storage fails quietly until an admin sees the warning banner. AI credits fail at the end of the quarter when finance asks why consumption doubled while conversation volume stayed flat.
 
+![Four cost meters compared: seats, API consumption, storage, and AI consumption, each with its own billed unit, growth driver, failure signal, and architecture lever](</diagrams/cost-architecture-licensing-api-consumption-storage-optimization/1-four-meters.png>)
+
+
 ## Define the terms
 
 - **User license**: the entitlement that sets the maximum functionality a user can have. Every user has exactly one. [^4]
@@ -72,6 +75,9 @@ Total: 1,412,000 calls per 24 hours.
 
 That looks generous until you count what the integrations do. A status-check integration polling an external order system every 30 seconds consumes 2,880 calls per day per poller. Twenty pollers is 57,600 calls, all of it producing "nothing changed" responses. A middleware retry loop without idempotency can double or triple the call count for a single business event. The allocation is not the budget; the allocation is the ceiling, and the budget is what your design actually spends.
 
+![The API allocation formula with per-license call rates, set against the cost of one polling integration and the difference between per-record REST upserts and a Bulk API 2.0 job](</diagrams/cost-architecture-licensing-api-consumption-storage-optimization/2-api-allocation-vs-spend.png>)
+
+
 Two structural facts change the math:
 
 - **Composite requests count once.** A REST composite request bundles subrequests into a single call. Ten record updates through one composite request cost one call, not ten. [^1]
@@ -99,6 +105,9 @@ The rate card published August 31, 2026 lists, among others: Standard Action 20 
 
 That rounding rule is the single most useful fact for an agent architect. Consider an agent handling 40,000 conversations a month at six actions each: 240,000 actions × 20 credits = 4.8 million credits. Now look at prompt context. If each turn carries a 6,500-token context because someone pasted the entire knowledge article and the full order history into the prompt, every turn bills four units. Trim the context to under 2,000 tokens and the same conversation bills one unit per turn. Nothing about the user experience changed; the design did.
 
+![Prompt billing in 2,000-token blocks, from one unit up to five, beside the credit cost of standard and custom actions and standard and advanced prompts](</diagrams/cost-architecture-licensing-api-consumption-storage-optimization/3-prompt-units.png>)
+
+
 Sandbox is not free either. The rate card prices sandbox actions at 16 against production's 20, which is a discount, not an exemption. [^7] Test suites that replay thousands of agent conversations in a sandbox show up on the same invoice.
 
 ## A worked example: the same requirements, two designs
@@ -110,6 +119,9 @@ A distributor needs order status visible in Salesforce, a nightly product catalo
 **Design B, the cost-aware build.** The ERP publishes order changes to Platform Events or a webhook, and Salesforce subscribes: near-zero polling, and latency drops from a minute to seconds. Pricing is fetched once per order through a composite request that carries all lines: 4,000 orders a day, 4,000 calls. The catalog load runs through Bulk API 2.0: one job, ingest batches against the separate 15,000-batch pool. The agent gets a retrieval step that pulls only the order in question plus the two relevant policy paragraphs: under 2,000 tokens per turn, one unit per turn.
 
 Design B meets the same requirements with roughly two orders of magnitude fewer API calls and a 5x reduction in AI credits per conversation. It also costs more engineering time up front. That trade is the actual architectural decision, and it belongs in the design document with the arithmetic attached.
+
+![Side-by-side comparison of the direct build and the cost-aware build across order status, order line pricing, catalog sync, and the agent prompt, with call counts and prompt units for each design](</diagrams/cost-architecture-licensing-api-consumption-storage-optimization/4-two-designs.png>)
+
 
 ## Where cost actually leaks
 
