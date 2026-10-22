@@ -2,6 +2,32 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "kickoff-alignment-consulting-delivery-2026",
+    "title": "The Kickoff Is Where Projects Die",
+    "excerpt": "Most consulting projects do not fail in week twelve. They fail in week one, when nobody wrote down what done means, who owns what, and how the team will work.",
+    "category": "Project Management",
+    "categoryColor": "pm",
+    "categoryGradient": "from-teal to-teal-dark",
+    "date": "October 21, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "Project Management",
+      "Delivery",
+      "Kickoff",
+      "Requirements",
+      "Stakeholder Management",
+      "Agile",
+      "Estimation",
+      "Client Management"
+    ],
+    "bannerImage": "/banners/kickoff-alignment-consulting-delivery-2026.webp",
+    "ogImage": "/banners/kickoff-alignment-consulting-delivery-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "incident-response-declare-early-2026",
     "title": "Declare the Incident Early, Downgrade It Later",
     "excerpt": "Incident response is a scripted skill, not a scramble. Declare early, contain before you diagnose, and turn every outage into action items that land.",
