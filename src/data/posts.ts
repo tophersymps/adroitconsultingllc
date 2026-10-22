@@ -2,6 +2,32 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "salesforce-sandbox-environment-strategy-2026",
+    "title": "The Environment Is Part of the Architecture",
+    "excerpt": "A sandbox is a copy with documented deltas. Ignore them and passed in the sandbox quietly becomes works in production, usually six weeks after go-live.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "October 22, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "13 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "Sandboxes",
+      "Delivery",
+      "DevOps",
+      "Data 360",
+      "Agentforce",
+      "Release Management",
+      "Testing"
+    ],
+    "bannerImage": "/banners/salesforce-sandbox-environment-strategy-2026.webp",
+    "ogImage": "/banners/salesforce-sandbox-environment-strategy-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "kickoff-alignment-consulting-delivery-2026",
     "title": "The Kickoff Is Where Projects Die",
     "excerpt": "Most consulting projects do not fail in week twelve. They fail in week one, when nobody wrote down what done means, who owns what, and how the team will work.",
