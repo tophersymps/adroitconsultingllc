@@ -22,6 +22,8 @@ That third option is the one architects underuse, and it is the one this objecti
 
 Salesforce publishes two numbers that function as warning lines rather than hard limits. Do not let a single user or queue own more than 10,000 records of an object, and do not associate more than 10,000 child records with a single parent account. Both conditions are named in the product guidance, the first as ownership data skew and the second as parent-child data skew. [^3]
 
+![Skew read as a ratio: 10,000 records per owner across 500 owners is healthy, while 20 million records split across four owners reaches 5 million each and 300,000 children under one parent forces a scan of the other 299,999](</diagrams/day-41-dm-5c-data-skew-extreme-cases-and-advanced-mitigation-pa/1-skew-as-a-ratio.png>)
+
 Read those numbers as a ratio, not a rule. An org with 10,000 records per owner across 500 owners is healthy. An org with 20 million records and four owners is not, even though each owner's share is well "under the limit" by any single-object count you might eyeball. What makes skew extreme is the ratio of records to destinations, measured against the work the platform has to do when that destination changes. When one integration user owns thirty million records and someone edits that user's role, the platform has to evaluate what happens to thirty million shares and the hierarchy above it. That is the extreme case, and it is the exact scenario in the first quiz question of this lesson.
 
 The same logic runs for relationships. One parent with 300,000 children is not just a slow related list. Salesforce's own example is a marketing-generated contact population parked under a single dummy account. When a user loses access to one contact, the platform has to scan the other 299,999 to decide whether the user still deserves an implicit share on the account. [^4] Multiply that by the number of visibility changes in a day and you have an account that quietly costs more than the rest of the object combined.
@@ -40,6 +42,8 @@ The fix is to distribute ownership so no single identity holds a disproportionat
 
 Salesforce's guidance adds two details that separate a good answer from a memorized one. Do not assign a role to a user who owns more than 10,000 records, because the role is what forces share materialization for everyone above them. If a role is unavoidable, put that user in a separate role at the top of the hierarchy, keep them there, and keep them out of public groups that sharing rules reference. [^3] Both moves attack the same cost: stop the platform from deriving shares from an enormous owned set.
 
+![One integration user owning 30 million records concentrates three costs on a single identity: sharing evaluation span, role share materialization, and group membership recalculation, and only distributing owners reduces the concentration](</diagrams/day-41-dm-5c-data-skew-extreme-cases-and-advanced-mitigation-pa/2-ownership-skew-three-costs.png>)
+
 ### Why more sharing rules make ownership skew worse
 
 Quiz question one offers "add more sharing rules" as a distractor, and the reason it is wrong is the reason a lot of remediation projects fail. Sharing rules are not free access. Each rule is a calculation that runs over records whose owner, criteria, or group membership changed. Adding rules to an org with an ownership skew problem adds calculation paths over the largest data set in the org. The slowness does not come from too few rules. It comes from too many records under one owner being evaluated by every rule you have. [^3][^5]
@@ -51,6 +55,8 @@ The same logic kills "remove the role hierarchy" as an answer. Removing hierarch
 Now the parent side. On an object with a master-detail relationship, updating a child record locks both the parent and the child for the duration of the transaction, because the platform is protecting referential integrity while it works. [^6] That lock is normally invisible. It becomes the dominant cost when one parent has millions of children, because every child write in flight has to queue behind the same parent lock.
 
 Add a roll-up summary and you make it worse in a specific, predictable way. A roll-up summary field lives on the master record and derives its value from detail records, which means the master's stored value has to be maintained as details change. [^2] So on a skewed master-detail relationship, each child write does two things: it takes the parent lock (mandatory, for integrity), and it makes the parent's aggregate stale, which pulls the parent record into the write path again. Serialize that across ten million children and the object effectively processes writes one at a time.
+
+![One child write on a skewed master-detail takes the mandatory parent lock and then makes the parent roll-up aggregate stale, so every write in flight queues behind the same parent record](</diagrams/day-41-dm-5c-data-skew-extreme-cases-and-advanced-mitigation-pa/3-master-detail-write-path.png>)
 
 That gives you the mitigation the second quiz question is testing, and it comes in two parts.
 
@@ -77,6 +83,8 @@ The cheaper variant, worth knowing for the exam, applies when the sharing model 
 If the relationship has to stay pointed at one entity and the volume keeps growing, stop storing the detail on the child object at all. Put the high-volume rows in a Big Object with the parent key on each row, and keep only the aggregate on the parent record. Nothing rolls up automatically from a Big Object, so the aggregate is written by the scheduled job, which is exactly what you wanted in the previous section. [^8] External Objects do the same trick when the detail already lives in another system and does not need to be copied.
 
 The trade is query behavior. Big Objects are for high-volume inserts and asynchronous reads, not for interactive related lists. The moment a user needs to see the ten most recent rows on a page, you need the query to be selective on an indexed field and you need the UI to tolerate that. If the details are genuinely cold (archive, audit, event history), this pattern is close to free. If they are hot, it is the wrong tool and sharding is the better answer.
+
+![Three sharding shapes side by side, intermediate parents, splitting the hot parent into pseudo-parents, and moving the detail into a Big Object, each with its mechanism and its reporting, identity, or query cost](</diagrams/day-41-dm-5c-data-skew-extreme-cases-and-advanced-mitigation-pa/4-three-sharding-shapes.png>)
 
 ### Polymorphic and junction patterns at extreme volume
 
@@ -127,6 +135,8 @@ Records per owner, grouped by object, sorted descending. One row with seven or e
 ## Configuration Walkthrough
 
 Work these in order on a real org. The sequence matters, because most remediation projects fail by starting at step five.
+
+![The eight step remediation ladder in order: measure the skew, change the flow of new records, fix the owner sharing context, shard the hot parents, replace live roll-ups only after the aggregate is proven, reorganise the load, defer sharing calculation, then consolidate the access model](</diagrams/day-41-dm-5c-data-skew-extreme-cases-and-advanced-mitigation-pa/5-remediation-ladder.png>)
 
 1. Measure the skew. Build a report or a SOQL aggregate of record counts grouped by `OwnerId` for each high-volume object, and counts grouped by the parent field for each kid object. Flag anything above 10,000 and anything an order of magnitude above its peer group. [^3]
 2. Distribute ownership on new loads first. Before touching history, change the integration so it round-robins or partitions records across a pool of integration users or queues. If you have one load user, this is the highest-value change in the whole list. [^3]
