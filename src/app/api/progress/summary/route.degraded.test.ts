@@ -30,7 +30,13 @@ import {
   type CapturedRequest,
 } from "@/lib/db/test-support/throttled-auth";
 
-const EMPTY_SUMMARY = { readContent: { blog: [], lesson: [] }, completedLessons: [] };
+// `quizStats` is part of the guest/degraded payload since the /atlas progress
+// fan-out fix (t_22e18719 folded per-quiz aggregates into this route).
+const EMPTY_SUMMARY = {
+  readContent: { blog: [], lesson: [] },
+  completedLessons: [],
+  quizStats: {},
+};
 
 let captured: CapturedRequest[] = [];
 
