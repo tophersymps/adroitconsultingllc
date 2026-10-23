@@ -8,14 +8,13 @@
  * PATCH /api/profile. Honest-stub rule still applies to every control with no
  * backend (Email updates, Clear history) — those render static + COMING SOON.
  */
-import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import StubBadge from "@/components/StubBadge";
 import ThemeToggle from "@/components/Theme/ThemeToggle";
-import { getSupabaseServerClient } from "@/lib/db/server";
+import { getSupabaseServerClient, DbAuthUnavailableError } from "@/lib/db/server";
 import { buildMetadata } from "@/lib/seo";
 import type { ThemePref } from "@/shared/contracts-account";
 
@@ -30,11 +29,37 @@ export const metadata: Metadata = buildMetadata({
 const kicker = "inline-flex items-center gap-2 font-mono text-[11px] font-semibold text-[var(--accent)] uppercase tracking-[0.08em] mb-3";
 
 export default async function SettingsPage() {
-  const supabase = await getSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login?next=/settings");
+  // t_223f8b3d: no bearer mint → render an honest unavailable state instead of
+  // 500ing (or bouncing a signed-in user to /login).
+  let supabase: Awaited<ReturnType<typeof getSupabaseServerClient>> | null = null;
+  let user: { id: string } | null = null;
+  try {
+    supabase = await getSupabaseServerClient();
+    const res = await supabase.auth.getUser();
+    user = res.data.user;
+  } catch (err) {
+    if (!(err instanceof DbAuthUnavailableError)) throw err;
+  }
+
+  if (!user || !supabase) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main id="main" className="flex-1">
+          <div className="max-w-[560px] mx-auto px-6 py-14">
+            <h1 className="text-3xl font-extrabold text-[var(--ink-primary)] tracking-[-0.02em] mb-2">
+              Settings
+            </h1>
+            <p role="status" className="text-[14px] text-[var(--ink-muted)]">
+              We can&apos;t verify your session right now. Please refresh in a
+              minute — your preferences are unchanged.
+            </p>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   // Seed ThemeProvider with the account's persisted theme (avoids a flash of
   // guest-localStorage theme before the account pref applies).

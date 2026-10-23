@@ -30,7 +30,6 @@ import DifficultyPill from "@/components/Learn/DifficultyPill";
 import PrerequisitesSection from "@/components/Learn/PrerequisitesSection";
 import SeriesStarChart from "@/components/Constellations/chart/SeriesStarChart";
 import { loadSeriesConstellation, loadExamPassedBySeries } from "@/lib/sky-server";
-import { getSupabaseServerClient } from "@/lib/db/server";
 
 interface Props {
   params: Promise<{ series: string }>;
@@ -73,6 +72,10 @@ export default async function SeriesPage({ params }: Props) {
   const userId = await getAccessUserId();
   const decision = await accessSeam.decideCourseAccess(userId, series);
   if (decision.kind === "not-launched") notFound();
+  // Credential bridge down (t_223f8b3d): no DB read is possible this request.
+  // Render the syllabus in the guest state — never 404 a live course, never
+  // pretend we know who is reading.
+  const degraded = decision.kind === "unavailable";
   const courseRow = await getCourseRowBySlug(series);
 
   // Learn v2 profile (ADR-208/209/210): the unified CatalogCourse for this
@@ -142,14 +145,18 @@ export default async function SeriesPage({ params }: Props) {
   // current completion rows — single source of truth lesson_completion, shared
   // with the profile sky via getCompletedLessonSlugs, so a mark OR unmark
   // reflects on both surfaces); guests see the locked/available shape.
-  const supabase = await getSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  const isAuthed = Boolean(user);
-  const completedSlugs = isAuthed
-    ? await getCompletedLessonSlugs(user!.id)
+  // Identity comes from the session cookie ONLY (getAccessUserId →
+  // getSessionUser). The page must never build a Data API client just to learn
+  // who is reading: that client is what throws when Neon Auth refuses to mint
+  // (t_223f8b3d), and reading identity from a second source produced a
+  // guest-access-against-authenticated-data skew.
+  const authedUserId = degraded ? null : userId;
+  const isAuthed = Boolean(authedUserId);
+  const completedSlugs = authedUserId
+    ? await getCompletedLessonSlugs(authedUserId)
     : new Set<string>();
-  const examPassed = isAuthed
-    ? (await loadExamPassedBySeries(user!.id, [series])).has(series)
+  const examPassed = authedUserId
+    ? (await loadExamPassedBySeries(authedUserId, [series])).has(series)
     : false;
   const constellation = await loadSeriesConstellation({
     seriesSlug: series,
@@ -161,10 +168,22 @@ export default async function SeriesPage({ params }: Props) {
   });
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col" data-degraded={degraded || undefined}>
       <Header />
 
       <main id="main" className="flex-1">
+        {degraded ? (
+          <div className="max-w-[1120px] mx-auto px-6 pt-10">
+            <p
+              role="status"
+              className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-card-soft)] px-4 py-3 text-[13px] text-[var(--ink-muted)]"
+            >
+              Live course data is temporarily unavailable, so this outline is
+              showing the public view. Your progress is safe — please refresh in
+              a minute.
+            </p>
+          </div>
+        ) : null}
         {/* Series header strip */}
         <div className="max-w-[1120px] mx-auto px-6 pt-14">
           <Link

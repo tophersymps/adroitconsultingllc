@@ -21,6 +21,7 @@ const { mocks } = vi.hoisted(() => {
   const getCourseRowBySlug = vi.fn();
   const getLessonsForSeries = vi.fn();
   const getUser = vi.fn();
+  const getSessionUser = vi.fn();
   return {
     mocks: {
       getSeriesBySlug,
@@ -33,6 +34,7 @@ const { mocks } = vi.hoisted(() => {
       getCourseRowBySlug,
       getLessonsForSeries,
       getUser,
+      getSessionUser,
     },
   };
 });
@@ -78,6 +80,10 @@ vi.mock("@/lib/access", () => ({
 }));
 
 vi.mock("@/lib/db/server", () => ({
+  // The page imports the typed error too (t_223f8b3d degrade paths).
+  DbAuthUnavailableError: class DbAuthUnavailableError extends Error {
+    readonly code = "DB_AUTH_UNAVAILABLE";
+  },
   getSupabaseServerClient: () => ({
     auth: { getUser: mocks.getUser },
     from: () => ({
@@ -89,6 +95,10 @@ vi.mock("@/lib/db/server", () => ({
     }),
   }),
 }));
+
+// Identity now comes from the session cookie (single source) instead of the
+// Data API client's auth.getUser() — see t_223f8b3d.
+vi.mock("@/lib/session", () => ({ getSessionUser: mocks.getSessionUser }));
 
 vi.mock("@/lib/seo", () => ({
   buildMetadata: (p: { title: string; description: string; path: string }) => ({ title: p.title, description: p.description }),
@@ -132,6 +142,7 @@ beforeEach(() => {
   mocks.decideCourseAccess.mockReset();
   mocks.getAccessUserId.mockReset();
   mocks.getUser.mockReset();
+  mocks.getSessionUser.mockReset();
 });
 
 describe("/atlas/[series]/certificate — exam-less series (B-07 / D2)", () => {
@@ -141,7 +152,7 @@ describe("/atlas/[series]/certificate — exam-less series (B-07 / D2)", () => {
     mocks.getSeriesLessonSlugs.mockReturnValue([]);
     mocks.getAccessUserId.mockResolvedValue("u1");
     mocks.decideCourseAccess.mockResolvedValue({ kind: "granted" });
-    mocks.getUser.mockResolvedValue({ data: { user: null }, error: null });
+    mocks.getSessionUser.mockResolvedValue(null);
 
     const { default: R } = await import("react-dom/server");
     const result = await Page({ params: Promise.resolve({ series: "agentic-ai" }) });
@@ -159,9 +170,10 @@ describe("/atlas/[series]/certificate — exam-less series (B-07 / D2)", () => {
     mocks.getSeriesLessonSlugs.mockReturnValue(["l1", "l2", "l3"]);
     mocks.getAccessUserId.mockResolvedValue("u1");
     mocks.decideCourseAccess.mockResolvedValue({ kind: "granted" });
-    mocks.getUser.mockResolvedValue({
-      data: { user: { id: "u1", email: "a@b.c" } },
-      error: null,
+    mocks.getSessionUser.mockResolvedValue({
+      id: "u1",
+      email: "a@b.c",
+      name: null,
     });
 
     const { default: R } = await import("react-dom/server");
@@ -180,7 +192,7 @@ describe("/atlas/[series]/certificate — exam-less series (B-07 / D2)", () => {
     mocks.getSeriesLessonSlugs.mockReturnValue(["l1"]);
     mocks.getAccessUserId.mockResolvedValue("u1");
     mocks.decideCourseAccess.mockResolvedValue({ kind: "granted" });
-    mocks.getUser.mockResolvedValue({ data: { user: null }, error: null });
+    mocks.getSessionUser.mockResolvedValue(null);
 
     const { default: R } = await import("react-dom/server");
     const result = await Page({ params: Promise.resolve({ series: "omni-studio-cert" }) });

@@ -24,7 +24,7 @@ import LessonCompleteProgress from "@/components/Progress/LessonCompleteProgress
 import LessonQuiz from "@/components/Progress/LessonQuiz";
 import GuestCTA from "@/components/Progress/GuestCTA";
 import { getQuizForLesson } from "@/lib/quiz";
-import { getSupabaseServerClient } from "@/lib/db/server";
+import { getCompletedLessonSlugs } from "@/lib/completion";
 import MDXArticle from "@/components/MDX/MDXArticle";
 import Paywall from "@/components/Catalog/Paywall";
 import { AudioPlayerLazy } from "@/components/BlogPost/AudioPlayerLazy";
@@ -95,10 +95,10 @@ export default async function LessonPage({ params }: Props) {
   if (decision.kind === "not-launched") notFound();
 
   // Server-side session gate (ADR-104): guests NEVER receive question text —
-  // the quiz JSON is loaded only in the authed branch.
-  const supabase = await getSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  const isAuthed = Boolean(user);
+  // the quiz JSON is loaded only in the authed branch. Identity comes from the
+  // session cookie only; no Data API client is built just to learn who is
+  // reading (t_223f8b3d), and an unavailable credential bridge renders guest.
+  const isAuthed = decision.kind !== "unavailable" && Boolean(userId);
   const lessonQuiz = isAuthed ? getQuizForLesson(series, slug) : null;
 
   // Paywall branch — live + not entitled. Server-rendered with the course's
@@ -134,14 +134,10 @@ export default async function LessonPage({ params }: Props) {
   // post-write value (current lesson counted) so the pop reads correctly the
   // moment the user marks complete.
   let constellationState: ConstellationState | null = null;
-  if (isAuthed) {
-    const completedRows = await supabase
-      .from("lesson_completion")
-      .select("lesson_slug")
-      .eq("user_id", user!.id);
-    const completed = new Set(
-      (completedRows.data ?? []).map((r) => r.lesson_slug as string),
-    );
+  if (isAuthed && userId) {
+    // getCompletedLessonSlugs degrades to an empty set on any Data API error
+    // (including DbAuthUnavailableError), so this read can never 500 the page.
+    const completed = await getCompletedLessonSlugs(userId);
     completed.add(slug); // this lesson just completed in the client flow
     constellationState = await loadSeriesConstellation({
       seriesSlug: series,

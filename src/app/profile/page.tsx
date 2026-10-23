@@ -15,7 +15,7 @@ import ProfileForm from "@/components/Profile/ProfileForm";
 import CertificateSection from "@/components/Profile/CertificateSection";
 import LockedSkyTeaser from "@/components/Constellations/LockedSkyTeaser";
 import FullSkySection from "@/components/Constellations/FullSkySection";
-import { getSupabaseServerClient } from "@/lib/db/server";
+import { getSupabaseServerClient, DbAuthUnavailableError } from "@/lib/db/server";
 import { loadProfileSky } from "@/lib/sky-server";
 import { avatarHueClass, initialsFromEmail } from "@/lib/avatar";
 import { buildMetadata } from "@/lib/seo";
@@ -30,14 +30,22 @@ export const metadata: Metadata = buildMetadata({
 });
 
 export default async function ProfilePage() {
-  const supabase = await getSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // t_223f8b3d: the Data API client throws DbAuthUnavailableError when Neon
+  // Auth cannot mint ANY bearer token for this request. A read surface must
+  // degrade (guest teaser), never 500.
+  let supabase: Awaited<ReturnType<typeof getSupabaseServerClient>> | null = null;
+  let user: { id: string; email?: string | null } | null = null;
+  try {
+    supabase = await getSupabaseServerClient();
+    const res = await supabase.auth.getUser();
+    user = res.data.user;
+  } catch (err) {
+    if (!(err instanceof DbAuthUnavailableError)) throw err;
+  }
 
   // Guest → locked-sky value preview (B-18 LockedSkyTeaser) instead of a
   // redirect wall. One real CTA to /login?next=/profile.
-  if (!user) return <LockedSkyTeaser />;
+  if (!user || !supabase) return <LockedSkyTeaser />;
 
   const email = user.email ?? "";
 

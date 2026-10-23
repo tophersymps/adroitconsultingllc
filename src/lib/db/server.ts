@@ -61,6 +61,25 @@ export type DbClient = NeonPostgrestClient & {
   auth: { getUser: () => Promise<GetUserResult> };
 };
 
+/**
+ * Thrown by the Data API client factory when Neon Auth refuses to mint ANY
+ * bearer token for this request (t_223f8b3d, digest 307487673).
+ *
+ * The Data API has no service key: a client with no `Authorization` header is
+ * not "anonymous", it is a hard 400 (`missing authentication credentials`)
+ * that escapes the RSC render as a 500. Callers on READ paths catch THIS type
+ * and degrade to the guest/empty state; anything else still fails loudly.
+ */
+export class DbAuthUnavailableError extends Error {
+  readonly code = "DB_AUTH_UNAVAILABLE";
+  constructor(
+    message = "Neon Auth did not mint a Data API JWT for this request",
+  ) {
+    super(message);
+    this.name = "DbAuthUnavailableError";
+  }
+}
+
 function authBaseUrl(): string {
   const url = process.env.NEON_AUTH_BASE_URL;
   if (!url) throw new Error("NEON_AUTH_BASE_URL is required");
@@ -86,30 +105,75 @@ const requestCookieHeader = cache(async (): Promise<string | null> => {
   }
 });
 
-async function fetchToken(path: string): Promise<string | null> {
-  const cookie = await requestCookieHeader();
+/** A mint request is bounded so a hung auth backend cannot hang the render. */
+const TOKEN_TIMEOUT_MS = 2500;
+
+/**
+ * Mint a Data API JWT. Returns null — never throws — when the endpoint is
+ * throttled, refuses, times out or answers garbage: the caller decides how to
+ * degrade. Only the endpoint path and the HTTP status are ever logged; a token
+ * or a cookie value must never reach a log line (t_52f55ea7).
+ */
+async function fetchToken(
+  path: string,
+  options: { withCookie: boolean },
+): Promise<string | null> {
+  // The anonymous mint must never see the caller's session cookie: one
+  // identity's credentials must not be presented on another identity's mint.
+  const cookie = options.withCookie ? await requestCookieHeader() : null;
   const headers: Record<string, string> = { Accept: "application/json" };
   if (cookie) headers.Cookie = cookie;
 
-  const res = await fetch(`${authBaseUrl()}${path}`, {
-    headers,
-    cache: "no-store",
-  });
-  if (!res.ok) return null;
+  // Resolved OUTSIDE the try: a missing endpoint env is a misconfiguration and
+  // must throw loudly (fail closed), not masquerade as a mint outage.
+  const base = authBaseUrl();
+
+  let res: Response;
+  try {
+    res = await fetch(`${base}${path}`, {
+      headers,
+      cache: "no-store",
+      signal: AbortSignal.timeout(TOKEN_TIMEOUT_MS),
+    });
+  } catch {
+    // Network error / abort — same degrade as a refusal.
+    console.warn("[db] token mint unavailable", {
+      event: "db_token_unavailable",
+      path,
+      status: null,
+    });
+    return null;
+  }
+  if (!res.ok) {
+    console.warn("[db] token mint refused", {
+      event: "db_token_unavailable",
+      path,
+      status: res.status,
+    });
+    return null;
+  }
   const body = (await res.json().catch(() => null)) as { token?: unknown } | null;
   return typeof body?.token === "string" && body.token.length > 0
     ? body.token
     : null;
 }
 
-/** The signed-in caller's Data API JWT, or null for guests. */
-export const getSessionJwt = cache((): Promise<string | null> =>
-  fetchToken("/token"),
-);
+/**
+ * The signed-in caller's Data API JWT, or null for guests.
+ *
+ * Skipped entirely when the request carries no cookie: `/token` can only
+ * answer 401 in that case, and burning the per-IP mint bucket on every guest
+ * render is what empties it for signed-in renders too (t_223f8b3d).
+ */
+export const getSessionJwt = cache(async (): Promise<string | null> => {
+  const cookie = await requestCookieHeader();
+  if (!cookie) return null;
+  return fetchToken("/token", { withCookie: true });
+});
 
 /** The `anonymous` role's JWT — used when nobody is signed in. */
 const getAnonymousJwt = cache((): Promise<string | null> =>
-  fetchToken("/token/anonymous"),
+  fetchToken("/token/anonymous", { withCookie: false }),
 );
 
 /**
@@ -139,7 +203,7 @@ export const getNeonSessionUser = cache(
   },
 );
 
-function createDbClient(jwt: string | null): DbClient {
+function createDbClient(jwt: string): DbClient {
   const client = new NeonPostgrestClient({
     dataApiUrl: dataApiUrl(),
     options: {
@@ -166,10 +230,16 @@ function createDbClient(jwt: string | null): DbClient {
  * Cookie-bound Data API client for the current request.
  * `await getSupabaseServerClient()` — name kept from the Supabase era so the
  * call sites moved by import path only (R2-2 scope item 1).
+ *
+ * FAIL CLOSED (t_223f8b3d): a bearer-less client cannot be constructed. When
+ * neither the session nor the anonymous mint yields a JWT the factory throws
+ * `DbAuthUnavailableError`, and read paths degrade to their guest/empty state
+ * instead of letting the Data API's 400 escape the render as a 500.
  */
 export const getSupabaseServerClient = cache(
   async (): Promise<DbClient> => {
     const jwt = (await getSessionJwt()) ?? (await getAnonymousJwt());
+    if (!jwt) throw new DbAuthUnavailableError();
     return createDbClient(jwt);
   },
 );

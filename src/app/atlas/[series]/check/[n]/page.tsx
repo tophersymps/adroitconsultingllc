@@ -22,7 +22,7 @@ import {
 } from "@/lib/quiz";
 import { getSeriesBySlug } from "@/lib/learn";
 import { buildMetadata } from "@/lib/seo";
-import { getSupabaseServerClient } from "@/lib/db/server";
+import { getSupabaseServerClient, DbAuthUnavailableError } from "@/lib/db/server";
 import {
   accessSeam,
   getAccessUserId,
@@ -93,22 +93,29 @@ export default async function KnowledgeCheckPage({ params }: Props) {
     );
   }
 
-  // Server-side session gate (ADR-104).
-  const supabase = await getSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  const isAuthed = Boolean(user);
+  // Server-side session gate (ADR-104). Identity comes from the session cookie
+  // only; the Data API client is built only for the authed read below, and an
+  // unavailable credential bridge (t_223f8b3d) renders the guest state.
+  const authedUserId = decision.kind === "unavailable" ? null : userId;
+  const isAuthed = Boolean(authedUserId);
 
   // Best score for the pass-status row (authed only).
   let bestScore = 0;
-  if (isAuthed) {
+  if (authedUserId) {
     const quizName = check.quizName;
-    const { data } = await supabase
-      .from("quiz_run")
-      .select("score")
-      .eq("user_id", user!.id)
-      .eq("quiz_name", quizName);
-    const scores = (data ?? []) as { score: number }[];
-    if (scores.length > 0) bestScore = Math.max(...scores.map((r) => r.score));
+    try {
+      const supabase = await getSupabaseServerClient();
+      const { data } = await supabase
+        .from("quiz_run")
+        .select("score")
+        .eq("user_id", authedUserId)
+        .eq("quiz_name", quizName);
+      const scores = (data ?? []) as { score: number }[];
+      if (scores.length > 0) bestScore = Math.max(...scores.map((r) => r.score));
+    } catch (err) {
+      // No bearer mid-render → show the pass row as "not yet", never a 500.
+      if (!(err instanceof DbAuthUnavailableError)) throw err;
+    }
   }
   const passed = bestScore >= 80;
 

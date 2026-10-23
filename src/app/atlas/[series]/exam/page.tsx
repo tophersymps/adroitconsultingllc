@@ -24,7 +24,7 @@ import {
 } from "@/lib/quiz";
 import { getSeriesBySlug } from "@/lib/learn";
 import { buildMetadata } from "@/lib/seo";
-import { getSupabaseServerClient } from "@/lib/db/server";
+import { getSupabaseServerClient, DbAuthUnavailableError } from "@/lib/db/server";
 import type { CheckProgress } from "@/shared/contracts";
 import {
   accessSeam,
@@ -90,9 +90,10 @@ export default async function ExamPage({ params }: Props) {
     );
   }
 
-  const supabase = await getSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  const isAuthed = Boolean(user);
+  // Identity from the session cookie only — no Data API client is built just
+  // to learn who is reading, and an unavailable credential bridge
+  // (t_223f8b3d) renders the guest state instead of a 500.
+  const isAuthed = decision.kind !== "unavailable" && Boolean(userId);
 
   // Guest → CTA placeholder.
   if (!isAuthed) {
@@ -130,11 +131,24 @@ export default async function ExamPage({ params }: Props) {
   // unlock decision must never depend on it).
   const checkMetas = getKnowledgeChecks(series);
   const quizNames = checkMetas.map((c) => `${series}:check:${c.n}`);
-  const { data } = await supabase
-    .from("quiz_attempt")
-    .select("quiz_name, question_index, is_correct")
-    .eq("user_id", user!.id)
-    .in("quiz_name", quizNames);
+  let attemptRows: {
+    quiz_name: string;
+    question_index: number;
+    is_correct: boolean;
+  }[] = [];
+  try {
+    const supabase = await getSupabaseServerClient();
+    const { data } = await supabase
+      .from("quiz_attempt")
+      .select("quiz_name, question_index, is_correct")
+      .eq("user_id", userId as string)
+      .in("quiz_name", quizNames);
+    attemptRows = (data ?? []) as typeof attemptRows;
+  } catch (err) {
+    // No bearer mid-render (t_223f8b3d) → no attempt rows is the honest
+    // degraded state: the exam renders locked, the page is still 200.
+    if (!(err instanceof DbAuthUnavailableError)) throw err;
+  }
 
   // Canonical coverage (t_55105899): a check with only 8 of 15 questions
   // answered (all correct) must NOT derive as 8/8 = 100% and unlock the
@@ -144,14 +158,7 @@ export default async function ExamPage({ params }: Props) {
     const quiz = getKnowledgeCheck(series, c.n);
     if (quiz) canonicalTotals.set(`${series}:check:${c.n}`, quiz.questions.length);
   }
-  const scoresByQuiz = scoreQuizAttemptsByQuiz(
-    (data ?? []) as {
-      quiz_name: string;
-      question_index: number;
-      is_correct: boolean;
-    }[],
-    canonicalTotals,
-  );
+  const scoresByQuiz = scoreQuizAttemptsByQuiz(attemptRows, canonicalTotals);
 
   const checks: CheckProgress[] = checkMetas.map((c) => {
     const bestScore = scoresByQuiz.get(`${series}:check:${c.n}`)?.score ?? 0;

@@ -25,7 +25,7 @@ const { cookiesMock } = vi.hoisted(() => ({ cookiesMock: vi.fn() }));
 
 vi.mock("next/headers", () => ({ cookies: cookiesMock }));
 
-import { getSupabaseServerClient } from "./server";
+import { getSupabaseServerClient, DbAuthUnavailableError } from "./server";
 
 const AUTH_BASE = "https://auth.test/neondb/auth";
 const DATA_BASE = "https://data.test/neondb/rest/v1";
@@ -61,6 +61,9 @@ function requestHeaders(input: RequestInfo | URL, init?: RequestInit): Headers {
 function stubFetch(options: {
   sessionToken?: string | null;
   anonymousToken?: string | null;
+  /** Force an HTTP status instead of the token/no-token answer (429, 500…). */
+  sessionStatus?: number;
+  anonymousStatus?: number;
 }) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = requestUrl(input);
@@ -68,11 +71,17 @@ function stubFetch(options: {
     captured.push({ url, headers });
 
     if (url === `${AUTH_BASE}/token`) {
+      if (options.sessionStatus) {
+        return jsonResponse({ message: "forced" }, options.sessionStatus);
+      }
       return options.sessionToken
         ? jsonResponse({ token: options.sessionToken })
         : jsonResponse({ error: "unauthenticated" }, 401);
     }
     if (url === `${AUTH_BASE}/token/anonymous`) {
+      if (options.anonymousStatus) {
+        return jsonResponse({ message: "forced" }, options.anonymousStatus);
+      }
       return options.anonymousToken
         ? jsonResponse({ token: options.anonymousToken })
         : jsonResponse({ error: "no anonymous role" }, 401);
@@ -135,10 +144,10 @@ describe("Neon session JWT bridge to the Data API client", () => {
     // but with no JWT the gateway is an implicit, unpinnable role. We pin it.
     expect(dataRequest?.headers.get("Authorization")).toBe(`Bearer ${ANON_JWT}`);
 
-    // The session endpoint is tried first and carries no cookie.
-    const sessionCall = captured.find((c) => c.url === `${AUTH_BASE}/token`);
-    expect(sessionCall).toBeDefined();
-    expect(sessionCall?.headers.get("Cookie")).toBeNull();
+    // A guest request never mints a session token: `/token` can only 401
+    // without a cookie, and every such call burns the same per-IP bucket that
+    // a signed-in render needs (t_223f8b3d).
+    expect(captured.some((c) => c.url === `${AUTH_BASE}/token`)).toBe(false);
   });
 
   it("sends the caller's session JWT, and forwards the httpOnly cookie, when signed in", async () => {
@@ -190,6 +199,15 @@ describe("Neon session JWT bridge to the Data API client", () => {
 
     const dataRequest = captured.find((c) => c.url.startsWith(DATA_BASE));
     expect(dataRequest?.headers.get("Authorization")).toBe(`Bearer ${ANON_JWT}`);
+
+    // t_52f55ea7 guard: the fallback mint is issued with NO Cookie header, so
+    // one identity's session credential is never presented for another
+    // identity's token request.
+    const anonCall = captured.find(
+      (c) => c.url === `${AUTH_BASE}/token/anonymous`,
+    );
+    expect(anonCall).toBeDefined();
+    expect(anonCall?.headers.get("Cookie")).toBeNull();
   });
 
   it("treats a malformed token reply as no token (never a bare request)", async () => {
@@ -227,5 +245,84 @@ describe("Neon session JWT bridge to the Data API client", () => {
     await expect(getSupabaseServerClient()).rejects.toThrow(
       "NEON_AUTH_BASE_URL is required",
     );
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  t_223f8b3d — no JWT at all must be a TYPED degrade, not a bare     */
+/*  client whose 400 escapes the RSC render as digest 307487673.       */
+/* ------------------------------------------------------------------ */
+
+describe("credential-bridge unavailability (t_223f8b3d)", () => {
+  it("rejects with DbAuthUnavailableError and issues NO bearer-less Data API call (401 + 429)", async () => {
+    cookiesMock.mockResolvedValue(cookieStore([SESSION_COOKIE]));
+    stubFetch({ sessionStatus: 401, anonymousStatus: 429 });
+
+    await expect(readRole("66666666-6666-6666-6666-666666666666")).rejects.toBeInstanceOf(
+      DbAuthUnavailableError,
+    );
+
+    // Both mints were attempted...
+    expect(captured.some((c) => c.url === `${AUTH_BASE}/token`)).toBe(true);
+    expect(
+      captured.some((c) => c.url === `${AUTH_BASE}/token/anonymous`),
+    ).toBe(true);
+    // ...and nothing reached the Data API without a bearer.
+    expect(captured.some((c) => c.url.startsWith(DATA_BASE))).toBe(false);
+  });
+
+  it("degrades identically when both endpoints answer 500", async () => {
+    cookiesMock.mockResolvedValue(cookieStore([SESSION_COOKIE]));
+    stubFetch({ sessionStatus: 500, anonymousStatus: 500 });
+
+    await expect(getSupabaseServerClient()).rejects.toBeInstanceOf(
+      DbAuthUnavailableError,
+    );
+    expect(captured.some((c) => c.url.startsWith(DATA_BASE))).toBe(false);
+  });
+
+  it("degrades for a GUEST too (the outage is not identity-dependent)", async () => {
+    cookiesMock.mockResolvedValue(cookieStore([]));
+    stubFetch({ anonymousStatus: 429 });
+
+    await expect(getSupabaseServerClient()).rejects.toBeInstanceOf(
+      DbAuthUnavailableError,
+    );
+    expect(captured.some((c) => c.url.startsWith(DATA_BASE))).toBe(false);
+  });
+
+  it("the typed error carries a stable code for callers to switch on", async () => {
+    cookiesMock.mockResolvedValue(cookieStore([]));
+    stubFetch({ anonymousStatus: 503 });
+
+    await expect(getSupabaseServerClient()).rejects.toMatchObject({
+      name: "DbAuthUnavailableError",
+      code: "DB_AUTH_UNAVAILABLE",
+    });
+  });
+
+  it("never logs a token value or the session cookie", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      cookiesMock.mockResolvedValue(cookieStore([SESSION_COOKIE]));
+      // Session mint refused, fallback succeeds → a token IS obtained; no log
+      // line may contain it, nor the caller's cookie value.
+      stubFetch({ sessionStatus: 429, anonymousToken: ANON_JWT });
+      await readRole("77777777-7777-7777-7777-777777777777");
+
+      const logged = [...warn.mock.calls, ...error.mock.calls]
+        .map((args) => JSON.stringify(args))
+        .join("\n");
+      expect(logged).not.toContain(ANON_JWT);
+      expect(logged).not.toContain(SESSION_JWT);
+      expect(logged).not.toContain(SESSION_COOKIE.value);
+      // What it MAY log: the endpoint path and the status.
+      expect(logged).toContain("/token");
+      expect(logged).toContain("429");
+    } finally {
+      warn.mockRestore();
+      error.mockRestore();
+    }
   });
 });

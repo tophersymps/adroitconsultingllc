@@ -25,7 +25,7 @@
  * Contract types: src/shared/contracts-course-catalog.ts (brainiac, t_22b26cb9).
  */
 import { cache } from "react";
-import { getSupabaseServerClient } from "@/lib/db/server";
+import { getSupabaseServerClient, DbAuthUnavailableError } from "@/lib/db/server";
 import { getSessionUser } from "@/lib/session";
 import type {
   AccessModel,
@@ -286,6 +286,38 @@ function nowIso(): string {
 }
 
 /**
+ * Run a READ and degrade to `fallback` only when the credential bridge could
+ * not produce any bearer token (`DbAuthUnavailableError`).
+ *
+ * Deliberately NOT a bare `catch`: a genuine Data API error (RLS denial, 5xx,
+ * schema drift) must still surface, or real outages become invisible.
+ */
+async function readOrDegrade<T>(
+  read: () => Promise<T>,
+  fallback: T,
+  label: string,
+): Promise<T> {
+  try {
+    return await read();
+  } catch (err) {
+    if (err instanceof DbAuthUnavailableError) {
+      console.warn("[access] degraded read", {
+        event: "access_read_degraded",
+        read: label,
+        code: err.code,
+      });
+      return fallback;
+    }
+    throw err;
+  }
+}
+
+const DEGRADED_CATALOG_FOR_USER: CatalogForUserResult = {
+  entries: [],
+  isAdmin: false,
+};
+
+/**
  * Default loader backed by the cookie-bound server client. Cached per-request
  * (React `cache`) so getCatalogForUser + decideCourseAccess on the same
  * request share one courses read (arch §3 — avoid N+1).
@@ -315,7 +347,11 @@ const loadCourseBySlugCached = cache(loadCourseBySlug);
 export async function getCourseRowBySlug(
   slug: string,
 ): Promise<CourseRow | null> {
-  return loadCourseBySlugCached(slug);
+  return readOrDegrade(
+    () => loadCourseBySlugCached(slug),
+    null,
+    "course_by_slug",
+  );
 }
 
 async function loadRole(userId: string): Promise<UserRole | null> {
@@ -396,12 +432,18 @@ export async function getCatalogOrg(): Promise<{
   groups: CatalogGroup[];
   prerequisites: CoursePrerequisiteRow[];
 }> {
-  const [sections, groups, prerequisites] = await Promise.all([
-    loadSections(),
-    loadGroups(),
-    loadPrerequisites(),
-  ]);
-  return { sections, groups, prerequisites };
+  return readOrDegrade(
+    async () => {
+      const [sections, groups, prerequisites] = await Promise.all([
+        loadSections(),
+        loadGroups(),
+        loadPrerequisites(),
+      ]);
+      return { sections, groups, prerequisites };
+    },
+    { sections: [], groups: [], prerequisites: [] },
+    "catalog_org",
+  );
 }
 
 /** Production loader — RLS cookie-bound reads. */
@@ -438,47 +480,76 @@ export function createAccessSeam(
     async getCatalogForUser(
       userId: UserId,
     ): Promise<CatalogForUserResult> {
-      const [courses, admin] = await Promise.all([
-        loader.getCatalogCourses(),
-        isAdmin(userId),
-      ]);
-      const entitlements = userId
-        ? await loader.getActiveEntitlements(userId)
-        : [];
-      const subscriptions = userId
-        ? await loader.getActiveSubscriptions(userId)
-        : [];
-      const entries = buildCatalogEntries({
-        isAdmin: admin,
-        courses,
-        entitlements,
-        subscriptions,
-        now: nowIso(),
-      });
-      return { entries, isAdmin: admin };
+      try {
+        const [courses, admin] = await Promise.all([
+          loader.getCatalogCourses(),
+          isAdmin(userId),
+        ]);
+        const entitlements = userId
+          ? await loader.getActiveEntitlements(userId)
+          : [];
+        const subscriptions = userId
+          ? await loader.getActiveSubscriptions(userId)
+          : [];
+        const entries = buildCatalogEntries({
+          isAdmin: admin,
+          courses,
+          entitlements,
+          subscriptions,
+          now: nowIso(),
+        });
+        return { entries, isAdmin: admin };
+      } catch (err) {
+        if (err instanceof DbAuthUnavailableError) {
+          // No bearer → no RLS-scoped read is possible. An empty catalog is
+          // the honest answer; surface it through the readOrDegrade log.
+          console.warn("[access] degraded read", {
+            event: "access_read_degraded",
+            read: "catalog_for_user",
+            code: err.code,
+          });
+          return DEGRADED_CATALOG_FOR_USER;
+        }
+        throw err;
+      }
     },
 
     async decideCourseAccess(
       userId: UserId,
       seriesSlug: string,
     ): Promise<CourseAccessDecision> {
-      const [course, admin] = await Promise.all([
-        loader.getCourseBySlug(seriesSlug),
-        isAdmin(userId),
-      ]);
-      const entitlements = userId
-        ? await loader.getActiveEntitlements(userId)
-        : [];
-      const subscriptions = userId
-        ? await loader.getActiveSubscriptions(userId)
-        : [];
-      return decideCourseAccessFromInput({
-        course,
-        isAdmin: admin,
-        entitlements,
-        subscriptions,
-        now: nowIso(),
-      });
+      try {
+        const [course, admin] = await Promise.all([
+          loader.getCourseBySlug(seriesSlug),
+          isAdmin(userId),
+        ]);
+        const entitlements = userId
+          ? await loader.getActiveEntitlements(userId)
+          : [];
+        const subscriptions = userId
+          ? await loader.getActiveSubscriptions(userId)
+          : [];
+        return decideCourseAccessFromInput({
+          course,
+          isAdmin: admin,
+          entitlements,
+          subscriptions,
+          now: nowIso(),
+        });
+      } catch (err) {
+        if (err instanceof DbAuthUnavailableError) {
+          // A TRANSIENT credential outage must never read as "no such course":
+          // returning not-launched here would 404 a live course. The pages
+          // render the guest/static view for `unavailable` instead.
+          console.warn("[access] degraded read", {
+            event: "access_read_degraded",
+            read: "course_access",
+            code: err.code,
+          });
+          return { kind: "unavailable" };
+        }
+        throw err;
+      }
     },
   };
 }

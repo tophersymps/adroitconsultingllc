@@ -19,6 +19,7 @@ import type {
   SubscriptionRow,
   UserEntitlementRow,
 } from "@/shared/contracts-course-catalog";
+import { DbAuthUnavailableError } from "@/lib/db/server";
 
 const NOW = "2026-08-25T12:00:00.000Z";
 
@@ -608,5 +609,58 @@ describe("accessSeam (createAccessSeam over fake loader)", () => {
     expect(loader.getActiveEntitlements).not.toHaveBeenCalled();
     expect(res.entries[0].visible).toBe(true);
     expect(res.entries[0].canAccess).toBe(true); // free model
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  Credential-bridge outage (t_223f8b3d, digest 307487673)            */
+/* ------------------------------------------------------------------ */
+
+describe("access seam under a credential-bridge outage", () => {
+  it("decideCourseAccess → `unavailable`, never `not-launched` (no 404 on a live course)", async () => {
+    const loader = fakeLoader({
+      getCourseBySlug: vi
+        .fn()
+        .mockRejectedValue(new DbAuthUnavailableError()),
+    });
+    const seam = createAccessSeam(loader);
+    await expect(
+      seam.decideCourseAccess("u1", "test-series"),
+    ).resolves.toEqual({ kind: "unavailable" });
+  });
+
+  it("degrades the role/entitlement reads the same way (no bearer ⇒ no per-user read)", async () => {
+    const loader = fakeLoader({
+      getCourseBySlug: vi.fn().mockResolvedValue(course()),
+      getRole: vi.fn().mockRejectedValue(new DbAuthUnavailableError()),
+    });
+    const seam = createAccessSeam(loader);
+    await expect(
+      seam.decideCourseAccess("u1", "test-series"),
+    ).resolves.toEqual({ kind: "unavailable" });
+  });
+
+  it("getCatalogForUser degrades to an empty catalog, not a throw", async () => {
+    const loader = fakeLoader({
+      getCatalogCourses: vi
+        .fn()
+        .mockRejectedValue(new DbAuthUnavailableError()),
+    });
+    const seam = createAccessSeam(loader);
+    await expect(seam.getCatalogForUser("u1")).resolves.toEqual({
+      entries: [],
+      isAdmin: false,
+    });
+  });
+
+  it("does NOT over-catch: a genuine Data API error still propagates", async () => {
+    const boom = new Error("relation \"courses\" does not exist");
+    const loader = fakeLoader({
+      getCourseBySlug: vi.fn().mockRejectedValue(boom),
+    });
+    const seam = createAccessSeam(loader);
+    await expect(seam.decideCourseAccess("u1", "test-series")).rejects.toThrow(
+      "relation \"courses\" does not exist",
+    );
   });
 });

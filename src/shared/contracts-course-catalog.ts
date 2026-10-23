@@ -154,7 +154,14 @@ export type CourseAccessDecision =
   /** User may read gated content. */
   | { kind: "granted" }
   /** User must see the paywall (live + not entitled). */
-  | { kind: "paywall" };
+  | { kind: "paywall" }
+  /**
+   * The seam could not READ the platform rows (Neon Auth refused to mint any
+   * Data API JWT, t_223f8b3d). Not a content decision: a `not-launched` here
+   * would 404 a live course on a transient outage, and a `paywall` would
+   * upsell a member who already paid. Surfaces render the guest/static view.
+   */
+  | { kind: "unavailable" };
 
 /** Access seam API surface — the single decision function every surface calls. */
 export interface AccessSeam {

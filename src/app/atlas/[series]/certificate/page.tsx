@@ -31,7 +31,8 @@ import {
 } from "@/lib/quiz";
 import { getSeriesBySlug } from "@/lib/learn";
 import { buildMetadata } from "@/lib/seo";
-import { getSupabaseServerClient } from "@/lib/db/server";
+import { getSupabaseServerClient, DbAuthUnavailableError } from "@/lib/db/server";
+import { getSessionUser } from "@/lib/session";
 import {
   buildCertificateEligibility,
   certificateCompletionDate,
@@ -54,6 +55,52 @@ import { loadSeriesConstellation, loadAchievementStats } from "@/lib/sky-server"
 
 interface Props {
   params: Promise<{ series: string }>;
+}
+
+type CertAttemptRow = {
+  quiz_name: string;
+  question_index: number;
+  is_correct: boolean;
+  attempted_at?: string | null;
+};
+
+/**
+ * The certificate page's two per-user reads, DEGRADE-SAFE (t_223f8b3d).
+ *
+ * When Neon Auth cannot mint a Data API JWT mid-render the Data API request
+ * would have escaped as a 500. Here the credential-bridge error degrades to
+ * "no rows" — the page then honestly shows zero known completions instead of
+ * claiming progress it could not read. Any OTHER error still propagates.
+ */
+async function readCertRows(
+  userId: string,
+  lessonSlugs: string[],
+  quizNames: string[],
+): Promise<[{ lesson_slug: string }[], CertAttemptRow[]]> {
+  try {
+    const supabase = await getSupabaseServerClient();
+    const [lessonRes, attemptRes] = await Promise.all([
+      lessonSlugs.length > 0
+        ? supabase
+            .from("lesson_completion")
+            .select("lesson_slug")
+            .eq("user_id", userId)
+            .in("lesson_slug", lessonSlugs)
+        : Promise.resolve({ data: [] as { lesson_slug: string }[], error: null }),
+      supabase
+        .from("quiz_attempt")
+        .select("quiz_name, question_index, is_correct, attempted_at")
+        .eq("user_id", userId)
+        .in("quiz_name", quizNames),
+    ]);
+    return [
+      (lessonRes.data ?? []) as { lesson_slug: string }[],
+      (attemptRes.data ?? []) as CertAttemptRow[],
+    ];
+  } catch (err) {
+    if (err instanceof DbAuthUnavailableError) return [[], []];
+    throw err;
+  }
 }
 
 export const dynamic = "force-dynamic";
@@ -115,8 +162,9 @@ export default async function CertificatePage({ params }: Props) {
   // (backlog B-07 / D2). Keeps the certificate promise visible instead of a
   // bare 404 while the prep exam is authored.
   if (!hasExam) {
-    const supabase = await getSupabaseServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    // Identity from the session cookie (single source). A credential-bridge
+    // outage (t_223f8b3d) renders the guest state, never a 500.
+    const user = decision.kind === "unavailable" ? null : await getSessionUser();
 
     const lessonSlugs = getSeriesLessonSlugs(series);
     const totalLessons = lessonSlugs.length || s.totalLessons;
@@ -162,15 +210,24 @@ export default async function CertificatePage({ params }: Props) {
     // Authed — show lessons completed against the planned lesson set.
     let completedCount = 0;
     if (lessonSlugs.length > 0) {
-      const { data } = await supabase
-        .from("lesson_completion")
-        .select("lesson_slug")
-        .eq("user_id", user.id)
-        .in("lesson_slug", lessonSlugs);
-      completedCount = Math.min(
-        new Set((data ?? []).map((r) => (r as { lesson_slug: string }).lesson_slug)).size,
-        totalLessons,
-      );
+      try {
+        const supabase = await getSupabaseServerClient();
+        const { data } = await supabase
+          .from("lesson_completion")
+          .select("lesson_slug")
+          .eq("user_id", user.id)
+          .in("lesson_slug", lessonSlugs);
+        completedCount = Math.min(
+          new Set(
+            ((data ?? []) as { lesson_slug: string }[]).map((r) => r.lesson_slug),
+          ).size,
+          totalLessons,
+        );
+      } catch (err) {
+        // No bearer mid-render → unknown completions read as none (empty
+        // state), never a fabricated count and never a 500.
+        if (!(err instanceof DbAuthUnavailableError)) throw err;
+      }
     }
     const allDone = totalLessons > 0 && completedCount >= totalLessons;
 
@@ -239,8 +296,11 @@ export default async function CertificatePage({ params }: Props) {
   const lessonSlugs = getSeriesLessonSlugs(series);
   const totalLessons = lessonSlugs.length;
 
-  const supabase = await getSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  // Identity from the session cookie (single source). A credential-bridge
+  // outage (t_223f8b3d) renders the guest state — this page must never 500
+  // because a Data API JWT could not be minted mid-render, and it must never
+  // build a client just to learn who is reading.
+  const user = decision.kind === "unavailable" ? null : await getSessionUser();
   const isAuthed = Boolean(user);
 
   const pageHead = (
@@ -288,31 +348,14 @@ export default async function CertificatePage({ params }: Props) {
   const checkQuizNames = checkMetas.map((c) => `${series}:check:${c.n}`);
   const examQuizName = `${series}:exam`;
 
-  const [lessonRes, attemptRes] = await Promise.all([
-    lessonSlugs.length > 0
-      ? supabase
-          .from("lesson_completion")
-          .select("lesson_slug")
-          .eq("user_id", user!.id)
-          .in("lesson_slug", lessonSlugs)
-      : Promise.resolve({ data: [] as { lesson_slug: string }[], error: null }),
-    supabase
-      .from("quiz_attempt")
-      .select("quiz_name, question_index, is_correct, attempted_at")
-      .eq("user_id", user!.id)
-      .in("quiz_name", [...checkQuizNames, examQuizName]),
+  const [lessonRows, attemptRowsRaw] = await readCertRows(user!.id, lessonSlugs, [
+    ...checkQuizNames,
+    examQuizName,
   ]);
 
-  const completedLessonSlugs = ((lessonRes.data ?? []) as { lesson_slug: string }[]).map(
-    (r) => r.lesson_slug,
-  );
+  const completedLessonSlugs = lessonRows.map((r) => r.lesson_slug);
 
-  const attemptRows = (attemptRes.data ?? []) as {
-    quiz_name: string;
-    question_index: number;
-    is_correct: boolean;
-    attempted_at?: string | null;
-  }[];
+  const attemptRows = attemptRowsRaw;
 
   // Exam: score from the graded attempt set; completion date = the latest
   // graded exam answer (quiz_attempt has no run boundaries).
@@ -498,7 +541,7 @@ export default async function CertificatePage({ params }: Props) {
           ) : null}
         </div>
         <Certificate
-          recipientName={certificateRecipientName(user!)}
+          recipientName={certificateRecipientName({ email: user!.email })}
           courseName={certificateCourseName(series, s.name)}
           completedAt={formatCertDate(completedAtIso)}
           examScore={eligibility.examBest}

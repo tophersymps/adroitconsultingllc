@@ -33,6 +33,14 @@ export async function denySeriesNotAccessible(
     if (decision.kind === "granted" || decision.kind === "admin-preview") {
       return null;
     }
+    if (decision.kind === "unavailable") {
+      // Credential-bridge outage (t_223f8b3d): fail CLOSED, but answer
+      // "try again shortly" instead of claiming the course isn't theirs.
+      return NextResponse.json(
+        { error: "Access check temporarily unavailable — retry shortly" },
+        { status: 503, headers: { "Retry-After": "30" } },
+      );
+    }
     return DENIED;
   } catch {
     // Fail closed: a DB/loader error must not grant access.
