@@ -20,6 +20,7 @@
 // read `DATABASE_URL`, so a Client Component import must fail the build rather
 // than pull the credential path into a client bundle.
 import "server-only";
+
 import { neon } from "@neondatabase/serverless";
 
 export interface AuthUserRef {
@@ -60,19 +61,28 @@ export async function listAuthUsers(): Promise<AuthUserRef[]> {
   );
 }
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isUuid(value: string): boolean {
+  return UUID_RE.test(value);
+}
+
 /**
  * Get one auth user (id + email) by id, or null when it doesn't exist.
  *
- * `id::text = $1` (not `id = $1::uuid`) so a non-UUID segment from the URL
- * returns "no such user" → 404 instead of a 22P02 cast error → 500, matching
- * the old `.maybeSingle()` / GoTrue 404 semantics.
+ * The URL segment is validated as a UUID first and bound as `uuid`
+ * (`id = $1::uuid`) so the query uses the `user_pkey` Index Scan instead of
+ * casting every row (`id::text = $1` → Seq Scan). A non-UUID segment is
+ * "no such user" → 404, never a 22P02 cast error → 500, matching the old
+ * `.maybeSingle()` / GoTrue 404 semantics. `::text` stays on OUTPUT only.
  */
 export async function getAuthUser(id: string): Promise<AuthUserRef | null> {
-  if (!id) return null;
+  if (!id || !isUuid(id)) return null;
   const rows = await query<AuthUserRef>(
     `SELECT id::text AS id, email
        FROM neon_auth."user"
-      WHERE id::text = $1
+      WHERE id = $1::uuid
       LIMIT 1`,
     [id],
   );
@@ -80,24 +90,28 @@ export async function getAuthUser(id: string): Promise<AuthUserRef | null> {
 }
 
 /**
- * Return the subset of `ids` that exist as auth users. One query with an
- * explicit placeholder list (bounded by MAX_LOOKUP) rather than a per-id GET.
+ * Return the subset of `ids` that exist as auth users. One query with an array
+ * bind (`id = ANY($1::uuid[])`, also an Index Scan) rather than a per-id GET.
+ * Non-UUID strings cannot exist in the table, so they are dropped before the
+ * bind — the answer is identical and the cast can never raise 22P02.
  */
 const MAX_LOOKUP = 1000;
 
 export async function authUserIdsExist(ids: string[]): Promise<Set<string>> {
-  const unique = [...new Set(ids.filter((id) => typeof id === "string" && id))].slice(
-    0,
-    MAX_LOOKUP,
-  );
+  const unique = [
+    ...new Set(
+      ids.filter(
+        (id) => typeof id === "string" && isUuid(id),
+      ),
+    ),
+  ].slice(0, MAX_LOOKUP);
   if (unique.length === 0) return new Set();
 
-  const placeholders = unique.map((_, i) => `$${i + 1}`).join(", ");
   const rows = await query<{ id: string }>(
     `SELECT id::text AS id
        FROM neon_auth."user"
-      WHERE id::text IN (${placeholders})`,
-    unique,
+      WHERE id = ANY($1::uuid[])`,
+    [unique],
   );
   return new Set(rows.map((r) => r.id));
 }

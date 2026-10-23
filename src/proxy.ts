@@ -18,11 +18,14 @@
  * NOTE: do NOT use `next/headers` cookies() here — proxy runs before the render
  * tree and only has access to request/response cookies.
  */
-import {
-  handleAuthProxyRequest,
-  NEON_AUTH_SESSION_COOKIE_NAME,
-} from "@neondatabase/auth/server";
+import { handleAuthProxyRequest } from "@neondatabase/auth/server";
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  adaptSetCookieHeaders,
+  forwardableAuthHeaders,
+  hasSessionCookie,
+  isSecureRequest,
+} from "@/lib/auth/transport";
 
 /** Session-data cookie cache TTL (seconds), matching the SDK default. */
 const SESSION_DATA_TTL = 300;
@@ -38,16 +41,18 @@ export async function proxy(request: NextRequest) {
   }
 
   const cookieHeader = request.headers.get("cookie") ?? "";
-  if (!cookieHeader.includes(NEON_AUTH_SESSION_COOKIE_NAME)) {
+  if (!hasSessionCookie(cookieHeader, isSecureRequest(request.headers))) {
     // Guest: nothing to refresh.
     return NextResponse.next({ request });
   }
 
   try {
     const authResponse = await handleAuthProxyRequest({
+      // Origin is synthesised when the caller sends none (non-browser clients),
+      // and the auth cookies are re-prefixed to the names the SDK expects.
       request: new Request(request.url, {
         method: "GET",
-        headers: request.headers,
+        headers: forwardableAuthHeaders(request.headers),
       }),
       path: "get-session",
       baseUrl,
@@ -55,7 +60,12 @@ export async function proxy(request: NextRequest) {
       sessionDataTtl: SESSION_DATA_TTL,
     });
 
-    const setCookies = authResponse.headers.getSetCookie();
+    // `__Secure-`-prefixed + `Secure` on https/loopback, plain `neon-auth.*`
+    // on http — otherwise the refreshed cookie is dropped by the browser.
+    const setCookies = adaptSetCookieHeaders(
+      authResponse.headers,
+      isSecureRequest(request.headers),
+    );
     if (setCookies.length === 0) {
       return NextResponse.next({ request });
     }
