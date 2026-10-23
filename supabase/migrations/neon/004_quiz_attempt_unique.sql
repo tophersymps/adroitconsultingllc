@@ -1,0 +1,36 @@
+-- ═══════════════════════════════════════════════════════════════════
+-- 004_quiz_attempt_unique.sql — restore the quiz_attempt upsert target
+-- Task t_94bda24e (alpha) · R2-4 finding F2 (zod QA report, head f49633b9)
+--
+-- WHAT THIS FILE IS
+--   The unique index the quiz write path depends on. POST
+--   /api/progress/quiz upserts one latest attempt per (user, quiz,
+--   question):
+--
+--     INSERT ... ON CONFLICT (user_id, quiz_name, question_index) DO UPDATE ...
+--
+--   Postgres rejects an ON CONFLICT clause whose conflict target has no
+--   matching unique index/constraint — at PLAN time, before any row is
+--   touched:  ERROR 42P10: there is no unique or exclusion constraint
+--   matching the ON CONFLICT specification. The route surfaced that as
+--   HTTP 500 {"error":"Failed to save progress"}, so every graded answer
+--   from a signed-in learner failed to persist.
+--
+-- WHY IT WAS MISSING (Neon schema drift)
+--   The index shipped in supabase/migrations/002_quiz_attempt_unique.sql
+--   and was applied to Supabase, but never to the Neon project: it was not
+--   part of the Neon migration set (supabase/migrations/neon/) and no
+--   manual apply happened. The sibling uniques the other write paths need
+--   — read_progress(user_id, content_slug), lesson_completion(user_id,
+--   lesson_slug), user_entitlements(user_id, …) — WERE present, so quiz
+--   was the only drifted table. Rows were deduped (0 groups with count>1)
+--   before this index was created on the production branch on 2026-10-23,
+--   which is why the unique build succeeded first try.
+--
+-- Idempotent by construction: CREATE UNIQUE INDEX IF NOT EXISTS. Safe to
+-- re-run on production, and it is the definition a freshly created branch
+-- needs before quiz writes can work at all.
+-- ═══════════════════════════════════════════════════════════════════
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_quiz_attempt_user_quiz_question
+  ON public.quiz_attempt (user_id, quiz_name, question_index);
