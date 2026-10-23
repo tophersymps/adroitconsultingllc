@@ -204,17 +204,30 @@ end $$;
 """
 
 
+def _unquote(value: str) -> str:
+    """Strip whitespace and any wrapping quote characters (`'`, `"`, or both).
+
+    `str.strip('"\'').strip('"')` is order-dependent and leaves a quote behind for
+    `"'postgresql://…'"`; stripping the quote character set on both ends at once
+    handles single, double and nested wrapping.
+    """
+    return value.strip().strip("\"'")
+
+
 def load_database_url() -> str:
     url = os.environ.get("DATABASE_URL_UNPOOLED") or os.environ.get("DATABASE_URL")
     if url:
-        return url
+        # Worker shells export the value with literal wrapping quotes. Left
+        # unstripped, psql exits with `invalid connection option` after parsing
+        # 0 assertions, which reads like an RLS regression when the DB is fine.
+        return _unquote(url)
     env_path = os.path.join(REPO_ROOT, ".env.local")
     if os.path.exists(env_path):
         with open(env_path, encoding="utf-8") as fh:
             for line in fh:
                 line = line.strip()
                 if line.startswith("DATABASE_URL_UNPOOLED="):
-                    return line.split("=", 1)[1].strip().strip('"').strip("'")
+                    return _unquote(line.split("=", 1)[1])
     sys.exit(
         "FAIL: no DATABASE_URL_UNPOOLED in the environment and none found in "
         f"{env_path}"
@@ -568,8 +581,18 @@ def main() -> int:
             print(f"    {line}")
 
     if proc.returncode != 0 or "RLS ISOLATION CHECK COMPLETE" not in proc.stdout:
-        print("\nRLS ISOLATION CHECK: FAIL", file=sys.stderr)
         error = re.sub(re.escape(url), "<redacted-db-url>", proc.stderr.strip())
+        if not passes and "RLS ISOLATION CHECK COMPLETE" not in proc.stdout:
+            # psql never ran the assertions (bad DSN, unreachable host, ...).
+            # Report that distinctly: "FAIL" here reads like an RLS regression.
+            print(
+                "RLS ISOLATION CHECK: HARNESS ERROR (0 assertions ran — this is a "
+                "connection/DSN problem, not an RLS result)",
+                file=sys.stderr,
+            )
+            print(error, file=sys.stderr)
+            return 1
+        print("\nRLS ISOLATION CHECK: FAIL", file=sys.stderr)
         print(error, file=sys.stderr)
         return 1
 

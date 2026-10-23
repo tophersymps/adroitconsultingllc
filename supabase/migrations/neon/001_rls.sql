@@ -144,7 +144,7 @@ BEGIN;
 -- ─────────────────────────────────────────────────────────────────────
 -- 0. Roles used by the Data API
 --
---    `authenticated` is referenced by 24 of the 37 policies (TO authenticated)
+--    `authenticated` is referenced by 21 of the 37 policies (TO authenticated)
 --    and must exist before CREATE POLICY parses. `anonymous` carries the
 --    public-read path. Both are NOLOGIN/NOSUPERUSER/NOBYPASSRLS so a JWT can
 --    never reach a role that ignores RLS. Creating them here keeps this file
@@ -229,7 +229,7 @@ REVOKE ALL ON TABLE public."user" FROM authenticated, anonymous;
 -- so every non-owner role gets zero rows (SELECT) and a withheld write even
 -- after a stray GRANT. neondb_owner owns the table and bypasses RLS, so Better
 -- Auth and the Next.js server are unaffected. Do NOT add a policy here (§4):
--- it would make the inventory 35 and re-open the table to client reads.
+-- it would make the inventory 38 (37 + 1) and re-open the table to client reads.
 ALTER TABLE public."user" ENABLE ROW LEVEL SECURITY;
 
 -- Future tables created BY THE APPLYING ROLE inherit the same baseline so a
