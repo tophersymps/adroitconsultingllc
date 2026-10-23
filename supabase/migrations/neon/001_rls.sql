@@ -49,15 +49,21 @@
 --      If you are here to make Neon "match Supabase": re-read this paragraph.
 --      The correct fix is to apply 012 to Supabase, not to reopen Neon.
 --
---   2. public."user" — deliberately NOT policy'd. The Better Auth user table
---      is protected by `REVOKE ALL` in §2, NOT by RLS (R1-4 verified both
---      authenticated and anonymous receive 42501, and both roles are
---      NOBYPASSRLS/NOLOGIN). A Neon-only `user_select_own` policy was
---      considered and rejected by the R1-4 fix card: it would make the
---      inventory 35 while the accepted parity baseline is 34, and a grant-less
---      role cannot reach the table anyway. scripts/rls-isolation-check.py
---      keeps an empty NEON_ONLY_POLICIES list for genuinely Neon-only
---      policies, and asserts the REVOKE denial instead.
+--   2. public."user" — RLS ENABLED, deliberately with NO policy. RLS-on with
+--      zero policies is default-deny: every non-owner role reads zero rows and
+--      writes nothing, so the Better Auth user table survives a stray GRANT or
+--      a re-created table inheriting pg_default_acl. §2 keeps the `REVOKE ALL`
+--      as the first control (R1-4 verified both authenticated and anonymous
+--      receive 42501, and both roles are NOBYPASSRLS/NOLOGIN), and §4 drops any
+--      ad-hoc policy so the posture stays zero-policy. A Neon-only
+--      `user_select_own` policy was considered and rejected: it would make the
+--      inventory 35 while the accepted parity baseline is 34, and it would
+--      re-open the table to a grant-permitted role. The table owner
+--      (neondb_owner, which the server connects as) bypasses RLS, so Better
+--      Auth and the Next.js server are unaffected.
+--      scripts/rls-isolation-check.py keeps an empty NEON_ONLY_POLICIES list
+--      for genuinely Neon-only policies, and asserts both the REVOKE denial and
+--      the RLS-on/zero-policy posture (grants.user_table.default_deny).
 --
 -- REWRITE TABLE (Supabase expression → Neon expression)
 --   ┌──────────────────────────────┬───────────────────┬───────────────────────────────────────────┐
@@ -202,12 +208,15 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 -- just because it lives in `public`: revoke the blanket grants above. Auth
 -- paths reach it through the privileged server connection only.
 REVOKE ALL ON TABLE public."user" FROM authenticated, anonymous;
--- Defense in depth (R1-4 F-6): the REVOKE stays the primary control, but 8
--- real users' emails should not sit one careless GRANT (or one inherited
--- default-ACL path) away from exposure. RLS plus an own-row SELECT policy means
--- a future grant still cannot read other people's rows. The privileged server
--- path (neondb_owner) bypasses RLS, so Better Auth and the Next.js server are
--- unaffected.
+-- Defense in depth (R1-4 F-6, kept by t_77f4d97e F-1): the REVOKE stays the
+-- first control, but real users' emails must not sit one careless GRANT (or
+-- one inherited default-ACL path: pg_default_acl hands arwd to authenticated
+-- on new public relations) away from exposure. So RLS is ENABLED on this table
+-- and NO policy is created for it — RLS-on with zero policies is default-deny,
+-- so every non-owner role gets zero rows (SELECT) and a withheld write even
+-- after a stray GRANT. neondb_owner owns the table and bypasses RLS, so Better
+-- Auth and the Next.js server are unaffected. Do NOT add a policy here (§4):
+-- it would make the inventory 35 and re-open the table to client reads.
 ALTER TABLE public."user" ENABLE ROW LEVEL SECURITY;
 
 -- Future tables created BY THE APPLYING ROLE inherit the same baseline so a
@@ -517,20 +526,26 @@ CREATE POLICY "completion_events deny client insert"
 -- No UPDATE/DELETE policy anywhere: completion_events stays append-only
 -- (ADR-211) for every non-owner role.
 
--- ── "user" — stays RLS-disabled by design (do NOT add a policy here) ────
+-- ── "user" — RLS ON with ZERO policies by design (do NOT add a policy) ──
 -- Not ported from Supabase (auth.users is a different object there and was
--- never policy'd) and deliberately NOT given a Neon-only policy: the accepted
--- control is the REVOKE ALL in §2 (R1-4 verified authenticated and anonymous
--- both receive 42501, and both roles are NOBYPASSRLS/NOLOGIN; the harness
--- asserts the denial). A grant-less role cannot reach the table at all, and a
--- user_select_own policy here would make the inventory 35 and break the
--- 34-policy parity the security review and QA both sign off on.
+-- never policy'd) and deliberately NOT given a Neon-only policy. The design
+-- agreed with the R1-4 security review (F-1) is: RLS enabled (§2) with no
+-- policy at all, i.e. default-deny for every non-owner role. On top of the
+-- REVOKE ALL in §2 that means authenticated/anonymous see zero rows and can
+-- write nothing even if a stray GRANT (or a re-created table picked up by
+-- pg_default_acl) re-grants the table; neondb_owner, which owns the table,
+-- bypasses RLS so Better Auth and the Next.js server keep working.
+-- A user_select_own policy here would make the inventory 35 and let a
+-- grant-permitted role read its own row; the 34-policy parity baseline is what
+-- the security review and QA both sign off on. Do not add one.
 --
 -- This block exists because policy state belongs to THIS file: if an ad-hoc
 -- user_select_own policy was applied to the branch, the file converges the
--- database back to the reviewed design instead of silently reporting 35.
+-- database back to the reviewed design instead of silently reporting 35, and
+-- re-asserts ENABLE in case it was turned off (it is also set in §2 — this is
+-- the authoritative statement for the table).
 DROP POLICY IF EXISTS "user_select_own" ON public."user";
-ALTER TABLE public."user" DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public."user" ENABLE ROW LEVEL SECURITY;
 
 -- ═════════════════════════════════════════════════════════════════════
 -- 5. Post-load repair — identity sequences vs imported data
