@@ -24,6 +24,18 @@
  */
 import { createClient } from "@neondatabase/neon-js";
 
+import { getToken, invalidateDbToken } from "./token-cache";
+
+/**
+ * The token cache lives in ./token-cache so that identity-change call sites
+ * (Header, login page, useAuth) can reset it without importing the Neon SDK.
+ * Re-exported here so `./client` stays a valid import surface for existing
+ * call sites and tests.
+ */
+export { getToken, invalidateDbToken };
+export { resetDbTokenCache } from "./token-cache";
+
+
 export interface DbBrowserUser {
   id: string;
   email: string;
@@ -34,41 +46,6 @@ export type DbBrowserClient = ReturnType<typeof createClient> & {
     getUser: () => Promise<{ data: { user: DbBrowserUser | null }; error: Error | null }>;
   };
 };
-
-/**
- * One in-flight token request per page is enough; cache it briefly.
- *
- * The time-based TTL is NOT identity-aware: a 60 s TTL on a guest `null` would
- * keep the client unauthenticated for up to a minute after sign-in, and a 60 s
- * TTL on a user JWT would keep sending it for up to a minute after sign-out.
- * Identity changes are therefore signalled explicitly and drop the cache:
- *
- *   1. sign-in / sign-out (login page, Header) — SEC-R2-2-M3(a)
- *   2. every auth-changed broadcast (notifyAuthChanged) plus window focus,
- *      which is where a stale identity is most likely to hide — M3(b)
- *   3. any 401 from the Data API (revoked or rotated JWT) — M3(c)
- *
- * The cache is identity-keyed *by construction*: it is only ever filled for the
- * identity the session cookie currently names, and every transition that can
- * change that identity clears it before the next read. The TTL only bounds
- * ordinary staleness (session refresh), never an identity change.
- */
-let tokenPromise: Promise<string | null> | null = null;
-let tokenFetchedAt = 0;
-const TOKEN_TTL_MS = 60_000;
-
-/** Drop the cached token so the next request re-reads the session cookie. */
-export function invalidateDbToken(): void {
-  tokenPromise = null;
-  tokenFetchedAt = 0;
-}
-
-/**
- * Alias with the name the R2-2 security review uses (SEC-R2-2-M3). Kept in
- * addition to `invalidateDbToken` because both names are already in call sites
- * and review notes; they are the same operation.
- */
-export const resetDbTokenCache = invalidateDbToken;
 
 /**
  * Data API fetch wrapper: a 401 means the JWT we just sent is no longer
@@ -83,27 +60,6 @@ const dataApiFetch: typeof fetch = async (input, init) => {
   if (response.status === 401) invalidateDbToken();
   return response;
 };
-
-async function getToken(): Promise<string | null> {
-  const now = Date.now();
-  if (tokenPromise && now - tokenFetchedAt < TOKEN_TTL_MS) return tokenPromise;
-
-  tokenFetchedAt = now;
-  tokenPromise = fetch("/api/db/token", {
-    credentials: "same-origin",
-    cache: "no-store",
-  })
-    .then(async (res) => {
-      if (!res.ok) return null;
-      const body = (await res.json().catch(() => null)) as { token?: unknown } | null;
-      return typeof body?.token === "string" && body.token.length > 0
-        ? body.token
-        : null;
-    })
-    .catch(() => null);
-
-  return tokenPromise;
-}
 
 let client: DbBrowserClient | undefined;
 

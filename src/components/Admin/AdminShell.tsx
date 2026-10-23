@@ -122,7 +122,15 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       <aside
         id="admin-drawer"
         ref={drawerRef}
-        aria-hidden={!open}
+        /* No aria-hidden here (a11y LOW L1, t_b717ec09): the same element is
+           the off-canvas mobile drawer and the static md+ sidebar, and
+           aria-hidden cannot be made responsive. In SSR `open` is false, so
+           aria-hidden="true" shipped on markup that paints visible at md+
+           (axe aria-hidden-focus: focusable nav links in a hidden container)
+           until the mount effect measured the viewport. The `invisible` /
+           `md:visible` classes already do the right thing in the a11y tree:
+           visibility:hidden removes the closed drawer (and its links) there,
+           while md:visible keeps the desktop sidebar exposed. */
         aria-label="Admin navigation"
         className={`admin-drawer fixed inset-y-0 left-0 z-50 w-[var(--admin-drawer-w)] max-w-[var(--admin-drawer-max-w)] transition-transform duration-[var(--admin-drawer-dur)] ease-[var(--admin-drawer-ease)] ${
           open ? "translate-x-0 visible" : "-translate-x-full invisible"

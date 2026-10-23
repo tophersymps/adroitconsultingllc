@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth, notifyAuthChanged } from "@/lib/hooks/useAuth";
-import { invalidateDbToken } from "@/lib/db/client";
+import { invalidateDbToken } from "@/lib/db/token-cache";
 import AvatarMenu from "@/components/AvatarMenu";
 import ThemeToggle from "@/components/Theme/ThemeToggle";
 import SearchOverlay from "@/components/SearchOverlay";

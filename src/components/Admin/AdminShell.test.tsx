@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 import { AdminShell } from "./AdminShell";
 
 let currentPath = "/admin/courses";
@@ -30,6 +31,33 @@ function setDesktop() {
     configurable: true,
   });
 }
+
+/**
+ * A11y LOW L1 (t_b717ec09). SSR cannot know the viewport, so `open` is false
+ * on the server even at md+. The aside ships `md:visible` (painted as the
+ * desktop sidebar) and used to ALSO ship aria-hidden="true", hiding focusable
+ * nav links from the accessibility tree (axe aria-hidden-focus, WCAG 4.1.2)
+ * until the mount effect measured the window — permanently without JS.
+ */
+describe("AdminShell SSR accessibility tree (t_b717ec09)", () => {
+  function asideMarkup(): string {
+    const html = renderToString(<AdminShell>content</AdminShell>);
+    const match = html.match(/<aside id="admin-drawer"[\s\S]*?>/);
+    expect(match).not.toBeNull();
+    return match![0];
+  }
+
+  it("does not ship aria-hidden on the md-visible sidebar", () => {
+    const aside = asideMarkup();
+    expect(aside).not.toContain("aria-hidden");
+    // The md+ sidebar styles are still server-rendered.
+    expect(aside).toContain("md:visible");
+  });
+
+  it("still keeps the closed mobile drawer out of the a11y tree via visibility", () => {
+    expect(asideMarkup()).toContain("invisible");
+  });
+});
 
 describe("AdminShell back-nav (t_f94e01d5)", () => {
   it("renders a Back to site link in the sidebar pointing to the public site", () => {
@@ -87,35 +115,33 @@ describe("AdminShell mobile off-canvas drawer (t_71a0d478, ADR-230)", () => {
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(toggle).toHaveAttribute("aria-label", "Close navigation");
-    // The aside is announced when open, hidden when closed.
-    expect(screen.getByLabelText("Admin navigation")).toHaveAttribute(
-      "aria-hidden",
-      "false",
-    );
+    // The aside is visible when open, and its links are in the a11y tree.
+    const drawer = screen.getByLabelText("Admin navigation");
+    expect(drawer.className).toContain("visible");
+    expect(drawer.className).not.toContain("invisible");
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.getByLabelText("Admin navigation")).toHaveAttribute(
-      "aria-hidden",
-      "true",
+    expect(screen.getByLabelText("Admin navigation").className).toContain(
+      "invisible",
     );
   });
 
-  it("keeps the drawer closed (aria-hidden) on a <md viewport before opening", () => {
+  it("keeps the drawer closed (visibility:hidden) on a <md viewport before opening", () => {
     render(<AdminShell>content</AdminShell>);
-    expect(screen.getByLabelText("Admin navigation")).toHaveAttribute(
-      "aria-hidden",
-      "true",
-    );
+    // No aria-hidden: the closed drawer leaves the a11y tree through
+    // visibility:hidden (`invisible`), which is also what hides it visually.
+    const drawer = screen.getByLabelText("Admin navigation");
+    expect(drawer).not.toHaveAttribute("aria-hidden");
+    expect(drawer.className).toContain("invisible");
   });
 
   it("always exposes the sidebar on a md+ viewport (static desktop sidebar)", () => {
     setDesktop();
     render(<AdminShell>content</AdminShell>);
     // Desktop: the aside is a visible layout landmark, never aria-hidden.
-    expect(screen.getByLabelText("Admin navigation")).toHaveAttribute(
-      "aria-hidden",
-      "false",
-    );
+    const drawer = screen.getByLabelText("Admin navigation");
+    expect(drawer).not.toHaveAttribute("aria-hidden");
+    expect(drawer.className).toContain("visible");
   });
 
   it("closes the drawer on route change (usePathname effect)", () => {

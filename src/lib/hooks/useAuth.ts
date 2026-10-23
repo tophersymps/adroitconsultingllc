@@ -14,7 +14,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { invalidateDbToken } from "@/lib/db/client";
+import { invalidateDbToken } from "@/lib/db/token-cache";
 
 export interface AuthUser {
   id: string;

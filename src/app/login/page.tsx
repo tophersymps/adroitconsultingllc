@@ -15,7 +15,7 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { notifyAuthChanged } from "@/lib/hooks/useAuth";
-import { invalidateDbToken } from "@/lib/db/client";
+import { invalidateDbToken } from "@/lib/db/token-cache";
 import { sanitizeRedirectPath } from "@/lib/redirect";
 
 function LoginForm() {
