@@ -12,6 +12,20 @@ All notable changes to the Adroit Consulting Blog project will be documented in 
 
 **Known Issues** - (1) R2-1's hardening (auth proxy allowlist, `/atlas` prerender) is still not in production until this PR merges — production runs main. (2) `supabase/migrations/neon/` now legitimately holds both `003_admin_read_policies.sql` (main) and `005_identity_continuity.sql` (this branch); any documentation that still says "003 identity" is stale.
 
+### SEC-LOW: DB DSN password off psql argv in the sibling DB harnesses (t_f94d8637)
+
+**What** - `scripts/verify-session-bridge.py`, `scripts/verify-user-provisioning.py` and `scripts/rls-isolation-check.py` (manual harnesses that run against the live Neon/production database; not shipped, not wired into CI) now use the same CWE-214 technique already reviewed in `scripts/data-api-isolation-check.py`:
+(1) new `split_dsn(dsn) -> (password-free target, password)` handles both the `postgres://user:pass@host/db` URL form (percent-decoding the password) and the `key=value` libpq form (stripping and de-quoting the `password=` key);
+(2) `configure_db(dsn)` records the split once per run, and every `psql` call receives only the password-free target on argv with `PGPASSWORD` set in the child environment (`dict(os.environ, PGPASSWORD=...)`); `verify-user-provisioning.py`'s inline heredoc-script call in `check_function()` goes through the same helper;
+(3) `-v ON_ERROR_STOP=1` is unchanged everywhere, and the scripts' own check logic is untouched.
+New `scripts/test_psql_dsn_argv.py` (11 offline unittest cases, no network/DB) pins `split_dsn` for all three harnesses plus the argv/PGPASSWORD contract of each psql call site.
+
+**Why** - QA's review of t_17956eb8 (PR #361 @ `b9ebece8`) fixed argv credentials in `data-api-isolation-check.py` but found the identical pattern still present here, so the owner DSN with its password was readable by any local process via `ps -axo command` and persisted in shell history whenever the URL was exported inline. Low priority (QA approved #361's scope as written); same-class hygiene, not a regression.
+
+**Verified** - `python3 -m py_compile` clean on all four files; `python3 -m unittest scripts/test_psql_dsn_argv.py` **11/11 passed**; `grep -n '\["psql", *[a-z_]*url' scripts/` returns nothing. Live read-only sanity against the production Neon branch (`select 1;`, no writes) through the refactored `sql()` helper: **1 returned for both the URL DSN form and an equivalent key=value DSN**, and `split_dsn`'s target contains no password in either case.
+
+**Known Issues** - (1) `--password` argv flags on `verify-session-bridge.py` / `verify-user-provisioning.py` are deliberately left as-is (separate LOW cleanup, per the card's notes); the QA password is still visible in `ps` if passed that way instead of via `$QA_SESSION_PASSWORD` / `$QA_PROVISION_PASSWORD`. (2) The `key=value` branch inherits the reference implementation's quoting limits (an inner `''` escape and a percent-encoded username are not re-encoded); both forms tested here behave. (3) No live run of the full harnesses was done — they mint and delete production auth identities; only the read-only `select 1` path was exercised end-to-end.
+
 ### Reset-password: never render a form that can only fail (t_233b6f61)
 
 **What** - `src/app/reset-password/page.tsx` (+ `ResetPasswordForm.tsx`, `page.test.tsx`):
