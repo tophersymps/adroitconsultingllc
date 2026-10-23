@@ -26,7 +26,7 @@ import {
   useProgressSummary,
   useSessionQuizStats,
 } from "./useProgressSummary";
-import { notifyAuthChanged } from "./useAuth";
+import { notifyAuthChanged, useAuth } from "./useAuth";
 
 type Who = "A" | "B" | "guest";
 
@@ -44,6 +44,12 @@ const PAYLOADS: Record<Who, unknown> = {
   guest: { readContent: { blog: [], lesson: [] }, completedLessons: [], quizStats: {} },
 };
 
+const IDENTITIES: Record<Who, unknown> = {
+  A: { id: "user-a", email: "a@example.com", isAdmin: false },
+  B: { id: "user-b", email: "b@example.com", isAdmin: false },
+  guest: null,
+};
+
 let who: Who = "A";
 let summaryCalls = 0;
 
@@ -56,6 +62,45 @@ function Card() {
       <span data-testid="lessons">{[...merge.lessons].sort().join(",")}</span>
       <span data-testid="best">{stats ? `${stats.bestScore}/${stats.attempts}` : "none"}</span>
     </div>
+  );
+}
+
+/**
+ * One real PathCard: `<SeriesProgress>` (summary subscriber) renders BEFORE
+ * `<QuizStats>` (which mounts `useAuth`). Sibling effect order therefore
+ * registers the summary listener first — the ordering QA-1 on 492f9c1e broke.
+ */
+function SeriesProgressShaped() {
+  const { merge } = useProgressSummary([], []);
+  return <span data-testid="lessons">{[...merge.lessons].sort().join(",")}</span>;
+}
+
+function QuizStatsShaped() {
+  const { user } = useAuth();
+  const stats = useSessionQuizStats("series-1", !!user);
+  return (
+    <span data-testid="best">
+      {user ? `${stats?.bestScore ?? "none"}/${stats?.attempts ?? 0}` : "guest"}
+    </span>
+  );
+}
+
+function PathCardShaped() {
+  return (
+    <div data-testid="path-card">
+      <SeriesProgressShaped />
+      <QuizStatsShaped />
+    </div>
+  );
+}
+
+function ShapedHub({ cards = 3 }: { cards?: number }) {
+  return (
+    <>
+      {Array.from({ length: cards }, (_, i) => (
+        <PathCardShaped key={i} />
+      ))}
+    </>
   );
 }
 
@@ -79,7 +124,9 @@ beforeEach(() => {
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : String(input);
     if (url === "/api/progress/summary") summaryCalls += 1;
-    return { ok: true, json: async () => PAYLOADS[who] } as unknown as Response;
+    const body =
+      url === "/api/auth/session" ? { user: IDENTITIES[who] } : PAYLOADS[who];
+    return { ok: true, json: async () => body } as unknown as Response;
   }) as never;
 });
 
@@ -136,6 +183,42 @@ describe("progress summary cache × identity transitions (PERF-P1 t_e786efe2)", 
     );
     // 3 cards × 2 hooks all re-read, but only one network request.
     expect(summaryCalls).toBe(2);
+  });
+
+  /*
+   * QA-1 (t_f789a076) on 492f9c1e: the fix must NOT bump the summary epoch from
+   * the per-instance `useAuth` listener. `PathCard` mounts a summary subscriber
+   * (`SeriesProgress`) before its `useAuth` consumer (`QuizStats`), so that
+   * listener runs AFTER the summary refetch has started and, when it
+   * invalidates, discards it — every bar ends with a null summary and the
+   * fan-out issues one request per card. On 492f9c1e this test fails: 5 summary
+   * requests instead of 2, and every card renders an empty lesson set.
+   */
+  it("an auth-changed broadcast refetches the summary ONCE with useAuth siblings mounted", async () => {
+    render(<ShapedHub cards={3} />);
+    await waitFor(() =>
+      expect(screen.getAllByTestId("best").every((n) => n.textContent === "82/3")).toBe(true),
+    );
+    expect(screen.getAllByTestId("lessons").every((n) => n.textContent === "series-1-1")).toBe(
+      true,
+    );
+    expect(summaryCalls).toBe(1);
+
+    // Same-tab account switch with the hub mounted (Header.tsx seam).
+    who = "B";
+    act(() => {
+      invalidateProgressSummary();
+      notifyAuthChanged();
+    });
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId("best").every((n) => n.textContent === "41/1")).toBe(true),
+    );
+    // Per-card useAuth instances must not re-create the per-card summary fan-out.
+    expect(summaryCalls).toBe(2);
+    expect(screen.getAllByTestId("lessons").every((n) => n.textContent === "series-2-1")).toBe(
+      true,
+    );
   });
 
   /*
