@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { activeSubscriptionOf, requireAdminApi } from "@/lib/admin";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { listAuthUsers } from "@/lib/supabase/auth-admin";
+import { listAuthUsers } from "@/lib/auth/users";
 import type {
   AdminUserListRow,
   SubscriptionRow,
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const service = getSupabaseServiceClient();
-    // Auth users come from the GoTrue Admin API (the `auth` schema is not
+    // Auth users come from the Neon Auth user table (the `auth` schema is not
     // exposed to PostgREST — PGRST205). Roles/profiles/subscriptions are
     // public tables.
     const [authUsers, rolesRes, profilesRes, subsRes] = await Promise.all([

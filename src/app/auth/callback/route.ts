@@ -1,58 +1,52 @@
 /**
- * GET /auth/callback — Supabase recovery-code exchange.
+ * GET /auth/callback — auth-email landing shim (Managed Better Auth).
  *
- * The reset email links to `<origin>/auth/callback?code=…&next=/reset-password`.
- * This handler exchanges the single-use code for a session (writing the
- * HttpOnly cookie server-side via the SSR client), then redirects to the
- * sanitized `next` (default /reset-password).
+ * Historical (Supabase/GoTrue) behaviour was a single-use code EXCHANGE that
+ * wrote a session cookie. Better Auth has no exchange step: the email links to
+ * `/reset-password?token=…` directly (see `buildPasswordResetRedirect()`), and
+ * the token itself is the credential that `/api/auth/reset-password/update`
+ * redeems.
  *
- * Graceful error handling (AC-2.4/2.5, ADR-PWR-3):
- *   - expired / already-used code → /reset-password?error=expired
- *   - missing or garbage code      → /reset-password?error=invalid
- * Never a 500.
+ * This route is kept so that:
+ *   - already-sent / bookmarked links that pass `?token=…` (or `?error=…` and
+ *     `?code=…`) still land somewhere useful, and
+ *   - the documented 7-route auth surface keeps a single, audited entry point.
+ *
+ * It performs no credential exchange and writes no cookies. Graceful error
+ * handling (AC-2.4/2.5, ADR-PWR-3) is preserved: expired/garbage → the reset
+ * page's "request a new link" state, never a 500.
  *
  * `next` is sanitized with sanitizeRedirectPath (CWE-601, AC-2.3).
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { sanitizeRedirectPath } from "@/lib/redirect";
 
 const RESET_PAGE = "/reset-password";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const code = searchParams.get("code");
   const next = sanitizeRedirectPath(searchParams.get("next"), RESET_PAGE);
+  const token = searchParams.get("token");
+  const error = searchParams.get("error") ?? searchParams.get("error_description");
 
-  // Missing code → invalid state (AC-2.5).
-  if (!code) {
-    return NextResponse.redirect(
-      new URL(`${RESET_PAGE}?error=invalid`, req.url),
-    );
+  // A real token is simply forwarded to the page that redeems it.
+  if (token) {
+    const target = new URL(next, req.url);
+    target.searchParams.set("token", token);
+    return NextResponse.redirect(target);
   }
 
-  try {
-    const supabase = await getSupabaseServerClient();
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-
+  // Upstream dead-link signals (`error=INVALID_TOKEN`, legacy `code=…`) all map
+  // to the same "expired" state so the user is never told which check failed.
+  if (error || searchParams.get("code")) {
     if (error) {
-      // Expired / already-used / invalid code — all surface the same
-      // "request a new link" state (ADR-PWR-3). Log the real reason server-side.
-      console.error("[auth/callback] exchangeCodeForSession failed", error.message);
-      const kind = /expired|used|invalid/i.test(error.message)
-        ? "expired"
-        : "invalid";
-      return NextResponse.redirect(
-        new URL(`${RESET_PAGE}?error=${kind}`, req.url),
-      );
+      console.error("[auth/callback] upstream auth error", error.slice(0, 80));
     }
-
-    // Success — session cookie written by the SSR client. Land on the reset page.
-    return NextResponse.redirect(new URL(next, req.url));
-  } catch (err) {
-    console.error("[auth/callback] unexpected error", err);
     return NextResponse.redirect(
-      new URL(`${RESET_PAGE}?error=invalid`, req.url),
+      new URL(`${RESET_PAGE}?error=expired`, req.url),
     );
   }
+
+  // Nothing usable in the URL (missing token) → invalid link (AC-2.5).
+  return NextResponse.redirect(new URL(`${RESET_PAGE}?error=invalid`, req.url));
 }

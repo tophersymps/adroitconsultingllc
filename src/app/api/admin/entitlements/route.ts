@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi, notFoundJson, writeAuditLog } from "@/lib/admin";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { getAuthUser } from "@/lib/supabase/auth-admin";
+import { getAuthUser } from "@/lib/auth/users";
 import {
   checkOrigin,
   checkRateLimit,

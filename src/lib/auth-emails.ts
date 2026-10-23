@@ -30,3 +30,44 @@ export const AUTH_CALLBACK_PATH = "/auth/callback";
 export function buildAuthRedirect(next: string = "/reset-password"): string {
   return `${AUTH_ORIGIN}${AUTH_CALLBACK_PATH}?next=${encodeURIComponent(next)}`;
 }
+
+/**
+ * Origin that Managed Better Auth will accept for `callbackURL` / `redirectTo`.
+ *
+ * Better Auth validates the redirect against the ORIGIN OF THE REQUEST, not
+ * just the project's trusted-domain list (verified 2026-10-23: sending
+ * `callbackURL: https://adroit.io/…` from an `Origin: http://localhost:3000`
+ * request returns `403 INVALID_CALLBACK_URL`, and vice-versa). The browser
+ * always sets `Origin` on our same-origin POSTs, and `checkOrigin()` has
+ * already rejected anything else, so echoing it back is safe — and it makes
+ * preview deployments work, which a hard-coded production origin cannot.
+ *
+ * Falls back to the canonical site origin for non-browser callers (server-side
+ * scripts), which is correct in production and fails closed elsewhere.
+ */
+export function authRedirectOrigin(reqOrigin: string | null | undefined): string {
+  if (reqOrigin && /^https?:\/\/[^/]+$/.test(reqOrigin)) {
+    return reqOrigin;
+  }
+  return AUTH_ORIGIN;
+}
+
+/**
+ * Build the `redirectTo` for Better Auth password-reset emails.
+ *
+ * Managed Better Auth appends the token itself (`<redirectTo>?token=…`, or
+ * `?error=INVALID_TOKEN` for a dead link), so this must NOT already carry a
+ * query string — otherwise the token lands inside an encoded parameter.
+ */
+export function buildPasswordResetRedirect(
+  reqOrigin?: string | null,
+): string {
+  return `${authRedirectOrigin(reqOrigin)}/reset-password`;
+}
+
+/** Same rule for signup/resend verification links (token appended upstream). */
+export function buildVerifyEmailRedirect(
+  reqOrigin?: string | null,
+): string {
+  return `${authRedirectOrigin(reqOrigin)}/field-notes`;
+}

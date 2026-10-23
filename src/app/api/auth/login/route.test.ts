@@ -1,48 +1,34 @@
 /**
- * route.test.ts — POST /api/auth/login (t_bd7ac2a0, H1).
+ * route.test.ts — POST /api/auth/login (t_bd7ac2a0, H1) on Managed Better Auth.
  *
- * Security findings from val-el's merged-site audit:
- *   - H1 (CWE-307/209): login was the only auth mutation with NO rate limit,
- *     NO origin (CSRF) check, and echoed raw Supabase/GoTrue error.message on
- *     failure (account enumeration + brute-force surface). Sibling routes
- *     (reset-password/request, reset-password/update) already apply
- *     checkRateLimit(getClientIp) + checkOrigin.
- *
- * Fixed behavior asserted here:
+ * Neon R2-1 port: the auth backend changed (Supabase GoTrue → Neon Auth
+ * `signIn.email` / `signUp.email`), so the mocks changed. Every security
+ * assertion from the GoTrue suite is preserved:
  *   - cross-origin POST -> 403, auth never called
  *   - rate-limited -> 429, auth never called
  *   - signin failure -> fixed generic "Invalid email or password.", never the
- *     raw Supabase error.message; real detail logged server-side
- *   - signup failure -> fixed generic message, never the raw error.message
+ *     raw upstream error detail (account enumeration + brute-force surface)
+ *   - signup failure -> fixed generic message, never the raw error detail
+ *   - unconfirmed email -> distinct-but-fixed 403 (US-5 recovery path)
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
 const { mocks } = vi.hoisted(() => {
-  const getSupabaseServerClient = vi.fn();
-  const signUp = vi.fn();
-  const signInWithPassword = vi.fn();
+  const signInEmail = vi.fn();
+  const signUpEmail = vi.fn();
   const checkRateLimit = vi.fn();
   const getClientIp = vi.fn();
   const checkOrigin = vi.fn();
   return {
-    mocks: {
-      getSupabaseServerClient,
-      signUp,
-      signInWithPassword,
-      checkRateLimit,
-      getClientIp,
-      checkOrigin,
-    },
+    mocks: { signInEmail, signUpEmail, checkRateLimit, getClientIp, checkOrigin },
   };
 });
 
-vi.mock("@/lib/supabase/server", () => ({
-  getSupabaseServerClient: async () => ({
-    auth: {
-      signUp: mocks.signUp,
-      signInWithPassword: mocks.signInWithPassword,
-    },
+vi.mock("@/lib/auth/server", () => ({
+  getAuthServer: () => ({
+    signIn: { email: mocks.signInEmail },
+    signUp: { email: mocks.signUpEmail },
   }),
 }));
 
@@ -58,7 +44,7 @@ const GENERIC_SIGNIN_ERROR = "Invalid email or password.";
 const GENERIC_SIGNUP_ERROR =
   "Unable to create account. Please try again later.";
 
-function req(body: unknown, origin?: string): NextRequest {
+function req(body: unknown, origin: string | null = "http://localhost:3000"): NextRequest {
   const headers: Record<string, string> = {
     "content-type": "application/json",
     "x-forwarded-for": "10.0.0.1",
@@ -76,22 +62,47 @@ beforeEach(() => {
   mocks.checkOrigin.mockReturnValue(null);
   mocks.checkRateLimit.mockReturnValue(true);
   mocks.getClientIp.mockReturnValue("10.0.0.1");
-  mocks.signUp.mockResolvedValue({ error: null });
-  mocks.signInWithPassword.mockResolvedValue({ error: null });
+  mocks.signUpEmail.mockResolvedValue({ error: null });
+  mocks.signInEmail.mockResolvedValue({ error: null });
 });
 
-describe("POST /api/auth/login — H1 hardening (t_bd7ac2a0)", () => {
+describe("POST /api/auth/login — H1 hardening (Neon Auth)", () => {
   it("signs in a valid user and returns ok", async () => {
     const res = await POST(
-      req({ mode: "signin", email: "reader@example.com", password: "secret1" }),
+      req({ mode: "signin", email: "Reader@Example.com", password: "secret1" }),
     );
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.status).toBe("ok");
-    expect(mocks.signInWithPassword).toHaveBeenCalledWith({
-      email: "reader@example.com",
-      password: "secret1",
-    });
+    expect(mocks.signInEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ email: "reader@example.com", password: "secret1" }),
+    );
+  });
+
+  it("omits callbackURL for a non-browser sign-in (no Origin)", async () => {
+    const res = await POST(
+      req({ mode: "signin", email: "reader@example.com", password: "secret1" }, null),
+    );
+    expect(res.status).toBe(200);
+    const payload = mocks.signInEmail.mock.calls[0][0] as Record<string, unknown>;
+    expect(payload).not.toHaveProperty("callbackURL");
+  });
+
+  it("signs up with a name derived from the email and a same-origin verify callback", async () => {
+    const res = await POST(
+      req({ mode: "signup", email: "new@example.com", password: "secret1" }),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("check-email");
+    expect(mocks.signUpEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: "new@example.com",
+        password: "secret1",
+        name: "new",
+        callbackURL: expect.stringContaining("/field-notes"),
+      }),
+    );
   });
 
   it("rejects a cross-origin POST with 403 before any auth call", async () => {
@@ -103,37 +114,40 @@ describe("POST /api/auth/login — H1 hardening (t_bd7ac2a0)", () => {
       ),
     );
     expect(res.status).toBe(403);
-    expect(mocks.signInWithPassword).not.toHaveBeenCalled();
-    expect(mocks.signUp).not.toHaveBeenCalled();
+    expect(mocks.signInEmail).not.toHaveBeenCalled();
+    expect(mocks.signUpEmail).not.toHaveBeenCalled();
   });
 
-  it("returns 429 when rate-limited and never calls Supabase auth", async () => {
+  it("returns 429 when rate-limited and never calls the auth backend", async () => {
     mocks.checkRateLimit.mockReturnValue(false);
     const res = await POST(
       req({ mode: "signin", email: "reader@example.com", password: "secret1" }),
     );
     expect(res.status).toBe(429);
-    expect(mocks.signInWithPassword).not.toHaveBeenCalled();
-    expect(mocks.signUp).not.toHaveBeenCalled();
+    expect(mocks.signInEmail).not.toHaveBeenCalled();
+    expect(mocks.signUpEmail).not.toHaveBeenCalled();
   });
 
-  it("returns a fixed generic message on signin failure, never the raw error.message", async () => {
-    mocks.signInWithPassword.mockResolvedValue({
-      error: { message: "Invalid login credentials" },
+  it("returns a fixed generic message on signin failure, never the raw error", async () => {
+    mocks.signInEmail.mockResolvedValue({
+      error: {
+        status: 401,
+        code: "INVALID_EMAIL_OR_PASSWORD",
+        message: "Invalid email or password",
+      },
     });
     const res = await POST(
-      req({ mode: "signin", email: "attacker@example.com", password: "wrong!" }),
+      req({ mode: "signin", email: "attacker@example.com", password: "wrong!!" }),
     );
     expect(res.status).toBe(401);
     const body = await res.json();
     expect(body.error).toBe(GENERIC_SIGNIN_ERROR);
-    // Raw Supabase detail must never be reflected to the caller.
-    expect(JSON.stringify(body)).not.toContain("Invalid login credentials");
+    expect(JSON.stringify(body)).not.toContain("INVALID_EMAIL_OR_PASSWORD");
   });
 
-  it("returns a fixed generic message on signup failure, never the raw error.message", async () => {
-    mocks.signUp.mockResolvedValue({
-      error: { message: "User already registered" },
+  it("returns a fixed generic message on signup failure, never the raw error", async () => {
+    mocks.signUpEmail.mockResolvedValue({
+      error: { status: 422, code: "USER_ALREADY_EXISTS", message: "User already exists" },
     });
     const res = await POST(
       req({ mode: "signup", email: "dup@example.com", password: "secret1" }),
@@ -141,12 +155,13 @@ describe("POST /api/auth/login — H1 hardening (t_bd7ac2a0)", () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe(GENERIC_SIGNUP_ERROR);
-    expect(JSON.stringify(body)).not.toContain("User already registered");
+    expect(JSON.stringify(body)).not.toContain("User already exists");
+    expect(JSON.stringify(body)).not.toContain("USER_ALREADY_EXISTS");
   });
 
-  it("returns a distinct fixed 403 on sign-in of an unconfirmed email (a11y t_be6b4bd2), never the raw error.message", async () => {
-    mocks.signInWithPassword.mockResolvedValue({
-      error: { message: "Email not confirmed", code: "email_not_confirmed" },
+  it("returns a distinct fixed 403 on sign-in of an unverified email (a11y t_be6b4bd2)", async () => {
+    mocks.signInEmail.mockResolvedValue({
+      error: { status: 403, code: "EMAIL_NOT_VERIFIED", message: "Email not verified" },
     });
     const res = await POST(
       req({ mode: "signin", email: "unconfirmed@example.com", password: "secret1" }),
@@ -154,27 +169,25 @@ describe("POST /api/auth/login — H1 hardening (t_bd7ac2a0)", () => {
     expect(res.status).toBe(403);
     const body = await res.json();
     expect(body.error).toContain("hasn't been confirmed");
-    // Distinct from the generic 401, and the raw GoTrue detail is never echoed.
     expect(body.error).not.toBe(GENERIC_SIGNIN_ERROR);
-    expect(JSON.stringify(body)).not.toContain("Email not confirmed");
-    expect(JSON.stringify(body)).not.toContain("email_not_confirmed");
+    expect(JSON.stringify(body)).not.toContain("EMAIL_NOT_VERIFIED");
   });
 
-  it("still returns the fixed generic 401 for a genuine wrong-password sign-in, even if the message text is absent", async () => {
-    mocks.signInWithPassword.mockResolvedValue({
-      error: { message: "Invalid login credentials" },
+  it("keeps the generic 401 for non-confirm sign-in failures", async () => {
+    mocks.signInEmail.mockResolvedValue({
+      error: { status: 403, code: "BANNED_USER", message: "User is banned" },
     });
     const res = await POST(
-      req({ mode: "signin", email: "user@example.com", password: "wrongpass" }),
+      req({ mode: "signin", email: "banned@example.com", password: "secret1" }),
     );
     expect(res.status).toBe(401);
     const body = await res.json();
     expect(body.error).toBe(GENERIC_SIGNIN_ERROR);
   });
 
-  it("does not leak an unconfirmed-email distinction on SIGN-UP (registration enumeration stays closed)", async () => {
-    mocks.signUp.mockResolvedValue({
-      error: { message: "Email not confirmed", code: "email_not_confirmed" },
+  it("does not leak an unconfirmed-email distinction on SIGN-UP", async () => {
+    mocks.signUpEmail.mockResolvedValue({
+      error: { status: 403, code: "EMAIL_NOT_VERIFIED", message: "Email not verified" },
     });
     const res = await POST(
       req({ mode: "signup", email: "dup@example.com", password: "secret1" }),
@@ -185,24 +198,11 @@ describe("POST /api/auth/login — H1 hardening (t_bd7ac2a0)", () => {
     expect(JSON.stringify(body)).not.toContain("confirmed");
   });
 
-  it("keeps the generic 401 for non-confirm sign-in failures that do not mention confirmation", async () => {
-    mocks.signInWithPassword.mockResolvedValue({
-      error: { message: "User is disabled", code: "user_disabled" },
-    });
-    const res = await POST(
-      req({ mode: "signin", email: "disabled@example.com", password: "secret1" }),
-    );
-    expect(res.status).toBe(401);
-    const body = await res.json();
-    expect(body.error).toBe(GENERIC_SIGNIN_ERROR);
-  });
-
-  it("does not leak the raw error.message in the signin 500 fallback path", async () => {
-    mocks.signInWithPassword.mockRejectedValue(new Error("secret db detail"));
+  it("does not leak the raw error in the signin 500 fallback path", async () => {
+    mocks.signInEmail.mockRejectedValue(new Error("secret db detail"));
     const res = await POST(
       req({ mode: "signin", email: "reader@example.com", password: "secret1" }),
     );
-    // The route's outer try/catch should swallow unexpected errors generically.
     expect([401, 500]).toContain(res.status);
     const body = await res.json();
     expect(JSON.stringify(body)).not.toContain("secret db detail");

@@ -13,7 +13,7 @@
 import { NextResponse } from "next/server";
 import { activeSubscriptionOf, requireAdminApi } from "@/lib/admin";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { listAuthUsers } from "@/lib/supabase/auth-admin";
+import { listAuthUsers } from "@/lib/auth/users";
 import { effectiveAccessState } from "@/lib/access";
 import type {
   AdminCourseListRow,

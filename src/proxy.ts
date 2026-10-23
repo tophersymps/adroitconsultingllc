@@ -1,65 +1,81 @@
 /**
- * Next.js 16 Proxy (successor of `middleware.ts`) — Supabase session refresh.
+ * Next.js 16 Proxy (successor of `middleware.ts`) — Managed Better Auth session
+ * refresh.
  *
- * F3 from security audit t_4ee14a75: without a proxy, expired access tokens
- * are only refreshed when a route handler calls `auth.getUser()` (cookies are
- * writable there). Server components and static pages would silently degrade
- * to "guest" on navigation until the user hits a progress API. This proxy
- * refreshes the Supabase session cookie on navigation before any page renders.
+ * F3 from security audit t_4ee14a75: without a proxy, auth state is only
+ * refreshed when a route handler asks for it, so server components and pages
+ * would silently degrade to "guest" on navigation. This proxy refreshes the
+ * Neon Auth session cookie on navigation before any page renders.
  *
- * Reference: @supabase/ssr server-side guide + Next 16 `proxy` file convention
- * (see node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/proxy.md).
+ * Why not the SDK's bundled middleware? `neonAuthMiddleware()` is a ROUTE
+ * PROTECTOR: it redirects every non-skip path to `loginUrl` when there is no
+ * session, and its skip list is not configurable in `createNeonAuth`. Adroit is
+ * a public site (marketing, field notes, atlas catalogue) where only some pages
+ * gate, so this proxy does the refresh half only: one `get-session` round-trip
+ * when a session cookie is present, and any `Set-Cookie` headers it returns are
+ * copied onto the response. It never redirects.
  *
- * NOTE: do NOT use `next/headers` cookies() here — proxy runs before the
- * render tree and only has access to request/response cookies.
+ * NOTE: do NOT use `next/headers` cookies() here — proxy runs before the render
+ * tree and only has access to request/response cookies.
  */
-import { createServerClient } from "@supabase/ssr";
+import {
+  handleAuthProxyRequest,
+  NEON_AUTH_SESSION_COOKIE_NAME,
+} from "@neondatabase/auth/server";
 import { NextResponse, type NextRequest } from "next/server";
-import { supabaseCookieOptions } from "@/lib/supabase/cookie-options";
+
+/** Session-data cookie cache TTL (seconds), matching the SDK default. */
+const SESSION_DATA_TTL = 300;
 
 export async function proxy(request: NextRequest) {
-  let response = NextResponse.next({ request });
+  const baseUrl = process.env.NEON_AUTH_BASE_URL;
+  const cookieSecret = process.env.NEON_AUTH_COOKIE_SECRET;
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  // No Supabase config (e.g. build-time static export) → pass through.
-  if (!supabaseUrl || !supabaseKey) {
-    return response;
+  // No auth config (build-time collection, previews without secrets) → pass
+  // through untouched, exactly like the old Supabase guard.
+  if (!baseUrl || !cookieSecret) {
+    return NextResponse.next({ request });
   }
 
-  const supabase = createServerClient(supabaseUrl, supabaseKey, {
-    // Hardened flags (CWE-1004): the refresh path re-writes the session
-    // cookie on navigation, so it must carry httpOnly/secure too.
-    cookieOptions: supabaseCookieOptions(),
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
-      },
-      setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value }) =>
-          request.cookies.set(name, value),
-        );
-        response = NextResponse.next({ request });
-        cookiesToSet.forEach(({ name, value, options }) =>
-          response.cookies.set(name, value, options),
-        );
-      },
-    },
-  });
+  const cookieHeader = request.headers.get("cookie") ?? "";
+  if (!cookieHeader.includes(NEON_AUTH_SESSION_COOKIE_NAME)) {
+    // Guest: nothing to refresh.
+    return NextResponse.next({ request });
+  }
 
-  // IMPORTANT: avoid running any code between createServerClient and
-  // supabase.auth.getUser() — the session refresh must happen before any
-  // page/route reads the cookies.
-  await supabase.auth.getUser();
+  try {
+    const authResponse = await handleAuthProxyRequest({
+      request: new Request(request.url, {
+        method: "GET",
+        headers: request.headers,
+      }),
+      path: "get-session",
+      baseUrl,
+      cookieSecret,
+      sessionDataTtl: SESSION_DATA_TTL,
+    });
 
-  return response;
+    const setCookies = authResponse.headers.getSetCookie();
+    if (setCookies.length === 0) {
+      return NextResponse.next({ request });
+    }
+
+    const response = NextResponse.next({ request });
+    for (const cookie of setCookies) {
+      response.headers.append("set-cookie", cookie);
+    }
+    return response;
+  } catch (err) {
+    // Never block navigation on an auth-backend hiccup: pages gate themselves.
+    console.error("[proxy] session refresh failed", err);
+    return NextResponse.next({ request });
+  }
 }
 
 export const config = {
   matcher: [
     // Run on all routes except static assets / image optimization / api
-    // (api routes do their own getUser() + cookie refresh).
+    // (api routes read and refresh the session themselves).
     "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|css|js|txt|xml|json|woff2?)$).*)",
   ],
 };
