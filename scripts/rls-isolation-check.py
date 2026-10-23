@@ -53,6 +53,7 @@ import os
 import re
 import subprocess
 import sys
+from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -531,14 +532,51 @@ def build_sql() -> str:
     return "\n".join(script)
 
 
+def split_dsn(dsn: str) -> tuple[str, str | None]:
+    """Split a libpq URL into (password-free target, password).
+
+    The password must never travel on argv (CWE-214): every process on the host
+    can read another process's command line, and shell history keeps it.
+    """
+    if "://" in dsn:
+        parts = urlsplit(dsn)
+        netloc = parts.netloc
+        password = None
+        if "@" in netloc:
+            userinfo, host = netloc.rsplit("@", 1)
+            if ":" in userinfo:
+                user, raw_password = userinfo.split(":", 1)
+                password = unquote(raw_password)
+                userinfo = quote(user, safe="")
+            netloc = f"{userinfo}@{host}"
+        target = urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+        return target, password
+    # key=value libpq form ("host=... password=...") — strip the password key
+    match = re.search(r"(?:^|\s)password=('(?:[^']|'')*'|\S+)", dsn)
+    if match:
+        password = match.group(1).strip("'")
+        target = (dsn[:match.start()] + dsn[match.end():]).strip()
+        return target, password
+    return dsn, None
+
+
+def configure_db(dsn: str) -> tuple[str, dict]:
+    """Password-free psql target plus the child env that carries PGPASSWORD."""
+    target, password = split_dsn(dsn)
+    env = dict(os.environ)
+    env["PGAPPNAME"] = "rls-isolation-check"
+    if password:
+        env["PGPASSWORD"] = password
+    return target, env
+
+
 def main() -> int:
     url = load_database_url()
     sql = build_sql()
 
-    env = dict(os.environ)
-    env["PGAPPNAME"] = "rls-isolation-check"
+    target, env = configure_db(url)
     proc = subprocess.run(
-        ["psql", url, "-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-f", "-"],
+        ["psql", target, "-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-f", "-"],
         input=sql,
         capture_output=True,
         text=True,

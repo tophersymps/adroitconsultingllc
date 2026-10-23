@@ -46,6 +46,7 @@ import sys
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
+from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_AUTH_HOST = "ep-noisy-glade-b7jpeudp.neonauth.c-13.us-east-1.aws.neon.tech"
@@ -121,10 +122,60 @@ def load_dotenv() -> None:
             os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
+PSQL_TARGET = ""
+PSQL_PASSWORD: str | None = None
+
+
+def split_dsn(dsn: str) -> tuple[str, str | None]:
+    """Split a libpq URL into (password-free target, password).
+
+    The password must never travel on argv (CWE-214): every process on the host
+    can read another process's command line, and shell history keeps it.
+    """
+    if "://" in dsn:
+        parts = urlsplit(dsn)
+        netloc = parts.netloc
+        password = None
+        if "@" in netloc:
+            userinfo, host = netloc.rsplit("@", 1)
+            if ":" in userinfo:
+                user, raw_password = userinfo.split(":", 1)
+                password = unquote(raw_password)
+                userinfo = quote(user, safe="")
+            netloc = f"{userinfo}@{host}"
+        target = urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+        return target, password
+    # key=value libpq form ("host=... password=...") — strip the password key
+    match = re.search(r"(?:^|\s)password=('(?:[^']|'')*'|\S+)", dsn)
+    if match:
+        password = match.group(1).strip("'")
+        target = (dsn[:match.start()] + dsn[match.end():]).strip()
+        return target, password
+    return dsn, None
+
+
+def configure_db(dsn: str) -> None:
+    """Record the DSN for psql without ever putting the password on argv."""
+    global PSQL_TARGET, PSQL_PASSWORD
+    PSQL_TARGET, PSQL_PASSWORD = split_dsn(dsn)
+
+
+def psql_target_and_env(db_url: str | None) -> tuple[str, dict]:
+    """Password-free psql target plus the child env that carries PGPASSWORD."""
+    target, password = (PSQL_TARGET, PSQL_PASSWORD) if db_url is None else split_dsn(db_url)
+    if not target:
+        raise RuntimeError("configure_db() must run before psql_target_and_env()")
+    env = dict(os.environ)
+    if password:
+        env["PGPASSWORD"] = password
+    return target, env
+
+
 def sql(query: str, *, db_url: str) -> str:
+    target, env = psql_target_and_env(db_url)
     proc = subprocess.run(
-        ["psql", db_url, "-X", "-q", "-A", "-F", "\t", "-t", "-v", "ON_ERROR_STOP=1", "-c", query],
-        capture_output=True, text=True, timeout=60,
+        ["psql", target, "-X", "-q", "-A", "-F", "\t", "-t", "-v", "ON_ERROR_STOP=1", "-c", query],
+        capture_output=True, text=True, timeout=60, env=env,
     )
     if proc.returncode != 0:
         raise RuntimeError(f"psql failed: {proc.stderr.strip()}")
@@ -186,9 +237,10 @@ def check_function(db_url: str, user_id: str) -> None:
     SELECT public.provision_public_user(gen_random_uuid());   -- unknown id: no-op, no raise
     ROLLBACK;
     """
-    proc = subprocess.run(["psql", db_url, "-X", "-q", "-A", "-F", "|", "-t",
+    target, env = psql_target_and_env(db_url)
+    proc = subprocess.run(["psql", target, "-X", "-q", "-A", "-F", "|", "-t",
                            "-v", "ON_ERROR_STOP=1"],
-                          input=script, capture_output=True, text=True, timeout=60)
+                          input=script, capture_output=True, text=True, timeout=60, env=env)
     if proc.returncode != 0:
         record("function.runs", False, expected="psql exit 0", detail=proc.stderr.strip()[-500:])
         return
@@ -375,6 +427,8 @@ def main() -> int:
     db_url = os.environ.get("DATABASE_URL_UNPOOLED") or os.environ.get("DATABASE_URL")
     if not db_url:
         raise SystemExit("DATABASE_URL_UNPOOLED (or DATABASE_URL) is required")
+    # CWE-214: the DSN password moves to PGPASSWORD, never onto psql's argv.
+    configure_db(db_url)
     auth_url = args.auth_url.rstrip("/")
     data_url = args.data_url.rstrip("/")
 
