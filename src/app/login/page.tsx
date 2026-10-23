@@ -8,7 +8,7 @@
  */
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import Link from "next/link";
@@ -32,9 +32,15 @@ function LoginForm() {
   const [info, setInfo] = useState<string | null>(null);
   const [unconfirmed, setUnconfirmed] = useState(false);
   const [isPending, startTransition] = useTransition();
+  // `isPending` only flips on the next render, so a fast double submit (double
+  // click, Enter + click, an automated retry) can fire two POSTs — and two
+  // verification emails (t_9690dda0). Reserve the in-flight slot synchronously.
+  const inFlight = useRef(false);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (inFlight.current) return;
+    inFlight.current = true;
     setError(null);
     setInfo(null);
     setUnconfirmed(false);
@@ -79,11 +85,15 @@ function LoginForm() {
         router.refresh();
       } catch {
         setError("Network error. Please try again.");
+      } finally {
+        inFlight.current = false;
       }
     });
   }
 
   function handleResend() {
+    if (inFlight.current) return;
+    inFlight.current = true;
     startTransition(async () => {
       try {
         await fetch("/api/auth/resend-confirmation", {
@@ -96,6 +106,8 @@ function LoginForm() {
         setError(null);
       } catch {
         setError("Network error. Please try again.");
+      } finally {
+        inFlight.current = false;
       }
     });
   }
