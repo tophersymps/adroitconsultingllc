@@ -1384,6 +1384,1081 @@ export const learnSeries: LearningSeries[] = [
     "curriculumLessons": 90
   },
   {
+    "slug": "ai-adoption",
+    "name": "AI Adoption",
+    "description": "The Level 3 capstone of the AI at Work arc, for the person who owns AI in an organization. Lead, govern, and scale a company's AI use: adoption metrics, change management, policy, data safety, vendor evaluation, security and privacy ownership, budgeting, ROI, and the ongoing program. Vendor-agnostic for a non-technical owner.",
+    "gradient": "from-emerald-500 to-purple-600",
+    "lessons": [
+      {
+        "slug": "the-adoption-owners-job-from-rollout-to-running-program",
+        "title": "Lesson 1: The Adoption Owner's Job: From Rollout to Running Program",
+        "series": "ai-adoption",
+        "lesson": 1,
+        "excerpt": "Someone in your organization has to own AI, not just launch it. This first lesson draws the line between a rollout, a bounded project with a finish line, and a running program, an ongoing discipline with no end date. It defines the adoption owner's real job, walks through one person making that shift, and ends with a try-it exercise that maps who owns AI in your organization today.",
+        "date": "September 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Adoption",
+          "Leadership"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "where-ai-already-creates-value-in-an-org",
+        "title": "Lesson 2: Where AI Already Creates Value in an Org (and Where It Does Not)",
+        "series": "ai-adoption",
+        "lesson": 2,
+        "excerpt": "AI use is nearly universal but enterprise value stays rare, and the gap is not random. This lesson gives you a way to read any piece of work and judge whether AI can genuinely improve it. It defines the characteristics of value-ready work, shows where the survey data says value actually concentrates, draws both a worked example and a try-it exercise that score your own organization's functions, and ends with the next lesson on measuring outcomes.",
+        "date": "September 23, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "LLMs",
+          "AI Adoption",
+          "Leadership"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "measuring-what-matters-time-saved-quality-usage-churn",
+        "title": "Lesson 3: Measuring What Matters: Time Saved, Quality, Usage, and Churn",
+        "series": "ai-adoption",
+        "lesson": 3,
+        "excerpt": "Almost every organization uses AI and almost none can prove it is paying off. This lesson gives you the four metrics that turn adoption from a belief into a number: time saved, quality, usage, and churn. It defines each one, separates outcome metrics from activity metrics, shows why speed without quality is the fastest road to confident error, and builds a worked example that measures one pilot against all four. It ends with the next lesson on auditing where your organization actually is.",
+        "date": "September 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "LLMs",
+          "AI Adoption",
+          "Leadership"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "the-adoption-baseline-audit-where-your-org-actually-is",
+        "title": "Lesson 4: The Adoption Baseline: Audit Where Your Organization Actually Is",
+        "series": "ai-adoption",
+        "lesson": 4,
+        "excerpt": "Almost everyone in your organization may already be using AI, and almost none of it may be sanctioned, measured, or visible to leadership. Before you can set goals, govern use, or prove value, you need an honest baseline. This lesson defines the adoption audit, shows why the gap between what leaders believe and what workers do is so wide, and gives you the four tracks that map where your org actually is.",
+        "date": "September 25, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "LLMs",
+          "AI Adoption",
+          "Leadership"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "setting-realistic-goals-and-a-north-star-metric",
+        "title": "Lesson 5: Setting Realistic Goals and a North-Star Metric",
+        "series": "ai-adoption",
+        "lesson": 5,
+        "excerpt": "A goal like 'we want more people to use AI' is a wish, not a plan. This lesson gives you the vocabulary to do better: goals, metrics, targets, a north-star metric, and a guardrail that keeps the whole system honest. You will learn how to pick one number that captures whether AI is actually moving the organization, how to set targets that are ambitious enough to matter and honest enough to hit, and how to ground every number in the baseline you built in Lesson 4.",
+        "date": "September 27, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "LLMs",
+          "AI Adoption",
+          "Leadership"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "change-management-past-the-30-day-on-ramp",
+        "title": "Lesson 6: Change Management Past the 30-Day On-Ramp",
+        "series": "ai-adoption",
+        "lesson": 6,
+        "excerpt": "The launch is over and the novelty is fading. This is where most AI programs quietly die, not because the tool is bad but because nobody planned for the change to stick. This lesson gives you the change-management toolkit for the period after the on-ramp: why a 30-day window is far too short, how to create short-term wins, consolidate gains, and anchor the new way of working into how your organization actually operates.",
+        "date": "September 27, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Change Management"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "sustaining-momentum-when-novelty-wears-off",
+        "title": "Lesson 7: Sustaining Momentum When Novelty Wears Off",
+        "series": "ai-adoption",
+        "lesson": 7,
+        "excerpt": "The first few weeks of an AI rollout are easy to misread. Usage spikes, everyone is curious, and it looks like the program is working. Then the novelty fades and the numbers start to slide. Most leaders treat that slide as a failure. It is not. It is the normal shape of adoption, and whether the program survives depends on what you do at that exact moment. This lesson defines the novelty effect, shows you how to tell a real gain in momentum from a one-time spike, and gives you a four-part cadence for keeping adoption alive after enthusiasm wears off.",
+        "date": "September 28, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Momentum"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "champions-and-power-users-building-an-internal-support-network",
+        "title": "Lesson 8: Champions and Power Users: Building an Internal Support Network",
+        "series": "ai-adoption",
+        "lesson": 8,
+        "excerpt": "Adoption that depends on one owner's energy is fragile, and adoption that depends on the launch team's enthusiasm ends when the project ends. The organizations that make AI stick build a human support network inside their own walls: a small group of peers who are trusted, who model the new way of working, and who answer questions the way a colleague would. This lesson defines the roles, explains why peer support outlives authority, and gives you a buildable plan for selecting, structuring, and sustaining your champions and power users past go-live.",
+        "date": "September 29, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Champions"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "communicating-ai-wins-and-setbacks-honestly",
+        "title": "Lesson 9: Communicating AI Wins (and Setbacks) Honestly",
+        "series": "ai-adoption",
+        "lesson": 9,
+        "excerpt": "How an organization talks about AI is a load-bearing part of adoption. Overstate the wins and people stop trusting what you say. Hide the setbacks and they stop bringing you problems until it is too late. This lesson defines what honest AI communication actually means, shows you why both failure modes damage the program, and gives you a reporting cadence that reports wins and losses with the same plain accuracy, so the trust you build survives the first real failure.",
+        "date": "September 30, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Communication"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "addressing-fear-and-skepticism-as-a-leader",
+        "title": "Lesson 10: Addressing Fear and Skepticism as a Leader",
+        "series": "ai-adoption",
+        "lesson": 10,
+        "excerpt": "Most of your workforce is not neutral about AI. Roughly half are worried about what it means for their jobs, and a meaningful share are quietly hostile to the whole idea. This lesson separates the two reactions you actually face, fear and skepticism, shows why arguing either one away backfires, and gives you a practical way to address the concern underneath before it hardens into resistance that stalls your program.",
+        "date": "October 1, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Change Management"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "training-that-scales-beyond-the-initial-rollout",
+        "title": "Lesson 11: Training That Scales: Beyond the Initial Rollout",
+        "series": "ai-adoption",
+        "lesson": 11,
+        "excerpt": "The launch training is not the training. People sit through the onboarding sessions, nod, use the tool for a week, and then drift back to the old way of working, not because they are resistant but because a one-time training event was never designed to change a daily habit. This lesson defines the transfer gap, the difference between learning a skill in a session and applying it on the job, and shows why cramming everyone into one training push produces weak retention. It gives you two scalable methods to replace the one-time event: spaced reinforcement that re-engages people after the classroom moment has passed, and a training model that builds the capability to teach inside your own teams instead of depending on you or an outside vendor. By the end you will have a plan for training that survives contact with the real working week.",
+        "date": "October 2, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Training"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "handling-the-it-failed-me-once-recovery",
+        "title": "Lesson 12: Handling the 'It Failed Me Once' Recovery",
+        "series": "ai-adoption",
+        "lesson": 12,
+        "excerpt": "A person tries the tool. It gives them a bad answer. They conclude the whole thing does not work, and they quietly retreat. This is not stubbornness. It is a documented psychological pattern called algorithm aversion, in which people give up on a machine after a single error more readily than they would forgive a human for the same mistake. This lesson defines that pattern, shows why one failure can cost you the trust that weeks of training built, and gives you a recovery playbook: calibrate expectations before the first use, reframe the failure honestly, and rebuild confidence through low-stakes, explained retries. It ends with the next lesson, on feedback loops that learn from what people actually use.",
+        "date": "October 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Trust"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "feedback-loops-learning-from-what-people-actually-use",
+        "title": "Lesson 13: Feedback Loops: Learning from What People Actually Use",
+        "series": "ai-adoption",
+        "lesson": 13,
+        "excerpt": "Most adoption owners run their program on what people say they will do, or say they are doing, and that is not the same thing as what they actually do. This lesson defines the feedback loop, the discipline of learning from real behavior instead of stated intention. It shows you why self-reports and surveys routinely overstate use, how the signals users leave while they work (and stop working) are more honest than anything they tell you, and how to close the loop so the program improves instead of going stale. It ends with the next lesson, on setting the bar for human supervision of AI output.",
+        "date": "October 4, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Feedback"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "the-human-in-the-loop-supervision-bar",
+        "title": "Lesson 14: The Human-in-the-Loop Supervision Bar for Your Org",
+        "series": "ai-adoption",
+        "lesson": 14,
+        "excerpt": "The most common AI oversight failure is not too little supervision. It is supervision that is scattered, unlabeled, and left to each employee to decide. This lesson gives you a supervision bar: a risk-based line that decides when an AI output needs a human sign-off before it leaves your org, and when it can run on its own. You will learn the difference between reviewing every output and reviewing the right outputs, how to set the bar so people actually check instead of rubber-stamp, and how to make the bar enforceable without adding bureaucracy nobody follows.",
+        "date": "October 5, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "writing-an-ai-policy-a-non-technical-owner-can-own",
+        "title": "Lesson 15: Writing an AI Policy a Non-Technical Owner Can Own",
+        "series": "ai-adoption",
+        "lesson": 15,
+        "excerpt": "Most companies do not actually have a usable AI policy. A 2025 survey found that only 36% of employees say their company has a formal AI policy at all, and only 41% tell a manager or seek permission before using AI on the job. Even when a policy exists, it is often a dense legal document that nobody reads and nobody can update. This lesson gives you a policy you can actually own: a plain-language AI acceptable use policy built from five pillars, a data rule your team can remember, and a review rhythm that keeps it current when the tools change.",
+        "date": "October 6, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "data-safety-what-employees-can-and-cannot-put-in-tools",
+        "title": "Lesson 16: Data Safety: What Employees Can and Cannot Put in Tools",
+        "series": "ai-adoption",
+        "lesson": 16,
+        "excerpt": "The single most important thing to understand about an AI tool is that whatever you put into it leaves your building. A pasted paragraph travels to the vendor's servers, where it may be stored, retained, and used to train the model. This lesson gives you the mental model that decides what employees can and cannot put into a tool, built on a four-level data classification you can teach in ten minutes. You will learn what PII is and why it is the first thing to protect, why a free public tool and an approved enterprise tool are not the same risk, and a simple decision routine your team can run before they paste anything.",
+        "date": "October 7, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Data"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "vendor-evaluation-assessing-ai-tools-before-purchase",
+        "title": "Lesson 17: Vendor Evaluation: Assessing AI Tools Before Purchase",
+        "series": "ai-adoption",
+        "lesson": 17,
+        "excerpt": "Most AI purchases are decided by a demo and signed before anyone asks the questions that actually matter: where does our data go, what does it cost to leave, and what obligations land on us after the signature? This lesson treats vendor evaluation as a risk decision, not comparison shopping. It defines the terms you need, walks through a weighted evaluation rubric applied to two real candidates for the same use case, and ends with a try-it exercise that scores a tool under consideration in your own organization against criteria that reflect your risk posture rather than a vendor's marketing.",
+        "date": "October 8, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Procurement"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "licensing-and-procurement-what-you-are-actually-buying",
+        "title": "Lesson 18: Licensing and Procurement: What You Are Actually Buying",
+        "series": "ai-adoption",
+        "lesson": 18,
+        "excerpt": "The demo ended and the contract arrived. This lesson is about what you are actually buying when you sign for an AI tool: a bundle of rights, costs, and risks that no sales call will show you. It defines the licensing models you will be quoted (per seat, per token, per activity, per outcome, and the hybrid most vendors actually sell), walks a worked example that prices the same assistant three different ways and shows how wildly the annual bill and its predictability can differ, then takes you clause by clause through the contract language that hides the real deal: who owns the outputs, whether your data trains the model, who pays when the output is wrong, and what happens when the vendor changes the model or silently renews the term. It ends with a try-it exercise that reads the AI agreement your organization is actually considering and decides, before you sign, what you are really buying.",
+        "date": "October 9, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Procurement"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "security-ownership-threat-model-for-your-ai-stack",
+        "title": "Lesson 19: Security Ownership: Threat Model for Your AI Stack",
+        "series": "ai-adoption",
+        "lesson": 19,
+        "excerpt": "You procured the tool in Lesson 18 and read the contract, but the contract names the vendor's liabilities, not anyone inside your company who answers when the tool is running. This lesson is about deciding, plainly and before an incident, what could actually go wrong with your AI stack and whose job it is to catch and answer each failure. It defines a threat model in plain language, adapts it to the specific ways AI breaks security assumptions, walks a worked example that builds a threat map for one real AI use case and scores each risk, then gives you a procedure for assigning a named owner to every risk so security is a set of accountable jobs rather than a vague wish that IT handles it.",
+        "date": "October 10, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "shadow-it-discovering-and-governing-unsanctioned-ai",
+        "title": "Lesson 20: Shadow IT: Discovering and Governing Unsanctioned AI",
+        "series": "ai-adoption",
+        "lesson": 20,
+        "excerpt": "Your people are already using AI tools you never approved, and banning them makes it worse. This lesson is about shadow IT in its newest form: the unsanctioned AI that has already arrived before you know it exists. It defines the terms, shows why prohibition fails, walks you through a concrete discovery and triage of a real inventory, and ends with a try-it exercise that finds and governs the shadow AI in your own organization. The goal is not detection theater. It is a repeatable loop that turns invisible usage into a governed, usable inventory.",
+        "date": "October 11, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "privacy-compliance-gdpr-ccpa-and-your-ai-use",
+        "title": "Lesson 21: Privacy Compliance: GDPR, CCPA, and Your AI Use",
+        "series": "ai-adoption",
+        "lesson": 21,
+        "excerpt": "AI training and inference run on personal data, which means your AI use is anchored to privacy law whether you planned for it or not. This lesson walks a non-technical owner through the two frameworks you are most likely to meet: the EU General Data Protection Regulation (GDPR) and California's Consumer Privacy Act (CCPA). It defines personal data and automated decision-making, explains what each law actually requires of an organization that runs AI, separates the real obligations from the myths, and gives you a plain checklist for figuring out which rules apply to your own AI use cases before a regulator does.",
+        "date": "October 12, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Privacy"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "incident-response-when-an-ai-tool-goes-wrong",
+        "title": "Lesson 22: Incident Response: When an AI Tool Goes Wrong",
+        "series": "ai-adoption",
+        "lesson": 22,
+        "excerpt": "Every AI program eventually hits the moment a tool fails, and the difference between a bad outcome and a disaster is whether you had a plan before it happened. This lesson teaches a non-technical owner how to respond when an AI tool goes wrong. It defines what an AI incident actually is, separates an incident from a near miss, walks you through a concrete response sequence, and ends with a try-it exercise that builds your own incident response plan before you need it.",
+        "date": "October 13, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "model-and-provider-risk-dependency-and-lock-in",
+        "title": "Lesson 23: Model and Provider Risk: Dependency and Lock-In",
+        "series": "ai-adoption",
+        "lesson": 23,
+        "excerpt": "Most of the AI in your organization runs on models and services someone else built and controls. That dependency is a risk, and it is easy to underestimate. This lesson teaches a non-technical owner where model and provider risk lives, what lock-in actually costs, and how to build resilience into an AI program so a vendor's model change, outage, price increase, or shutdown does not become your incident. It defines the terms, works a concrete example where a provider retires the exact model a team built around, and ends with a try-it exercise that turns your top AI tool into a one-page dependency and exit plan.",
+        "date": "October 14, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "intellectual-property-your-data-your-outputs",
+        "title": "Lesson 24: Intellectual Property: Your Data, Your Outputs",
+        "series": "ai-adoption",
+        "lesson": 24,
+        "excerpt": "When your team uses AI, two things leave your control: the data you put in and the outputs you get out. Both raise ownership questions that most organizations never answer until a dispute, a registration, or an audit forces them. This lesson teaches a non-technical owner where the intellectual property risk in AI actually lives. You will learn that copyright only protects what a human wrote, that a contract saying you own an output cannot manufacture a copyright the law does not recognize, that the vendor's right to train on your data is the single most important clause to check, and how to protect the outputs your business actually depends on.",
+        "date": "October 15, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "guardrails-for-agentic-and-automated-ai",
+        "title": "Lesson 25: Guardrails for Agentic and Automated AI",
+        "series": "ai-adoption",
+        "lesson": 25,
+        "excerpt": "The moment AI stops waiting for you and starts acting on its own, the rules of oversight change. This lesson is about guardrails: the boundaries and controls that keep an automated or agentic AI system inside its lane even when the model is wrong, stubborn, or tricked. You will learn what agentic AI is and how it differs from the tools you have already governed, why guardrails must be deterministic when the model is probabilistic, and how to build five families of guardrails: scope, permission, reversibility, observability, and containment. A worked example shows a leader letting an automation run while keeping the failures cheap and reversible.",
+        "date": "October 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "auditing-ai-use-on-a-regular-cadence",
+        "title": "Lesson 26: Auditing AI Use on a Regular Cadence",
+        "series": "ai-adoption",
+        "lesson": 26,
+        "excerpt": "Setting up an AI policy is a start. Knowing it is still true is a separate, repeated job. This lesson is about auditing: the scheduled, evidence-based check that your AI inventory, your policy, your controls, and your real usage still match. You will learn the difference between an audit and continuous monitoring, why a calendar cadence is what keeps a governance program honest, how to define a concrete scope and pull evidence instead of opinions, and how to turn each audit into a short list of fixes you can actually schedule. A worked example walks through a quarterly audit that catches a license mismatch, a drift in tool usage, and a stale policy before any of them became an incident. The lesson ends with a try-it that runs your own first audit and a teaser for the next lesson on budgeting AI spend across teams.",
+        "date": "October 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "budgeting-ai-spend-across-teams",
+        "title": "Lesson 27: Budgeting AI spend across teams",
+        "series": "ai-adoption",
+        "lesson": 27,
+        "excerpt": "AI spend does not act like the software budgets you already run. It is partly fixed and partly usage-driven, it scales to match adoption, and it spikes exactly when a workflow succeeds. This lesson gives you a way to budget for that: split the spend into a central foundation, seats sized to the people who actually use the tools, and a capped, attributed pool for the usage that grows. You will learn why per-seat and usage-based pricing behave differently, how showback and chargeback turn visibility into ownership, and how to run a monthly review with unit economics instead of a guess. A worked example shows a mid-size company building a whole-year AI budget and putting controls on the volatile part.",
+        "date": "October 18, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Finance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "proving-the-ai-programs-roi-to-the-business",
+        "title": "Lesson 28: Proving the AI program's ROI to the business",
+        "series": "ai-adoption",
+        "lesson": 28,
+        "excerpt": "Adoption is everywhere in most organizations and the financial proof is not. This lesson closes that gap. It defines ROI, baseline, and total cost of ownership for AI, lays the evidence out in four layers so a CFO can read it, and stress tests the headline number so you never hand finance a claim that collapses. A worked example turns a support automation pilot into a realized return, and a try-it prompt builds one case you can defend before the next budget conversation. It ends with the next lesson on scaling from pilot to org-wide.",
+        "date": "October 19, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Finance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "scaling-from-pilot-to-org-wide",
+        "title": "Lesson 29: Scaling from Pilot to Org-Wide",
+        "series": "ai-adoption",
+        "lesson": 29,
+        "excerpt": "A pilot that proves value and a program that runs at scale are two different things, and most organizations are stuck between them. This lesson defines the terms, shows why scaling breaks what the pilot proved, walks you through the four phases and decision gates that get a use case from pilot to business as usual, and ends with a try-it exercise that builds a scale decision gate for one of your own pilots. It is the lesson where one credible use case becomes a portfolio.",
+        "date": "October 20, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Strategy"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "building-a-cross-functional-ai-council-or-governance-group",
+        "title": "Lesson 30: Building a Cross-Functional AI Council or Governance Group",
+        "series": "ai-adoption",
+        "lesson": 30,
+        "excerpt": "A scaling discipline run by one person, however good, is still a personal system, and personal systems do not survive contact with the rest of the company. This lesson turns the program into the organization's: it defines what an AI council is and what it is not, shows why advisory bodies without decision rights become governance theater, walks through the cross-functional membership, decision rights, and escalation lines a council actually needs, and builds a worked example of a council that owns approving, pausing, and stopping AI use. It ends with the next lesson on standardizing tools and avoiding pile-up.",
+        "date": "October 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "standardizing-tools-and-avoiding-pile-up",
+        "title": "Lesson 31: Standardizing tools and avoiding pile-up",
+        "series": "ai-adoption",
+        "lesson": 31,
+        "excerpt": "Tool pile-up is what happens when buying is easy, approving is slow, and nobody owns the list of what the company runs. This lesson gives you the standard stack: a short, owned list of primary tools mapped to the jobs people actually do, plus a written path for the exceptions. You will learn how to inventory what is really in use (including the subscriptions on company cards and the AI tiers hidden inside existing software), how to classify tools by job instead of by feature, how to consolidate at renewal rather than someday, and how to keep the stack from refilling. A worked example takes an organization from twenty AI tools down to seven without losing a single workflow.",
+        "date": "October 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "access-and-licensing-rollout-at-scale",
+        "title": "Lesson 32: Access and licensing rollout at scale",
+        "series": "ai-adoption",
+        "lesson": 32,
+        "excerpt": "A rollout is two systems wearing one name. Access decides who can open the tool, what they can reach inside it, and when that access ends. Licensing decides what you are committed to pay for, how seats move between people, and how you get them back. This lesson defines the vocabulary, compares per-seat and consumption licensing and what each one does to your ability to shrink, walks the provisioning chain from identity provider to platform seat, and shows the seat funnel that turns purchased licenses into habitual use. A worked example takes a 1,650-person insurer from a 1,000-seat annual commitment to a 820-seat renewal without losing anyone who actually uses the tool.",
+        "date": "October 23, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Operations"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 32,
+    "curriculumLessons": 40
+  },
+  {
+    "slug": "ai-power-user",
+    "name": "AI Power User",
+    "description": "The Level 2 follow-on to AI at Work for professionals who use AI daily and want to build and own their own automations: designing repeatable workflows, making them reliable, and sustaining them. Vendor-agnostic and buildable without code.",
+    "gradient": "from-cyan-500 to-purple-600",
+    "lessons": [
+      {
+        "slug": "from-user-to-power-user-owning-your-workflow",
+        "title": "Lesson 1: From User to Power User: What Owning Your Workflow Means",
+        "series": "ai-power-user",
+        "lesson": 1,
+        "excerpt": "You already use AI every day. This lesson is about the step between using a tool and owning a workflow: what separates a user from a power user, what it actually means to own the way you work, and why the payoff lives in a small slice of your recurring tasks. It defines the terms, walks through one person making the shift, and ends with a try-it prompt that starts the audit you will run in Lesson 2.",
+        "date": "September 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "auditing-how-you-actually-work-finding-the-repetitive-20-percent",
+        "title": "Lesson 2: Auditing How You Actually Work: Finding the Repetitive 20 Percent",
+        "series": "ai-power-user",
+        "lesson": 2,
+        "excerpt": "Lesson 1 told you the payoff lives in the repetitive slice of your work. This lesson gives you the method to find that slice honestly: a time audit that measures where your week actually goes, a way to separate the tasks worth automating from the ones that are not, and a concrete worked example of one person running the audit. It ends with a try-it prompt that produces your own list of the repetitive 20 percent, ready for Lesson 3.",
+        "date": "September 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "decomposing-a-task-into-a-repeatable-flow-input-tool-output-review",
+        "title": "Lesson 3: Decomposing a Task into a Repeatable Flow: Input, Tool, Output, Review",
+        "series": "ai-power-user",
+        "lesson": 3,
+        "excerpt": "Lesson 2 gave you a named task, the frequent, same-shaped, low-risk one. This lesson turns that task into a flow by decomposing it into the four parts every workflow needs: input, tool, output, and review. It defines each part, walks through one person decomposing their weekly status email, and ends with a try-it prompt that produces your own four-part design, ready for Lesson 4.",
+        "date": "September 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "building-a-custom-tool-tailored-instructions-saved-context-your-own-project",
+        "title": "Lesson 4: Building a Custom Tool: Tailored Instructions, Saved Context, Your Own Project",
+        "series": "ai-power-user",
+        "lesson": 4,
+        "excerpt": "Lesson 3 decomposed your task into input, tool, output, and review, and you named the tool part. This lesson builds that tool properly. It defines what a custom tool is, why one prompt and a bit of setup beats re-explaining yourself every time, and how the three pieces, tailored instructions, saved context, and a project of your own, come together to give you something you control. A worked example follows one person building theirs, and a try-it prompt walks you through your own.",
+        "date": "September 23, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Custom Tools"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "connected-tools-stitching-the-apps-you-already-use",
+        "title": "Lesson 5: Connected Tools: Stitching the Apps You Already Use",
+        "series": "ai-power-user",
+        "lesson": 5,
+        "excerpt": "Lesson 4 gave you a custom tool built to your task. This lesson turns outward. It stitches the apps you already use into one connected flow, so one app's output feeds the next app's input instead of stopping at the chat window. It defines connected workflows, explains the handoff that makes them work, walks through the pattern tool-agnostically, and ends with a try-it prompt that maps a two-step chain of your own.",
+        "date": "September 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Connected Tools"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "structured-output-getting-data-back-in-a-format-downstream-tools-can-consume",
+        "title": "Lesson 6: Structured Output: Getting Data Back in a Format Downstream Tools Can Consume",
+        "series": "ai-power-user",
+        "lesson": 6,
+        "excerpt": "A connected workflow hands one step's output to the next, and that only works when the output arrives in a shape the next step can read. This lesson defines structured output, plain words for the JSON format at its center, and why a table or list beats a paragraph when a downstream tool is doing the consuming. A worked example follows one person turning meeting notes into actions a tracker can read, and a try-it prompt walks you through getting your own output into a shape that carries.",
+        "date": "September 25, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Structured Output"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "parameterized-prompts-templates-that-scale",
+        "title": "Lesson 7: Templates That Scale: Parameterized Prompts You Reuse With Different Inputs",
+        "series": "ai-power-user",
+        "lesson": 7,
+        "excerpt": "Lesson 6 fixed the shape of your answer. This lesson fixes the shape of your question: a template prompt you write once and reuse run after run with only a few variable slots filled fresh. It defines a parameterized prompt in plain words, shows why a stable frame beats re-deciding everything each time, and walks a worked example of someone turning a recurring weekly task into one reusable prompt. A try-it prompt gets you building your own template, and the close points at the real skill behind it: knowing when a task earns a template at all.",
+        "date": "September 28, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Prompt Templates"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "choosing-what-to-own-when-a-one-off-is-better-than-a-workflow",
+        "title": "Lesson 8: Choosing What to Own: When a One-Off Is Better Than a Workflow",
+        "series": "ai-power-user",
+        "lesson": 8,
+        "excerpt": "Lessons 3 through 7 taught you how to build workflows. This lesson is the discipline of choosing what to own, and it is the judgment that decides where all that building effort goes. It defines a one-off against a workflow, names the real cost of ownership (build cost plus the maintenance you carry forever), and gives you a three-question test for whether a task deserves a workflow at all. A worked example shows someone deciding one task earns a workflow while another stays a one-off, and a try-it prompt gets you running the test on your own work.",
+        "date": "September 29, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Ownership"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "versioning-your-tools-and-instructions-knowing-what-changed-and-why",
+        "title": "Lesson 9: Versioning Your Tools and Instructions: Knowing What Changed and Why",
+        "series": "ai-power-user",
+        "lesson": 9,
+        "excerpt": "A workflow that worked last month stops working this month, and you cannot say what changed. That is a version problem, not an AI problem. This lesson defines a version, a baseline, a changelog, and a rollback in plain words, shows why a running record of changes is the only reliable way to know what broke (and how to get the good version back), and walks a worked example of someone tracing a broken report back to a single tweak. A try-it prompt gets you building a one-line-per-change log for your own tools and instructions, and the close points at the underlying habit: treating every change as something you can name, date, and undo.",
+        "date": "September 30, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "8 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Versioning"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "testing-a-workflow-dry-runs-edge-cases-catching-bad-output",
+        "title": "Lesson 10: Testing a Workflow: Dry Runs, Edge Cases, and Spotting Bad Output Before It Ships",
+        "series": "ai-power-user",
+        "lesson": 10,
+        "excerpt": "The workflow you trust produced wrong output, and you only found out after it shipped. That is a testing problem, not a bad-luck problem. This lesson defines a dry run, an edge case, and bad output in plain words, shows why checking a workflow before it acts for real is the difference between catching a mistake and living with it, and walks a worked example of someone dry-running a report, probing awkward inputs, and catching a confident-looking error before anyone saw it. A try-it prompt gets you wrapping your own tool in a check-before-you-trust routine, and the close points at the underlying habit: treat whatever the tool produces as unverified until you run it somewhere safe first.",
+        "date": "October 1, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Testing"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "handling-failure-silent-errors-hallucinations-tools-that-break-mid-flow",
+        "title": "Lesson 11: Handling Failure: Silent Errors, Hallucinations, and Tools That Break Mid-Flow",
+        "series": "ai-power-user",
+        "lesson": 11,
+        "excerpt": "Testing reduces the chance a bad output ships, but it cannot make failure impossible. This lesson is the plan for when something goes wrong anyway. It defines a silent error, where a step fails and nothing tells you, a hallucination, where the output is confidently wrong and your check may still miss it, and a mid-flow break, where the automation stops partway and you have to pick it up. A worked example shows Priya catching each of the three in her own workflow, and a try-it prompt gets you writing a failure plan for one of yours. The close points at the next lesson on scheduling and triggers, the cadence that decides how often your workflow runs and what happens when a run does not finish.",
+        "date": "October 2, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Failure"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "scheduling-and-triggers-cadence-batching-queues-event-hooks",
+        "title": "Lesson 12: Scheduling and Triggers: Cadence, Batching, Queues, and Event Hooks",
+        "series": "ai-power-user",
+        "lesson": 12,
+        "excerpt": "A workflow that only runs when you remember to start it is not yet owned. This lesson is the rhythm that makes a workflow run on its own. It defines cadence, the schedule that decides how often your automation runs, draws the line between a scheduled run and a triggered run, and walks the four choices that control the rhythm: how often it runs, whether it processes work one item at a time or in a batch, how it handles work that arrives faster than it can keep up, and whether it starts on a clock or on an event. A worked example shows Priya taking her monthly vendor summary and turning it into a cadence she sets once and stops thinking about. A try-it prompt gets you defining the cadence for one of your own workflows, and the close points at the next lesson on review gates, the human checkpoints that make a workflow you can trust.",
+        "date": "October 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Scheduling"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "review-gates-human-checkpoints-built-in-not-bolted-on-after",
+        "title": "Lesson 13: Review Gates: Human Checkpoints Built In, Not Bolted On After",
+        "series": "ai-power-user",
+        "lesson": 13,
+        "excerpt": "A review gate is a deliberate pause in a workflow where a person checks the output before the tool acts on it. This lesson shows why the gate has to be built into the design, placed at the step where it earns its interruption, and never added on at the end as an afterthought. It defines human-in-the-loop oversight, separates a mandatory gate from a monitoring glance, and names the failure that undoes both: automation complacency. A worked example walks Priya through placing three gates in her vendor summary so it can run unattended without eroding her judgment. A try-it prompt maps a workflow of yours, step by step, to the moments that deserve a human in the path. The close points at the next lesson on treating prompts like code.",
+        "date": "October 4, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "AI Power User",
+          "Workflow",
+          "Review Gates"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "treating-prompts-like-code-structure-maintainability-comments",
+        "title": "Lesson 14: Treating Your Prompts Like Code: Structure, Maintainability, Comments",
+        "series": "ai-power-user",
+        "lesson": 14,
+        "excerpt": "A prompt that works once is not the same as a prompt you can live with. This lesson is about treating your prompts like code, the way a developer treats a file they will have to read again. It defines structure, the clear sections and delimiters that let a future reader, human or model, parse what a prompt is asking, maintainability, the quality that lets you change one rule without breaking the rest, and comments, the notes that record why a rule exists and not just what it does. A worked example shows Dev recovering from a prompt that drifted into a fragile blob, and a try-it prompt gets you refactoring one of your own. The close points at the next lesson on assembling a multi-step pipeline from the pieces.",
+        "date": "October 6, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Prompt Structure"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "assembling-a-multi-step-pipeline-from-the-pieces",
+        "title": "Lesson 15: Assembling a Multi-Step Pipeline from the Pieces",
+        "series": "ai-power-user",
+        "lesson": 15,
+        "excerpt": "The pieces are built. Now they become a machine. This lesson is about assembling the components from earlier lessons into a single multi-step pipeline, one where data flows from an input step through a series of tool and review steps to a finished output. It defines a pipeline, a step, and a handoff, shows why the interface between steps is where pipelines break, and walks a worked example of someone wiring four components into one running flow. A try-it prompt gets you assembling your own pieces end to end, and the close points at the next lesson, the first full worked example of an ops and reporting workflow.",
+        "date": "October 7, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Pipeline"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "worked-example-a-an-ops-and-reporting-workflow-end-to-end",
+        "title": "Lesson 16: Worked Example A: An Ops and Reporting Workflow, End to End",
+        "series": "ai-power-user",
+        "lesson": 16,
+        "excerpt": "The pattern is built. Now watch it run. This lesson is the first full worked example of the course: a real operational and reporting job, taken from its first trigger through every step and handoff to its finished output, with the reasoning at each join made visible. It defines a worked example, an ops workflow, and a reporting workflow in plain words, then walks one person's weekly operations report end to end, showing where the pieces from earlier lessons earn their keep and where a simpler flow would have been better. A try-it prompt gets you auditing your own recurring report against the same moves, and the close points at the second worked example, a marketing and content workflow.",
+        "date": "October 8, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Reporting"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "worked-example-b-a-marketing-and-content-workflow-end-to-end",
+        "title": "Lesson 17: Worked Example B: A Marketing and Content Workflow, End to End",
+        "series": "ai-power-user",
+        "lesson": 17,
+        "excerpt": "The second full worked example of the course, and this time the job is marketing and content. It defines a marketing workflow, a content workflow, a content calendar, and a brand voice in plain words, then follows one person's weekly content production from its first trigger through the data pull, the draft, the repurpose step, the review gate, and the finished output. It shows where the pieces from earlier lessons earn their keep, where a simpler flow would have been better, and how a review gate catches a fabricated statistic before it ships. A try-it prompt gets you auditing your own recurring content against the same moves, and the close points at the next lesson, the quality bar.",
+        "date": "October 9, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Marketing",
+          "Content"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "the-quality-bar-measuring-accuracy-and-catching-regressions",
+        "title": "Lesson 18: The Quality Bar: Measuring Accuracy and Catching Regressions",
+        "series": "ai-power-user",
+        "lesson": 18,
+        "excerpt": "The quality bar lesson turns from building and running workflows to judging them. It defines a quality bar, accuracy, and a regression in plain words, explains why a working workflow can quietly stop working, and gives you a small, repeatable way to measure whether a workflow is actually good: a golden set of known-good cases you re-run after every change. It defines the it-runs versus it-works-correctly gap that makes AI output hard to judge, follows one person's weekly report through building a ten-case bar and watching it catch a regression, and points out where the bar is cheap and where it is overkill. A try-it prompt gets you building your first bar on a workflow you already trust, and the close points at the next lesson, cost and limits.",
+        "date": "October 10, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Quality",
+          "Reliability"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "cost-and-limits-token-budgets-rate-limits-and-your-tools-constraints",
+        "title": "Lesson 19: Cost and Limits: Token Budgets, Rate Limits, and Your Tool's Constraints",
+        "series": "ai-power-user",
+        "lesson": 19,
+        "excerpt": "The cost and limits lesson turns from judging a workflow to affording it. It defines a token, the unit of text a model processes, a context window, the amount a model can consider at once, a token budget, the amount a workflow can afford to spend, and a rate limit, the cap on how fast a tool will respond. It explains why bigger context windows cost more to run, why providers cap how often you can call a tool, and how a spend cap protects you from a runaway run. A worked example follows Priya as her weekly report grows until it stops fitting, then hits a rate limit, then quietly runs up her bill, and it shows the small habits that fix all three. A try-it prompt gets you auditing your own workflows for the same three constraints, and the close points at the next lesson on when automation is wrong.",
+        "date": "October 11, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Cost",
+          "Limits"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "when-automation-is-wrong-what-stays-manual-and-sunsetting-honestly",
+        "title": "Lesson 20: When Automation Is Wrong: What Stays Manual, and Sunsetting Honestly",
+        "series": "ai-power-user",
+        "lesson": 20,
+        "excerpt": "Everything before this lesson made the case for automation. This one is the honest counterweight: when automation is the wrong answer, what you should keep doing by hand, and how to retire a workflow that has stopped earning its keep. It defines automation bias, the cognitive pull that makes you over-trust a tool, and total cost of ownership, the reason every workflow quietly costs more than the hours it saves. A worked example shows Priya spotting both problems in her own stack and retiring a workflow honestly, and a try-it prompt gets you running an honest review of one of yours. The close points at the next lesson on documenting your automation stack, which is what makes every future decision about retire or keep a fast one.",
+        "date": "October 13, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Sustaining"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "documenting-your-automation-stack-a-personal-runbook",
+        "title": "Lesson 21: Documenting Your Automation Stack: A Personal Runbook",
+        "series": "ai-power-user",
+        "lesson": 21,
+        "excerpt": "An automation you cannot explain six months from now is an automation you will eventually lose. This lesson defines a runbook, a personal runbook, and the automation stack in plain words, shows why the written record matters more than the workflow itself, and walks a worked example of someone who documents their own five automations before the details slip. A try-it prompt gets you writing one runbook entry for a workflow you already run, and the close points at the habit underneath: your automations are not finished when they first work, they are finished when someone (including your future self) can run and repair them from a written page alone.",
+        "date": "October 14, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Documentation"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "sharing-advanced-workflows-team-multiplier",
+        "title": "Lesson 22: From Power User to Team Multiplier: Sharing Advanced Workflows",
+        "series": "ai-power-user",
+        "lesson": 22,
+        "excerpt": "You mastered a workflow and wrote it down in a runbook. That makes you a power user. This lesson is about the next step: turning that individual skill into capability your whole team can use. It defines a team multiplier, a shared workflow, a community of practice, and shadow AI in plain words, then follows one person turning the runbook entry from Lesson 21 into a workflow four teammates actually run, keeping the review gate, the version discipline, and the data rules intact as it spreads. A try-it prompt gets you packaging one of your own workflows for a teammate, and the close points at the next lesson, keeping current as tools and models update.",
+        "date": "October 15, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Team",
+          "Collaboration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "keeping-current-adapting-to-tool-and-model-updates",
+        "title": "Lesson 23: Keeping Current: Adapting to Tool and Model Updates",
+        "series": "ai-power-user",
+        "lesson": 23,
+        "excerpt": "Tools and models change under you, often invisibly. This lesson shows how to notice an update before it breaks a workflow, and when to ride it out versus adapt.",
+        "date": "October 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Maintenance",
+          "Updates"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "failure-post-mortem-when-a-workflow-died-what-you-do-next",
+        "title": "Lesson 24: Failure Post-Mortem: When a Workflow Died, What You Do Next",
+        "series": "ai-power-user",
+        "lesson": 24,
+        "excerpt": "A workflow that dies is not a dead end. It is a source of information. This lesson shows how to run a blameless post-mortem: separate the symptom from the root cause, trace the chain with five whys, and turn the failure into fixes that keep the same mistake from taking down the next workflow.",
+        "date": "October 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Reliability",
+          "Post-Mortem"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "judging-a-tools-reliability",
+        "title": "Lesson 25: The Power User's Mental Model: Judging a Tool's Reliability",
+        "series": "ai-power-user",
+        "lesson": 25,
+        "excerpt": "Before you trust a tool, a model, or a platform with a workflow, you need an honest estimate of how reliable it is. This lesson builds the mental model that separates a dependable tool from a fragile one, weighs a vendor's track record against its promises, and matches a tool's reliability to what your workflow actually needs.",
+        "date": "October 18, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Reliability",
+          "Judgment"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "building-a-personal-automation-library-that-compounds",
+        "title": "Lesson 26: Building a Personal Automation Library That Compounds",
+        "series": "ai-power-user",
+        "lesson": 26,
+        "excerpt": "Every workflow you have built so far has been a single, finished thing. This lesson is the turn where you stop collecting finished workflows and start building a library of reusable pieces, the kind that makes each new automation cheaper than the last. It defines an automation library, compounding, a reusable building block, and the DRY principle in plain words, then follows Priya as she takes four workflows she already built and extracts the parts that transfer, so her next workflow costs half the time of her first. It shows what belongs in a library, how to structure it so you can actually find the pieces, and how a compound stack is the difference between working in AI and owning your workflow. The close points at the capstone, where you stop building pieces and build a full workflow of your own, end to end.",
+        "date": "October 19, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Sustaining",
+          "Library"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "capstone-a-choose-and-scope-your-own-end-to-end-workflow",
+        "title": "Lesson 27: Capstone A: Choose and Scope Your Own End-to-End Workflow",
+        "series": "ai-power-user",
+        "lesson": 27,
+        "excerpt": "The capstone is where the course stops being a set of lessons and becomes one workflow you actually own. This first capstone lesson covers the two decisions that decide whether your build succeeds before you build anything: which workflow to take on, and how to write a scope precise enough to build from. It gives you five selection tests, a seven-part scoping template, and a worked example of Priya choosing her fifth workflow and writing the scope that Capstone B will assemble. It ends with a try-it prompt that walks you through choosing and scoping your own capstone.",
+        "date": "October 20, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Capstone"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "capstone-b-build-it-design-and-assemble",
+        "title": "Lesson 28: Capstone B: Build It (Design and Assemble)",
+        "series": "ai-power-user",
+        "lesson": 28,
+        "excerpt": "Capstone A gave you a scope and a definition of done. This lesson takes that page and turns it into a workflow that actually runs. It covers how to design the pipeline from the scope, reusing the pieces you already built instead of writing fresh ones, and how to assemble the whole thing in the right order so you find wiring mistakes early. A worked example follows Priya building her vendor risk digest against the scope and definition of done she wrote in Capstone A. It ends with a try-it prompt that assembles your capstone and runs its first dry test.",
+        "date": "October 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Capstone"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "capstone-c-harden-it-test-review-gates-reliability",
+        "title": "Lesson 29: Capstone C: Harden It (Test, Review Gates, Reliability)",
+        "series": "ai-power-user",
+        "lesson": 29,
+        "excerpt": "Capstone B left you with a workflow that passed one dry run. This lesson makes it durable. It covers three layers of hardening: a regression set of past inputs you can re-run after every change, review gates that stop a bad output instead of merely noticing it, and failure handling that makes a broken run loud, early, and cheap. A worked example follows Priya hardening her vendor risk digest and finding three real breaks before the first real month. It ends with a try-it prompt and a hardening checklist you can run against your own capstone.",
+        "date": "October 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Capstone"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "capstone-d-ship-document-and-reflect-on-the-full-stack",
+        "title": "Lesson 30: Capstone D: Ship, Document, and Reflect on the Full Stack",
+        "series": "ai-power-user",
+        "lesson": 30,
+        "excerpt": "Capstone C left you with a workflow that has been tested, gated, and instrumented. This final lesson closes the capstone by making it something other than your private knowledge: a runbook entry another person can operate from, a decision record that explains why it is built the way it is, a retro built from measured numbers rather than memory, and a handover test that proves the documentation works before you rely on it. A worked example follows Priya shipping her vendor risk digest and running the retro that changes her next build. It ends with a try-it prompt, one pass back over the whole course, and the series restarting at Lesson 1.",
+        "date": "October 23, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Capstone"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 30,
+    "curriculumLessons": 30
+  },
+  {
     "slug": "salesforce-architect",
     "name": "Salesforce System Architect Primer",
     "description": "A practical deep dive into Flow design, Apex patterns, and platform architecture for teams scaling on Salesforce.",
@@ -3518,1047 +4593,6 @@ export const learnSeries: LearningSeries[] = [
     ],
     "totalLessons": 42,
     "curriculumLessons": 42
-  },
-  {
-    "slug": "ai-adoption",
-    "name": "AI Adoption",
-    "description": "The Level 3 capstone of the AI at Work arc, for the person who owns AI in an organization. Lead, govern, and scale a company's AI use: adoption metrics, change management, policy, data safety, vendor evaluation, security and privacy ownership, budgeting, ROI, and the ongoing program. Vendor-agnostic for a non-technical owner.",
-    "gradient": "from-emerald-500 to-purple-600",
-    "lessons": [
-      {
-        "slug": "the-adoption-owners-job-from-rollout-to-running-program",
-        "title": "Lesson 1: The Adoption Owner's Job: From Rollout to Running Program",
-        "series": "ai-adoption",
-        "lesson": 1,
-        "excerpt": "Someone in your organization has to own AI, not just launch it. This first lesson draws the line between a rollout, a bounded project with a finish line, and a running program, an ongoing discipline with no end date. It defines the adoption owner's real job, walks through one person making that shift, and ends with a try-it exercise that maps who owns AI in your organization today.",
-        "date": "September 22, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Adoption",
-          "Leadership"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "where-ai-already-creates-value-in-an-org",
-        "title": "Lesson 2: Where AI Already Creates Value in an Org (and Where It Does Not)",
-        "series": "ai-adoption",
-        "lesson": 2,
-        "excerpt": "AI use is nearly universal but enterprise value stays rare, and the gap is not random. This lesson gives you a way to read any piece of work and judge whether AI can genuinely improve it. It defines the characteristics of value-ready work, shows where the survey data says value actually concentrates, draws both a worked example and a try-it exercise that score your own organization's functions, and ends with the next lesson on measuring outcomes.",
-        "date": "September 23, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "LLMs",
-          "AI Adoption",
-          "Leadership"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "measuring-what-matters-time-saved-quality-usage-churn",
-        "title": "Lesson 3: Measuring What Matters: Time Saved, Quality, Usage, and Churn",
-        "series": "ai-adoption",
-        "lesson": 3,
-        "excerpt": "Almost every organization uses AI and almost none can prove it is paying off. This lesson gives you the four metrics that turn adoption from a belief into a number: time saved, quality, usage, and churn. It defines each one, separates outcome metrics from activity metrics, shows why speed without quality is the fastest road to confident error, and builds a worked example that measures one pilot against all four. It ends with the next lesson on auditing where your organization actually is.",
-        "date": "September 24, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "LLMs",
-          "AI Adoption",
-          "Leadership"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "the-adoption-baseline-audit-where-your-org-actually-is",
-        "title": "Lesson 4: The Adoption Baseline: Audit Where Your Organization Actually Is",
-        "series": "ai-adoption",
-        "lesson": 4,
-        "excerpt": "Almost everyone in your organization may already be using AI, and almost none of it may be sanctioned, measured, or visible to leadership. Before you can set goals, govern use, or prove value, you need an honest baseline. This lesson defines the adoption audit, shows why the gap between what leaders believe and what workers do is so wide, and gives you the four tracks that map where your org actually is.",
-        "date": "September 25, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "LLMs",
-          "AI Adoption",
-          "Leadership"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "setting-realistic-goals-and-a-north-star-metric",
-        "title": "Lesson 5: Setting Realistic Goals and a North-Star Metric",
-        "series": "ai-adoption",
-        "lesson": 5,
-        "excerpt": "A goal like 'we want more people to use AI' is a wish, not a plan. This lesson gives you the vocabulary to do better: goals, metrics, targets, a north-star metric, and a guardrail that keeps the whole system honest. You will learn how to pick one number that captures whether AI is actually moving the organization, how to set targets that are ambitious enough to matter and honest enough to hit, and how to ground every number in the baseline you built in Lesson 4.",
-        "date": "September 27, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "LLMs",
-          "AI Adoption",
-          "Leadership"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "change-management-past-the-30-day-on-ramp",
-        "title": "Lesson 6: Change Management Past the 30-Day On-Ramp",
-        "series": "ai-adoption",
-        "lesson": 6,
-        "excerpt": "The launch is over and the novelty is fading. This is where most AI programs quietly die, not because the tool is bad but because nobody planned for the change to stick. This lesson gives you the change-management toolkit for the period after the on-ramp: why a 30-day window is far too short, how to create short-term wins, consolidate gains, and anchor the new way of working into how your organization actually operates.",
-        "date": "September 27, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Change Management"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "sustaining-momentum-when-novelty-wears-off",
-        "title": "Lesson 7: Sustaining Momentum When Novelty Wears Off",
-        "series": "ai-adoption",
-        "lesson": 7,
-        "excerpt": "The first few weeks of an AI rollout are easy to misread. Usage spikes, everyone is curious, and it looks like the program is working. Then the novelty fades and the numbers start to slide. Most leaders treat that slide as a failure. It is not. It is the normal shape of adoption, and whether the program survives depends on what you do at that exact moment. This lesson defines the novelty effect, shows you how to tell a real gain in momentum from a one-time spike, and gives you a four-part cadence for keeping adoption alive after enthusiasm wears off.",
-        "date": "September 28, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Momentum"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "champions-and-power-users-building-an-internal-support-network",
-        "title": "Lesson 8: Champions and Power Users: Building an Internal Support Network",
-        "series": "ai-adoption",
-        "lesson": 8,
-        "excerpt": "Adoption that depends on one owner's energy is fragile, and adoption that depends on the launch team's enthusiasm ends when the project ends. The organizations that make AI stick build a human support network inside their own walls: a small group of peers who are trusted, who model the new way of working, and who answer questions the way a colleague would. This lesson defines the roles, explains why peer support outlives authority, and gives you a buildable plan for selecting, structuring, and sustaining your champions and power users past go-live.",
-        "date": "September 29, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Champions"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "communicating-ai-wins-and-setbacks-honestly",
-        "title": "Lesson 9: Communicating AI Wins (and Setbacks) Honestly",
-        "series": "ai-adoption",
-        "lesson": 9,
-        "excerpt": "How an organization talks about AI is a load-bearing part of adoption. Overstate the wins and people stop trusting what you say. Hide the setbacks and they stop bringing you problems until it is too late. This lesson defines what honest AI communication actually means, shows you why both failure modes damage the program, and gives you a reporting cadence that reports wins and losses with the same plain accuracy, so the trust you build survives the first real failure.",
-        "date": "September 30, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Communication"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "addressing-fear-and-skepticism-as-a-leader",
-        "title": "Lesson 10: Addressing Fear and Skepticism as a Leader",
-        "series": "ai-adoption",
-        "lesson": 10,
-        "excerpt": "Most of your workforce is not neutral about AI. Roughly half are worried about what it means for their jobs, and a meaningful share are quietly hostile to the whole idea. This lesson separates the two reactions you actually face, fear and skepticism, shows why arguing either one away backfires, and gives you a practical way to address the concern underneath before it hardens into resistance that stalls your program.",
-        "date": "October 1, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Change Management"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "training-that-scales-beyond-the-initial-rollout",
-        "title": "Lesson 11: Training That Scales: Beyond the Initial Rollout",
-        "series": "ai-adoption",
-        "lesson": 11,
-        "excerpt": "The launch training is not the training. People sit through the onboarding sessions, nod, use the tool for a week, and then drift back to the old way of working, not because they are resistant but because a one-time training event was never designed to change a daily habit. This lesson defines the transfer gap, the difference between learning a skill in a session and applying it on the job, and shows why cramming everyone into one training push produces weak retention. It gives you two scalable methods to replace the one-time event: spaced reinforcement that re-engages people after the classroom moment has passed, and a training model that builds the capability to teach inside your own teams instead of depending on you or an outside vendor. By the end you will have a plan for training that survives contact with the real working week.",
-        "date": "October 2, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Training"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "handling-the-it-failed-me-once-recovery",
-        "title": "Lesson 12: Handling the 'It Failed Me Once' Recovery",
-        "series": "ai-adoption",
-        "lesson": 12,
-        "excerpt": "A person tries the tool. It gives them a bad answer. They conclude the whole thing does not work, and they quietly retreat. This is not stubbornness. It is a documented psychological pattern called algorithm aversion, in which people give up on a machine after a single error more readily than they would forgive a human for the same mistake. This lesson defines that pattern, shows why one failure can cost you the trust that weeks of training built, and gives you a recovery playbook: calibrate expectations before the first use, reframe the failure honestly, and rebuild confidence through low-stakes, explained retries. It ends with the next lesson, on feedback loops that learn from what people actually use.",
-        "date": "October 3, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Trust"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "feedback-loops-learning-from-what-people-actually-use",
-        "title": "Lesson 13: Feedback Loops: Learning from What People Actually Use",
-        "series": "ai-adoption",
-        "lesson": 13,
-        "excerpt": "Most adoption owners run their program on what people say they will do, or say they are doing, and that is not the same thing as what they actually do. This lesson defines the feedback loop, the discipline of learning from real behavior instead of stated intention. It shows you why self-reports and surveys routinely overstate use, how the signals users leave while they work (and stop working) are more honest than anything they tell you, and how to close the loop so the program improves instead of going stale. It ends with the next lesson, on setting the bar for human supervision of AI output.",
-        "date": "October 4, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Feedback"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "the-human-in-the-loop-supervision-bar",
-        "title": "Lesson 14: The Human-in-the-Loop Supervision Bar for Your Org",
-        "series": "ai-adoption",
-        "lesson": 14,
-        "excerpt": "The most common AI oversight failure is not too little supervision. It is supervision that is scattered, unlabeled, and left to each employee to decide. This lesson gives you a supervision bar: a risk-based line that decides when an AI output needs a human sign-off before it leaves your org, and when it can run on its own. You will learn the difference between reviewing every output and reviewing the right outputs, how to set the bar so people actually check instead of rubber-stamp, and how to make the bar enforceable without adding bureaucracy nobody follows.",
-        "date": "October 5, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Governance"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "writing-an-ai-policy-a-non-technical-owner-can-own",
-        "title": "Lesson 15: Writing an AI Policy a Non-Technical Owner Can Own",
-        "series": "ai-adoption",
-        "lesson": 15,
-        "excerpt": "Most companies do not actually have a usable AI policy. A 2025 survey found that only 36% of employees say their company has a formal AI policy at all, and only 41% tell a manager or seek permission before using AI on the job. Even when a policy exists, it is often a dense legal document that nobody reads and nobody can update. This lesson gives you a policy you can actually own: a plain-language AI acceptable use policy built from five pillars, a data rule your team can remember, and a review rhythm that keeps it current when the tools change.",
-        "date": "October 6, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Governance"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "data-safety-what-employees-can-and-cannot-put-in-tools",
-        "title": "Lesson 16: Data Safety: What Employees Can and Cannot Put in Tools",
-        "series": "ai-adoption",
-        "lesson": 16,
-        "excerpt": "The single most important thing to understand about an AI tool is that whatever you put into it leaves your building. A pasted paragraph travels to the vendor's servers, where it may be stored, retained, and used to train the model. This lesson gives you the mental model that decides what employees can and cannot put into a tool, built on a four-level data classification you can teach in ten minutes. You will learn what PII is and why it is the first thing to protect, why a free public tool and an approved enterprise tool are not the same risk, and a simple decision routine your team can run before they paste anything.",
-        "date": "October 7, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Data"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "vendor-evaluation-assessing-ai-tools-before-purchase",
-        "title": "Lesson 17: Vendor Evaluation: Assessing AI Tools Before Purchase",
-        "series": "ai-adoption",
-        "lesson": 17,
-        "excerpt": "Most AI purchases are decided by a demo and signed before anyone asks the questions that actually matter: where does our data go, what does it cost to leave, and what obligations land on us after the signature? This lesson treats vendor evaluation as a risk decision, not comparison shopping. It defines the terms you need, walks through a weighted evaluation rubric applied to two real candidates for the same use case, and ends with a try-it exercise that scores a tool under consideration in your own organization against criteria that reflect your risk posture rather than a vendor's marketing.",
-        "date": "October 8, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Procurement"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "licensing-and-procurement-what-you-are-actually-buying",
-        "title": "Lesson 18: Licensing and Procurement: What You Are Actually Buying",
-        "series": "ai-adoption",
-        "lesson": 18,
-        "excerpt": "The demo ended and the contract arrived. This lesson is about what you are actually buying when you sign for an AI tool: a bundle of rights, costs, and risks that no sales call will show you. It defines the licensing models you will be quoted (per seat, per token, per activity, per outcome, and the hybrid most vendors actually sell), walks a worked example that prices the same assistant three different ways and shows how wildly the annual bill and its predictability can differ, then takes you clause by clause through the contract language that hides the real deal: who owns the outputs, whether your data trains the model, who pays when the output is wrong, and what happens when the vendor changes the model or silently renews the term. It ends with a try-it exercise that reads the AI agreement your organization is actually considering and decides, before you sign, what you are really buying.",
-        "date": "October 9, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Procurement"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "security-ownership-threat-model-for-your-ai-stack",
-        "title": "Lesson 19: Security Ownership: Threat Model for Your AI Stack",
-        "series": "ai-adoption",
-        "lesson": 19,
-        "excerpt": "You procured the tool in Lesson 18 and read the contract, but the contract names the vendor's liabilities, not anyone inside your company who answers when the tool is running. This lesson is about deciding, plainly and before an incident, what could actually go wrong with your AI stack and whose job it is to catch and answer each failure. It defines a threat model in plain language, adapts it to the specific ways AI breaks security assumptions, walks a worked example that builds a threat map for one real AI use case and scores each risk, then gives you a procedure for assigning a named owner to every risk so security is a set of accountable jobs rather than a vague wish that IT handles it.",
-        "date": "October 10, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Security"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "shadow-it-discovering-and-governing-unsanctioned-ai",
-        "title": "Lesson 20: Shadow IT: Discovering and Governing Unsanctioned AI",
-        "series": "ai-adoption",
-        "lesson": 20,
-        "excerpt": "Your people are already using AI tools you never approved, and banning them makes it worse. This lesson is about shadow IT in its newest form: the unsanctioned AI that has already arrived before you know it exists. It defines the terms, shows why prohibition fails, walks you through a concrete discovery and triage of a real inventory, and ends with a try-it exercise that finds and governs the shadow AI in your own organization. The goal is not detection theater. It is a repeatable loop that turns invisible usage into a governed, usable inventory.",
-        "date": "October 11, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Governance"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "privacy-compliance-gdpr-ccpa-and-your-ai-use",
-        "title": "Lesson 21: Privacy Compliance: GDPR, CCPA, and Your AI Use",
-        "series": "ai-adoption",
-        "lesson": 21,
-        "excerpt": "AI training and inference run on personal data, which means your AI use is anchored to privacy law whether you planned for it or not. This lesson walks a non-technical owner through the two frameworks you are most likely to meet: the EU General Data Protection Regulation (GDPR) and California's Consumer Privacy Act (CCPA). It defines personal data and automated decision-making, explains what each law actually requires of an organization that runs AI, separates the real obligations from the myths, and gives you a plain checklist for figuring out which rules apply to your own AI use cases before a regulator does.",
-        "date": "October 12, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Privacy"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "incident-response-when-an-ai-tool-goes-wrong",
-        "title": "Lesson 22: Incident Response: When an AI Tool Goes Wrong",
-        "series": "ai-adoption",
-        "lesson": 22,
-        "excerpt": "Every AI program eventually hits the moment a tool fails, and the difference between a bad outcome and a disaster is whether you had a plan before it happened. This lesson teaches a non-technical owner how to respond when an AI tool goes wrong. It defines what an AI incident actually is, separates an incident from a near miss, walks you through a concrete response sequence, and ends with a try-it exercise that builds your own incident response plan before you need it.",
-        "date": "October 13, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Governance"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "model-and-provider-risk-dependency-and-lock-in",
-        "title": "Lesson 23: Model and Provider Risk: Dependency and Lock-In",
-        "series": "ai-adoption",
-        "lesson": 23,
-        "excerpt": "Most of the AI in your organization runs on models and services someone else built and controls. That dependency is a risk, and it is easy to underestimate. This lesson teaches a non-technical owner where model and provider risk lives, what lock-in actually costs, and how to build resilience into an AI program so a vendor's model change, outage, price increase, or shutdown does not become your incident. It defines the terms, works a concrete example where a provider retires the exact model a team built around, and ends with a try-it exercise that turns your top AI tool into a one-page dependency and exit plan.",
-        "date": "October 14, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Governance"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "intellectual-property-your-data-your-outputs",
-        "title": "Lesson 24: Intellectual Property: Your Data, Your Outputs",
-        "series": "ai-adoption",
-        "lesson": 24,
-        "excerpt": "When your team uses AI, two things leave your control: the data you put in and the outputs you get out. Both raise ownership questions that most organizations never answer until a dispute, a registration, or an audit forces them. This lesson teaches a non-technical owner where the intellectual property risk in AI actually lives. You will learn that copyright only protects what a human wrote, that a contract saying you own an output cannot manufacture a copyright the law does not recognize, that the vendor's right to train on your data is the single most important clause to check, and how to protect the outputs your business actually depends on.",
-        "date": "October 15, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Governance"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "guardrails-for-agentic-and-automated-ai",
-        "title": "Lesson 25: Guardrails for Agentic and Automated AI",
-        "series": "ai-adoption",
-        "lesson": 25,
-        "excerpt": "The moment AI stops waiting for you and starts acting on its own, the rules of oversight change. This lesson is about guardrails: the boundaries and controls that keep an automated or agentic AI system inside its lane even when the model is wrong, stubborn, or tricked. You will learn what agentic AI is and how it differs from the tools you have already governed, why guardrails must be deterministic when the model is probabilistic, and how to build five families of guardrails: scope, permission, reversibility, observability, and containment. A worked example shows a leader letting an automation run while keeping the failures cheap and reversible.",
-        "date": "October 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Governance"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "auditing-ai-use-on-a-regular-cadence",
-        "title": "Lesson 26: Auditing AI Use on a Regular Cadence",
-        "series": "ai-adoption",
-        "lesson": 26,
-        "excerpt": "Setting up an AI policy is a start. Knowing it is still true is a separate, repeated job. This lesson is about auditing: the scheduled, evidence-based check that your AI inventory, your policy, your controls, and your real usage still match. You will learn the difference between an audit and continuous monitoring, why a calendar cadence is what keeps a governance program honest, how to define a concrete scope and pull evidence instead of opinions, and how to turn each audit into a short list of fixes you can actually schedule. A worked example walks through a quarterly audit that catches a license mismatch, a drift in tool usage, and a stale policy before any of them became an incident. The lesson ends with a try-it that runs your own first audit and a teaser for the next lesson on budgeting AI spend across teams.",
-        "date": "October 17, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Governance"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "budgeting-ai-spend-across-teams",
-        "title": "Lesson 27: Budgeting AI spend across teams",
-        "series": "ai-adoption",
-        "lesson": 27,
-        "excerpt": "AI spend does not act like the software budgets you already run. It is partly fixed and partly usage-driven, it scales to match adoption, and it spikes exactly when a workflow succeeds. This lesson gives you a way to budget for that: split the spend into a central foundation, seats sized to the people who actually use the tools, and a capped, attributed pool for the usage that grows. You will learn why per-seat and usage-based pricing behave differently, how showback and chargeback turn visibility into ownership, and how to run a monthly review with unit economics instead of a guess. A worked example shows a mid-size company building a whole-year AI budget and putting controls on the volatile part.",
-        "date": "October 18, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "14 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Finance"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "proving-the-ai-programs-roi-to-the-business",
-        "title": "Lesson 28: Proving the AI program's ROI to the business",
-        "series": "ai-adoption",
-        "lesson": 28,
-        "excerpt": "Adoption is everywhere in most organizations and the financial proof is not. This lesson closes that gap. It defines ROI, baseline, and total cost of ownership for AI, lays the evidence out in four layers so a CFO can read it, and stress tests the headline number so you never hand finance a claim that collapses. A worked example turns a support automation pilot into a realized return, and a try-it prompt builds one case you can defend before the next budget conversation. It ends with the next lesson on scaling from pilot to org-wide.",
-        "date": "October 19, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Finance"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "scaling-from-pilot-to-org-wide",
-        "title": "Lesson 29: Scaling from Pilot to Org-Wide",
-        "series": "ai-adoption",
-        "lesson": 29,
-        "excerpt": "A pilot that proves value and a program that runs at scale are two different things, and most organizations are stuck between them. This lesson defines the terms, shows why scaling breaks what the pilot proved, walks you through the four phases and decision gates that get a use case from pilot to business as usual, and ends with a try-it exercise that builds a scale decision gate for one of your own pilots. It is the lesson where one credible use case becomes a portfolio.",
-        "date": "October 20, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Strategy"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "building-a-cross-functional-ai-council-or-governance-group",
-        "title": "Lesson 30: Building a Cross-Functional AI Council or Governance Group",
-        "series": "ai-adoption",
-        "lesson": 30,
-        "excerpt": "A scaling discipline run by one person, however good, is still a personal system, and personal systems do not survive contact with the rest of the company. This lesson turns the program into the organization's: it defines what an AI council is and what it is not, shows why advisory bodies without decision rights become governance theater, walks through the cross-functional membership, decision rights, and escalation lines a council actually needs, and builds a worked example of a council that owns approving, pausing, and stopping AI use. It ends with the next lesson on standardizing tools and avoiding pile-up.",
-        "date": "October 21, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Governance"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "standardizing-tools-and-avoiding-pile-up",
-        "title": "Lesson 31: Standardizing tools and avoiding pile-up",
-        "series": "ai-adoption",
-        "lesson": 31,
-        "excerpt": "Tool pile-up is what happens when buying is easy, approving is slow, and nobody owns the list of what the company runs. This lesson gives you the standard stack: a short, owned list of primary tools mapped to the jobs people actually do, plus a written path for the exceptions. You will learn how to inventory what is really in use (including the subscriptions on company cards and the AI tiers hidden inside existing software), how to classify tools by job instead of by feature, how to consolidate at renewal rather than someday, and how to keep the stack from refilling. A worked example takes an organization from twenty AI tools down to seven without losing a single workflow.",
-        "date": "October 22, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "15 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "Leadership",
-          "Governance"
-        ],
-        "status": "published"
-      }
-    ],
-    "totalLessons": 31,
-    "curriculumLessons": 40
-  },
-  {
-    "slug": "ai-power-user",
-    "name": "AI Power User",
-    "description": "The Level 2 follow-on to AI at Work for professionals who use AI daily and want to build and own their own automations: designing repeatable workflows, making them reliable, and sustaining them. Vendor-agnostic and buildable without code.",
-    "gradient": "from-cyan-500 to-purple-600",
-    "lessons": [
-      {
-        "slug": "from-user-to-power-user-owning-your-workflow",
-        "title": "Lesson 1: From User to Power User: What Owning Your Workflow Means",
-        "series": "ai-power-user",
-        "lesson": 1,
-        "excerpt": "You already use AI every day. This lesson is about the step between using a tool and owning a workflow: what separates a user from a power user, what it actually means to own the way you work, and why the payoff lives in a small slice of your recurring tasks. It defines the terms, walks through one person making the shift, and ends with a try-it prompt that starts the audit you will run in Lesson 2.",
-        "date": "September 21, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "auditing-how-you-actually-work-finding-the-repetitive-20-percent",
-        "title": "Lesson 2: Auditing How You Actually Work: Finding the Repetitive 20 Percent",
-        "series": "ai-power-user",
-        "lesson": 2,
-        "excerpt": "Lesson 1 told you the payoff lives in the repetitive slice of your work. This lesson gives you the method to find that slice honestly: a time audit that measures where your week actually goes, a way to separate the tasks worth automating from the ones that are not, and a concrete worked example of one person running the audit. It ends with a try-it prompt that produces your own list of the repetitive 20 percent, ready for Lesson 3.",
-        "date": "September 21, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "decomposing-a-task-into-a-repeatable-flow-input-tool-output-review",
-        "title": "Lesson 3: Decomposing a Task into a Repeatable Flow: Input, Tool, Output, Review",
-        "series": "ai-power-user",
-        "lesson": 3,
-        "excerpt": "Lesson 2 gave you a named task, the frequent, same-shaped, low-risk one. This lesson turns that task into a flow by decomposing it into the four parts every workflow needs: input, tool, output, and review. It defines each part, walks through one person decomposing their weekly status email, and ends with a try-it prompt that produces your own four-part design, ready for Lesson 4.",
-        "date": "September 22, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "building-a-custom-tool-tailored-instructions-saved-context-your-own-project",
-        "title": "Lesson 4: Building a Custom Tool: Tailored Instructions, Saved Context, Your Own Project",
-        "series": "ai-power-user",
-        "lesson": 4,
-        "excerpt": "Lesson 3 decomposed your task into input, tool, output, and review, and you named the tool part. This lesson builds that tool properly. It defines what a custom tool is, why one prompt and a bit of setup beats re-explaining yourself every time, and how the three pieces, tailored instructions, saved context, and a project of your own, come together to give you something you control. A worked example follows one person building theirs, and a try-it prompt walks you through your own.",
-        "date": "September 23, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Custom Tools"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "connected-tools-stitching-the-apps-you-already-use",
-        "title": "Lesson 5: Connected Tools: Stitching the Apps You Already Use",
-        "series": "ai-power-user",
-        "lesson": 5,
-        "excerpt": "Lesson 4 gave you a custom tool built to your task. This lesson turns outward. It stitches the apps you already use into one connected flow, so one app's output feeds the next app's input instead of stopping at the chat window. It defines connected workflows, explains the handoff that makes them work, walks through the pattern tool-agnostically, and ends with a try-it prompt that maps a two-step chain of your own.",
-        "date": "September 24, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Connected Tools"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "structured-output-getting-data-back-in-a-format-downstream-tools-can-consume",
-        "title": "Lesson 6: Structured Output: Getting Data Back in a Format Downstream Tools Can Consume",
-        "series": "ai-power-user",
-        "lesson": 6,
-        "excerpt": "A connected workflow hands one step's output to the next, and that only works when the output arrives in a shape the next step can read. This lesson defines structured output, plain words for the JSON format at its center, and why a table or list beats a paragraph when a downstream tool is doing the consuming. A worked example follows one person turning meeting notes into actions a tracker can read, and a try-it prompt walks you through getting your own output into a shape that carries.",
-        "date": "September 25, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Structured Output"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "parameterized-prompts-templates-that-scale",
-        "title": "Lesson 7: Templates That Scale: Parameterized Prompts You Reuse With Different Inputs",
-        "series": "ai-power-user",
-        "lesson": 7,
-        "excerpt": "Lesson 6 fixed the shape of your answer. This lesson fixes the shape of your question: a template prompt you write once and reuse run after run with only a few variable slots filled fresh. It defines a parameterized prompt in plain words, shows why a stable frame beats re-deciding everything each time, and walks a worked example of someone turning a recurring weekly task into one reusable prompt. A try-it prompt gets you building your own template, and the close points at the real skill behind it: knowing when a task earns a template at all.",
-        "date": "September 28, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Prompt Templates"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "choosing-what-to-own-when-a-one-off-is-better-than-a-workflow",
-        "title": "Lesson 8: Choosing What to Own: When a One-Off Is Better Than a Workflow",
-        "series": "ai-power-user",
-        "lesson": 8,
-        "excerpt": "Lessons 3 through 7 taught you how to build workflows. This lesson is the discipline of choosing what to own, and it is the judgment that decides where all that building effort goes. It defines a one-off against a workflow, names the real cost of ownership (build cost plus the maintenance you carry forever), and gives you a three-question test for whether a task deserves a workflow at all. A worked example shows someone deciding one task earns a workflow while another stays a one-off, and a try-it prompt gets you running the test on your own work.",
-        "date": "September 29, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Ownership"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "versioning-your-tools-and-instructions-knowing-what-changed-and-why",
-        "title": "Lesson 9: Versioning Your Tools and Instructions: Knowing What Changed and Why",
-        "series": "ai-power-user",
-        "lesson": 9,
-        "excerpt": "A workflow that worked last month stops working this month, and you cannot say what changed. That is a version problem, not an AI problem. This lesson defines a version, a baseline, a changelog, and a rollback in plain words, shows why a running record of changes is the only reliable way to know what broke (and how to get the good version back), and walks a worked example of someone tracing a broken report back to a single tweak. A try-it prompt gets you building a one-line-per-change log for your own tools and instructions, and the close points at the underlying habit: treating every change as something you can name, date, and undo.",
-        "date": "September 30, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "8 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Versioning"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "testing-a-workflow-dry-runs-edge-cases-catching-bad-output",
-        "title": "Lesson 10: Testing a Workflow: Dry Runs, Edge Cases, and Spotting Bad Output Before It Ships",
-        "series": "ai-power-user",
-        "lesson": 10,
-        "excerpt": "The workflow you trust produced wrong output, and you only found out after it shipped. That is a testing problem, not a bad-luck problem. This lesson defines a dry run, an edge case, and bad output in plain words, shows why checking a workflow before it acts for real is the difference between catching a mistake and living with it, and walks a worked example of someone dry-running a report, probing awkward inputs, and catching a confident-looking error before anyone saw it. A try-it prompt gets you wrapping your own tool in a check-before-you-trust routine, and the close points at the underlying habit: treat whatever the tool produces as unverified until you run it somewhere safe first.",
-        "date": "October 1, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Testing"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "handling-failure-silent-errors-hallucinations-tools-that-break-mid-flow",
-        "title": "Lesson 11: Handling Failure: Silent Errors, Hallucinations, and Tools That Break Mid-Flow",
-        "series": "ai-power-user",
-        "lesson": 11,
-        "excerpt": "Testing reduces the chance a bad output ships, but it cannot make failure impossible. This lesson is the plan for when something goes wrong anyway. It defines a silent error, where a step fails and nothing tells you, a hallucination, where the output is confidently wrong and your check may still miss it, and a mid-flow break, where the automation stops partway and you have to pick it up. A worked example shows Priya catching each of the three in her own workflow, and a try-it prompt gets you writing a failure plan for one of yours. The close points at the next lesson on scheduling and triggers, the cadence that decides how often your workflow runs and what happens when a run does not finish.",
-        "date": "October 2, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Failure"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "scheduling-and-triggers-cadence-batching-queues-event-hooks",
-        "title": "Lesson 12: Scheduling and Triggers: Cadence, Batching, Queues, and Event Hooks",
-        "series": "ai-power-user",
-        "lesson": 12,
-        "excerpt": "A workflow that only runs when you remember to start it is not yet owned. This lesson is the rhythm that makes a workflow run on its own. It defines cadence, the schedule that decides how often your automation runs, draws the line between a scheduled run and a triggered run, and walks the four choices that control the rhythm: how often it runs, whether it processes work one item at a time or in a batch, how it handles work that arrives faster than it can keep up, and whether it starts on a clock or on an event. A worked example shows Priya taking her monthly vendor summary and turning it into a cadence she sets once and stops thinking about. A try-it prompt gets you defining the cadence for one of your own workflows, and the close points at the next lesson on review gates, the human checkpoints that make a workflow you can trust.",
-        "date": "October 3, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Scheduling"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "review-gates-human-checkpoints-built-in-not-bolted-on-after",
-        "title": "Lesson 13: Review Gates: Human Checkpoints Built In, Not Bolted On After",
-        "series": "ai-power-user",
-        "lesson": 13,
-        "excerpt": "A review gate is a deliberate pause in a workflow where a person checks the output before the tool acts on it. This lesson shows why the gate has to be built into the design, placed at the step where it earns its interruption, and never added on at the end as an afterthought. It defines human-in-the-loop oversight, separates a mandatory gate from a monitoring glance, and names the failure that undoes both: automation complacency. A worked example walks Priya through placing three gates in her vendor summary so it can run unattended without eroding her judgment. A try-it prompt maps a workflow of yours, step by step, to the moments that deserve a human in the path. The close points at the next lesson on treating prompts like code.",
-        "date": "October 4, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "AI Power User",
-          "Workflow",
-          "Review Gates"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "treating-prompts-like-code-structure-maintainability-comments",
-        "title": "Lesson 14: Treating Your Prompts Like Code: Structure, Maintainability, Comments",
-        "series": "ai-power-user",
-        "lesson": 14,
-        "excerpt": "A prompt that works once is not the same as a prompt you can live with. This lesson is about treating your prompts like code, the way a developer treats a file they will have to read again. It defines structure, the clear sections and delimiters that let a future reader, human or model, parse what a prompt is asking, maintainability, the quality that lets you change one rule without breaking the rest, and comments, the notes that record why a rule exists and not just what it does. A worked example shows Dev recovering from a prompt that drifted into a fragile blob, and a try-it prompt gets you refactoring one of your own. The close points at the next lesson on assembling a multi-step pipeline from the pieces.",
-        "date": "October 6, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Prompt Structure"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "assembling-a-multi-step-pipeline-from-the-pieces",
-        "title": "Lesson 15: Assembling a Multi-Step Pipeline from the Pieces",
-        "series": "ai-power-user",
-        "lesson": 15,
-        "excerpt": "The pieces are built. Now they become a machine. This lesson is about assembling the components from earlier lessons into a single multi-step pipeline, one where data flows from an input step through a series of tool and review steps to a finished output. It defines a pipeline, a step, and a handoff, shows why the interface between steps is where pipelines break, and walks a worked example of someone wiring four components into one running flow. A try-it prompt gets you assembling your own pieces end to end, and the close points at the next lesson, the first full worked example of an ops and reporting workflow.",
-        "date": "October 7, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Pipeline"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "worked-example-a-an-ops-and-reporting-workflow-end-to-end",
-        "title": "Lesson 16: Worked Example A: An Ops and Reporting Workflow, End to End",
-        "series": "ai-power-user",
-        "lesson": 16,
-        "excerpt": "The pattern is built. Now watch it run. This lesson is the first full worked example of the course: a real operational and reporting job, taken from its first trigger through every step and handoff to its finished output, with the reasoning at each join made visible. It defines a worked example, an ops workflow, and a reporting workflow in plain words, then walks one person's weekly operations report end to end, showing where the pieces from earlier lessons earn their keep and where a simpler flow would have been better. A try-it prompt gets you auditing your own recurring report against the same moves, and the close points at the second worked example, a marketing and content workflow.",
-        "date": "October 8, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Reporting"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "worked-example-b-a-marketing-and-content-workflow-end-to-end",
-        "title": "Lesson 17: Worked Example B: A Marketing and Content Workflow, End to End",
-        "series": "ai-power-user",
-        "lesson": 17,
-        "excerpt": "The second full worked example of the course, and this time the job is marketing and content. It defines a marketing workflow, a content workflow, a content calendar, and a brand voice in plain words, then follows one person's weekly content production from its first trigger through the data pull, the draft, the repurpose step, the review gate, and the finished output. It shows where the pieces from earlier lessons earn their keep, where a simpler flow would have been better, and how a review gate catches a fabricated statistic before it ships. A try-it prompt gets you auditing your own recurring content against the same moves, and the close points at the next lesson, the quality bar.",
-        "date": "October 9, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Marketing",
-          "Content"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "the-quality-bar-measuring-accuracy-and-catching-regressions",
-        "title": "Lesson 18: The Quality Bar: Measuring Accuracy and Catching Regressions",
-        "series": "ai-power-user",
-        "lesson": 18,
-        "excerpt": "The quality bar lesson turns from building and running workflows to judging them. It defines a quality bar, accuracy, and a regression in plain words, explains why a working workflow can quietly stop working, and gives you a small, repeatable way to measure whether a workflow is actually good: a golden set of known-good cases you re-run after every change. It defines the it-runs versus it-works-correctly gap that makes AI output hard to judge, follows one person's weekly report through building a ten-case bar and watching it catch a regression, and points out where the bar is cheap and where it is overkill. A try-it prompt gets you building your first bar on a workflow you already trust, and the close points at the next lesson, cost and limits.",
-        "date": "October 10, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Quality",
-          "Reliability"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "cost-and-limits-token-budgets-rate-limits-and-your-tools-constraints",
-        "title": "Lesson 19: Cost and Limits: Token Budgets, Rate Limits, and Your Tool's Constraints",
-        "series": "ai-power-user",
-        "lesson": 19,
-        "excerpt": "The cost and limits lesson turns from judging a workflow to affording it. It defines a token, the unit of text a model processes, a context window, the amount a model can consider at once, a token budget, the amount a workflow can afford to spend, and a rate limit, the cap on how fast a tool will respond. It explains why bigger context windows cost more to run, why providers cap how often you can call a tool, and how a spend cap protects you from a runaway run. A worked example follows Priya as her weekly report grows until it stops fitting, then hits a rate limit, then quietly runs up her bill, and it shows the small habits that fix all three. A try-it prompt gets you auditing your own workflows for the same three constraints, and the close points at the next lesson on when automation is wrong.",
-        "date": "October 11, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Cost",
-          "Limits"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "when-automation-is-wrong-what-stays-manual-and-sunsetting-honestly",
-        "title": "Lesson 20: When Automation Is Wrong: What Stays Manual, and Sunsetting Honestly",
-        "series": "ai-power-user",
-        "lesson": 20,
-        "excerpt": "Everything before this lesson made the case for automation. This one is the honest counterweight: when automation is the wrong answer, what you should keep doing by hand, and how to retire a workflow that has stopped earning its keep. It defines automation bias, the cognitive pull that makes you over-trust a tool, and total cost of ownership, the reason every workflow quietly costs more than the hours it saves. A worked example shows Priya spotting both problems in her own stack and retiring a workflow honestly, and a try-it prompt gets you running an honest review of one of yours. The close points at the next lesson on documenting your automation stack, which is what makes every future decision about retire or keep a fast one.",
-        "date": "October 13, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Sustaining"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "documenting-your-automation-stack-a-personal-runbook",
-        "title": "Lesson 21: Documenting Your Automation Stack: A Personal Runbook",
-        "series": "ai-power-user",
-        "lesson": 21,
-        "excerpt": "An automation you cannot explain six months from now is an automation you will eventually lose. This lesson defines a runbook, a personal runbook, and the automation stack in plain words, shows why the written record matters more than the workflow itself, and walks a worked example of someone who documents their own five automations before the details slip. A try-it prompt gets you writing one runbook entry for a workflow you already run, and the close points at the habit underneath: your automations are not finished when they first work, they are finished when someone (including your future self) can run and repair them from a written page alone.",
-        "date": "October 14, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Documentation"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "sharing-advanced-workflows-team-multiplier",
-        "title": "Lesson 22: From Power User to Team Multiplier: Sharing Advanced Workflows",
-        "series": "ai-power-user",
-        "lesson": 22,
-        "excerpt": "You mastered a workflow and wrote it down in a runbook. That makes you a power user. This lesson is about the next step: turning that individual skill into capability your whole team can use. It defines a team multiplier, a shared workflow, a community of practice, and shadow AI in plain words, then follows one person turning the runbook entry from Lesson 21 into a workflow four teammates actually run, keeping the review gate, the version discipline, and the data rules intact as it spreads. A try-it prompt gets you packaging one of your own workflows for a teammate, and the close points at the next lesson, keeping current as tools and models update.",
-        "date": "October 15, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Team",
-          "Collaboration"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "keeping-current-adapting-to-tool-and-model-updates",
-        "title": "Lesson 23: Keeping Current: Adapting to Tool and Model Updates",
-        "series": "ai-power-user",
-        "lesson": 23,
-        "excerpt": "Tools and models change under you, often invisibly. This lesson shows how to notice an update before it breaks a workflow, and when to ride it out versus adapt.",
-        "date": "October 16, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Maintenance",
-          "Updates"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "failure-post-mortem-when-a-workflow-died-what-you-do-next",
-        "title": "Lesson 24: Failure Post-Mortem: When a Workflow Died, What You Do Next",
-        "series": "ai-power-user",
-        "lesson": 24,
-        "excerpt": "A workflow that dies is not a dead end. It is a source of information. This lesson shows how to run a blameless post-mortem: separate the symptom from the root cause, trace the chain with five whys, and turn the failure into fixes that keep the same mistake from taking down the next workflow.",
-        "date": "October 17, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Reliability",
-          "Post-Mortem"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "judging-a-tools-reliability",
-        "title": "Lesson 25: The Power User's Mental Model: Judging a Tool's Reliability",
-        "series": "ai-power-user",
-        "lesson": 25,
-        "excerpt": "Before you trust a tool, a model, or a platform with a workflow, you need an honest estimate of how reliable it is. This lesson builds the mental model that separates a dependable tool from a fragile one, weighs a vendor's track record against its promises, and matches a tool's reliability to what your workflow actually needs.",
-        "date": "October 18, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Reliability",
-          "Judgment"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "building-a-personal-automation-library-that-compounds",
-        "title": "Lesson 26: Building a Personal Automation Library That Compounds",
-        "series": "ai-power-user",
-        "lesson": 26,
-        "excerpt": "Every workflow you have built so far has been a single, finished thing. This lesson is the turn where you stop collecting finished workflows and start building a library of reusable pieces, the kind that makes each new automation cheaper than the last. It defines an automation library, compounding, a reusable building block, and the DRY principle in plain words, then follows Priya as she takes four workflows she already built and extracts the parts that transfer, so her next workflow costs half the time of her first. It shows what belongs in a library, how to structure it so you can actually find the pieces, and how a compound stack is the difference between working in AI and owning your workflow. The close points at the capstone, where you stop building pieces and build a full workflow of your own, end to end.",
-        "date": "October 19, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Sustaining",
-          "Library"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "capstone-a-choose-and-scope-your-own-end-to-end-workflow",
-        "title": "Lesson 27: Capstone A: Choose and Scope Your Own End-to-End Workflow",
-        "series": "ai-power-user",
-        "lesson": 27,
-        "excerpt": "The capstone is where the course stops being a set of lessons and becomes one workflow you actually own. This first capstone lesson covers the two decisions that decide whether your build succeeds before you build anything: which workflow to take on, and how to write a scope precise enough to build from. It gives you five selection tests, a seven-part scoping template, and a worked example of Priya choosing her fifth workflow and writing the scope that Capstone B will assemble. It ends with a try-it prompt that walks you through choosing and scoping your own capstone.",
-        "date": "October 20, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "11 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Capstone"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "capstone-b-build-it-design-and-assemble",
-        "title": "Lesson 28: Capstone B: Build It (Design and Assemble)",
-        "series": "ai-power-user",
-        "lesson": 28,
-        "excerpt": "Capstone A gave you a scope and a definition of done. This lesson takes that page and turns it into a workflow that actually runs. It covers how to design the pipeline from the scope, reusing the pieces you already built instead of writing fresh ones, and how to assemble the whole thing in the right order so you find wiring mistakes early. A worked example follows Priya building her vendor risk digest against the scope and definition of done she wrote in Capstone A. It ends with a try-it prompt that assembles your capstone and runs its first dry test.",
-        "date": "October 21, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "12 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Capstone"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "capstone-c-harden-it-test-review-gates-reliability",
-        "title": "Lesson 29: Capstone C: Harden It (Test, Review Gates, Reliability)",
-        "series": "ai-power-user",
-        "lesson": 29,
-        "excerpt": "Capstone B left you with a workflow that passed one dry run. This lesson makes it durable. It covers three layers of hardening: a regression set of past inputs you can re-run after every change, review gates that stop a bad output instead of merely noticing it, and failure handling that makes a broken run loud, early, and cheap. A worked example follows Priya hardening her vendor risk digest and finding three real breaks before the first real month. It ends with a try-it prompt and a hardening checklist you can run against your own capstone.",
-        "date": "October 22, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "13 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Capstone"
-        ],
-        "status": "published"
-      }
-    ],
-    "totalLessons": 29,
-    "curriculumLessons": 30
   },
   {
     "slug": "salesforce-sharing-visibility-architect",
@@ -8721,6 +8755,40 @@ export const learnLessons: LearnLesson[] = [
       "Temporal",
       "Step Functions",
       "Agents"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "access-and-licensing-rollout-at-scale",
+    "title": "Lesson 32: Access and licensing rollout at scale",
+    "series": "ai-adoption",
+    "lesson": 32,
+    "excerpt": "A rollout is two systems wearing one name. Access decides who can open the tool, what they can reach inside it, and when that access ends. Licensing decides what you are committed to pay for, how seats move between people, and how you get them back. This lesson defines the vocabulary, compares per-seat and consumption licensing and what each one does to your ability to shrink, walks the provisioning chain from identity provider to platform seat, and shows the seat funnel that turns purchased licenses into habitual use. A worked example takes a 1,650-person insurer from a 1,000-seat annual commitment to a 820-seat renewal without losing anyone who actually uses the tool.",
+    "date": "October 23, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "17 min read",
+    "tags": [
+      "Learn",
+      "AI",
+      "Leadership",
+      "Operations"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "capstone-d-ship-document-and-reflect-on-the-full-stack",
+    "title": "Lesson 30: Capstone D: Ship, Document, and Reflect on the Full Stack",
+    "series": "ai-power-user",
+    "lesson": 30,
+    "excerpt": "Capstone C left you with a workflow that has been tested, gated, and instrumented. This final lesson closes the capstone by making it something other than your private knowledge: a runbook entry another person can operate from, a decision record that explains why it is built the way it is, a retro built from measured numbers rather than memory, and a handover test that proves the documentation works before you rely on it. A worked example follows Priya shipping her vendor risk digest and running the retro that changes her next build. It ends with a try-it prompt, one pass back over the whole course, and the series restarting at Lesson 1.",
+    "date": "October 23, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "LLMs",
+      "AI Power User",
+      "Workflow",
+      "Capstone"
     ],
     "status": "published"
   },

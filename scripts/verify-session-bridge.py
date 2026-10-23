@@ -58,12 +58,14 @@ import argparse
 import base64
 import json
 import os
+import re
 import secrets
 import subprocess
 import sys
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
+from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from live_db_guard import add_guard_arguments, require_safe_db_target  # noqa: E402
@@ -143,11 +145,55 @@ def load_dotenv() -> None:
             os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
-def psql(query: str, db_url: str) -> str:
+PSQL_TARGET = ""
+PSQL_PASSWORD: str | None = None
+
+
+def split_dsn(dsn: str) -> tuple[str, str | None]:
+    """Split a libpq URL into (password-free target, password).
+
+    The password must never travel on argv (CWE-214): every process on the host
+    can read another process's command line, and shell history keeps it.
+    """
+    if "://" in dsn:
+        parts = urlsplit(dsn)
+        netloc = parts.netloc
+        password = None
+        if "@" in netloc:
+            userinfo, host = netloc.rsplit("@", 1)
+            if ":" in userinfo:
+                user, raw_password = userinfo.split(":", 1)
+                password = unquote(raw_password)
+                userinfo = quote(user, safe="")
+            netloc = f"{userinfo}@{host}"
+        target = urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+        return target, password
+    # key=value libpq form ("host=... password=...") — strip the password key
+    match = re.search(r"(?:^|\s)password=('(?:[^']|'')*'|\S+)", dsn)
+    if match:
+        password = match.group(1).strip("'")
+        target = (dsn[:match.start()] + dsn[match.end():]).strip()
+        return target, password
+    return dsn, None
+
+
+def configure_db(dsn: str) -> None:
+    """Record the DSN for psql without ever putting the password on argv."""
+    global PSQL_TARGET, PSQL_PASSWORD
+    PSQL_TARGET, PSQL_PASSWORD = split_dsn(dsn)
+
+
+def psql(query: str, db_url: str | None = None) -> str:
+    target, password = (PSQL_TARGET, PSQL_PASSWORD) if db_url is None else split_dsn(db_url)
+    if not target:
+        raise RuntimeError("configure_db() must run before psql()")
+    env = dict(os.environ)
+    if password:
+        env["PGPASSWORD"] = password
     proc = subprocess.run(
-        ["psql", db_url, "-X", "-q", "-A", "-F", "\t", "-t", "-v", "ON_ERROR_STOP=1",
+        ["psql", target, "-X", "-q", "-A", "-F", "\t", "-t", "-v", "ON_ERROR_STOP=1",
          "-c", query],
-        capture_output=True, text=True, timeout=60,
+        capture_output=True, text=True, timeout=60, env=env,
     )
     if proc.returncode != 0:
         raise RuntimeError(f"psql failed: {proc.stderr.strip()}")
@@ -341,6 +387,8 @@ def main() -> int:
     # production endpoint. Refuse anything that was not explicitly opted into.
     db_host = require_safe_db_target(db_url, allow_live_db=args.allow_live_db,
                                      allow_production_db=args.allow_production_db)
+    # CWE-214: the DSN password moves to PGPASSWORD, never onto psql's argv.
+    configure_db(db_url)
     auth_url_global = auth_url
 
     email = args.email or (

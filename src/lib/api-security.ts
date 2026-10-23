@@ -179,27 +179,148 @@ export function getClientIp(req: NextRequest): string {
 /*  Origin/CSRF check (F6)                                             */
 /* ------------------------------------------------------------------ */
 
-const ALLOWED_ORIGINS = new Set([
-  "https://adroit.io",
-  "https://www.adroit.io",
-  // Retired pre-merger Vercel origins. Both projects were deleted on
-  // 2026-09-15 and their URLs 404 today. They are kept so any first-party
-  // page or bookmark still posting from them keeps working: an `Origin`
-  // header cannot be forged cross-site, so a stale entry here is not a
-  // bypass, it is dead weight. Removing them is a cleanup follow-up.
-  "https://adroit-blog-two.vercel.app",
-  "https://adroit-blog.vercel.app",
-  "http://localhost:3000",
-]);
+const ABSOLUTE_URL_RE = /^https?:\/\/[^\s]+$/i;
+
+/**
+ * `https://host[:port]` for an absolute http(s) URL (paths/query dropped),
+ * otherwise `null` — an opaque `Origin: null` is rejected here.
+ */
+export function normalizeOrigin(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed || !ABSOLUTE_URL_RE.test(trimmed)) return null;
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+/** Canonical deployment origin: config first, code-level default second. */
+function siteOrigin(): string {
+  return normalizeOrigin(process.env.NEXT_PUBLIC_SITE_URL) ?? "https://adroit.io";
+}
+
+/**
+ * Origins accepted for a CROSS-origin POST.
+ *
+ * Config-driven, never a literal deployment list: the previous hardcoded set
+ * (`adroit.io`, two retired `*.vercel.app` projects, `localhost:3000`) meant
+ * every preview, custom-domain and self-hosted deployment answered 403
+ * `Forbidden origin` (QA F1, t_ab6c1cb6). Sources:
+ *
+ *   - `NEXT_PUBLIC_SITE_URL` (falls back to the canonical production origin)
+ *     plus its `www.`/apex sibling;
+ *   - `VERCEL_URL` / `VERCEL_BRANCH_URL` / `VERCEL_PROJECT_PRODUCTION_URL` —
+ *     the per-deployment origin, so every Vercel preview works unconfigured;
+ *   - `AUTH_ALLOWED_ORIGINS` — comma-separated extras (custom domains,
+ *     tunnels, a native app's webview origin);
+ *   - loopback origins outside production (local dev / `next dev`).
+ *
+ * Same-origin requests do not need to appear here at all — `checkOrigin()`
+ * accepts them from the request's own Host (see `isSameOriginRequest()`).
+ */
+export function getAllowedOrigins(): Set<string> {
+  const origins = new Set<string>();
+
+  const canonical = siteOrigin();
+  origins.add(canonical);
+  const canonicalUrl = new URL(canonical);
+  const bareHost = canonicalUrl.host.replace(/^www\./, "");
+  origins.add(`${canonicalUrl.protocol}//www.${bareHost}`);
+  origins.add(`${canonicalUrl.protocol}//${bareHost}`);
+
+  // Vercel deployment origins are hostnames only (`VERCEL_URL`) — no scheme.
+  for (const raw of [
+    process.env.VERCEL_URL,
+    process.env.VERCEL_BRANCH_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL,
+  ]) {
+    const host = raw?.trim();
+    if (!host) continue;
+    const normalized = normalizeOrigin(
+      /^https?:\/\//i.test(host) ? host : `https://${host}`,
+    );
+    if (normalized) origins.add(normalized);
+  }
+
+  for (const entry of (process.env.AUTH_ALLOWED_ORIGINS ?? "").split(",")) {
+    const normalized = normalizeOrigin(entry);
+    if (normalized) origins.add(normalized);
+  }
+
+  if (process.env.NODE_ENV !== "production") {
+    for (const port of [process.env.PORT, "3000", "3001", "3111"]) {
+      if (!port) continue;
+      origins.add(`http://localhost:${port}`);
+      origins.add(`http://127.0.0.1:${port}`);
+    }
+  }
+
+  return origins;
+}
+
+/**
+ * Origin of THIS request, derived from the Host it was served for and the
+ * proxy's `x-forwarded-proto` (Vercel/every reverse proxy sets it). `null`
+ * when the request carries no Host.
+ */
+export function requestOrigin(req: NextRequest): string | null {
+  const host = req.headers.get("host");
+  if (!host) return null;
+
+  const forwarded = (req.headers.get("x-forwarded-proto") ?? "")
+    .split(",")[0]
+    ?.trim()
+    .toLowerCase();
+  const urlProtocol = (() => {
+    try {
+      return new URL(req.url).protocol.replace(":", "").toLowerCase();
+    } catch {
+      return "";
+    }
+  })();
+  const protocol =
+    forwarded === "https" || forwarded === "http"
+      ? forwarded
+      : urlProtocol === "https"
+        ? "https"
+        : "http";
+
+  return normalizeOrigin(`${protocol}://${host}`);
+}
+
+/**
+ * True when the request's own origin matches `origin` — i.e. the browser is
+ * posting from the very deployment that serves the route. This is what makes
+ * previews / custom domains / plain-http staging work without any config, and
+ * it cannot be forged: a cross-site page cannot set another site's Origin.
+ */
+function isSameOriginRequest(req: NextRequest, origin: string): boolean {
+  return requestOrigin(req) === origin;
+}
 
 /**
  * Check the `Origin` header if present.
  * Returns a message on failure, or `null` on pass.
+ *
+ * No Origin → pass (direct browser navigation / same-origin `fetch` from an
+ * old browser). For requests that do carry one: same-origin passes, then the
+ * configured cross-origin allowlist, then 403.
  */
 export function checkOrigin(req: NextRequest): string | null {
   const origin = req.headers.get("origin");
   if (!origin) return null; // no Origin → direct browser navigation
-  if (ALLOWED_ORIGINS.has(origin)) return null;
+
+  const normalized = normalizeOrigin(origin);
+  // `Origin: null` (sandboxed iframe / file://) and malformed values fail.
+  if (!normalized) return "Forbidden origin";
+
+  if (isSameOriginRequest(req, normalized)) return null;
+  if (getAllowedOrigins().has(normalized)) return null;
+
   return "Forbidden origin";
 }
 

@@ -1,38 +1,25 @@
 /**
- * page.test.ts — /reset-password server-side gate (t_13982e68, t_4fbc8f48),
- * ported to Managed Better Auth (R2-1).
+ * page.test.ts — /reset-password server gate (t_13982e68, t_4fbc8f48,
+ * t_233b6f61).
  *
  * The page is a SERVER component that:
- *   - renders the error (role=alert) state for ANY visitor BEFORE any gate
- *     (Better Auth's `?error=INVALID_TOKEN`, the callback's expired/invalid),
  *   - renders <ResetPasswordForm token=… /> for an emailed token — imported
  *     legacy users are signed out and must still be able to reset,
- *   - renders <ResetPasswordForm /> for a session, and redirects a guest with
- *     no token to /login WITHOUT ever rendering the form (SSR HTML leak).
+ *   - renders the "expired" state (role=alert) for an upstream error
+ *     (Better Auth's `?error=INVALID_TOKEN`, the callback's expired/invalid),
+ *   - renders the "missing" state (role=alert) when there is NO token — the
+ *     update route redeems a token and 401s without one, so the form is never
+ *     rendered into the SSR HTML where it could only fail,
+ *   - never reads the session: there is no session-based reset path any more.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-
-const { mocks } = vi.hoisted(() => {
-  const getSessionUser = vi.fn();
-  return { mocks: { getSessionUser } };
-});
-
-vi.mock("next/navigation", () => ({
-  redirect: (path: string) => {
-    const e = new Error(`NEXT_REDIRECT:${path}`);
-    (e as { digest?: string }).digest = `NEXT_REDIRECT:${path}`;
-    throw e;
-  },
-}));
-
-vi.mock("@/lib/session", () => ({ getSessionUser: mocks.getSessionUser }));
 
 vi.mock("@/components/Header", () => ({ default: () => <header /> }));
 vi.mock("@/components/Footer", () => ({ default: () => <footer /> }));
 vi.mock("./ResetPasswordForm", () => ({
-  default: ({ token }: { token?: string }) => (
-    <div data-testid="reset-form" data-token={token ?? ""} />
+  default: ({ token }: { token: string }) => (
+    <div data-testid="reset-form" data-token={token} />
   ),
 }));
 
@@ -42,62 +29,61 @@ function params(input: Record<string, string> = {}) {
   return Promise.resolve(input);
 }
 
-function authed() {
-  mocks.getSessionUser.mockResolvedValue({
-    id: "user-1",
-    email: "a@adroit.io",
-    name: null,
-  });
-}
-function guest() {
-  mocks.getSessionUser.mockResolvedValue(null);
-}
-
-beforeEach(() => {
-  vi.clearAllMocks();
-  authed();
-});
-
 describe("/reset-password server gate (Neon Auth)", () => {
-  it("renders the form for an authed session", async () => {
-    const el = await ResetPasswordPage({ searchParams: params() });
-    render(el);
-    expect(screen.getByTestId("reset-form")).toBeInTheDocument();
-    expect(mocks.getSessionUser).toHaveBeenCalled();
-  });
-
   it("renders the form for a guest WITH a reset token and passes the token through", async () => {
-    guest();
     const el = await ResetPasswordPage({ searchParams: params({ token: "tok-123" }) });
     render(el);
     expect(screen.getByTestId("reset-form")).toHaveAttribute("data-token", "tok-123");
-    // The token is the credential; no session lookup is needed.
-    expect(mocks.getSessionUser).not.toHaveBeenCalled();
   });
 
-  it("redirects a guest with no token to login and never renders the form", async () => {
-    guest();
-    await expect(ResetPasswordPage({ searchParams: params() })).rejects.toThrow(
-      "NEXT_REDIRECT:/login?next=/reset-password",
+  it("shows the explicit 'needs your reset link' state when there is no token", async () => {
+    const el = await ResetPasswordPage({ searchParams: params() });
+    render(el);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByText(/This page needs your reset link/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Request a new link/i })).toHaveAttribute(
+      "href",
+      "/forgot-password",
     );
     expect(screen.queryByTestId("reset-form")).not.toBeInTheDocument();
   });
 
-  it("does NOT call the session check for error=expired", async () => {
-    guest();
+  it("does NOT render the form for error=expired", async () => {
     const el = await ResetPasswordPage({ searchParams: params({ error: "expired" }) });
     render(el);
-    expect(mocks.getSessionUser).not.toHaveBeenCalled();
     expect(screen.getByRole("alert")).toBeInTheDocument();
     expect(screen.getByText(/This link has expired/)).toBeInTheDocument();
     expect(screen.queryByTestId("reset-form")).not.toBeInTheDocument();
   });
 
   it("treats Better Auth's error=INVALID_TOKEN as an expired link", async () => {
-    guest();
     const el = await ResetPasswordPage({ searchParams: params({ error: "INVALID_TOKEN" }) });
     render(el);
     expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.queryByTestId("reset-form")).not.toBeInTheDocument();
+  });
+
+  it("treats an over-long token as a dead link (F-S3: route MAX_TOKEN=512)", async () => {
+    const el = await ResetPasswordPage({ searchParams: params({ token: "a".repeat(513) }) });
+    render(el);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByText(/This link has expired/)).toBeInTheDocument();
+    expect(screen.queryByTestId("reset-form")).not.toBeInTheDocument();
+  });
+
+  it("accepts a token at the 512 boundary", async () => {
+    const token = "a".repeat(512);
+    const el = await ResetPasswordPage({ searchParams: params({ token }) });
+    render(el);
+    expect(screen.getByTestId("reset-form")).toHaveAttribute("data-token", token);
+  });
+
+  it("prefers the error state over a token in the same URL", async () => {
+    const el = await ResetPasswordPage({
+      searchParams: params({ error: "INVALID_TOKEN", token: "tok-123" }),
+    });
+    render(el);
+    expect(screen.getByText(/This link has expired/)).toBeInTheDocument();
     expect(screen.queryByTestId("reset-form")).not.toBeInTheDocument();
   });
 });

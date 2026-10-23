@@ -30,6 +30,82 @@ export const analyticsEnabled = Boolean(GA_MEASUREMENT_ID);
 
 const SCRIPT_ID = "adroit-ga4-script";
 
+/**
+ * Routes whose URL carries a credential in the query string (single-use reset /
+ * invite tokens). A page view from one of these must never forward its query
+ * to a third party — GA4 keeps every `page_location` it receives — so the whole
+ * query is dropped for the route rather than redacting param-by-param. New
+ * credential-in-URL routes only need to be added here (F-S1, CWE-201).
+ */
+const CREDENTIAL_ROUTES = ["/reset-password"];
+
+/**
+ * Query params that are secret-bearing on ANY route (protocol flows such as
+ * `?access_token=…`, `?code=…`, `?state=…`), stripped as defence in depth so a
+ * future credential route cannot leak before it is added to CREDENTIAL_ROUTES.
+ */
+const SENSITIVE_PARAMS = new Set([
+  "token",
+  "access_token",
+  "refresh_token",
+  "id_token",
+  "recovery_token",
+  "password",
+  "secret",
+  "code",
+  "state",
+  "session",
+  "otp",
+  "sig",
+  "signature",
+  "api_key",
+  "key",
+]);
+
+/** True when `pathname` is (or is under) a credential-bearing route. */
+function isCredentialRoute(pathname: string): boolean {
+  return CREDENTIAL_ROUTES.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`),
+  );
+}
+
+/**
+ * Build the `page_location` value handed to GA4 — a URL that can never carry a
+ * credential (F-S1).
+ *
+ * - Credential routes (`/reset-password`): query AND fragment are dropped, so
+ *   `…/reset-password?token=abc123` reports as `…/reset-password`.
+ * - Every other page keeps its full path and query (UTM/campaign attribution
+ *   must not regress), minus any SENSITIVE_PARAMS entry.
+ *
+ * Fragments are never reported (GA4 ignores them server-side, and they are a
+ * second place credentials ride in — e.g. `#access_token=…`). Falls back to
+ * plain string surgery when the input is not parseable as a URL.
+ */
+export function safePageLocation(href: string): string {
+  const stripped = href.split("#")[0].split("?")[0];
+
+  let url: URL;
+  try {
+    url = new URL(href, "https://placeholder.invalid");
+  } catch {
+    return stripped;
+  }
+
+  const pathname = url.pathname || "/";
+  const isAbsolute = /^[a-z][a-z0-9+.-]*:\/\//i.test(href);
+  const prefix = isAbsolute ? url.origin : "";
+
+  if (isCredentialRoute(pathname)) return `${prefix}${pathname}`;
+
+  const params = url.searchParams;
+  for (const name of new Set(params.keys())) {
+    if (SENSITIVE_PARAMS.has(name.toLowerCase())) params.delete(name);
+  }
+  const search = params.toString();
+  return `${prefix}${pathname}${search ? `?${search}` : ""}`;
+}
+
 /** Consent-gating storage key (merger contract ConsentAnalyticsApi). */
 export const CONSENT_STORAGE_KEY = "adroit_cookie_consent";
 export type ConsentState = "granted" | "denied";
@@ -66,8 +142,12 @@ export function initAnalytics(): void {
   if (getConsentState() === "granted") {
     window.gtag("consent", "update", { analytics_storage: "granted" });
   }
+  // page_location is explicit: the gtag `config` page_view would otherwise
+  // default to window.location.href, which on /reset-password is the token
+  // itself (F-S1). safePageLocation drops the query for credential routes.
   window.gtag("config", GA_MEASUREMENT_ID, {
     anonymize_ip: true,
+    page_location: safePageLocation(window.location.href),
   });
 
   const script = document.createElement("script");

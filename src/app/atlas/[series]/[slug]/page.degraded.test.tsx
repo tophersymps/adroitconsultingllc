@@ -1,161 +1,176 @@
 /**
- * page.degraded.test.tsx — the R2-5 A11Y-M1 pinned regression (t_8d1638a7).
+ * page.degraded.test.tsx — R2-5 forced-429 regression for the lesson route
+ * `/atlas/[series]/[slug]` (t_ffe32443, AC-6).
  *
- * `buildDegradedPaywallView` renders the ordinary "this course is locked"
- * paywall when the anonymous Data API token cannot be resolved. That is a
- * fail-closed guess, not an access decision: a signed-in ENTITLED member sees a
- * false access denial, and a screen-reader user is told nothing about the page
- * being provisional.
+ * The lesson page is the surface where a degradation could leak the answer key:
+ * the server-side quiz branch is guarded by `isAuthed`, so the failure to pin is
+ * that a token outage must land in the GUEST/paywall view at 200 — no 404 (the
+ * course is live), no 5xx, and NOT ONE byte of quiz question text or
+ * `correct_answer_index` in the serialised HTML.
  *
- * Contract: the degraded state is announced in a `role="status"`
- * `aria-live="polite"` region ("temporarily unavailable" copy) rendered IN
- * ADDITION to the paywall, distinguished by text rather than colour alone,
- * leaking no internals — and it must NOT appear on an ordinary signed-out
- * paywall.
+ * Only `fetch` is stubbed for the token routes; the real page, `db/server.ts`,
+ * the access seam and `lib/paywall.ts` run. Content/component modules are
+ * stubbed so the assertion is about the degradation branch, not MDX rendering.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-const { mocks } = vi.hoisted(() => ({
-  mocks: {
-    getAccessUserId: vi.fn(),
-    decideCourseAccess: vi.fn(),
-    getCourseRowBySlug: vi.fn(),
-    getUser: vi.fn(),
-    notFound: vi.fn(),
+const { cookiesMock, notFoundMock, quizMock } = vi.hoisted(() => ({
+  cookiesMock: vi.fn(),
+  notFoundMock: vi.fn(() => {
+    throw new Error("NEXT_NOT_FOUND");
+  }),
+  quizMock: {
+    getQuizForLesson: vi.fn(() => ({
+      questions: [
+        {
+          question: "SECRET_QUESTION_TEXT_SHOULD_NEVER_SHIP",
+          options: ["a", "b"],
+          correct_answer_index: 1,
+        },
+      ],
+    })),
   },
 }));
 
-vi.mock("next/navigation", () => ({
-  notFound: mocks.notFound.mockImplementation(() => {
-    throw new Error("NEXT_NOT_FOUND");
-  }),
-}));
-
-vi.mock("@/data/learn", () => ({
-  learnSeries: [{ slug: "omni-studio-cert" }],
-}));
-
-const LESSONS = [
-  { slug: "lesson-one", title: "Lesson 1: Declarative OmniStudio", number: 1 },
-  { slug: "lesson-two", title: "Lesson 2: OmniScript Patterns", number: 2 },
-];
-
-const SERIES = {
-  slug: "omni-studio-cert",
-  name: "OmniStudio Developer Certification",
-  description: "Build declarative OmniStudio solutions.",
-  gradient: "from-a to-b",
-  totalLessons: LESSONS.length,
-  lessons: LESSONS,
-};
+vi.mock("next/headers", () => ({ cookies: cookiesMock }));
+vi.mock("next/navigation", () => ({ notFound: notFoundMock }));
 
 vi.mock("@/lib/learn", () => ({
   getLesson: (series: string, slug: string) =>
-    series === SERIES.slug ? LESSONS.find((l) => l.slug === slug) ?? null : null,
-  getSeriesBySlug: (slug: string) => (slug === SERIES.slug ? SERIES : null),
-  getLessonsForSeries: () => LESSONS,
-  getLearnMDXContent: () => "# Lesson\nbody",
-  stripMDXFrontmatter: (s: string) => s,
-  stripLessonTitleH1: (s: string) => s,
-  toIsoDate: () => "2026-01-01",
-  getAuthorInitials: () => "AB",
+    series === "omni-studio-cert" && slug === "day-01"
+      ? {
+          slug,
+          series,
+          title: "Day 1 — OmniStudio solutions",
+          lesson: 1,
+          excerpt: "Remove friction from the flow.",
+          date: "2026-10-01",
+          author: "Adroit",
+          tags: ["omnistudio"],
+        }
+      : null,
+  getSeriesBySlug: (slug: string) =>
+    slug === "omni-studio-cert"
+      ? {
+          slug,
+          name: "OmniStudio Developer Certification",
+          description: "Build declarative OmniStudio solutions.",
+          gradient: "from-a to-b",
+          totalLessons: 1,
+          lessons: [{ slug: "day-01", title: "Day 1 — OmniStudio solutions" }],
+        }
+      : null,
+  getLessonsForSeries: () => [
+    { slug: "day-01", title: "Day 1 — OmniStudio solutions", number: 1 },
+  ],
+  getLearnMDXContent: () => "---\ntitle: x\n---\n# Day 1\n\nBody.",
+  stripMDXFrontmatter: (raw: string) => raw,
+  stripLessonTitleH1: (raw: string) => raw,
+  toIsoDate: (d: string) => d,
+  getAuthorInitials: () => "AD",
 }));
 
-vi.mock("@/lib/mdx", () => ({ linkifySourceCitations: (s: string) => s }));
+vi.mock("@/lib/mdx", () => ({ linkifySourceCitations: (raw: string) => raw }));
 vi.mock("@/lib/seo", () => ({
   siteConfig: { url: "https://example.test" },
   buildMetadata: (p: unknown) => p,
 }));
-vi.mock("@/lib/quiz", () => ({
-  getQuizForLesson: () => null,
-  getKnowledgeChecks: () => [],
-}));
-vi.mock("@/data/lesson-audio", () => ({ lessonAudio: [] }));
+vi.mock("@/lib/quiz", () => quizMock);
 vi.mock("@/lib/sky-server", () => ({ loadSeriesConstellation: () => null }));
-vi.mock("@/lib/db/server", () => ({
-  getSupabaseServerClient: async () => ({ auth: { getUser: mocks.getUser } }),
-}));
 
-vi.mock("@/lib/access", () => ({
-  accessSeam: { decideCourseAccess: mocks.decideCourseAccess },
-  getAccessUserId: mocks.getAccessUserId,
-  getCourseRowBySlug: mocks.getCourseRowBySlug,
-}));
-
-vi.mock("@/components/Header", () => ({ default: () => <header /> }));
-vi.mock("@/components/Footer", () => ({ default: () => <footer /> }));
+vi.mock("@/components/Header", () => ({ default: () => <header data-testid="header" /> }));
+vi.mock("@/components/Footer", () => ({ default: () => <footer data-testid="footer" /> }));
 vi.mock("@/components/BlogPost/ReadingProgress", () => ({ default: () => <div /> }));
 vi.mock("@/components/BlogPost/ShareBar", () => ({ default: () => <div /> }));
-vi.mock("@/components/BlogPost/AudioPlayerLazy", () => ({
-  AudioPlayerLazy: () => <div />,
-}));
 vi.mock("@/components/Learn/LessonNavigation", () => ({ default: () => <div /> }));
 vi.mock("@/components/Progress/MarkComplete", () => ({ default: () => <div /> }));
-vi.mock("@/components/Progress/LessonCompleteProgress", () => ({
-  default: () => <div />,
+vi.mock("@/components/Progress/LessonCompleteProgress", () => ({ default: () => <div /> }));
+vi.mock("@/components/Progress/LessonQuiz", () => ({
+  default: () => <div data-testid="lesson-quiz" />,
 }));
-vi.mock("@/components/Progress/LessonQuiz", () => ({ default: () => <div /> }));
 vi.mock("@/components/Progress/GuestCTA", () => ({ default: () => <div /> }));
-vi.mock("@/components/MDX/MDXArticle", () => ({ default: () => <div /> }));
-vi.mock("@/components/Constellations/LessonCelebration", () => ({
-  default: () => <div />,
+vi.mock("@/components/MDX/MDXArticle", () => ({ default: () => <article /> }));
+vi.mock("@/components/BlogPost/AudioPlayerLazy", () => ({ AudioPlayerLazy: () => <div /> }));
+vi.mock("@/components/Constellations/LessonCelebration", () => ({ default: () => <div /> }));
+vi.mock("@/components/Catalog/Paywall", () => ({
+  default: ({ seriesSlug }: { seriesSlug: string }) => (
+    <div data-testid="paywall" data-series={seriesSlug} />
+  ),
 }));
 
-import Page from "./page";
-import { DEGRADED_PAYWALL_MESSAGE } from "@/components/Catalog/Paywall";
-import { DbTokenUnavailableError } from "@/lib/db/degraded-client";
+import LessonPage from "./page";
+import { resetAnonymousTokenCacheForTests } from "@/lib/db/anonymous-token";
+import {
+  applyThrottledAuthEnv,
+  clearThrottledAuthEnv,
+  dataApiRequests,
+  installThrottledAuth,
+  sessionCookieStore,
+  type CapturedRequest,
+} from "@/lib/db/test-support/throttled-auth";
 
-const COURSE_ROW = {
-  slug: SERIES.slug,
-  access_model: "subscription",
-  price_cents: 4900,
-};
+let captured: CapturedRequest[] = [];
 
-beforeEach(() => {
-  vi.clearAllMocks();
-  mocks.getAccessUserId.mockResolvedValue(null);
-  mocks.getUser.mockResolvedValue({ data: { user: null }, error: null });
-});
-
-async function renderLesson(series = SERIES.slug, slug = "lesson-one") {
+async function renderLesson(): Promise<string> {
   const { default: R } = await import("react-dom/server");
-  const result = await Page({ params: Promise.resolve({ series, slug }) });
+  const result = await LessonPage({
+    params: Promise.resolve({ series: "omni-studio-cert", slug: "day-01" }),
+  });
   return R.renderToString(result as never);
 }
 
-describe("/atlas/[series]/[slug] degraded paywall (A11Y-M1)", () => {
-  it("announces a temporary-unavailable status region when the token path fails", async () => {
-    mocks.decideCourseAccess.mockRejectedValue(
-      new DbTokenUnavailableError("/token/anonymous"),
-    );
+beforeEach(() => {
+  applyThrottledAuthEnv();
+  captured = [];
+  cookiesMock.mockReset();
+  cookiesMock.mockResolvedValue(sessionCookieStore());
+  notFoundMock.mockClear();
+  quizMock.getQuizForLesson.mockClear();
+  resetAnonymousTokenCacheForTests();
+  vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  vi.spyOn(console, "error").mockImplementation(() => undefined);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  clearThrottledAuthEnv();
+});
+
+describe("/atlas/[series]/[slug] under a token-route 429 (R2-5, AC-6)", () => {
+  it("still answers the guest/paywall view at 200 — never a 404 for a live course", async () => {
+    captured = installThrottledAuth({
+      sessionUser: { id: "user-1", email: "learner@test.dev" },
+    });
 
     const html = await renderLesson();
 
-    // Rendered at 200, not 404.
-    expect(mocks.notFound).not.toHaveBeenCalled();
-    // A polite live region exists and carries the degraded copy.
-    expect(html).toMatch(/role="status"/);
-    expect(html).toMatch(/aria-live="polite"/);
-    expect(html).toContain(DEGRADED_PAYWALL_MESSAGE);
-    // …in addition to the paywall lock UI, not instead of it.
-    expect(html).toContain("Members-only content");
-    expect(html).toContain("This course is locked for you right now");
-    // No internals leak into the user-facing copy.
-    expect(html).not.toMatch(/token\/anonymous|DbTokenUnavailableError|429|401|500/i);
-    // Landmark structure unchanged: exactly one <main id="main">.
-    expect(html.match(/<main id="main"/g) ?? []).toHaveLength(1);
+    expect(notFoundMock).not.toHaveBeenCalled();
+    expect(html).toContain('data-testid="paywall"');
+    expect(html).toContain('data-series="omni-studio-cert"');
+    expect(html).not.toMatch(/not launched|coming soon/i);
   });
 
-  it("does NOT render the status region on an ordinary signed-out paywall", async () => {
-    mocks.decideCourseAccess.mockResolvedValue({ kind: "paywall" });
-    mocks.getCourseRowBySlug.mockResolvedValue(COURSE_ROW);
+  it("serialises no quiz question text and no answer key", async () => {
+    captured = installThrottledAuth({
+      sessionUser: { id: "user-1", email: "learner@test.dev" },
+    });
 
     const html = await renderLesson();
 
-    expect(mocks.notFound).not.toHaveBeenCalled();
-    expect(html).toContain("Members-only content");
-    expect(html).not.toMatch(/role="status"/);
-    expect(html).not.toContain(DEGRADED_PAYWALL_MESSAGE);
-    expect(html).not.toMatch(/temporarily unavailable/i);
+    expect(html).not.toContain("SECRET_QUESTION_TEXT_SHOULD_NEVER_SHIP");
+    expect(html).not.toContain("correct_answer_index");
+    expect(html).not.toContain("correctAnswerIndex");
+    expect(html).not.toContain('data-testid="lesson-quiz"');
+  });
+
+  it("reads the course row only after a token exists — zero Data API calls here", async () => {
+    captured = installThrottledAuth({
+      sessionUser: { id: "user-1", email: "learner@test.dev" },
+    });
+
+    await renderLesson();
+
+    expect(dataApiRequests(captured)).toHaveLength(0);
   });
 });
