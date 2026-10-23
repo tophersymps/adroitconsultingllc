@@ -15,6 +15,7 @@ import { resolve } from "node:path";
 import {
   PUBLICLY_LAUNCHED_SERIES,
   isPubliclyLaunchedSeries,
+  mayDiscloseSeries,
 } from "@/lib/atlas-launch";
 
 // vitest runs from the repo root (jsdom has no file:// import.meta.url).
@@ -63,5 +64,32 @@ describe("atlas-launch mirror", () => {
     ]) {
       expect(isPubliclyLaunchedSeries(slug)).toBe(false);
     }
+  });
+});
+
+/**
+ * t_b4c0da5f (MEDIUM, CWE-200): the DISCLOSURE predicate combines the static
+ * mirror with the `courses.status` read. A mirror-listed series that ops
+ * delists in the DB must stop being named publicly (404 head, blog funnel),
+ * while an unreadable DB must fall back to the mirror (never a fresh 404 on a
+ * launched series during an outage).
+ */
+describe("mayDiscloseSeries", () => {
+  it("allows a mirrored series when the DB says live", () => {
+    expect(mayDiscloseSeries("agentic-ai", true)).toBe(true);
+  });
+
+  it("refuses a mirrored series the DB calls delisted", () => {
+    expect(mayDiscloseSeries("agentic-ai", false)).toBe(false);
+  });
+
+  it("falls back to the mirror when the DB is unreadable", () => {
+    expect(mayDiscloseSeries("agentic-ai", null)).toBe(true);
+    expect(mayDiscloseSeries("hermes-consultant", null)).toBe(false);
+  });
+
+  it("never allows a series outside the mirror, whatever the DB says", () => {
+    expect(mayDiscloseSeries("hermes-consultant", true)).toBe(false);
+    expect(mayDiscloseSeries("hermes-consultant", false)).toBe(false);
   });
 });
