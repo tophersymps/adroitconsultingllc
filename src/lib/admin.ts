@@ -11,14 +11,31 @@
  */
 import { NextResponse } from "next/server";
 import { accessSeam, getAccessUserId } from "@/lib/access";
+import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
 import { getSupabaseServerClient } from "@/lib/db/server";
 import type { SubscriptionRow } from "@/shared/contracts-course-catalog";
+
+/**
+ * Resolve the role without letting the R2-5 "no Data API token" sentinel escape
+ * the gate (CWE-755). A token-route lockout is an authorization state, not an
+ * outage: every admin surface must answer its uniform deny (403 API / 404 page)
+ * instead of a 5xx that would confirm the route exists. Any OTHER loader error
+ * still propagates — this is not a blanket catch.
+ */
+async function isAdminOrDeny(userId: string): Promise<boolean> {
+  try {
+    return await accessSeam.isAdmin(userId);
+  } catch (err) {
+    if (isDbTokenUnavailable(err)) return false;
+    throw err;
+  }
+}
 
 /** Resolve the current admin from the session cookie. Non-admin / guest → false. */
 export async function isCurrentUserAdmin(): Promise<boolean> {
   const userId = await getAccessUserId();
   if (!userId) return false;
-  return accessSeam.isAdmin(userId);
+  return isAdminOrDeny(userId);
 }
 
 /** Admin API guard — returns the acting user id when the caller is an admin. */
@@ -28,16 +45,20 @@ export async function requireAdminApi(): Promise<
 > {
   const userId = await getAccessUserId();
   if (!userId) return { ok: false, response: forbidden() };
-  const admin = await accessSeam.isAdmin(userId);
+  const admin = await isAdminOrDeny(userId);
   if (!admin) return { ok: false, response: forbidden() };
   return { ok: true, userId };
 }
 
-/** Admin API guard for pages (layout) — non-admin renders 404 (US-016). */
+/**
+ * Admin API guard for pages (layout) — non-admin renders 404 (US-016).
+ * A token-route lockout maps to null as well, so the caller renders the same
+ * 404 as a plain non-admin instead of a 500.
+ */
 export async function requireAdminPage(): Promise<{ userId: string } | null> {
   const userId = await getAccessUserId();
   if (!userId) return null;
-  const admin = await accessSeam.isAdmin(userId);
+  const admin = await isAdminOrDeny(userId);
   if (!admin) return null;
   return { userId };
 }

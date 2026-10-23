@@ -16,9 +16,27 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NextRequest } from "next/server";
 
-const { cookiesMock } = vi.hoisted(() => ({ cookiesMock: vi.fn() }));
+const { cookiesMock, sessionUserRef } = vi.hoisted(() => ({
+  cookiesMock: vi.fn(),
+  sessionUserRef: { current: null as { id: string; email: string; name: null } | null },
+}));
 
 vi.mock("next/headers", () => ({ cookies: cookiesMock }));
+
+/**
+ * Identity is mocked at the canonical seam (`src/lib/session.ts`) so the suite
+ * can drive BOTH cases: the real Neon SDK cannot mint a signed session cookie
+ * here, so without this the resolved identity is always guest and the
+ * signed-in branch of the gate (the one that reads a role) is never exercised.
+ */
+vi.mock("@/lib/session", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/session")>();
+  return {
+    ...actual,
+    getSessionUser: async () => sessionUserRef.current,
+    getSessionUserId: async () => sessionUserRef.current?.id ?? null,
+  };
+});
 
 import { resetAnonymousTokenCacheForTests } from "@/lib/db/anonymous-token";
 import {
@@ -83,6 +101,7 @@ let captured: CapturedRequest[] = [];
 beforeEach(() => {
   applyThrottledAuthEnv();
   captured = [];
+  sessionUserRef.current = null;
   cookiesMock.mockReset();
   cookiesMock.mockResolvedValue(guestCookieStore());
   resetAnonymousTokenCacheForTests();
@@ -113,13 +132,39 @@ describe("admin API under a token-route 429 (R2-5)", () => {
     }
   }
 
-  // NOTE (found while writing this suite, reported not fixed — see the card
-  // completion metadata): for a caller whose SESSION resolves (signed-in user),
-  // `requireAdminApi()` runs the role read, the Data API client is degraded, and
-  // `loadRole` rethrows `DbTokenUnavailableError` out of the gate — none of the
-  // admin handlers wrap the gate in a try/catch, so that caller gets a 500
-  // instead of 403. The cookieless case pinned above is the only one this
-  // fixture can drive: the Neon SDK cannot mint a signed session cookie here, so
-  // identity always resolves to guest in this suite.
+});
+
+/**
+ * The signed-in case (t_cf1e430f). A caller whose SESSION resolves still needs a
+ * role read, and that read is the one the degraded client refuses: the sentinel
+ * used to escape the gate and every admin handler answered 500. The gate must
+ * map it to the same uniform 403 as a guest (CWE-755), never a 5xx.
+ */
+describe("admin API under a token-route 429, signed-in caller (t_cf1e430f)", () => {
+  for (const route of ADMIN_ROUTES) {
+    for (const method of route.methods) {
+      it(`${method} ${route.path} answers 403 Forbidden, never 500`, async () => {
+        sessionUserRef.current = {
+          id: "user-1",
+          email: "signed-in@example.test",
+          name: null,
+        };
+        captured = installThrottledAuth({
+          sessionUser: { id: "user-1", email: "signed-in@example.test" },
+        });
+        const mod = (await import(route.module)) as Record<string, Handler | undefined>;
+        const handler = mod[method];
+        expect(handler, `${method} not exported by ${route.module}`).toBeTypeOf("function");
+
+        const res = await handler!(req(method, route.path), PARAMS);
+
+        expect(res.status).toBe(403);
+        expect(await res.json()).toEqual({ error: "Forbidden" });
+        // The role read never reached the network: the degraded client answered
+        // locally with the classified sentinel and the gate denied.
+        expect(dataApiRequests(captured)).toHaveLength(0);
+      });
+    }
+  }
 });
 
