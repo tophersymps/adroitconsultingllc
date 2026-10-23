@@ -15,6 +15,10 @@
  * cookie-bound client.
  */
 
+// Build-time guard (review F-7): reads SUPABASE_SERVICE_ROLE_KEY, so it must
+// never be pulled into a client bundle.
+import "server-only";
+
 export interface AuthUserRef {
   id: string;
   email: string;
