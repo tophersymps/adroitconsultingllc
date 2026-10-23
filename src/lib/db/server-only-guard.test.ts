@@ -24,6 +24,10 @@ const PRIVILEGED = [
   "src/lib/db/service.ts",
   // Reads DATABASE_URL for admin auth-user reads.
   "src/lib/auth/users.ts",
+  // R2-5: holds the process-wide anonymous-role JWT — server-only by nature.
+  "src/lib/db/anonymous-token.ts",
+  // R2-5: the classified token-unavailable client (Data API seam).
+  "src/lib/db/degraded-client.ts",
 ];
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -59,6 +63,10 @@ describe("server-only build-time guards (SEC-R2-2-M2)", () => {
     const readers = files.filter((f) =>
       /process\.env\.DATABASE_URL(_UNPOOLED)?\b/.test(readFileSync(join(process.cwd(), f), "utf8")),
     );
-    expect(readers.sort()).toEqual([...PRIVILEGED].sort());
+    // The R2-5 token-cache modules carry the guard because they hold token
+    // material, but they do not open SQL connections — keep that distinction.
+    expect(readers.sort()).toEqual(
+      ["src/lib/auth/users.ts", "src/lib/db/service.ts"].sort(),
+    );
   });
 });

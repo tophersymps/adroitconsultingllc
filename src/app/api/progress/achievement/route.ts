@@ -9,6 +9,7 @@
  */
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/db/server";
+import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
 import { loadAchievementStats } from "@/lib/sky-server";
 import type { AchievementResponse } from "@/shared/contracts-constellations";
 
@@ -26,6 +27,10 @@ export async function GET(): Promise<NextResponse<AchievementResponse>> {
     userId = null;
   }
 
-  const stats = await loadAchievementStats(userId);
+  const stats = await loadAchievementStats(userId).catch((err) => {
+    // R2-5: token unavailable → the guest (empty) stats block, never a 5xx.
+    if (!isDbTokenUnavailable(err)) throw err;
+    return loadAchievementStats(null);
+  });
   return NextResponse.json({ stats } satisfies AchievementResponse);
 }
