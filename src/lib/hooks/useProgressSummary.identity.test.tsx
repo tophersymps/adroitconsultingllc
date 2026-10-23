@@ -66,6 +66,21 @@ function Card() {
   );
 }
 
+/**
+ * The SeriesProgress shape: `isLoading && done === 0` renders the skeleton.
+ * Exposes the raw flag so a stuck `true` is observable without the component.
+ */
+function LoadingCard() {
+  const { merge, isLoading } = useProgressSummary([], []);
+  const done = merge.lessons.size;
+  return (
+    <div data-testid="loading-card">
+      <span data-testid="state">{isLoading ? "loading" : `done:${done ? "some" : "none"}`}</span>
+      <span data-testid="lessons">{[...merge.lessons].sort().join(",")}</span>
+    </div>
+  );
+}
+
 /** A card plus its own useAuth instance (the /atlas hub shape). */
 function AuthCard() {
   const { user, isLoading } = useAuth();
@@ -354,6 +369,110 @@ describe("cross-tab identity change via focus (SEC-R2-F1 t_2dd0e9f9)", () => {
     // the epoch guard turns it into null. That null must not be applied.
     await act(async () => {
       abandonedRead(PAYLOADS["B"]);
+    });
+    expect(screen.getByTestId("lessons")).toHaveTextContent("series-2-1");
+    expect(screen.getByTestId("lessons")).not.toHaveTextContent("series-1-1");
+    expect(screen.getByTestId("best")).toHaveTextContent("41/1");
+  });
+
+  /*
+   * QA-L1 (t_4e6198a6): a mount read discarded by an identity transition must
+   * still clear `isLoading`. Otherwise a guest / fresh sign-in — an identity
+   * with zero merged progress — renders `SeriesProgress`'s animate-pulse
+   * skeleton forever (`isLoading && done === 0`) until a remount. Reported
+   * repro: hold the mount read, sign out, resolve the new read with the guest
+   * payload, then resolve the stale mount read ⇒ `isLoading` stayed true.
+   */
+  it("a discarded mount read still clears isLoading (no permanent skeleton) [QA-L1]", async () => {
+    const resolvers: Array<(payload: unknown) => void> = [];
+    globalThis.fetch = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolvers.push((payload) =>
+            resolve({ ok: true, json: async () => payload } as unknown as Response),
+          );
+        }),
+    ) as never;
+
+    render(<LoadingCard />);
+    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("loading"));
+    await waitFor(() => expect(resolvers.length).toBe(1));
+    const staleMountRead = resolvers[0];
+
+    // Sign-out while the mount read is still open: epoch bumps, seam re-reads.
+    who = "guest";
+    await act(async () => {
+      invalidateProgressSummary();
+      notifyAuthChanged();
+    });
+    await waitFor(() => expect(resolvers.length).toBe(2));
+
+    // The new identity's read lands first (empty guest payload).
+    await act(async () => {
+      resolvers[1](PAYLOADS["guest"]);
+    });
+    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("done:none"));
+
+    // The stale mount read settles LAST and is discarded — loading must stay clear.
+    await act(async () => {
+      staleMountRead(PAYLOADS["A"]);
+    });
+    expect(screen.getByTestId("state")).toHaveTextContent("done:none");
+    expect(screen.getByTestId("lessons")).toHaveTextContent("");
+    expect(screen.getByTestId("lessons")).not.toHaveTextContent("series-1-1");
+  });
+
+  /*
+   * QA-L2 (t_4e6198a6): two identity transitions inside one network RTT. A
+   * `refresh()` read from the previous epoch settles last and resolves to null
+   * (epoch mismatch in fetchProgressSummary); applying that null used to blank
+   * the merged lesson bars while the epoch-guarded quiz strip kept the newer
+   * numbers. The event refresh must skip a read from a superseded epoch.
+   */
+  it("a superseded refresh settling last never blanks a newer payload [QA-L2]", async () => {
+    const resolvers: Array<(payload: unknown) => void> = [];
+    globalThis.fetch = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolvers.push((payload) =>
+            resolve({ ok: true, json: async () => payload } as unknown as Response),
+          );
+        }),
+    ) as never;
+
+    render(<Card />);
+    await waitFor(() => expect(resolvers.length).toBe(1));
+    await act(async () => {
+      resolvers[0](PAYLOADS["A"]);
+    });
+    await waitFor(() => expect(screen.getByTestId("best")).toHaveTextContent("82/3"));
+
+    // focus #1 → refresh R2 starts under the current epoch.
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    await waitFor(() => expect(resolvers.length).toBe(2));
+    const supersededRead = resolvers[1];
+
+    // focus #2 / same-tab sign-out bumps the epoch and starts R3.
+    who = "B";
+    await act(async () => {
+      invalidateProgressSummary();
+      notifyAuthChanged();
+    });
+    await waitFor(() => expect(resolvers.length).toBe(3));
+
+    // R3 (newest) delivers B and renders.
+    await act(async () => {
+      resolvers[2](PAYLOADS["B"]);
+    });
+    await waitFor(() => expect(screen.getByTestId("best")).toHaveTextContent("41/1"));
+    expect(screen.getByTestId("lessons")).toHaveTextContent("series-2-1");
+
+    // R2 settles LAST — even carrying B's bytes it belongs to a superseded
+    // epoch, so it resolves null. That null must not be applied over R3's data.
+    await act(async () => {
+      supersededRead(PAYLOADS["B"]);
     });
     expect(screen.getByTestId("lessons")).toHaveTextContent("series-2-1");
     expect(screen.getByTestId("lessons")).not.toHaveTextContent("series-1-1");
