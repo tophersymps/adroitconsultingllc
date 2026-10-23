@@ -15,7 +15,10 @@ Three layers of proof, in order:
   2. EAGER (integration, HTTP) — a genuinely new Managed Better Auth sign-up
      has its public."user" row *before* the first Data API write, and that
      write (POST /lesson_completion) returns 2xx with only the new user's JWT.
-     This is the bug R1-5 measured (23503).
+     This is the bug R1-5 measured (23503). The eager path is also where
+     `provider` must still be NULL for an email+password sign-up (see F1 in
+     task t_de36d259); 'credential' is only written by a later re-provision,
+     which layer 1 asserts.
 
   3. LAZY HEAL (integration, HTTP) — delete the mirror row (the exact state
      R1-5's fresh-signup probe creates), then POST /lesson_completion again:
@@ -249,11 +252,25 @@ def check_eager(auth_url: str, data_url: str, db_url: str, token: str, user_id: 
         sql(f"SELECT public.provision_public_user('{user_id}');", db_url=db_url)
 
     fields = sql(
-        f'SELECT email, name, provider IS NULL AS provider_null FROM public."user" WHERE id = \'{user_id}\';',
+        f'SELECT email, name, coalesce(provider, \'<NULL>\') '
+        f'FROM public."user" WHERE id = \'{user_id}\';',
         db_url=db_url).split("\t")
     auth_email = sql(f'SELECT email FROM neon_auth."user" WHERE id = \'{user_id}\';', db_url=db_url)
     record("eager.email_copied", bool(fields) and fields[0].strip().lower() == auth_email.strip().lower(),
            expected="email matches the auth identity", detail={"fields": fields})
+
+    # F1 (t_de36d259, decision B): an email+password sign-up carries no
+    # provider *identity*, and the neon_auth.account trigger deliberately
+    # skips providerId='credential' (002 §3), so the eager path MUST leave
+    # provider NULL. 'credential' only appears if the same id is
+    # re-provisioned later - that is what function.provider_copied proves.
+    actual_provider = fields[2].strip() if len(fields) > 2 else ""
+    provider_null = actual_provider == "<NULL>"
+    record("eager.provider_null_for_credential", provider_null,
+           expected="provider IS NULL for a fresh email+password sign-up",
+           detail={"provider": None if provider_null else actual_provider,
+                   "LHS": auth_email.strip(),
+                   "decision": "B - NULL at sign-up, credential only after a re-provision"})
 
     # The R1-5 failure: 409/23503 on the very first write.
     check_write(data_url, token, user_id, "/lesson_completion",

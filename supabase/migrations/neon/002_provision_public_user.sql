@@ -58,9 +58,15 @@
 --     someone else's id exist).
 --
 -- `provider` column: providerId of the user's first non-credential account
---   (e.g. 'google', 'github'), else 'credential' for email+password. It comes
---   from neon_auth.account, whose INSERT lands after neon_auth."user"'s, hence
---   the third trigger.
+--   (e.g. 'google', 'github'). It comes from neon_auth.account, whose INSERT
+--   lands after neon_auth."user"'s, hence the third trigger. That trigger
+--   deliberately ignores 'credential' rows (see §3): an email+password
+--   sign-up carries no provider *identity*, so `provider` stays NULL on the
+--   eager path. It only becomes 'credential' if the same id is re-provisioned
+--   later (public.provision_public_user() reads the by-then present
+--   neon_auth.account row), e.g. via the lazy heal trigger. Documented and
+--   asserted as such: scripts/verify-user-provisioning.py checks
+--   `eager.provider_null_for_credential` on a genuinely fresh sign-up.
 --
 -- IDEMPOTENCY / ATOMICITY: same contract as 001_rls.sql — every object is
 --   guarded (CREATE OR REPLACE, DROP TRIGGER IF EXISTS, ADD COLUMN IF NOT
@@ -196,7 +202,11 @@ CREATE TRIGGER provision_public_user
   EXECUTE FUNCTION public.neon_auth_user_provisioned();
 
 -- Provider identity lands in neon_auth.account *after* the user row, so the
--- provider column is refreshed separately.
+-- provider column is refreshed separately. 'credential' (email+password) is
+-- skipped on purpose: there is no provider identity to record, so `provider`
+-- stays NULL for a fresh sign-up (matching this file's header note and the
+-- eager-path assertion in scripts/verify-user-provisioning.py) and only a
+-- later public.provision_public_user() re-run writes 'credential'.
 CREATE OR REPLACE FUNCTION public.neon_auth_account_provisioned()
 RETURNS trigger
 LANGUAGE plpgsql
