@@ -2,6 +2,22 @@
 
 All notable changes to the Adroit Consulting Blog project will be documented in this file.
 
+### /sitemap.xml fails CLOSED on a credential outage — stealth series are no longer advertised to crawlers (t_2cc94bb7, decision t_0194c233)
+
+**What** - `src/app/sitemap.ts` no longer fails open when the `courses` table cannot be read. Before: `const liveSet = liveSlugs ?? new Set(learnSeries.map(s => s.slug))` — every content series was treated as live, so an outage sitemap published **136 unpublished-series URLs** (40 `ai-adoption`, 96 `hermes-consultant{,-intermediate,-advanced}`), measured live by val-el (t_5ebe86d6) on this branch's head. Now the fallback is the static launch mirror, the same DB-free predicate the atlas routes use on their `unavailable` path: `learnSeries.filter(s => isPubliclyLaunchedSeries(s.slug))`. Only the four seeded live series (`agentic-ai`, `ai-at-work`, `omni-studio-cert`, `salesforce-architect`) contribute learn URLs while the DB is unreachable; static marketing, blog, tag and `/atlas` hub URLs are unchanged, so the build still never fails on a DB hiccup (arch §10). The degradation is still logged exactly once, with the message updated to `courses table unreachable — restricting learn series to the static launched-series mirror`.
+
+Tests: `src/app/sitemap.degraded.test.ts` (the R2-5 forced-429 suite, real `sitemap()` + real `db/server.ts`, only `fetch` stubbed) replaces the old "falls back to the content-derived live series set" assertion — which pinned the fail-open contract — with "fails CLOSED to the static launched-series mirror (no stealth slugs)": every `PUBLICLY_LAUNCHED_SERIES` slug must still appear, and every content series that is not in the mirror must appear **nowhere** in the URLs. The warn assertion now matches the new message.
+
+**Why** - val-el's re-review of t_3b6d832e rated this MEDIUM (CWE-200): the sitemap is session-free, crawler-visible, and during an outage it was the widest disclosure surface for unpublished courses — the same F-2 doctrine the page routes were just fixed to follow. The architecture card for it (t_0194c233) recommends option 1 (fail closed, the static mirror), and this implements that option so the branch has ONE rule for outage disclosure: page routes and sitemap both consult `isPubliclyLaunchedSeries`, and the DB `courses.status` remains the source of truth on the healthy path.
+
+**Verified** -
+- `npx vitest run src/app/sitemap.degraded.test.ts` -> 4/4 passed (fail-closed set, single warn, no token-less Data API request, static routes survive).
+- `npx vitest run "src/app/atlas" "src/app/sitemap" src/lib/atlas-launch.test.ts` -> 12 files / 54 tests passed.
+- `npx tsc --noEmit` exit 0; `npx eslint src/app/sitemap.ts src/app/sitemap.degraded.test.ts` clean.
+- Full suite: see completion metadata.
+
+**Known Issues** - (1) Fail-closed means a course row created at RUNTIME (admin backend, no migration) is missing from the sitemap for the duration of an outage, exactly the documented trade-off in `src/lib/atlas-launch.ts`; add the slug to `PUBLICLY_LAUNCHED_SERIES` when a course launches. (2) Per-user gated surfaces are unaffected: the sitemap only ever advertised public URLs, and this changes which public URLs it advertises, not access control.
+
 ### /atlas/[series]/preview degrades instead of 500ing under a token-route outage — and stealth-series 404 heads stop naming the course (t_91a3e30b)
 
 **What** -
