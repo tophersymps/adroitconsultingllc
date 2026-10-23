@@ -28,11 +28,15 @@ vi.mock("@/lib/auth/server", () => ({
   getAuthServer: () => ({ requestPasswordReset: mocks.requestPasswordReset }),
 }));
 
-vi.mock("@/lib/api-security", () => ({
-  checkRateLimit: mocks.checkRateLimit,
-  getClientIp: mocks.getClientIp,
-  checkOrigin: mocks.checkOrigin,
-}));
+vi.mock("@/lib/api-security", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api-security")>();
+  return {
+    ...actual,
+    checkRateLimit: mocks.checkRateLimit,
+    getClientIp: mocks.getClientIp,
+    checkOrigin: mocks.checkOrigin,
+  };
+});
 
 import { POST } from "./route";
 

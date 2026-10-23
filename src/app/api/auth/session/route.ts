@@ -11,8 +11,15 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/session";
 import { accessSeam } from "@/lib/access";
+import { withAuthCookies } from "@/lib/auth/cookie-jar";
 
-export async function GET() {
+export function GET(): Promise<Response> {
+  // A session read can refresh the SDK cookie; the jar replays it onto this
+  // response (the adapter's `cookies().set()` path is dropped in a handler).
+  return withAuthCookies(handleGet);
+}
+
+async function handleGet(): Promise<Response> {
   try {
     const user = await getSessionUser();
 

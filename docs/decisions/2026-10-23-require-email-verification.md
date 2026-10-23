@@ -37,7 +37,7 @@ total=11  verified=9  unverified=2  unverified_internal=2  unverified_fixture=0
 
 | verified | who | first seen | app data |
 |---|---|---|---|
-| yes (8) | the Supabase-era identities (5 client/staff mailboxes + `qa.admin|member|granted@adroit.io`), imported with their original UUIDs by `003_identity_continuity.sql` | 2026-08-06 → 2026-09-09 | `chris.sympson` 612 lesson_completion + 612 quiz_attempt rows; `kelex1812` 3; rest 0 |
+| yes (8) | the Supabase-era identities (5 client/staff mailboxes + `qa.admin|member|granted@adroit.io`), imported with their original UUIDs by `005_identity_continuity.sql` | 2026-08-06 → 2026-09-09 | `chris.sympson` 612 lesson_completion + 612 quiz_attempt rows; `kelex1812` 3; rest 0 |
 | yes (1) | `Steel F2 probe @adroit.io` | 2026-10-23 | 0 |
 | **no (2)** | `Alpha R1-2 Probe @adroit.io`, `steel.qa.t_ab6c1cb6 @adroit.io` | 2026-10-23 | 0 roles, 0 entitlements, 0 lessons, 0 reads, 1–2 sessions each |
 
@@ -51,7 +51,7 @@ a human, a customer, or a staff member is already `emailVerified = true`, and th
 came from the Supabase era, where the mailbox was proven by an actual confirmation click.
 
 Extra safety margin that makes the flip strictly cheaper than it looks: imported identities were issued
-an **unusable random password** (`003_identity_continuity.sql`, `scripts/import-legacy-identities.mjs`),
+an **unusable random password** (`005_identity_continuity.sql`, `scripts/import-legacy-identities.mjs`),
 so every legacy user's first action is a **password reset** — a mandatory mailbox round-trip *before*
 they can ever reach the sign-in gate. Verification states cannot lock out a user who has to prove the
 mailbox anyway.
@@ -88,7 +88,7 @@ proves the round-trip *while the toggle is still false*, at zero user risk.
 
 ## 4. Why verify at all (the case for flipping)
 
-1. **Authorization keys on identity continuity.** `003_identity_continuity.sql` is explicit that real
+1. **Authorization keys on identity continuity.** `005_identity_continuity.sql` is explicit that real
    authorization (roles, entitlements) is carried by the identity row, and that reconciliation must
    never be by email because "whoever controls a staff address" could inherit a role. With verification
    off, `emailVerified` is a dead field and unverified sign-ups are a standing class of identity risk.

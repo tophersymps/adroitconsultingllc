@@ -11,8 +11,17 @@
  * derived from the request host — deriving from the request would let a
  * localhost dev server or a mismatched deploy origin produce a redirectTo
  * that Supabase's `uri_allow_list` rejects (silent email failure).
+ *
+ * M1 (t_7ecb98d7, CWE-601/CWE-640): the request `Origin` is only honoured when
+ * it is in the CONFIGURED allowlist (`getAllowedOrigins()`). It is never taken
+ * from a request header on trust: `checkOrigin()` accepts a "same-origin"
+ * request on the strength of `Host`, and a caller-supplied Host is
+ * attacker-controlled (a self-hosted deployment or a proxy that forwards it).
+ * Echoing that Origin into a reset/verification link would deliver the
+ * single-use token to a host the attacker controls.
  */
 import { siteConfig } from "@/lib/seo";
+import { getAllowedOrigins, normalizeOrigin } from "@/lib/api-security";
 
 /** Canonical origin for all auth-email redirects (ADR-PWR-1). */
 export const AUTH_ORIGIN = siteConfig.url;
@@ -39,15 +48,22 @@ export function buildAuthRedirect(next: string = "/reset-password"): string {
  * `callbackURL: https://adroit.io/…` from an `Origin: http://localhost:3000`
  * request returns `403 INVALID_CALLBACK_URL`, and vice-versa). The browser
  * always sets `Origin` on our same-origin POSTs, and `checkOrigin()` has
- * already rejected anything else, so echoing it back is safe — and it makes
- * preview deployments work, which a hard-coded production origin cannot.
+ * already rejected anything else — but `checkOrigin()`'s same-origin branch
+ * trusts the request `Host`, which a non-browser caller can forge. So the
+ * value fed into an EMAIL is resolved against the configured origin set only:
  *
- * Falls back to the canonical site origin for non-browser callers (server-side
- * scripts), which is correct in production and fails closed elsewhere.
+ *   - an Origin in `getAllowedOrigins()` (canonical + www sibling, Vercel
+ *     deployment hosts, `AUTH_ALLOWED_ORIGINS`, dev loopback) is used as-is,
+ *     which keeps previews and non-production deployments working;
+ *   - anything else falls back to the canonical `AUTH_ORIGIN`.
+ *
+ * The fallback is also the behaviour for non-browser callers (no Origin),
+ * which is correct in production and fails closed elsewhere.
  */
 export function authRedirectOrigin(reqOrigin: string | null | undefined): string {
-  if (reqOrigin && /^https?:\/\/[^/]+$/.test(reqOrigin)) {
-    return reqOrigin;
+  const normalized = normalizeOrigin(reqOrigin);
+  if (normalized && getAllowedOrigins().has(normalized)) {
+    return normalized;
   }
   return AUTH_ORIGIN;
 }
