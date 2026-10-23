@@ -29,8 +29,16 @@ Endpoints and the database URL come from the environment / the repo's
 .env.local; nothing secret is printed or written.
 
 Usage:
-  QA_PROVISION_PASSWORD=... python3 scripts/verify-user-provisioning.py [--email ...]
+  QA_PROVISION_PASSWORD=... python3 scripts/verify-user-provisioning.py [--email ...] \
+      [--allow-live-db [--allow-production-db]]
   (or pass --password; the script refuses to run without one — no built-in default)
+
+Database guard (security audit F6, task t_9aba2d2e): this harness INSERTs an
+admin row into public.user_roles and DELETEs identities, so it refuses to run
+against any non-local database unless --allow-live-db is passed, and against the
+PRODUCTION Neon endpoint unless --allow-production-db is passed as well. See
+scripts/live_db_guard.py. Exit 2 = configuration error (including a refused
+target), the same contract the script already used for missing config.
 Exit 0 = all checks pass. Exit 1 = a check failed (printed as FAIL).
 """
 
@@ -46,6 +54,9 @@ import sys
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from live_db_guard import add_guard_arguments, require_safe_db_target  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_AUTH_HOST = "ep-noisy-glade-b7jpeudp.neonauth.c-13.us-east-1.aws.neon.tech"
@@ -363,6 +374,7 @@ def main() -> int:
                                                              f"https://{DEFAULT_DATA_HOST}{DATA_BASE_PATH}"))
     parser.add_argument("--report", default=os.path.join(ROOT, "reports",
                                                          "user-provisioning-evidence.json"))
+    add_guard_arguments(parser)
     args = parser.parse_args()
 
     load_dotenv()
@@ -375,10 +387,16 @@ def main() -> int:
     db_url = os.environ.get("DATABASE_URL_UNPOOLED") or os.environ.get("DATABASE_URL")
     if not db_url:
         raise SystemExit("DATABASE_URL_UNPOOLED (or DATABASE_URL) is required")
+    # Security audit F6 (t_9aba2d2e): this harness INSERTs an admin role row
+    # and DELETEs identities, and DATABASE_URL_UNPOOLED in .env.local is the
+    # production endpoint. Refuse anything that was not explicitly opted into.
+    db_host = require_safe_db_target(db_url, allow_live_db=args.allow_live_db,
+                                     allow_production_db=args.allow_production_db)
     auth_url = args.auth_url.rstrip("/")
     data_url = args.data_url.rstrip("/")
 
-    print(f"auth={auth_url.split('//')[-1].split('/')[0]}  data={data_url.split('//')[-1].split('/')[0]}")
+    print(f"auth={auth_url.split('//')[-1].split('/')[0]}  data={data_url.split('//')[-1].split('/')[0]}"
+          f"  db={db_host}")
 
     # A brand-new identity per run is the point of the eager check: reusing an
     # account would only re-test the lazy heal path.
