@@ -2,10 +2,11 @@
 """RLS isolation check for the Neon database (task t_ce10555b, reused by R1-4/R1-5).
 
 Proves, against the live Neon database, that:
-  1. the policy inventory on Neon is complete — the 34 policies over the same
-     14 public tables as the Supabase origin (checked by name AND command, so a
-     dropped or renamed policy fails here even if it happens not to leak) plus
-     the documented Neon-only policy on public."user" = 35 total;
+  1. the policy inventory on Neon is complete — exactly the 34 policies over
+     the same 14 public tables as the Supabase origin (checked by name AND
+     command, so a dropped or renamed policy fails here even if it happens not
+     to leak). No Neon-only policy is declared, which is the point: public."user"
+     is RLS-on with zero policies (default-deny), so the total stays 34;
   2. every user-scoped table has RLS enabled and at least one policy;
   3. user A cannot read user B's rows on any of the ten user-scoped tables;
   4. cross-user writes are rejected, and the legitimate own-user writes the
@@ -17,13 +18,18 @@ Proves, against the live Neon database, that:
      certificate, R1-4 F-2);
   6. an anonymous caller (no JWT) reads zero user rows but still reads the
      genuinely public catalog tables;
-  7. `public."user"` (the auth user table) is not readable by either role;
+  7. `public."user"` (the auth user table) is not readable by either role, and
+     its posture is the reviewed one: RLS ENABLED with ZERO policies
+     (default-deny) behind the REVOKE, so a stray GRANT cannot expose it;
   8. every public table reachable by `authenticated`/`anonymous` has RLS
      enabled — derived from the catalog, not a hardcoded list, so a future
      table cannot inherit the fail-open default privileges unnoticed (F-3);
   9. the admin_audit_log identity sequence is at or ahead of max(id), so a
      server-side audit INSERT cannot collide on the primary key after a data
-     import (F-1).
+     import (F-1);
+ 10. grant independence of `public."user"`: with `GRANT SELECT` to authenticated
+     inside the rolled-back transaction, `SET ROLE authenticated` still reads
+     zero rows (0 instead of every user's email) — the exact F-1 repro.
 
 It never mutates committed row state: everything runs in ONE transaction that
 is rolled back, so it is safe to run against the shared dev branch and safe to
@@ -115,14 +121,14 @@ EXPECTED_POLICIES = [
 # answerable, while the total still has to match exactly (a stray policy hiding
 # in here is the only way a loosened one could slip past the count).
 NEON_ONLY_POLICIES = [
-    # Empty by decision: the accepted design keeps public."user" RLS-DISABLED
-    # with the REVOKE ALL from 001_rls.sql §2 as the control (R1-4 verified
-    # authenticated and anonymous both receive 42501, both roles are
-    # NOBYPASSRLS/NOLOGIN). Val-el's fix card for the R1-4 rework lists that
-    # posture under "do not change", so do NOT add a user_select_own policy
-    # here: it would make the inventory 35 and break the 34-policy parity AC.
-    # Keep the list as the single place where a genuinely Neon-only policy
-    # would be declared (with its reason), not as a parking space for extras.
+    # Empty by decision (t_77f4d97e F-1): public."user" is RLS ENABLED with
+    # ZERO policies, which is default-deny, on top of the REVOKE ALL from
+    # 001_rls.sql §2 (R1-4 verified authenticated and anonymous both receive
+    # 42501, both roles are NOBYPASSRLS/NOLOGIN). Do NOT add a user_select_own
+    # policy here: it would make the inventory 35, break the 34-policy parity
+    # AC, and re-open the table to a grant-permitted role. Keep the list as the
+    # single place where a genuinely Neon-only policy would be declared (with
+    # its reason), not as a parking space for extras.
 ]
 
 ALL_EXPECTED_POLICIES = EXPECTED_POLICIES + NEON_ONLY_POLICIES
@@ -211,8 +217,9 @@ def build_sql() -> str:
         for t, p, c in NEON_ONLY_POLICIES
     )
     # Joining the two groups must survive an EMPTY NEON_ONLY_POLICIES list
-    # (the current state: the accepted design keeps public."user" RLS-disabled
-    # + REVOKE-only), otherwise the generated VALUES list ends in a stray comma.
+    # (the current state: public."user" is RLS-on/zero-policy, i.e. default-deny
+    # behind the REVOKE, and needs no Neon-only policy), otherwise the generated
+    # VALUES list ends in a stray comma.
     expected_values_sql = ",\n    ".join(
         part for part in (policy_values, neon_only_values) if part
     )
@@ -401,37 +408,19 @@ def build_sql() -> str:
         "  where n.nspname = 'public' and c.relkind = 'r'",
         "    and (has_table_privilege('authenticated', c.oid, 'SELECT')",
         "      or has_table_privilege('anonymous', c.oid, 'SELECT'))), 'checked');",
-        "-- public.\"user\" is protected by REVOKE, not by a policy (accepted R1-4",
-        "-- design). The relrowsecurity FLAG itself is not a stable invariant: the",
-        "-- Neon Data API ENABLES RLS on the tables it exposes, so a Data API",
-        "-- request flips it on and the next 001 apply flips it off. What must hold",
-        "-- for every one of those states is that a client role cannot reach the",
-        "-- table: no grants at all, and if RLS is on there must be ZERO policies",
-        "-- (deny-all, not a narrow allow). Assert both, so an ad-hoc permissive",
-        "-- policy still fails even when the flag looks benign.",
-        "select pg_temp.is_('grants.user_table.no_client_grants', (",
-        "  select count(*)::text from pg_class c",
+        "-- public.\"user\" is protected by REVOKE (§2) *and* by default-deny RLS",
+        "-- (t_77f4d97e F-1): RLS ENABLED with ZERO policies means no non-owner",
+        "-- role can read or write the table even if a stray GRANT (or a",
+        "-- re-created table inheriting pg_default_acl) re-grants it. Assert both",
+        "-- halves so a DISABLE, or an ad-hoc user_select_own policy, fails here",
+        "-- (a policy would also make the inventory 35 and break the 34 baseline).",
+        "select pg_temp.is_('grants.user_table.default_deny', (",
+        "  select case when c.relrowsecurity then 'on' else 'off' end from pg_class c",
         "  join pg_namespace n on n.oid = c.relnamespace",
-        "  where n.nspname = 'public' and c.relname = 'user'",
-        "    and (has_table_privilege('authenticated', c.oid, 'SELECT')",
-        "      or has_table_privilege('authenticated', c.oid, 'INSERT')",
-        "      or has_table_privilege('authenticated', c.oid, 'UPDATE')",
-        "      or has_table_privilege('authenticated', c.oid, 'DELETE')",
-        "      or has_table_privilege('anonymous', c.oid, 'SELECT')",
-        "      or has_table_privilege('anonymous', c.oid, 'INSERT')",
-        "      or has_table_privilege('anonymous', c.oid, 'UPDATE')",
-        "      or has_table_privilege('anonymous', c.oid, 'DELETE'))), '0');",
-        "select pg_temp.is_('grants.user_table.posture', (",
-        "  select case when (not c.relrowsecurity)",
-        "              or (select count(*) from pg_policy p where p.polrelid = c.oid) = 0",
-        "              then 'denied' else 'policies-present' end",
-        "  from pg_class c join pg_namespace n on n.oid = c.relnamespace",
-        "  where n.nspname = 'public' and c.relname = 'user'), 'denied');",
-        "select pg_temp.is_('grants.user_table.policy_count', (",
-        "  select count(*)::text from pg_policy p",
-        "  join pg_class c on c.oid = p.polrelid",
-        "  join pg_namespace n on n.oid = c.relnamespace",
-        "  where n.nspname = 'public' and c.relname = 'user'), '0');",
+        "  where n.nspname = 'public' and c.relname = 'user'), 'on');",
+        "select pg_temp.eq('grants.user_table.policy_count', (",
+        "  select count(*) from pg_policies",
+        "  where schemaname = 'public' and tablename = 'user'), 0);",
         "",
         "-- ── 1c. identity sequence not behind its data (F-1) ───────────────",
         "-- Asserted BEFORE the seed, against committed data only: the branch is",
@@ -511,6 +500,18 @@ def build_sql() -> str:
         "'insert into public.catalog_sections(slug, name) values (''rls-leak'',''leak'')'), 'denied:42501');",
         "select pg_temp.is_('anonymous.user_table.read_denied', pg_temp.try_sql("
         "'select count(*) from public.\"user\"'), 'denied:42501');",
+        "reset role;",
+        "",
+        "-- ── 5b. grant independence: a stray GRANT on public.\"user\" is inert ──",
+        "-- This is the exact F-1 repro from the security review: pg_default_acl",
+        "-- hands arwd to `authenticated` on new public relations, so one",
+        "-- re-created table (or one careless GRANT) re-grants the user table.",
+        "-- With RLS enabled and ZERO policies the grant must be inert: 0 rows,",
+        "-- not every user's email. The GRANT is rolled back with the txn.",
+        "grant select on public.\"user\" to authenticated;",
+        "set local role authenticated;",
+        "select pg_temp.eq('grants.user_table.stray_grant_rows', "
+        "(select count(*) from public.\"user\"), 0);",
         "reset role;",
         "",
         "-- ── 6. owner path keeps working (server-side privileged connection) ──",
