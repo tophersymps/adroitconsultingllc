@@ -9,6 +9,23 @@ import {
   revokeAnalyticsConsent,
 } from "@/lib/analytics";
 
+const CONSENT_KEY = "adroit_cookie_consent";
+
+/** Only a truly-undecided visitor sees the banner: "denied" is also the
+ * default when nothing is stored, so a saved deny must stay silent. */
+function isUndecided(): boolean {
+  if (getConsentState() !== "denied") return false;
+  return !window.localStorage.getItem(CONSENT_KEY);
+}
+
+/** Cross-tab: another tab's accept/decline hides this banner too. */
+function subscribeConsent(onChange: () => void): () => void {
+  window.addEventListener("storage", onChange);
+  return () => window.removeEventListener("storage", onChange);
+}
+
+const HIDDEN_ON_SERVER = () => false;
+
 /**
  * Unified cookie consent banner (merger B1). Drives GA4 consent mode: the site
  * defaults to analytics_storage: denied and gtag.js is only granted after the
@@ -17,42 +34,21 @@ import {
  * AnalyticsInit gating so returning visitors with a saved grant do not see the
  * banner and analytics stays granted.
  */
-const CONSENT_KEY = "adroit_cookie_consent";
-
-/**
- * Undecided-visitor predicate. `denied` is ALSO the default when nothing is
- * stored, so the banner only shows for the truly-undecided (no stored key) —
- * repeat deniers are not nagged.
- */
-function needsConsentDecision(): boolean {
-  if (getConsentState() !== "denied") return false;
-  return !window.localStorage.getItem(CONSENT_KEY);
-}
-
-/** localStorage never emits events here; the value only changes via our CTA. */
-function subscribeToConsent(): () => void {
-  return () => {};
-}
-
-/**
- * Hydration safety (t_80131e31): the banner is decided from localStorage, which
- * the server cannot read. Resolving that in a lazy `useState` initializer made
- * the client's FIRST render differ from the server's (empty) markup — a React
- * hydration mismatch (#418) on every page for first-time visitors.
- *
- * `useSyncExternalStore` is the supported way to read an external store with a
- * distinct server snapshot: React renders `getServerSnapshot` (false → nothing)
- * during SSR *and* hydration, then re-reads the client snapshot and re-renders,
- * so the banner appears immediately after hydration with no mismatch.
- */
 export default function CookieConsent() {
-  const [dismissed, setDismissed] = useState(false);
-  const needsDecision = useSyncExternalStore(
-    subscribeToConsent,
-    needsConsentDecision,
-    () => false,
+  // Hydration-safe by construction (QA R2-4 F4). localStorage does not exist
+  // during SSR, so deciding the banner in a useState initializer made the first
+  // client render (banner) disagree with the server HTML (nothing): React
+  // logged a mismatch and threw the server tree away. `useSyncExternalStore`
+  // renders the server snapshot during hydration and switches to the real
+  // value immediately after, with no setState-in-effect cascade. The banner is
+  // fixed to the viewport bottom, so revealing it post-hydration shifts nothing.
+  const undecided = useSyncExternalStore(
+    subscribeConsent,
+    isUndecided,
+    HIDDEN_ON_SERVER,
   );
-  const visible = needsDecision && !dismissed;
+  const [dismissed, setDismissed] = useState(false);
+  const visible = undecided && !dismissed;
 
   function accept() {
     grantAnalyticsConsent();

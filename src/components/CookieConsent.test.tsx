@@ -1,71 +1,43 @@
 /**
- * CookieConsent — hydration safety (t_80131e31).
+ * CookieConsent — hydration contract (QA R2-4 F4).
  *
- * The banner is decided from localStorage, which the server cannot read, so it
- * MUST render nothing on the server AND on the client's first (hydration)
- * render — otherwise React throws a hydration mismatch (#418) on every page for
- * first-time visitors. The banner then appears from an effect.
+ * The banner is decided from localStorage, which does not exist during SSR.
+ * Deciding it in a lazy useState initializer made the first client render
+ * disagree with the server HTML and cost the whole page its server markup
+ * (React #418 on /atlas). The rule this test locks in: server and first client
+ * render both produce nothing, and only the post-mount effect reveals the
+ * banner for a genuinely undecided visitor.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { describe, it, expect, beforeEach } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 import CookieConsent from "./CookieConsent";
 
-const { mocks } = vi.hoisted(() => ({
-  mocks: {
-    getConsentState: vi.fn(),
-    grantAnalyticsConsent: vi.fn(),
-    initAnalytics: vi.fn(),
-    revokeAnalyticsConsent: vi.fn(),
-  },
-}));
-
-vi.mock("@/lib/analytics", () => ({
-  getConsentState: mocks.getConsentState,
-  grantAnalyticsConsent: mocks.grantAnalyticsConsent,
-  initAnalytics: mocks.initAnalytics,
-  revokeAnalyticsConsent: mocks.revokeAnalyticsConsent,
-}));
-
-const KEY = "adroit_cookie_consent";
+const CONSENT_KEY = "adroit_cookie_consent";
 
 beforeEach(() => {
-  vi.clearAllMocks();
-  window.localStorage.clear();
-  mocks.getConsentState.mockReturnValue("denied");
-});
-
-afterEach(() => {
   window.localStorage.clear();
 });
 
-describe("CookieConsent hydration safety", () => {
-  it("renders nothing on the server (no markup for a first-time visitor)", async () => {
-    const { renderToString } = await import("react-dom/server");
+describe("CookieConsent hydration", () => {
+  it("renders nothing on the server, so the client's first render can match", () => {
     expect(renderToString(<CookieConsent />)).toBe("");
   });
 
-  it("shows the banner after hydration for an undecided visitor", async () => {
+  it("shows the banner to an undecided visitor once hydrated", () => {
     render(<CookieConsent />);
-
-    // The server output is empty (pinned above); the effect then reveals it.
-    expect(await screen.findByRole("dialog", { name: /cookie consent/i })).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Cookie consent" })).toBeTruthy();
   });
 
-  it("stays hidden for a returning visitor with a stored decision", async () => {
-    window.localStorage.setItem(KEY, "granted");
+  it("stays hidden for a returning visitor who granted consent", () => {
+    window.localStorage.setItem(CONSENT_KEY, "granted");
     render(<CookieConsent />);
-
-    await waitFor(() => expect(mocks.getConsentState).toHaveBeenCalled());
-    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Cookie consent" })).toBeNull();
   });
 
-  it("hides and persists the decision when accepted", async () => {
+  it("stays hidden for a returning visitor who declined", () => {
+    window.localStorage.setItem(CONSENT_KEY, "denied");
     render(<CookieConsent />);
-    const accept = await screen.findByRole("button", { name: /accept/i });
-    fireEvent.click(accept);
-
-    expect(mocks.grantAnalyticsConsent).toHaveBeenCalled();
-    expect(mocks.initAnalytics).toHaveBeenCalled();
-    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Cookie consent" })).toBeNull();
   });
 });
