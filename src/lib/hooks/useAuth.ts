@@ -37,43 +37,78 @@ function normalizeUser(u: AuthUser | null): AuthUser | null {
   return u ? { ...u, isAdmin: u.isAdmin ?? false } : null;
 }
 
+/**
+ * Shared in-flight/settled session read (PERF t_22e18719).
+ *
+ * Every `useAuth` caller used to issue its own `GET /api/auth/session`. On the
+ * signed-in `/atlas` hub that is one card's `QuizStats` per card — 9 identical
+ * requests for one identity. The session is per-cookie, not per-component, so
+ * the module keeps ONE promise: concurrent mounts join it, later mounts read
+ * the settled value. Identity transitions invalidate it explicitly
+ * (`refresh` / `notifyAuthChanged` / the auth-changed + focus listeners).
+ */
+let sessionPromise: Promise<AuthUser | null> | null = null;
+/** Set by an invalidation; the next `readSession` refetches in place. */
+let sessionStale = false;
+/** Collapses concurrent forced refreshes (an auth-changed event fans out to
+ *  every mounted hook) into one network read. */
+let sessionRefresh: Promise<AuthUser | null> | null = null;
+
+async function fetchSessionUser(): Promise<AuthUser | null> {
+  try {
+    const res = await fetch("/api/auth/session", { cache: "no-store" });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { user: AuthUser | null };
+    return normalizeUser(data.user ?? null);
+  } catch {
+    return null;
+  }
+}
+
+function readSession(): Promise<AuthUser | null> {
+  if (sessionPromise && !sessionStale) return sessionPromise;
+  sessionStale = false;
+  sessionPromise = fetchSessionUser();
+  return sessionPromise;
+}
+
+/** Force a re-read, sharing one request between all callers. */
+function refreshSession(): Promise<AuthUser | null> {
+  if (sessionRefresh) return sessionRefresh;
+  sessionStale = false;
+  const next = fetchSessionUser();
+  sessionPromise = next;
+  sessionRefresh = next;
+  void next.finally(() => {
+    if (sessionRefresh === next) sessionRefresh = null;
+  });
+  return next;
+}
+
+/**
+ * Drop the shared session read so the next `useAuth` mount refetches.
+ * Call on any identity transition (sign-in, sign-out, account switch).
+ */
+export function invalidateAuthSession(): void {
+  sessionStale = true;
+}
+
 export function useAuth(): UseAuthReturn {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    try {
-      const res = await fetch("/api/auth/session", { cache: "no-store" });
-      if (!res.ok) {
-        setUser(null);
-        return;
-      }
-      const data = (await res.json()) as { user: AuthUser | null };
-      setUser(normalizeUser(data.user ?? null));
-    } catch {
-      setUser(null);
-    } finally {
-      setIsLoading(false);
-    }
+    setUser(await refreshSession());
+    setIsLoading(false);
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      try {
-        const res = await fetch("/api/auth/session", { cache: "no-store" });
-        if (cancelled) return;
-        if (!res.ok) {
-          setUser(null);
-          return;
-        }
-        const data = (await res.json()) as { user: AuthUser | null };
-        if (!cancelled) setUser(normalizeUser(data.user ?? null));
-      } catch {
-        if (!cancelled) setUser(null);
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
+      const next = await readSession();
+      if (cancelled) return;
+      setUser(next);
+      setIsLoading(false);
     })();
     /*
      * SEC-R2-2-M3(b): an auth-changed event (or a focus, which is how a
