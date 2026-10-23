@@ -300,6 +300,65 @@ describe("cross-tab identity change via focus (SEC-R2-F1 t_2dd0e9f9)", () => {
     expect(screen.getByTestId("lessons")).toHaveTextContent("series-2-1");
     expect(screen.getByTestId("lessons")).not.toHaveTextContent("series-1-1");
   });
+
+  it("an abandoned event refresh settling last does not wipe B's payload (SEC-L1)", async () => {
+    // SEC-L1 (t_15a53bb8): the event path (`refresh()`, fed by focus /
+    // AUTH_CHANGED) lacked the epoch re-check the mount reads have. Shape of the
+    // repro: an event refresh is in flight when the identity changes; the
+    // post-transition read delivers B and renders; THEN the abandoned read
+    // settles (fetchProgressSummary → null). Before the fix `refresh()` applied
+    // that null, blanking `lessons` while the quiz strip kept B's numbers.
+    const resolvers: Array<(payload: unknown) => void> = [];
+    globalThis.fetch = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolvers.push((payload) =>
+            resolve({ ok: true, json: async () => payload } as unknown as Response),
+          );
+        }),
+    ) as never;
+
+    render(<Card />);
+    await waitFor(() => expect(resolvers.length).toBe(1));
+    // Initial A read lands.
+    await act(async () => {
+      resolvers[0](PAYLOADS["A"]);
+    });
+    await waitFor(() => expect(screen.getByTestId("best")).toHaveTextContent("82/3"));
+    expect(screen.getByTestId("lessons")).toHaveTextContent("series-1-1");
+
+    // An event-driven refresh starts and stays in flight (epoch 0).
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    await waitFor(() => expect(resolvers.length).toBe(2));
+    const abandonedRead = resolvers[1];
+
+    // Identity changes before that read settles: epoch bumps and the seam
+    // refresh starts a new read (epoch 1).
+    who = "B";
+    await act(async () => {
+      invalidateProgressSummary();
+      notifyAuthChanged();
+    });
+    await waitFor(() => expect(resolvers.length).toBe(3));
+
+    // B's read lands first and renders.
+    await act(async () => {
+      resolvers[2](PAYLOADS["B"]);
+    });
+    await waitFor(() => expect(screen.getByTestId("best")).toHaveTextContent("41/1"));
+    expect(screen.getByTestId("lessons")).toHaveTextContent("series-2-1");
+
+    // The abandoned read settles LAST — even if the server returned B's data,
+    // the epoch guard turns it into null. That null must not be applied.
+    await act(async () => {
+      abandonedRead(PAYLOADS["B"]);
+    });
+    expect(screen.getByTestId("lessons")).toHaveTextContent("series-2-1");
+    expect(screen.getByTestId("lessons")).not.toHaveTextContent("series-1-1");
+    expect(screen.getByTestId("best")).toHaveTextContent("41/1");
+  });
 });
 
 describe("identity seams invalidate the summary cache (source lock)", () => {
