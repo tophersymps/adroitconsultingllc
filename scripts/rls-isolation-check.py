@@ -115,11 +115,14 @@ EXPECTED_POLICIES = [
 # answerable, while the total still has to match exactly (a stray policy hiding
 # in here is the only way a loosened one could slip past the count).
 NEON_ONLY_POLICIES = [
-    # R1-4 F-6: public."user" (Better Auth) gets RLS + own-row SELECT as defense
-    # in depth behind the REVOKE ALL in 001_rls.sql §2. Safe because no grants
-    # exist for authenticated/anonymous, the privileged server path is
-    # BYPASSRLS, and the policy only ever returns the caller's own row.
-    ("user", "user_select_own", "SELECT"),
+    # Empty by decision: the accepted design keeps public."user" RLS-DISABLED
+    # with the REVOKE ALL from 001_rls.sql §2 as the control (R1-4 verified
+    # authenticated and anonymous both receive 42501, both roles are
+    # NOBYPASSRLS/NOLOGIN). Val-el's fix card for the R1-4 rework lists that
+    # posture under "do not change", so do NOT add a user_select_own policy
+    # here: it would make the inventory 35 and break the 34-policy parity AC.
+    # Keep the list as the single place where a genuinely Neon-only policy
+    # would be declared (with its reason), not as a parking space for extras.
 ]
 
 ALL_EXPECTED_POLICIES = EXPECTED_POLICIES + NEON_ONLY_POLICIES
@@ -206,6 +209,12 @@ def build_sql() -> str:
     neon_only_values = ",\n    ".join(
         "('%s','%s','%s', false)" % (t.replace("'", "''"), p.replace("'", "''"), c)
         for t, p, c in NEON_ONLY_POLICIES
+    )
+    # Joining the two groups must survive an EMPTY NEON_ONLY_POLICIES list
+    # (the current state: the accepted design keeps public."user" RLS-disabled
+    # + REVOKE-only), otherwise the generated VALUES list ends in a stray comma.
+    expected_values_sql = ",\n    ".join(
+        part for part in (policy_values, neon_only_values) if part
     )
     tables_sql = ", ".join("'%s'" % t for t, _ in USER_SCOPED)
     allowlist_sql = ", ".join(
@@ -349,8 +358,7 @@ def build_sql() -> str:
         "-- ── 1. policy inventory vs the Supabase origin ────────────────────",
         "create temp table expected_policies (tbl text, pol text, cmd text, origin boolean) on commit drop;",
         "insert into expected_policies(tbl, pol, cmd, origin) values",
-        "    " + policy_values + ",",
-        "    " + neon_only_values + ";",
+        "    " + expected_values_sql + ";",
         f"select pg_temp.eq('policy.origin_baseline_size', (select count(*) from expected_policies where origin), {ORIGIN_POLICY_COUNT});",
         "select pg_temp.eq('policy.total_count', (select count(*) from pg_policies where schemaname = 'public'), "
         f"{EXPECTED_POLICY_COUNT});",
@@ -393,11 +401,13 @@ def build_sql() -> str:
         "  where n.nspname = 'public' and c.relkind = 'r'",
         "    and (has_table_privilege('authenticated', c.oid, 'SELECT')",
         "      or has_table_privilege('anonymous', c.oid, 'SELECT'))), 'checked');",
-        "-- the auth user table relies on RLS (F-6) in addition to its REVOKE",
-        "select pg_temp.is_('grants.user_table.rls_enabled', (",
+        "-- public.\"user\" is protected by REVOKE, not RLS (accepted R1-4 design):",
+        "-- assert the posture is the reviewed one, so an ad-hoc ENABLE cannot land",
+        "-- unnoticed (it would also add a 35th policy and break the 34 baseline).",
+        "select pg_temp.is_('grants.user_table.rls_disabled_by_design', (",
         "  select case when c.relrowsecurity then 'on' else 'off' end from pg_class c",
         "  join pg_namespace n on n.oid = c.relnamespace",
-        "  where n.nspname = 'public' and c.relname = 'user'), 'on');",
+        "  where n.nspname = 'public' and c.relname = 'user'), 'off');",
         "",
         "-- ── 1c. identity sequence not behind its data (F-1) ───────────────",
         "-- Asserted BEFORE the seed, against committed data only: the branch is",

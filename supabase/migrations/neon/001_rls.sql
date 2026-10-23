@@ -24,9 +24,10 @@
 --   what is ported — except where the live Supabase database differs, see
 --   the "LIVE-vs-FILES DIVERGENCE" note below.
 --
--- LIVE-vs-FILES DIVERGENCE — TWO DELIBERATE ONES, DO NOT "RESTORE PARITY"
---   Baselines: live Supabase (zrggxfdyptiahskogwnn) has 34 policies over 14
---   public tables; this file produces 35 (the 34 ported + 1 new, see 2 below).
+-- LIVE-vs-FILES DIVERGENCE — ONE DELIBERATE ONE, DO NOT "RESTORE PARITY"
+--   Baseline: live Supabase (zrggxfdyptiahskogwnn) has 34 policies over 14
+--   public tables; this file produces the same 34 (the completion_events
+--   INSERT policy is swapped 1-for-1, see 1 below).
 --
 --   1. completion_events — Neon INTENTIONALLY DIVERGES from live Supabase.
 --      Live still has `completion_events_insert_own` (WITH CHECK
@@ -48,12 +49,15 @@
 --      If you are here to make Neon "match Supabase": re-read this paragraph.
 --      The correct fix is to apply 012 to Supabase, not to reopen Neon.
 --
---   2. public."user" — ADDED ON NEON, absent from the Supabase origin (F-6).
---      The Better Auth user table keeps RLS enabled with a
---      `USING (auth.uid() = id)` SELECT policy as defense in depth behind the
---      `REVOKE ALL` in §2. This is the one extra policy (34 + 1 = 35); it is
---      listed separately in scripts/rls-isolation-check.py as
---      NEON_ONLY_POLICIES so the Supabase-parity check stays meaningful.
+--   2. public."user" — deliberately NOT policy'd. The Better Auth user table
+--      is protected by `REVOKE ALL` in §2, NOT by RLS (R1-4 verified both
+--      authenticated and anonymous receive 42501, and both roles are
+--      NOBYPASSRLS/NOLOGIN). A Neon-only `user_select_own` policy was
+--      considered and rejected by the R1-4 fix card: it would make the
+--      inventory 35 while the accepted parity baseline is 34, and a grant-less
+--      role cannot reach the table anyway. scripts/rls-isolation-check.py
+--      keeps an empty NEON_ONLY_POLICIES list for genuinely Neon-only
+--      policies, and asserts the REVOKE denial instead.
 --
 -- REWRITE TABLE (Supabase expression → Neon expression)
 --   ┌──────────────────────────────┬───────────────────┬───────────────────────────────────────────┐
@@ -89,13 +93,34 @@
 --
 -- IDEMPOTENCY: safe to re-run. Every object is guarded (DO block for roles,
 --   CREATE OR REPLACE for functions, DROP POLICY IF EXISTS + CREATE POLICY
---   for policies, idempotent GRANTs). The final verification block raises
---   if the policy inventory is short, so a partial apply cannot pass silently.
+--   for policies, membership grants guarded by pg_has_role()). The final
+--   verification block raises if the policy inventory is short OR has extras,
+--   so a partial or over-broad apply cannot pass silently.
+--
+--   The harness-only membership grants in §2 MUST stay conditional: on a
+--   branch where the Data API created `authenticated`/`anonymous`,
+--   neondb_owner is already a MEMBER of both but holds no ADMIN OPTION, so an
+--   unconditional `GRANT authenticated TO current_user` aborts the whole
+--   apply with `permission denied to grant role "authenticated"` before a
+--   single policy is created (R1-4 F2).
+--
+-- ATOMICITY: the whole file runs in one explicit transaction (BEGIN ...
+--   COMMIT below). psql otherwise executes statement-by-statement in
+--   autocommit, so a failure halfway through would leave a partially applied
+--   policy set — the exact failure mode F2 produced. The one non-transactional
+--   statement is the §5 setval() repair, which is deliberately idempotent.
 --
 -- HOW TO APPLY
---   psql "$DATABASE_URL_UNPOOLED" -v ON_ERROR_STOP=1 -f supabase/migrations/neon/001_rls.sql
+--   psql "$DATABASE_URL_UNPOOLED" -X -v ON_ERROR_STOP=1 --single-transaction \
+--     -f supabase/migrations/neon/001_rls.sql
+--   (--single-transaction is belt-and-braces; psql then prints two benign
+--   "already a transaction" warnings around the file's own BEGIN/COMMIT.)
 --   Verify with: scripts/rls-isolation-check.py
 -- ═══════════════════════════════════════════════════════════════════
+
+-- One transaction for the whole apply: nothing below is visible unless all of
+-- it succeeds.
+BEGIN;
 
 -- ─────────────────────────────────────────────────────────────────────
 -- 0. Roles used by the Data API
@@ -259,9 +284,8 @@ GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated, anonymous;
 
 -- ═════════════════════════════════════════════════════════════════════
 -- 4. Policies — the 34 policies over 14 tables ported by name from live
---    Supabase, plus 1 Neon-only policy on public."user" (F-6) = 35.
---    The completion_events INSERT policy is 012's deny guard, not live
---    Supabase's forgeable insert_own — see the header note.
+--    Supabase. The completion_events INSERT policy is 012's deny guard, not
+--    live Supabase's forgeable insert_own — see the header note.
 -- ═════════════════════════════════════════════════════════════════════
 
 -- ── read_progress (001, hardened by 003) ─────────────────────────────
@@ -493,17 +517,20 @@ CREATE POLICY "completion_events deny client insert"
 -- No UPDATE/DELETE policy anywhere: completion_events stays append-only
 -- (ADR-211) for every non-owner role.
 
--- ── "user" (Neon-only, R1-4 F-6) ───────────────────────────────────────
+-- ── "user" — stays RLS-disabled by design (do NOT add a policy here) ────
 -- Not ported from Supabase (auth.users is a different object there and was
--- never policy'd); added as defense in depth behind the REVOKE in §2. A caller
--- holding a valid JWT may see its OWN row and nothing else, so a future GRANT
--- cannot turn into a roster dump. No INSERT/UPDATE/DELETE policy: Better Auth
--- writes through the privileged server connection, which bypasses RLS. This is
--- the 35th policy — see the header divergence note.
+-- never policy'd) and deliberately NOT given a Neon-only policy: the accepted
+-- control is the REVOKE ALL in §2 (R1-4 verified authenticated and anonymous
+-- both receive 42501, and both roles are NOBYPASSRLS/NOLOGIN; the harness
+-- asserts the denial). A grant-less role cannot reach the table at all, and a
+-- user_select_own policy here would make the inventory 35 and break the
+-- 34-policy parity the security review and QA both sign off on.
+--
+-- This block exists because policy state belongs to THIS file: if an ad-hoc
+-- user_select_own policy was applied to the branch, the file converges the
+-- database back to the reviewed design instead of silently reporting 35.
 DROP POLICY IF EXISTS "user_select_own" ON public."user";
-CREATE POLICY "user_select_own"
-  ON public."user" FOR SELECT TO authenticated
-  USING (auth.uid() = id);
+ALTER TABLE public."user" DISABLE ROW LEVEL SECURITY;
 
 -- ═════════════════════════════════════════════════════════════════════
 -- 5. Post-load repair — identity sequences vs imported data
@@ -558,8 +585,7 @@ DECLARE
     ['quiz_run','2'], ['user_profiles','3'], ['user_roles','2'],
     ['courses','2'], ['user_entitlements','2'], ['subscriptions','1'],
     ['admin_audit_log','2'], ['catalog_sections','2'], ['catalog_groups','2'],
-    ['course_prerequisites','2'], ['completion_events','2'],
-    ['user','1']
+    ['course_prerequisites','2'], ['completion_events','2']
   ];
   rec text[];
   actual int;
@@ -582,6 +608,14 @@ BEGIN
   END LOOP;
 
   SELECT count(*) INTO actual FROM pg_policies WHERE schemaname = 'public';
-  RAISE NOTICE 'RLS port OK: % policies on public (35 expected: 34 ported across the 14 app tables + 1 Neon-only on "user")', actual;
+  IF actual <> 34 THEN
+    RAISE EXCEPTION
+      'RLS port policy count is %, expected exactly 34 — an extra policy is a '
+      'loosened gate, a short one is a lost one', actual;
+  END IF;
+  RAISE NOTICE 'RLS port OK: % policies on public (34 expected across the 14 app tables)', actual;
 END
 $$;
+
+-- Everything above commits together or not at all (see BEGIN at the top).
+COMMIT;
