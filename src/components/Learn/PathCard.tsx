@@ -96,7 +96,7 @@ export default function PathCard({ series, gate, loginNext }: PathCardProps) {
           </span>
         ) : isGuest ? (
           /* Guest-locked state: name + description visible, non-clickable, CTA */
-          <div className="mt-3 pt-3 border-t border-[var(--border-subtle)] min-h-[96px]">
+          <div className="mt-4 pt-3 border-t border-[var(--border-subtle)] min-h-[96px]">
             <div className="flex items-center gap-2 text-xs text-[var(--ink-muted)] mb-[11px]">
               <svg
                 viewBox="0 0 24 24"

@@ -83,4 +83,28 @@ describe("PathCard footer height reservation (PERF-M2)", () => {
     const quizSlot = screen.getByTestId("quiz-stats").parentElement;
     expect(quizSlot?.className).toContain("min-h-[16px]");
   });
+
+  /**
+   * Zod review of PR #371 (F4): the two footers reserved the same floor but not
+   * the same top margin (guest `mt-3`, signed-in `mt-4`), leaving ~4px of
+   * residual growth on the guest→signed-in swap. Pin them to one value.
+   */
+  it("uses one top margin for both footers (F4 residual)", () => {
+    const marginOf = (el: HTMLElement | undefined) =>
+      el?.className.split(/\s+/).find((c) => /^mt-\d/.test(c));
+
+    const guest = render(
+      <PathCard series={card({ canAccess: false })} gate="guest-locked" />,
+    );
+    const guestMargin = marginOf(footers(guest.container)[0]);
+    guest.unmount();
+
+    const signed = render(
+      <PathCard series={card({ canAccess: true })} gate="signed-in" />,
+    );
+    const signedMargin = marginOf(footers(signed.container)[0]);
+
+    expect(guestMargin).toBe("mt-4");
+    expect(signedMargin).toBe(guestMargin);
+  });
 });
