@@ -39,6 +39,15 @@ export interface SessionUser {
 export const SESSION_COOKIE_NAME = "__Secure-neon-auth.session_token";
 
 /**
+ * Same cookie under its plain-http name. On https (and on loopback) the SDK's
+ * `__Secure-`-prefixed name is used; on plain http over a non-loopback host
+ * browsers reject a `__Secure-` cookie unless it carries `Secure`, so the
+ * session is stored unprefixed instead (see `src/lib/auth/transport.ts`).
+ * Both names must be checked or those deployments degrade to guest.
+ */
+export const PLAIN_SESSION_COOKIE_NAME = "neon-auth.session_token";
+
+/**
  * Current session user, or null for guests / on any auth error.
  * Shape is intentionally minimal: only what the app needs (id, email, name).
  *
@@ -56,7 +65,12 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   try {
     const { cookies } = await import("next/headers");
     const cookieStore = await cookies();
-    if (!cookieStore.has(SESSION_COOKIE_NAME)) return null;
+    if (
+      !cookieStore.has(SESSION_COOKIE_NAME) &&
+      !cookieStore.has(PLAIN_SESSION_COOKIE_NAME)
+    ) {
+      return null;
+    }
 
     const { getAuthServer } = await import("@/lib/auth/server");
     const { data } = await getAuthServer().getSession();

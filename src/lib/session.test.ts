@@ -35,6 +35,7 @@ vi.mock("next/headers", () => ({
 import {
   getSessionUser,
   getSessionUserId,
+  PLAIN_SESSION_COOKIE_NAME,
   SESSION_COOKIE_NAME,
 } from "./session";
 
@@ -48,8 +49,11 @@ const SESSION = {
 
 /** Sign the fake request in (or out) by setting the session cookie name. */
 function setSessionCookie(present: boolean): void {
+  /* Both accepted names are cleared, otherwise a test that signs in under the
+   * plain-http name leaks into the guest cases that follow. */
+  mocks.cookies.delete(SESSION_COOKIE_NAME);
+  mocks.cookies.delete(PLAIN_SESSION_COOKIE_NAME);
   if (present) mocks.cookies.add(SESSION_COOKIE_NAME);
-  else mocks.cookies.delete(SESSION_COOKIE_NAME);
 }
 
 beforeEach(() => {
@@ -89,6 +93,22 @@ describe("getSessionUser", () => {
       email: "",
       name: null,
     });
+  });
+
+  it("resolves a session stored under the plain-http cookie name", async () => {
+    /* Plain-http deployments (LAN staging / http preview) cannot store a
+     * `__Secure-` cookie, so the SDK writes `neon-auth.session_token` there
+     * (t_ab6c1cb6 F2). The fast path must not treat that as a guest. */
+    setSessionCookie(false);
+    mocks.cookies.add(PLAIN_SESSION_COOKIE_NAME);
+    mocks.getSession.mockResolvedValue(SESSION);
+
+    await expect(getSessionUser()).resolves.toEqual({
+      id: "u1",
+      email: "a@adroit.io",
+      name: "A",
+    });
+    expect(mocks.getSession).toHaveBeenCalledTimes(1);
   });
 
   it("short-circuits guests without touching the auth SDK (perf P2)", async () => {

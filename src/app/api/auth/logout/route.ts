@@ -9,8 +9,15 @@
  */
 import { NextResponse } from "next/server";
 import { getAuthServer } from "@/lib/auth/server";
+import { withAuthCookies } from "@/lib/auth/cookie-jar";
 
-export async function POST() {
+export function POST(): Promise<Response> {
+  // Cookie expiry headers are replayed onto the response by the jar (the
+  // adapter's `cookies().set()` path is dropped inside a route handler).
+  return withAuthCookies(handleLogout);
+}
+
+async function handleLogout(): Promise<Response> {
   try {
     await getAuthServer().signOut();
     return NextResponse.json({ status: "ok" });

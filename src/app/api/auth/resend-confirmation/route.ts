@@ -14,13 +14,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthServer } from "@/lib/auth/server";
 import { checkRateLimit, getClientIp, checkOrigin } from "@/lib/api-security";
 import { buildVerifyEmailRedirect } from "@/lib/auth-emails";
+import { withAuthCookies } from "@/lib/auth/cookie-jar";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const GENERIC_MESSAGE =
   "If that account needs confirmation, we've sent a new confirmation link. Please allow a few minutes for it to arrive.";
 
-export async function POST(req: NextRequest) {
+export function POST(req: NextRequest): Promise<Response> {
+  return withAuthCookies(() => handleResend(req));
+}
+
+async function handleResend(req: NextRequest): Promise<Response> {
   const originError = checkOrigin(req);
   if (originError) {
     return NextResponse.json({ error: "Forbidden origin" }, { status: 403 });
