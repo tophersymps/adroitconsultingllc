@@ -39,6 +39,8 @@
  *   NEXT_PUBLIC_SITE_URL    canonical origin used when a caller sends no
  *                           Origin/Referer, and by the auth-email redirects
  */
+import "server-only";
+
 import { headers } from "next/headers";
 import {
   createAuthServer,
