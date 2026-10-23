@@ -67,8 +67,14 @@ export default function CookieConsent() {
 
   return (
     <div
-      role="dialog"
+      /* Non-modal, non-blocking notice (a11y LOW L2, t_b717ec09): it is
+         mounted post-hydration, so role="dialog" without aria-modal and
+         without a focus move mis-described it. A labelled region is announced
+         as a landmark region of the page; aria-live="polite" lets the text
+         reach a screen reader that is already scanning the page. */
+      role="region"
       aria-label="Cookie consent"
+      aria-live="polite"
       className="fixed bottom-0 inset-x-0 z-[90] border-t border-[var(--border-default)] bg-[var(--surface-card)] px-6 py-4 shadow-[var(--shadow-dialog)] sm:flex sm:items-center sm:justify-between sm:gap-6"
     >
       <p className="text-sm text-[var(--ink-muted)]">
@@ -79,16 +85,18 @@ export default function CookieConsent() {
         </Link>{" "}
         for details.
       </p>
+      {/* min-h-[44px]: WCAG 2.5.8 / 44x44 touch targets (a11y LOW L3,
+          t_b717ec09) — px-4 py-2 text-sm alone lands at ~36 px. */}
       <div className="mt-3 flex shrink-0 gap-3 sm:mt-0">
         <button
           onClick={decline}
-          className="rounded-lg border border-[var(--border-strong)] px-4 py-2 text-sm font-medium text-[var(--ink-body)] transition-colors hover:bg-[var(--surface-sunken)]"
+          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-[var(--border-strong)] px-4 py-2 text-sm font-medium text-[var(--ink-body)] transition-colors hover:bg-[var(--surface-sunken)]"
         >
           Decline
         </button>
         <button
           onClick={accept}
-          className="rounded-lg bg-[var(--surface-inverse)] px-4 py-2 text-sm font-medium text-[var(--ink-on-inverse)] transition-colors hover:bg-[var(--surface-inverse-hover)]"
+          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg bg-[var(--surface-inverse)] px-4 py-2 text-sm font-medium text-[var(--ink-on-inverse)] transition-colors hover:bg-[var(--surface-inverse-hover)]"
         >
           Accept
         </button>

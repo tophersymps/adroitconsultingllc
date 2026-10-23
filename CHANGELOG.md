@@ -2,6 +2,19 @@
 
 All notable changes to the Adroit Consulting Blog project will be documented in this file.
 
+### A11Y LOW fixes: AdminShell SSR aria-hidden + consent banner semantics/targets (t_b717ec09)
+
+**What** - Three LOW a11y findings from lara's review of PR #361 (`c43fb6af`), all pre-existing:
+(1) **L1 — AdminShell** (`src/components/Admin/AdminShell.tsx`): dropped `aria-hidden={!open}` from the `<aside id="admin-drawer">`. That one element is both the off-canvas mobile drawer and the static `md+` sidebar, and `aria-hidden` cannot be made responsive, so SSR (where `open` is always `false`) shipped `aria-hidden="true"` on markup that paints visible at ≥768 px, hiding focusable nav links from the a11y tree (`aria-hidden-focus`, WCAG 4.1.2) until the mount effect measured the window — permanently without JS. The existing `invisible` / `md:visible` classes already express the same thing in the a11y tree (`visibility:hidden` removes the closed drawer and its links, `md:visible` keeps the desktop sidebar exposed), so the attribute was redundant. No new state, no new server/client split, no extra commit. `aria-expanded` / `aria-controls` / `aria-label` / Escape / focus-on-open on the hamburger are untouched.
+(2) **L2 — CookieConsent** (`src/components/CookieConsent.tsx`): `role="dialog"` (no `aria-modal`, no focus move, mounted post-hydration) → `role="region"` + existing `aria-label="Cookie consent"` + `aria-live="polite"`. It is a non-modal, non-blocking notice, so it no longer claims to be a dialog that was never announced.
+(3) **L3 — CookieConsent**: both choice buttons now `inline-flex min-h-[44px] min-w-[44px] items-center justify-center`; `px-4 py-2 text-sm` alone measured ~36 px tall (WCAG 2.5.8 target 44×44).
+
+**Why** - lara's a11y review of the R2-4 hydration fix (t_3f513e6e) passed both axes with these three LOW items recorded against files the hydration fix touched; the SSR one is the only finding with a user-visible a11y-tree defect at desktop widths.
+
+**Verified** - `npx vitest run src/components/Admin/AdminShell.test.tsx src/components/CookieConsent.test.tsx` **2 files / 20 tests passed** (7 new/updated assertions: an SSR `renderToString` probe that the aside ships `md:visible` with **no** `aria-hidden`, visibility-class assertions replacing the old aria-hidden ones, region/aria-live/non-modal checks and the 44 px class checks). `npx tsc --noEmit` clean; `npx eslint` clean on all four files. Live `next dev` on :3411 with a console hook injected via `Page.addScriptToEvaluateOnNewDocument` before load: `/atlas`, `/atlas/salesforce-architect`, `/field-notes` → **zero React #418/#441**, only the pre-existing dev-mode CSP `eval()` notice.
+
+**Known Issues** - (1) `aria-live="polite"` on a region that is inserted after hydration is not announced by every screen reader (live regions are most reliable when the region pre-exists); the reviewer's preferred `role="region"` option is implemented, and moving focus was rejected as it would steal focus from page interaction. (2) The desktop sidebar is only verified by unit/SSR assertions here — /admin is auth-guarded, so no live browser pass on the md+ admin surface. (3) L4 from the same review (next/image aspect-ratio warning on the header logo) is out of scope for this card.
+
 ### SEC-R2-4: hygiene fixes on the data-API isolation harness (t_17956eb8)
 
 **What** - `scripts/data-api-isolation-check.py` (the manual harness that runs against the production Neon auth/Data API/DB; not shipped, not wired into CI):
