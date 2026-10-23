@@ -41,8 +41,15 @@ $QA_SESSION_PASSWORD). It is never printed and never written to the report.
 
 Usage:
   python3 scripts/verify-session-bridge.py [--app-url http://localhost:3000] \
-      [--email kelex1812+qa-bridge-<ts>@gmail.com] [--password ...]
+      [--email kelex1812+qa-bridge-<ts>@gmail.com] [--password ...] \
+      [--allow-live-db [--allow-production-db]]
 Exit 0 = every check passed. 1 = a check failed. 2 = configuration error.
+
+Database guard (security audit F6, task t_9aba2d2e): steps 3-5 seed an `admin`
+row into public.user_roles and then DELETE the throwaway identity from
+public."user" / neon_auth.*, so this harness refuses any non-local database
+without --allow-live-db, and refuses the PRODUCTION Neon endpoint without
+--allow-production-db on top. See scripts/live_db_guard.py.
 """
 
 from __future__ import annotations
@@ -57,6 +64,9 @@ import sys
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from live_db_guard import add_guard_arguments, require_safe_db_target  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ORIGIN = "https://adroit.io"
@@ -316,6 +326,7 @@ def main() -> int:
                         help="running app, e.g. http://localhost:3000 (enables criterion 1/2)")
     parser.add_argument("--report", default=os.path.join(ROOT, "reports",
                                                          "session-bridge-evidence.json"))
+    add_guard_arguments(parser)
     args = parser.parse_args()
 
     load_dotenv()
@@ -325,6 +336,11 @@ def main() -> int:
     if not (auth_url and data_url and db_url):
         print("NEON_AUTH_BASE_URL, NEON_DATA_API_URL and DATABASE_URL_UNPOOLED are required")
         return 2
+    # Security audit F6 (t_9aba2d2e): this harness seeds an admin role row and
+    # DELETEs identities, and DATABASE_URL_UNPOOLED in .env.local is the
+    # production endpoint. Refuse anything that was not explicitly opted into.
+    db_host = require_safe_db_target(db_url, allow_live_db=args.allow_live_db,
+                                     allow_production_db=args.allow_production_db)
     auth_url_global = auth_url
 
     email = args.email or (
@@ -332,7 +348,8 @@ def main() -> int:
     password = args.password or ("Bridge-" + secrets.token_urlsafe(18) + "!9")
 
     print(f"auth={auth_url.split('//')[-1].split('/')[0]}  "
-          f"data={data_url.split('//')[-1].split('/')[0]}  app={args.app_url or '(none)'}")
+          f"data={data_url.split('//')[-1].split('/')[0]}  app={args.app_url or '(none)'}  "
+          f"db={db_host}")
 
     user_id: str | None = None
     try:
