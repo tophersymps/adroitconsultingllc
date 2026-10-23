@@ -28,11 +28,36 @@ export interface SessionUser {
 }
 
 /**
+ * Session cookie name, mirrored from the SDK's `NEON_AUTH_SESSION_COOKIE_NAME`
+ * (`__Secure-neon-auth.session_token`).
+ *
+ * Duplicated on purpose: the guest fast path must decide "no cookie ⇒ no
+ * session" WITHOUT importing the SDK, and the cookie name is the only fact it
+ * needs. `session.test.ts` pins this literal against the SDK's exported
+ * constant so the two cannot drift apart silently.
+ */
+export const SESSION_COOKIE_NAME = "__Secure-neon-auth.session_token";
+
+/**
  * Current session user, or null for guests / on any auth error.
  * Shape is intentionally minimal: only what the app needs (id, email, name).
+ *
+ * GUEST FAST PATH (perf P2, review of t_d3c401c9): `/api/auth/session` is
+ * called on every page load (`src/hooks/useAuth.ts`), and the SDK's
+ * `getSession()` only consults the signed session-data cookie cache when BOTH
+ * the session token cookie and the session-data cookie are present. With
+ * neither — i.e. every guest — it falls through to an upstream `get-session`
+ * fetch (~40 ms locally vs ~3 ms before the R2-1 swap, plus a round trip to
+ * the auth backend per anonymous pageview). So: no session cookie ⇒ guest,
+ * decided from `next/headers` alone, before the SDK is even imported. This is
+ * the same guard `src/proxy.ts` uses.
  */
 export async function getSessionUser(): Promise<SessionUser | null> {
   try {
+    const { cookies } = await import("next/headers");
+    const cookieStore = await cookies();
+    if (!cookieStore.has(SESSION_COOKIE_NAME)) return null;
+
     const { getAuthServer } = await import("@/lib/auth/server");
     const { data } = await getAuthServer().getSession();
     const user = data?.user;
