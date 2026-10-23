@@ -34,6 +34,7 @@ export const articleAudio: ArticleAudio[] = [
   { slug: "ai-requirements-bottleneck-2026", voice: "af_heart", storagePath: "blog/ai-requirements-bottleneck-2026/af_heart.mp3", timingsStoragePath: "blog/ai-requirements-bottleneck-2026/af_heart.timing.json" },
   { slug: "ai-strategy-2026", voice: "af_heart", storagePath: "blog/ai-strategy-2026/af_heart.mp3", timingsStoragePath: "blog/ai-strategy-2026/af_heart.timing.json" },
   { slug: "apex-summer-26-security-v67-migration", voice: "af_heart", storagePath: "blog/apex-summer-26-security-v67-migration/af_heart.mp3", timingsStoragePath: "blog/apex-summer-26-security-v67-migration/af_heart.timing.json" },
+  { slug: "async-batch-inference-2026", voice: "af_heart", storagePath: "blog/async-batch-inference-2026/af_heart.mp3", timingsStoragePath: "blog/async-batch-inference-2026/af_heart.timing.json" },
   { slug: "backlog-refinement-story-slicing-2026", voice: "af_heart", storagePath: "blog/backlog-refinement-story-slicing-2026/af_heart.mp3", timingsStoragePath: "blog/backlog-refinement-story-slicing-2026/af_heart.timing.json" },
   { slug: "backup-restore-validation-2026", voice: "af_heart", storagePath: "blog/backup-restore-validation-2026/af_heart.mp3", timingsStoragePath: "blog/backup-restore-validation-2026/af_heart.timing.json" },
   { slug: "ci-cache-infrastructure-2026", voice: "af_heart", storagePath: "blog/ci-cache-infrastructure-2026/af_heart.mp3", timingsStoragePath: "blog/ci-cache-infrastructure-2026/af_heart.timing.json" },
