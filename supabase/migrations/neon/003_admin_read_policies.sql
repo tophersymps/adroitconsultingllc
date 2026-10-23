@@ -9,12 +9,18 @@
 -- still returned 200. That is a silent functional regression, so the admin read paths
 -- get the same treatment every other admin surface already has in 001 (is_admin()).
 --
--- SCOPE: SELECT only, TO authenticated, USING (public.is_admin()). No write policies are
--- added or changed here — privileged writes still go through the deny-client-insert
--- guards and the direct-SQL helpers in src/lib/db/service.ts.
+-- SCOPE: SELECT only, TO authenticated, USING ((SELECT public.is_admin())). No write
+-- policies are added or changed here — privileged writes still go through the
+-- deny-client-insert guards and the direct-SQL helpers in src/lib/db/service.ts.
 --
 -- Mirrors 001_rls.sql section 5 (user_roles / entitlements / subscriptions / courses),
 -- which already grant admin SELECT via public.is_admin(). Idempotent: safe to re-apply.
+--
+-- PERFORMANCE (t_61fbf171): each USING clause calls is_admin() as
+-- `(SELECT public.is_admin())` so the planner turns it into an InitPlan (one
+-- evaluation per statement, ~130x cheaper on the analytics aggregate) instead of
+-- a per-row Filter — is_admin() is SECURITY DEFINER and cannot be inlined.
+-- Keep the definitions byte-identical to 001_rls.sql §4b.
 --
 -- NOTE (t_de7db90d): 001_rls.sql §4b now creates these same three policies itself,
 -- so a fresh branch converges to the 37-policy inventory (34 origin + 3 Neon-only)
@@ -33,7 +39,7 @@ DROP POLICY IF EXISTS "user_profiles_admin_select" ON public.user_profiles;
 CREATE POLICY "user_profiles_admin_select"
   ON public.user_profiles FOR SELECT
   TO authenticated
-  USING (public.is_admin());
+  USING ((SELECT public.is_admin()));
 
 -- ── lesson_completion — /api/admin/analytics aggregates completions per course ──
 ALTER TABLE public.lesson_completion ENABLE ROW LEVEL SECURITY;
@@ -41,7 +47,7 @@ DROP POLICY IF EXISTS "lesson_completion_admin_select" ON public.lesson_completi
 CREATE POLICY "lesson_completion_admin_select"
   ON public.lesson_completion FOR SELECT
   TO authenticated
-  USING (public.is_admin());
+  USING ((SELECT public.is_admin()));
 
 -- ── read_progress — same analytics aggregate, reads per content slug ──
 ALTER TABLE public.read_progress ENABLE ROW LEVEL SECURITY;
@@ -49,6 +55,6 @@ DROP POLICY IF EXISTS "read_progress_admin_select" ON public.read_progress;
 CREATE POLICY "read_progress_admin_select"
   ON public.read_progress FOR SELECT
   TO authenticated
-  USING (public.is_admin());
+  USING ((SELECT public.is_admin()));
 
 COMMIT;
