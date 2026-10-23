@@ -2,6 +2,30 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "async-batch-inference-2026",
+    "title": "Half Price If It Can Wait: The Batch Inference Lane",
+    "excerpt": "Your nightly model calls are paying interactive prices. The batch lane is half price, 24 hours, and a state machine you have to own.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "October 22, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "AI Infrastructure",
+      "Batch Inference",
+      "LLM Cost",
+      "Inference",
+      "Model Serving",
+      "Queueing"
+    ],
+    "bannerImage": "/banners/async-batch-inference-2026.webp",
+    "ogImage": "/banners/async-batch-inference-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "salesforce-sandbox-environment-strategy-2026",
     "title": "The Environment Is Part of the Architecture",
     "excerpt": "A sandbox is a copy with documented deltas. Ignore them and passed in the sandbox quietly becomes works in production, usually six weeks after go-live.",
