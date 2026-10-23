@@ -32,6 +32,7 @@ import SeriesStarChart from "@/components/Constellations/chart/SeriesStarChart";
 import { loadSeriesConstellation, loadExamPassedBySeries } from "@/lib/sky-server";
 import { getSupabaseServerClient } from "@/lib/db/server";
 import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
+import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
 
 interface Props {
   params: Promise<{ series: string }>;
@@ -85,6 +86,12 @@ export default async function SeriesPage({ params }: Props) {
     if (!isDbTokenUnavailable(err)) throw err;
     degraded = true;
   }
+  // F-2 (t_c4eafa3b MEDIUM, CWE-200): the degraded path cannot prove the
+  // series is publicly launched — the static catalogue also carries stealth
+  // slugs — so fail CLOSED on EXISTENCE. An unpublished series 404s during an
+  // outage exactly as the healthy seam does. Availability for the four seeded
+  // live series is unchanged (R2-5).
+  if (degraded && !isPubliclyLaunchedSeries(series)) notFound();
   const courseRow = degraded ? null : await getCourseRowBySlug(series);
 
   // Learn v2 profile (ADR-208/209/210): the unified CatalogCourse for this

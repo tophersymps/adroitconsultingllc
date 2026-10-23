@@ -113,6 +113,7 @@ vi.mock("@/components/Constellations/CertificateCelebration", () => ({
 }));
 
 import Page from "./page";
+import { DbTokenUnavailableError } from "@/lib/db/degraded-client";
 
 const series = (over: Record<string, unknown> = {}) => ({
   slug: "agentic-ai",
@@ -189,5 +190,22 @@ describe("/atlas/[series]/certificate — exam-less series (B-07 / D2)", () => {
     expect(html).toContain("Your certificate");
     expect(html).toMatch(/guest-cta-.*certificate/);
     expect(html).not.toContain("coming soon");
+  });
+
+  // F-2 (t_c4eafa3b MEDIUM, CWE-200). Fails on `origin/main`: under a mint
+  // outage the stealth series' certificate route answered 200 and named the
+  // unpublished course in the locked-content view.
+  it("F-2: 404s a stealth series' certificate route during a token outage", async () => {
+    mocks.getSeriesBySlug.mockReturnValue(series({ slug: "ai-adoption", name: "AI Adoption for Teams" }));
+    mocks.getCertExam.mockReturnValue(null);
+    mocks.getSeriesLessonSlugs.mockReturnValue([]);
+    mocks.getAccessUserId.mockResolvedValue(null);
+    mocks.decideCourseAccess.mockRejectedValue(
+      new DbTokenUnavailableError("/token/anonymous"),
+    );
+
+    await expect(
+      Page({ params: Promise.resolve({ series: "ai-adoption" }) }),
+    ).rejects.toThrow("NEXT_NOT_FOUND");
   });
 });

@@ -37,7 +37,9 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/data/learn", () => ({
-  learnSeries: [{ slug: "omni-studio-cert" }],
+  // `ai-adoption` is a STEALTH series: present in the static catalogue, no live
+  // `courses` row. It is here for the F-2 existence test below.
+  learnSeries: [{ slug: "omni-studio-cert" }, { slug: "ai-adoption" }],
 }));
 
 const LESSONS = [
@@ -56,7 +58,16 @@ vi.mock("@/lib/learn", () => ({
           totalLessons: LESSONS.length,
           lessons: LESSONS,
         }
-      : null,
+      : slug === "ai-adoption"
+        ? {
+            slug,
+            name: "AI Adoption for Teams",
+            description: "Unpublished stealth syllabus.",
+            gradient: "from-a to-b",
+            totalLessons: LESSONS.length,
+            lessons: LESSONS,
+          }
+        : null,
   getLessonsForSeries: () => LESSONS,
   getSeriesProgress: () => ({
     published: LESSONS.length,
@@ -147,11 +158,9 @@ beforeEach(() => {
   mocks.getCompletedCourseIds.mockResolvedValue(new Set<string>());
 });
 
-async function renderSeriesPage() {
+async function renderSeriesPage(series = "omni-studio-cert") {
   const { default: R } = await import("react-dom/server");
-  const result = await Page({
-    params: Promise.resolve({ series: "omni-studio-cert" }),
-  });
+  const result = await Page({ params: Promise.resolve({ series }) });
   return R.renderToString(result as never);
 }
 
@@ -217,5 +226,21 @@ describe("/atlas/[series] under a token-route failure (R2-5 pinned regression)",
     mocks.decideCourseAccess.mockResolvedValue({ kind: "not-launched" });
 
     await expect(renderSeriesPage()).rejects.toThrow("NEXT_NOT_FOUND");
+  });
+
+  // F-2 (t_c4eafa3b MEDIUM, CWE-200). On `origin/main` this test FAILS: the
+  // degraded branch only knew "is this slug in the static catalogue", and the
+  // static catalogue carries stealth slugs — so during a mint outage the
+  // unpublished syllabus answered 200 and named a course that is not launched.
+  it("F-2: 404s a stealth series during a token outage instead of naming it", async () => {
+    mocks.decideCourseAccess.mockRejectedValue(
+      new DbTokenUnavailableError("/token/anonymous"),
+    );
+
+    await expect(renderSeriesPage("ai-adoption")).rejects.toThrow(
+      "NEXT_NOT_FOUND",
+    );
+    // The fail-closed decision happens before any DB read or render.
+    expect(mocks.getCourseRowBySlug).not.toHaveBeenCalled();
   });
 });

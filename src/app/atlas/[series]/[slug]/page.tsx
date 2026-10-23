@@ -26,6 +26,7 @@ import GuestCTA from "@/components/Progress/GuestCTA";
 import { getQuizForLesson } from "@/lib/quiz";
 import { getSupabaseServerClient } from "@/lib/db/server";
 import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
+import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
 import MDXArticle from "@/components/MDX/MDXArticle";
 import Paywall from "@/components/Catalog/Paywall";
 import { AudioPlayerLazy } from "@/components/BlogPost/AudioPlayerLazy";
@@ -106,6 +107,12 @@ export default async function LessonPage({ params }: Props) {
     if (!isDbTokenUnavailable(err)) throw err;
     degraded = true;
   }
+  // F-2 (t_c4eafa3b MEDIUM, CWE-200): the degraded path cannot prove the
+  // series is publicly launched — the static catalogue also carries stealth
+  // slugs — so fail CLOSED on EXISTENCE. An unpublished series 404s during an
+  // outage exactly as the healthy seam does. Availability for the four seeded
+  // live series is unchanged (R2-5).
+  if (degraded && !isPubliclyLaunchedSeries(series)) notFound();
   if (decision?.kind === "not-launched") notFound();
 
   // Server-side session gate (ADR-104): guests NEVER receive question text —

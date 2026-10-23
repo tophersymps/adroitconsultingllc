@@ -37,7 +37,8 @@ vi.mock("next/navigation", () => ({ notFound: notFoundMock }));
 
 vi.mock("@/lib/learn", () => ({
   getLesson: (series: string, slug: string) =>
-    series === "omni-studio-cert" && slug === "day-01"
+    (series === "omni-studio-cert" || series === "ai-adoption") &&
+    slug === "day-01"
       ? {
           slug,
           series,
@@ -59,7 +60,16 @@ vi.mock("@/lib/learn", () => ({
           totalLessons: 1,
           lessons: [{ slug: "day-01", title: "Day 1 — OmniStudio solutions" }],
         }
-      : null,
+      : slug === "ai-adoption"
+        ? {
+            slug,
+            name: "AI Adoption for Teams",
+            description: "Unpublished stealth syllabus.",
+            gradient: "from-a to-b",
+            totalLessons: 1,
+            lessons: [{ slug: "day-01", title: "Day 1 — AI adoption" }],
+          }
+        : null,
   getLessonsForSeries: () => [
     { slug: "day-01", title: "Day 1 — OmniStudio solutions", number: 1 },
   ],
@@ -111,11 +121,12 @@ import {
 
 let captured: CapturedRequest[] = [];
 
-async function renderLesson(): Promise<string> {
+async function renderLesson(
+  series = "omni-studio-cert",
+  slug = "day-01",
+): Promise<string> {
   const { default: R } = await import("react-dom/server");
-  const result = await LessonPage({
-    params: Promise.resolve({ series: "omni-studio-cert", slug: "day-01" }),
-  });
+  const result = await LessonPage({ params: Promise.resolve({ series, slug }) });
   return R.renderToString(result as never);
 }
 
@@ -171,6 +182,20 @@ describe("/atlas/[series]/[slug] under a token-route 429 (R2-5, AC-6)", () => {
 
     await renderLesson();
 
+    expect(dataApiRequests(captured)).toHaveLength(0);
+  });
+
+  // F-2 (t_c4eafa3b MEDIUM, CWE-200). Fails on `origin/main`: the degraded path
+  // served the stealth lesson's paywall shell at 200, confirming the series and
+  // its lesson title exist. It must 404 exactly like the healthy seam does.
+  it("F-2: 404s a stealth series' lesson during a token-route 429", async () => {
+    captured = installThrottledAuth({
+      sessionUser: { id: "user-1", email: "learner@test.dev" },
+    });
+
+    await expect(renderLesson("ai-adoption", "day-01")).rejects.toThrow(
+      "NEXT_NOT_FOUND",
+    );
     expect(dataApiRequests(captured)).toHaveLength(0);
   });
 });
