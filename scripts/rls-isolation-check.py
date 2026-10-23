@@ -2,22 +2,36 @@
 """RLS isolation check for the Neon database (task t_ce10555b, reused by R1-4/R1-5).
 
 Proves, against the live Neon database, that:
-  1. the policy inventory on Neon is complete — 34 policies over the same 14
-     public tables as the Supabase origin, checked by name AND command, so a
-     dropped or renamed policy fails here even if it happens not to leak;
+  1. the policy inventory on Neon is complete — the 34 policies over the same
+     14 public tables as the Supabase origin (checked by name AND command, so a
+     dropped or renamed policy fails here even if it happens not to leak) plus
+     the documented Neon-only policy on public."user" = 35 total;
   2. every user-scoped table has RLS enabled and at least one policy;
   3. user A cannot read user B's rows on any of the ten user-scoped tables;
   4. cross-user writes are rejected, and the legitimate own-user writes the
      product depends on still succeed (a policy set that blocks everything
      would pass a leak test while breaking the app);
-  5. the client-forge guards still deny quiz_attempt / quiz_run writes;
+  5. the client-forge guards still deny quiz_attempt / quiz_run /
+     completion_events writes (completion_events is server-write-only per
+     migration 012 — a permissive INSERT policy there is a forgeable
+     certificate, R1-4 F-2);
   6. an anonymous caller (no JWT) reads zero user rows but still reads the
      genuinely public catalog tables;
-  7. `public."user"` (the auth user table) is not readable by either role.
+  7. `public."user"` (the auth user table) is not readable by either role;
+  8. every public table reachable by `authenticated`/`anonymous` has RLS
+     enabled — derived from the catalog, not a hardcoded list, so a future
+     table cannot inherit the fail-open default privileges unnoticed (F-3);
+  9. the admin_audit_log identity sequence is at or ahead of max(id), so a
+     server-side audit INSERT cannot collide on the primary key after a data
+     import (F-1).
 
-It never mutates persistent state: everything runs in ONE transaction that is
-rolled back, so it is safe to run against the shared dev branch and safe to
-re-run. Exit 0 = clean; exit 1 = a policy is missing/loosened or a leak exists.
+It never mutates committed row state: everything runs in ONE transaction that
+is rolled back, so it is safe to run against the shared dev branch and safe to
+re-run. (One benign exception: seeding an identity column with OVERRIDING
+SYSTEM VALUE still advances that sequence, so admin_audit_log_id_seq drifts
+forward slightly. Forward drift cannot collide, and the sequence invariant is
+asserted BEFORE the seed, against committed data only.)
+Exit 0 = clean; exit 1 = a policy is missing/loosened or a leak exists.
 
 Usage:
     python3 scripts/rls-isolation-check.py
@@ -62,7 +76,11 @@ EXPECTED_POLICIES = [
     ("catalog_groups", "groups_select_public", "SELECT"),
     ("catalog_sections", "sections_admin_write", "ALL"),
     ("catalog_sections", "sections_select_public", "SELECT"),
-    ("completion_events", "completion_events_insert_own", "INSERT"),
+    # NOT "completion_events_insert_own": Neon applies migration 012's
+    # server-write-only guard instead of live Supabase's forgeable
+    # `WITH CHECK (auth.uid() = user_id)` policy (R1-4 F-2; header note in
+    # 001_rls.sql). One policy out, one in — the origin baseline stays 34.
+    ("completion_events", "completion_events deny client insert", "INSERT"),
     ("completion_events", "completion_events_select_own", "SELECT"),
     ("course_prerequisites", "prereqs_admin_write", "ALL"),
     ("course_prerequisites", "prereqs_select_public", "SELECT"),
@@ -92,7 +110,30 @@ EXPECTED_POLICIES = [
     ("user_roles", "user_roles_select_own", "SELECT"),
 ]
 
-EXPECTED_POLICY_COUNT = len(EXPECTED_POLICIES)
+# Policies that exist on Neon with NO Supabase origin. Kept separate from
+# EXPECTED_POLICIES so "did the port lose/rename anything from the origin" stays
+# answerable, while the total still has to match exactly (a stray policy hiding
+# in here is the only way a loosened one could slip past the count).
+NEON_ONLY_POLICIES = [
+    # R1-4 F-6: public."user" (Better Auth) gets RLS + own-row SELECT as defense
+    # in depth behind the REVOKE ALL in 001_rls.sql §2. Safe because no grants
+    # exist for authenticated/anonymous, the privileged server path is
+    # BYPASSRLS, and the policy only ever returns the caller's own row.
+    ("user", "user_select_own", "SELECT"),
+]
+
+ALL_EXPECTED_POLICIES = EXPECTED_POLICIES + NEON_ONLY_POLICIES
+EXPECTED_POLICY_COUNT = len(ALL_EXPECTED_POLICIES)
+ORIGIN_POLICY_COUNT = len(EXPECTED_POLICIES)
+
+# F-3: every public table any Data API role can reach must have RLS on. An
+# exception is a policy decision, not a convenience — a table listed here must
+# carry the reason it is safe to leave RLS off.
+GRANT_RLS_ALLOWLIST = {
+    # (empty) — every reachable public table has RLS enabled today. Do not add
+    # entries without a written reason: the point of this check is that the
+    # fail-open default GRANTs are never the last line of defense.
+}
 
 ASSERTION_HELPERS = """
 create function pg_temp.eq(label text, actual bigint, expected bigint) returns text
@@ -159,10 +200,17 @@ def load_database_url() -> str:
 
 def build_sql() -> str:
     policy_values = ",\n    ".join(
-        "('%s','%s','%s')" % (t.replace("'", "''"), p.replace("'", "''"), c)
+        "('%s','%s','%s', true)" % (t.replace("'", "''"), p.replace("'", "''"), c)
         for t, p, c in EXPECTED_POLICIES
     )
+    neon_only_values = ",\n    ".join(
+        "('%s','%s','%s', false)" % (t.replace("'", "''"), p.replace("'", "''"), c)
+        for t, p, c in NEON_ONLY_POLICIES
+    )
     tables_sql = ", ".join("'%s'" % t for t, _ in USER_SCOPED)
+    allowlist_sql = ", ".join(
+        "'%s'" % t.replace("'", "''") for t in sorted(GRANT_RLS_ALLOWLIST)
+    )
 
     seed = []
     for uid in (USER_A, USER_B):
@@ -272,6 +320,10 @@ def build_sql() -> str:
             f"'insert into public.quiz_attempt(user_id, quiz_name, question_index, correct_answer_index, user_answer_index, is_correct) values (''{uid}'',''q'',1,1,1,true)'), 'denied:42501');",
             f"select pg_temp.is_('{uid[-2:]}.quiz_run.insert_denied', pg_temp.try_sql("
             f"'insert into public.quiz_run(user_id, quiz_name, correct, total, score) values (''{uid}'',''q'',1,1,100)'), 'denied:42501');",
+            "-- completion_events is server-write-only (012): a member must not be",
+            "-- able to mint its own certificate/streak row through the Data API (F-2).",
+            f"select pg_temp.is_('{uid[-2:]}.completion_events.insert_denied', pg_temp.try_sql("
+            f"'insert into public.completion_events(user_id, event_type) values (''{uid}'',''certificate'')'), 'denied:42501');",
             "",
             "-- admin-only surfaces",
             f"select pg_temp.is_('{uid[-2:]}.user_roles.write_denied', pg_temp.try_sql("
@@ -295,9 +347,11 @@ def build_sql() -> str:
         ASSERTION_HELPERS,
         "",
         "-- ── 1. policy inventory vs the Supabase origin ────────────────────",
-        "create temp table expected_policies (tbl text, pol text, cmd text) on commit drop;",
-        "insert into expected_policies(tbl, pol, cmd) values",
-        "    " + policy_values + ";",
+        "create temp table expected_policies (tbl text, pol text, cmd text, origin boolean) on commit drop;",
+        "insert into expected_policies(tbl, pol, cmd, origin) values",
+        "    " + policy_values + ",",
+        "    " + neon_only_values + ";",
+        f"select pg_temp.eq('policy.origin_baseline_size', (select count(*) from expected_policies where origin), {ORIGIN_POLICY_COUNT});",
         "select pg_temp.eq('policy.total_count', (select count(*) from pg_policies where schemaname = 'public'), "
         f"{EXPECTED_POLICY_COUNT});",
         "select pg_temp.eq('policy.missing_from_neon', (",
@@ -316,6 +370,53 @@ def build_sql() -> str:
         f"join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' "
         f"and c.relkind = 'r' and c.relname in ({tables_sql}) and not exists ("
         f"select 1 from pg_policies p where p.schemaname = 'public' and p.tablename = c.relname)), 0);",
+        "",
+        "-- ── 1b. fail-open default privileges (F-3) ───────────────────────",
+        "-- 001_rls.sql §2 grants arwd on every FUTURE public table to",
+        "-- `authenticated`, but RLS is opt-in, so a new table is world-writable by",
+        "-- default until someone remembers ENABLE ROW LEVEL SECURITY. Derived from",
+        "-- the catalog (not the hardcoded table list above) so it catches a table",
+        "-- nobody thought to enumerate.",
+        "select pg_temp.eq('grants.tables_reachable_without_rls', (",
+        "  select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace",
+        "  where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity",
+        "    and (has_table_privilege('authenticated', c.oid, 'SELECT')",
+        "      or has_table_privilege('authenticated', c.oid, 'INSERT')",
+        "      or has_table_privilege('authenticated', c.oid, 'UPDATE')",
+        "      or has_table_privilege('authenticated', c.oid, 'DELETE')",
+        "      or has_table_privilege('anonymous', c.oid, 'SELECT'))",
+        f"    and not (c.relname = any(array[{allowlist_sql}]::text[]))), 0);",
+        "-- guard against a vacuous pass (e.g. a catalog query that matches nothing)",
+        "select pg_temp.is_('grants.check_not_vacuous', (",
+        "  select case when count(*) > 0 then 'checked' else 'vacuous' end",
+        "  from pg_class c join pg_namespace n on n.oid = c.relnamespace",
+        "  where n.nspname = 'public' and c.relkind = 'r'",
+        "    and (has_table_privilege('authenticated', c.oid, 'SELECT')",
+        "      or has_table_privilege('anonymous', c.oid, 'SELECT'))), 'checked');",
+        "-- the auth user table relies on RLS (F-6) in addition to its REVOKE",
+        "select pg_temp.is_('grants.user_table.rls_enabled', (",
+        "  select case when c.relrowsecurity then 'on' else 'off' end from pg_class c",
+        "  join pg_namespace n on n.oid = c.relnamespace",
+        "  where n.nspname = 'public' and c.relname = 'user'), 'on');",
+        "",
+        "-- ── 1c. identity sequence not behind its data (F-1) ───────────────",
+        "-- Asserted BEFORE the seed, against committed data only: the branch is",
+        "-- data-loaded with explicit ids, which leaves identity sequences behind",
+        "-- max(id). The first server-side INSERT then collides on the PK *after*",
+        "-- the business mutation committed (audit row lost, admin route 500s).",
+        "-- 001_rls.sql §5 realigns at apply time; this assertion is the durable",
+        "-- guard so the next data import cannot silently reintroduce the gap.",
+        "select pg_temp.is_('sequence.admin_audit_log.in_sync', (",
+        "  select case when coalesce((select last_value from pg_sequences",
+        "      where schemaname = 'public' and sequencename = 'admin_audit_log_id_seq'), 0)",
+        "      >= coalesce((select max(id) from public.admin_audit_log), 0)",
+        "    then 'ok'",
+        "    else 'behind: last_value=' || coalesce((select last_value::text from pg_sequences",
+        "      where sequencename = 'admin_audit_log_id_seq'), 'null') || ' max(id)=' ||",
+        "      coalesce((select max(id)::text from public.admin_audit_log), '0') end), 'ok');",
+        "select 'NOTE admin_audit_log identity sequence last_value=' || "
+        "coalesce((select last_value::text from pg_sequences where sequencename = 'admin_audit_log_id_seq'), '?') || "
+        "' max(id)=' || coalesce((select max(id)::text from public.admin_audit_log), '0');",
         "",
         "-- ── 2. seed two users + one row each for every user-scoped table ──",
         *seed,
@@ -387,15 +488,7 @@ def build_sql() -> str:
         "select pg_temp.is_('owner.quiz_attempt.insert_allowed', pg_temp.try_sql("
         f"'insert into public.quiz_attempt(user_id, quiz_name, question_index, correct_answer_index, user_answer_index, is_correct) values (''{USER_A}'',''owner-write'',0,1,1,true)'), 'allowed');",
         "",
-        "-- informational: an identity sequence behind the imported data breaks",
-        "-- server-side inserts from a DIFFERENT cause than RLS. Reported, never",
-        "-- repaired here (setval is not transactional).",
-        "select 'NOTE admin_audit_log identity sequence last_value=' || "
-        "coalesce((select last_value::text from pg_sequences where sequencename = 'admin_audit_log_id_seq'), '?') || "
-        "' max(id)=' || coalesce((select max(id)::text from public.admin_audit_log), '0') || "
-        "case when coalesce((select last_value from pg_sequences where sequencename = 'admin_audit_log_id_seq'), 0) "
-        "< coalesce((select max(id) from public.admin_audit_log), 0) "
-        "then ' -> SEQUENCE BEHIND DATA: server inserts will collide' else ' -> sequence in sync' end;",
+        "-- sequence alignment (F-1) was asserted in 1c, before the seed.",
         "",
         "rollback;",
         "select 'RLS ISOLATION CHECK COMPLETE' as done;",

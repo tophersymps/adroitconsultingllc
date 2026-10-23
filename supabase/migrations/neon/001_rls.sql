@@ -24,16 +24,36 @@
 --   what is ported — except where the live Supabase database differs, see
 --   the "LIVE-vs-FILES DIVERGENCE" note below.
 --
--- LIVE-vs-FILES DIVERGENCE (verified 2026-10-23 against zrggxfdyptiahskogwnn)
---   pg_policies on the live Supabase project holds 34 policies over 14
---   public tables. Migration 012 (completion_events server-write-only) is
---   NOT applied there: live still has `completion_events_insert_own` and no
---   `completion_events deny client insert`. This port mirrors LIVE, because
---   the acceptance criterion is policy-count parity with the live project.
---   That divergence is a real (pre-existing) Supabase hardening gap and is
---   flagged in the PR for val-el (R1-4) to decide on, not silently fixed
---   here: changing it would make the Neon policy set differ from the thing
---   it is verified against.
+-- LIVE-vs-FILES DIVERGENCE — TWO DELIBERATE ONES, DO NOT "RESTORE PARITY"
+--   Baselines: live Supabase (zrggxfdyptiahskogwnn) has 34 policies over 14
+--   public tables; this file produces 35 (the 34 ported + 1 new, see 2 below).
+--
+--   1. completion_events — Neon INTENTIONALLY DIVERGES from live Supabase.
+--      Live still has `completion_events_insert_own` (WITH CHECK
+--      auth.uid() = user_id) because migration 012 was never applied there;
+--      that policy lets any signed-in member INSERT arbitrary rows for
+--      itself (event_type='certificate', any metadata) straight through the
+--      Data API, bypassing the server-side milestone logic — val-el proved it
+--      live in R1-4 (finding F-2). Neon ports 012's deny guard instead:
+--      `completion_events deny client insert` (WITH CHECK (false)).
+--      Why this is safe, and why parity is NOT the goal:
+--        * Neon is a greenfield deployment — parity with a known-broken
+--          policy is a liability, not a compatibility win.
+--        * The server write path is `neondb_owner`, which carries BYPASSRLS,
+--          so revoking client INSERT breaks nothing server-side.
+--        * The table was empty (0 rows) when the change was made: no data or
+--          backfill risk.
+--        * The swap is 1 policy in, 1 out, so the 34-policy baseline of the
+--          origin set is undisturbed.
+--      If you are here to make Neon "match Supabase": re-read this paragraph.
+--      The correct fix is to apply 012 to Supabase, not to reopen Neon.
+--
+--   2. public."user" — ADDED ON NEON, absent from the Supabase origin (F-6).
+--      The Better Auth user table keeps RLS enabled with a
+--      `USING (auth.uid() = id)` SELECT policy as defense in depth behind the
+--      `REVOKE ALL` in §2. This is the one extra policy (34 + 1 = 35); it is
+--      listed separately in scripts/rls-isolation-check.py as
+--      NEON_ONLY_POLICIES so the Supabase-parity check stays meaningful.
 --
 -- REWRITE TABLE (Supabase expression → Neon expression)
 --   ┌──────────────────────────────┬───────────────────┬───────────────────────────────────────────┐
@@ -157,6 +177,13 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 -- just because it lives in `public`: revoke the blanket grants above. Auth
 -- paths reach it through the privileged server connection only.
 REVOKE ALL ON TABLE public."user" FROM authenticated, anonymous;
+-- Defense in depth (R1-4 F-6): the REVOKE stays the primary control, but 8
+-- real users' emails should not sit one careless GRANT (or one inherited
+-- default-ACL path) away from exposure. RLS plus an own-row SELECT policy means
+-- a future grant still cannot read other people's rows. The privileged server
+-- path (neondb_owner) bypasses RLS, so Better Auth and the Next.js server are
+-- unaffected.
+ALTER TABLE public."user" ENABLE ROW LEVEL SECURITY;
 
 -- Future tables created BY THE APPLYING ROLE inherit the same baseline so a
 -- new table cannot be silently unreachable... or silently open. Objects
@@ -174,8 +201,28 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 -- bypasses RLS, so this widens nothing.
 DO $$
 BEGIN
-  EXECUTE format('GRANT authenticated TO %I', current_user);
-  EXECUTE format('GRANT anonymous TO %I', current_user);
+  -- Conditional: a re-run used to abort here with
+  -- `permission denied to grant role "authenticated"` (only a role holding
+  -- ADMIN OPTION on the target may grant it; `neondb_owner` is a member
+  -- without it), which broke --single-transaction applies for everyone after
+  -- the first (R1-4 F2 on t_31005930). Grant only when the membership is
+  -- genuinely missing.
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_auth_members m
+    JOIN pg_roles g ON g.oid = m.roleid
+    WHERE g.rolname = 'authenticated'
+      AND m.member = (SELECT oid FROM pg_roles WHERE rolname = current_user)
+  ) THEN
+    EXECUTE format('GRANT authenticated TO %I', current_user);
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_auth_members m
+    JOIN pg_roles g ON g.oid = m.roleid
+    WHERE g.rolname = 'anonymous'
+      AND m.member = (SELECT oid FROM pg_roles WHERE rolname = current_user)
+  ) THEN
+    EXECUTE format('GRANT anonymous TO %I', current_user);
+  END IF;
 END
 $$;
 
@@ -198,9 +245,23 @@ AS $$
   );
 $$;
 
+-- It is SECURITY DEFINER with a BYPASSRLS owner, so it is the gate under every
+-- admin policy: an unnecessary PUBLIC execute grant hands that gate to anyone
+-- who can reach the database (R1-4 F-5). Restrict it to the two Data API roles.
+REVOKE EXECUTE ON FUNCTION public.is_admin() FROM PUBLIC;
+-- `anonymous` is granted too, deliberately: the public-read policies on
+-- courses / catalog_* are scoped to PUBLIC (no TO clause, mirroring live) and
+-- call is_admin(); evaluating them as `anonymous` would raise
+-- `permission denied for function is_admin` if that role could not execute it.
+-- The function takes no arguments and only reads the caller's own claims, so
+-- this exposes nothing.
+GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated, anonymous;
+
 -- ═════════════════════════════════════════════════════════════════════
--- 4. Policies — 34 policies over 14 tables, byte-for-byte name parity with
---    live Supabase (see the count assertion at the end of this file).
+-- 4. Policies — the 34 policies over 14 tables ported by name from live
+--    Supabase, plus 1 Neon-only policy on public."user" (F-6) = 35.
+--    The completion_events INSERT policy is 012's deny guard, not live
+--    Supabase's forgeable insert_own — see the header note.
 -- ═════════════════════════════════════════════════════════════════════
 
 -- ── read_progress (001, hardened by 003) ─────────────────────────────
@@ -398,7 +459,7 @@ CREATE POLICY "prereqs_admin_write"
   USING (public.is_admin())
   WITH CHECK (public.is_admin());
 
--- ── completion_events (009; 012 not applied on Supabase live — see header)
+-- ── completion_events (009, made server-write-only by 012) ───────────
 ALTER TABLE public.completion_events ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "completion_events_select_own" ON public.completion_events;
@@ -406,20 +467,89 @@ CREATE POLICY "completion_events_select_own"
   ON public.completion_events FOR SELECT
   USING (auth.uid() = user_id OR public.is_admin());
 
--- Mirrors LIVE Supabase. Migration 012 in the repo replaces this with a
--- `deny client insert` guard; that migration was never applied to the live
--- project, so porting the guard would break policy-count parity. FLAGGED for
--- val-el (R1-4) — see header.
+-- Ported from 012_completion_events_server_write_only.sql. completion_events is
+-- SERVER-WRITE-ONLY: the columns a client could forge — event_type
+-- (lesson/course/quiz/exam/certificate), course_id, lesson slugs, metadata,
+-- completed_at — are exactly what certificates, constellations, streaks and
+-- rank read. `WITH CHECK (auth.uid() = user_id)` is therefore NOT a harmless
+-- own-row write: it mints credentials without doing the work (CWE-807),
+-- proven exploitable on the ported version in R1-4 (F-2).
+--
+-- The one legitimate write path is appendCompletionEvent() in
+-- src/lib/completion.ts behind the server-side API routes, which validates
+-- input and applies the idempotency guard. On Neon that path connects as
+-- neondb_owner (BYPASSRLS), so it ignores RLS and is unaffected here.
+--
+-- Note on layering: permissive policies for the same command are ORed, so this
+-- deny guard does not by itself survive a *later* permissive INSERT policy
+-- being re-added. The harness assertion `completion_events.insert_denied`
+-- (42501 for an authenticated INSERT) is what catches that regression.
 DROP POLICY IF EXISTS "completion_events_insert_own" ON public.completion_events;
-CREATE POLICY "completion_events_insert_own"
-  ON public.completion_events FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "completion_events deny client insert" ON public.completion_events;
+CREATE POLICY "completion_events deny client insert"
+  ON public.completion_events FOR INSERT TO authenticated
+  WITH CHECK (false);
 
 -- No UPDATE/DELETE policy anywhere: completion_events stays append-only
 -- (ADR-211) for every non-owner role.
 
+-- ── "user" (Neon-only, R1-4 F-6) ───────────────────────────────────────
+-- Not ported from Supabase (auth.users is a different object there and was
+-- never policy'd); added as defense in depth behind the REVOKE in §2. A caller
+-- holding a valid JWT may see its OWN row and nothing else, so a future GRANT
+-- cannot turn into a roster dump. No INSERT/UPDATE/DELETE policy: Better Auth
+-- writes through the privileged server connection, which bypasses RLS. This is
+-- the 35th policy — see the header divergence note.
+DROP POLICY IF EXISTS "user_select_own" ON public."user";
+CREATE POLICY "user_select_own"
+  ON public."user" FOR SELECT TO authenticated
+  USING (auth.uid() = id);
+
 -- ═════════════════════════════════════════════════════════════════════
--- 5. Self-verification — a partial apply must fail loudly, not silently.
+-- 5. Post-load repair — identity sequences vs imported data
+--
+--    The branch was data-loaded with explicit ids, so every
+--    GENERATED ... AS IDENTITY sequence starts behind the rows it must
+--    continue from. The first server-side INSERT then collides on the PK
+--    (`duplicate key (id)=(N)`) *after* the business mutation has already
+--    committed, because the audit row is written in the same request but a
+--    separate statement. On admin routes that means a 500 with the mutation
+--    applied and no audit trail (ADR-205 requires one row per mutation).
+--    Reproduced live in R1-4 (F-1: last_value=20, max(id)=82).
+--
+--    setval() is NON-TRANSACTIONAL and cannot be rolled back, which is why it
+--    lives here at apply time rather than in the verification harness. Re-running
+--    this file is safe: it only realigns when the sequence is behind.
+--    scripts/rls-isolation-check.py asserts the invariant
+--    (`sequence.admin_audit_log.in_sync`) so a future data import cannot
+--    silently reintroduce the gap.
+-- ═════════════════════════════════════════════════════════════════════
+DO $$
+DECLARE
+  seq_name text;
+  max_id   bigint;
+  last_id  bigint;
+BEGIN
+  SELECT pg_get_serial_sequence('public.admin_audit_log', 'id') INTO seq_name;
+  IF seq_name IS NULL THEN
+    RAISE EXCEPTION 'admin_audit_log has no identity/sequence on id — cannot align sequence';
+  END IF;
+
+  EXECUTE 'SELECT max(id) FROM public.admin_audit_log' INTO max_id;
+  EXECUTE format('SELECT last_value FROM %s', seq_name) INTO last_id;
+
+  IF coalesce(max_id, 0) > coalesce(last_id, 0) THEN
+    PERFORM setval(seq_name, max_id);
+    RAISE NOTICE 'admin_audit_log sequence realigned: % -> %', last_id, max_id;
+  ELSE
+    RAISE NOTICE 'admin_audit_log sequence already in sync (last_value=%, max(id)=%)',
+      last_id, coalesce(max_id, 0);
+  END IF;
+END
+$$;
+
+-- ═════════════════════════════════════════════════════════════════════
+-- 6. Self-verification — a partial apply must fail loudly, not silently.
 -- ═════════════════════════════════════════════════════════════════════
 DO $$
 DECLARE
@@ -428,7 +558,8 @@ DECLARE
     ['quiz_run','2'], ['user_profiles','3'], ['user_roles','2'],
     ['courses','2'], ['user_entitlements','2'], ['subscriptions','1'],
     ['admin_audit_log','2'], ['catalog_sections','2'], ['catalog_groups','2'],
-    ['course_prerequisites','2'], ['completion_events','2']
+    ['course_prerequisites','2'], ['completion_events','2'],
+    ['user','1']
   ];
   rec text[];
   actual int;
@@ -451,6 +582,6 @@ BEGIN
   END LOOP;
 
   SELECT count(*) INTO actual FROM pg_policies WHERE schemaname = 'public';
-  RAISE NOTICE 'RLS port OK: % policies on public (34 expected across the 14 app tables)', actual;
+  RAISE NOTICE 'RLS port OK: % policies on public (35 expected: 34 ported across the 14 app tables + 1 Neon-only on "user")', actual;
 END
 $$;
