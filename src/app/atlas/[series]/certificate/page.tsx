@@ -46,8 +46,10 @@ import {
   getAccessUserId,
   getCourseRowBySlug,
 } from "@/lib/access";
+import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
 import { buildPaywallView } from "@/lib/paywall";
 import { LockedContentPage } from "@/components/Catalog/LockedContentPage";
+import AtlasUnavailable from "@/components/Learn/AtlasUnavailable";
 import { getLessonsForSeries } from "@/lib/learn";
 import { appendCompletionEvent } from "@/lib/completion";
 import CertificateCelebration from "@/components/Constellations/CertificateCelebration";
@@ -142,6 +144,17 @@ export default async function CertificatePage({ params }: Props) {
   const userId = await getAccessUserId();
   const decision = await accessSeam.decideCourseAccess(userId, series);
   if (decision.kind === "not-launched") notFound();
+
+  // Credential-bridge outage (t_223f8b3d): "we could not decide" must NEVER
+  // read as "public" (security t_c4eafa3b F-2, CWE-200). Fail CLOSED on
+  // CONTENT — stealth/unknown series 404 (existence stays hidden), a
+  // statically-launched series gets an availability notice, and no certificate
+  // identity, eligibility row or completion count renders on this path.
+  if (decision.kind === "unavailable") {
+    if (!isPubliclyLaunchedSeries(series)) notFound();
+    return <AtlasUnavailable surface="certificate" />;
+  }
+
   if (decision.kind === "paywall") {
     const courseRow = await getCourseRowBySlug(series);
     if (!courseRow) notFound();
@@ -162,9 +175,9 @@ export default async function CertificatePage({ params }: Props) {
   // (backlog B-07 / D2). Keeps the certificate promise visible instead of a
   // bare 404 while the prep exam is authored.
   if (!hasExam) {
-    // Identity from the session cookie (single source). A credential-bridge
-    // outage (t_223f8b3d) renders the guest state, never a 500.
-    const user = decision.kind === "unavailable" ? null : await getSessionUser();
+    // Identity from the session cookie (single source). `unavailable` already
+    // returned above, so an outage never reaches this read.
+    const user = await getSessionUser();
 
     const lessonSlugs = getSeriesLessonSlugs(series);
     const totalLessons = lessonSlugs.length || s.totalLessons;
@@ -296,11 +309,10 @@ export default async function CertificatePage({ params }: Props) {
   const lessonSlugs = getSeriesLessonSlugs(series);
   const totalLessons = lessonSlugs.length;
 
-  // Identity from the session cookie (single source). A credential-bridge
-  // outage (t_223f8b3d) renders the guest state — this page must never 500
-  // because a Data API JWT could not be minted mid-render, and it must never
-  // build a client just to learn who is reading.
-  const user = decision.kind === "unavailable" ? null : await getSessionUser();
+  // Identity from the session cookie (single source). This page must never
+  // build a Data API client just to learn who is reading; a credential-bridge
+  // outage already returned the availability notice above.
+  const user = await getSessionUser();
   const isAuthed = Boolean(user);
 
   const pageHead = (

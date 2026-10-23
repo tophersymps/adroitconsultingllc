@@ -22,6 +22,7 @@ import CheckCardList from "@/components/Progress/CheckCardList";
 import ExamCard from "@/components/Progress/ExamCard";
 import { getKnowledgeChecks } from "@/lib/quiz";
 import { accessSeam, getAccessUserId, getCourseRowBySlug } from "@/lib/access";
+import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
 import { getCatalogForUserV2, prerequisitesMet } from "@/lib/catalog";
 import { getCompletedCourseIds, getCompletedLessonSlugs } from "@/lib/completion";
 import { StatusBadge } from "@/components/Catalog/StatusBadge";
@@ -72,10 +73,16 @@ export default async function SeriesPage({ params }: Props) {
   const userId = await getAccessUserId();
   const decision = await accessSeam.decideCourseAccess(userId, series);
   if (decision.kind === "not-launched") notFound();
-  // Credential bridge down (t_223f8b3d): no DB read is possible this request.
-  // Render the syllabus in the guest state — never 404 a live course, never
-  // pretend we know who is reading.
+  // Credential bridge down (t_223f8b3d): no DB read is possible this request,
+  // so the seam cannot see the `courses` row at all. The syllabus behind this
+  // route is the legitimately-public surface, so a LAUNCHED series may degrade
+  // to the guest/static shell — but a series we cannot statically vouch for is
+  // an unpublished/stealth course whose existence is deliberately secret
+  // (decideCourseAccessFromInput → not-launched). Rendering its syllabus +
+  // lesson titles under `unavailable` was an existence leak (security
+  // t_c4eafa3b F-2, CWE-200); it now 404s exactly as a healthy read would.
   const degraded = decision.kind === "unavailable";
+  if (degraded && !isPubliclyLaunchedSeries(series)) notFound();
   const courseRow = await getCourseRowBySlug(series);
 
   // Learn v2 profile (ADR-208/209/210): the unified CatalogCourse for this

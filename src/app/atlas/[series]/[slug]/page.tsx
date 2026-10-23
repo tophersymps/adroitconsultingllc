@@ -27,9 +27,11 @@ import { getQuizForLesson } from "@/lib/quiz";
 import { getCompletedLessonSlugs } from "@/lib/completion";
 import MDXArticle from "@/components/MDX/MDXArticle";
 import Paywall from "@/components/Catalog/Paywall";
+import AtlasUnavailable from "@/components/Learn/AtlasUnavailable";
 import { AudioPlayerLazy } from "@/components/BlogPost/AudioPlayerLazy";
 import { lessonAudio } from "@/data/lesson-audio";
 import { accessSeam, getAccessUserId, getCourseRowBySlug } from "@/lib/access";
+import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
 import { buildPaywallView } from "@/lib/paywall";
 import { loadSeriesConstellation } from "@/lib/sky-server";
 import LessonCelebration from "@/components/Constellations/LessonCelebration";
@@ -94,11 +96,23 @@ export default async function LessonPage({ params }: Props) {
   const decision = await accessSeam.decideCourseAccess(userId, series);
   if (decision.kind === "not-launched") notFound();
 
+  // Credential-bridge outage (t_223f8b3d): "we could not decide" must NEVER
+  // read as "this is public" (security t_c4eafa3b F-1 — HIGH, CWE-285/693/200).
+  // Fail CLOSED on CONTENT: a series we cannot statically vouch for 404s (the
+  // same answer a healthy read gives a stealth/unknown series), and a
+  // statically-launched series gets an availability notice instead of the
+  // page. `mdxBody`, the quiz JSON and the lesson body are never rendered on
+  // this path, for ANY access model (free, paid, stealth).
+  if (decision.kind === "unavailable") {
+    if (!isPubliclyLaunchedSeries(series)) notFound();
+    return <AtlasUnavailable surface="lesson" />;
+  }
+
   // Server-side session gate (ADR-104): guests NEVER receive question text —
   // the quiz JSON is loaded only in the authed branch. Identity comes from the
   // session cookie only; no Data API client is built just to learn who is
-  // reading (t_223f8b3d), and an unavailable credential bridge renders guest.
-  const isAuthed = decision.kind !== "unavailable" && Boolean(userId);
+  // reading (t_223f8b3d).
+  const isAuthed = Boolean(userId);
   const lessonQuiz = isAuthed ? getQuizForLesson(series, slug) : null;
 
   // Paywall branch — live + not entitled. Server-rendered with the course's

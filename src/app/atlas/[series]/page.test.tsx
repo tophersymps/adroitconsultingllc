@@ -223,6 +223,23 @@ describe("/atlas/[series] under a credential-bridge outage (t_223f8b3d)", () => 
     expect(mocks.getSupabaseServerClient).not.toHaveBeenCalled();
   });
 
+  it("404s a STEALTH series under `unavailable` instead of rendering its syllabus (t_c4eafa3b F-2, CWE-200)", async () => {
+    // A series with no `courses` row 404s on a healthy read; the outage must
+    // not turn its syllabus + lesson titles into a public page.
+    mocks.getAccessUserId.mockResolvedValue(null);
+    mocks.decideCourseAccess.mockResolvedValue({ kind: "unavailable" });
+    mocks.getSeriesBySlug.mockReturnValue({
+      ...SERIES,
+      slug: "hermes-consultant",
+      name: "Hermes Agent Consultant",
+    });
+
+    await expect(
+      Page({ params: Promise.resolve({ series: "hermes-consultant" }) }),
+    ).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(mocks.getCourseRowBySlug).not.toHaveBeenCalled();
+  });
+
   it("still 404s a not-launched course (the access gate is not neutered)", async () => {
     mocks.getAccessUserId.mockResolvedValue(null);
     mocks.decideCourseAccess.mockResolvedValue({ kind: "not-launched" });

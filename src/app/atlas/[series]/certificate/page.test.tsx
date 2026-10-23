@@ -185,6 +185,41 @@ describe("/atlas/[series]/certificate — exam-less series (B-07 / D2)", () => {
     expect(html).toContain("coming soon");
   });
 
+  it("under `unavailable`, a LAUNCHED series gets an availability notice — no certificate identity, no eligibility rows (t_c4eafa3b F-2 / F-1)", async () => {
+    mocks.getSeriesBySlug.mockReturnValue(series());
+    mocks.getCertExam.mockReturnValue({ questions: [{ id: "q1" }] });
+    mocks.getKnowledgeChecks.mockReturnValue([]);
+    mocks.getSeriesLessonSlugs.mockReturnValue(["l1"]);
+    mocks.getAccessUserId.mockResolvedValue("u1");
+    mocks.decideCourseAccess.mockResolvedValue({ kind: "unavailable" });
+    mocks.getSessionUser.mockResolvedValue({ id: "u1", email: "a@b.c", name: null });
+
+    const { default: R } = await import("react-dom/server");
+    const result = await Page({ params: Promise.resolve({ series: "agentic-ai" }) });
+    const html = R.renderToString(result as never);
+
+    expect(html).toContain('data-testid="atlas-unavailable"');
+    expect(html).not.toContain("Your certificate");
+    expect(html).not.toContain("Learner");
+    expect(html).not.toContain("Completion Record");
+    // No Data API client is built and no identity is read on this path.
+    expect(mocks.getSessionUser).not.toHaveBeenCalled();
+  });
+
+  it("under `unavailable`, a STEALTH series 404s instead of naming the course", async () => {
+    mocks.getSeriesBySlug.mockReturnValue(
+      series({ slug: "hermes-consultant", name: "Hermes Agent Consultant" }),
+    );
+    mocks.getCertExam.mockReturnValue(null);
+    mocks.getSeriesLessonSlugs.mockReturnValue(["l1"]);
+    mocks.getAccessUserId.mockResolvedValue("u1");
+    mocks.decideCourseAccess.mockResolvedValue({ kind: "unavailable" });
+
+    await expect(
+      Page({ params: Promise.resolve({ series: "hermes-consultant" }) }),
+    ).rejects.toThrow("NEXT_NOT_FOUND");
+  });
+
   it("still renders the real certificate flow for a series WITH a cert exam (not regressed)", async () => {
     mocks.getSeriesBySlug.mockReturnValue(series({ name: "OmniStudio Developer Certification" }));
     mocks.getCertExam.mockReturnValue({ questions: [{ id: "q1" }] });

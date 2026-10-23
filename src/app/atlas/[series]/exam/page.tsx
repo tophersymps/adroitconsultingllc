@@ -31,8 +31,10 @@ import {
   getAccessUserId,
   getCourseRowBySlug,
 } from "@/lib/access";
+import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
 import { buildPaywallView } from "@/lib/paywall";
 import { LockedContentPage } from "@/components/Catalog/LockedContentPage";
+import AtlasUnavailable from "@/components/Learn/AtlasUnavailable";
 import { getLessonsForSeries } from "@/lib/learn";
 
 interface Props {
@@ -74,6 +76,17 @@ export default async function ExamPage({ params }: Props) {
   const userId = await getAccessUserId();
   const decision = await accessSeam.decideCourseAccess(userId, series);
   if (decision.kind === "not-launched") notFound();
+
+  // Credential-bridge outage (t_223f8b3d): "we could not decide" must NEVER
+  // read as "public" (security t_c4eafa3b F-2, CWE-200). Fail CLOSED on
+  // CONTENT — stealth/unknown series 404 (existence stays hidden), a
+  // statically-launched series gets an availability notice, and NO exam
+  // question text is rendered on this path.
+  if (decision.kind === "unavailable") {
+    if (!isPubliclyLaunchedSeries(series)) notFound();
+    return <AtlasUnavailable surface="exam" />;
+  }
+
   if (decision.kind === "paywall") {
     const courseRow = await getCourseRowBySlug(series);
     if (!courseRow) notFound();
@@ -91,9 +104,9 @@ export default async function ExamPage({ params }: Props) {
   }
 
   // Identity from the session cookie only — no Data API client is built just
-  // to learn who is reading, and an unavailable credential bridge
-  // (t_223f8b3d) renders the guest state instead of a 500.
-  const isAuthed = decision.kind !== "unavailable" && Boolean(userId);
+  // to learn who is reading. `unavailable` already returned above, so this is
+  // a plain guest/authed split.
+  const isAuthed = Boolean(userId);
 
   // Guest → CTA placeholder.
   if (!isAuthed) {
