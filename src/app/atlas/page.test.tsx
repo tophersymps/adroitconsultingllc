@@ -3,7 +3,9 @@
  * on t_3a3d6595).
  *
  * The route MUST be prerendered (○) in a production-configured build, i.e. with
- * `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` present. The
+ * the Neon Data API endpoint (`NEXT_PUBLIC_NEON_DATA_API_URL`, or the
+ * server-only `NEON_DATA_API_URL`) present — the catalogue read has gone
+ * through Neon, not Supabase, since R2-2 (t_4b1c9124). The
  * catalogue reads are cookie-bound (`cookies()` = dynamic API), so the page
  * declares `dynamic = "force-static"` and resolves NO identity at all: any
  * cookie/header read here would flip the route to ƒ and cost the public hub its
@@ -203,21 +205,67 @@ describe("/atlas — empty-catalogue prerender guard (SEO-M2 / SEO-H1)", () => {
     expect(html).toMatch(/cards:(<!-- -->)?0/);
   });
 
-  it("does NOT fail the build when Supabase env is absent (env-less CI/local builds)", async () => {
+  it("does NOT fail the build when the Neon data layer is absent (env-less CI/local builds)", async () => {
     process.env.NEXT_PHASE = "phase-production-build";
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
-    delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    mocks.getCatalogForUserV2.mockRejectedValue(new Error("Supabase URL and anon key are required"));
+    const publicUrl = process.env.NEXT_PUBLIC_NEON_DATA_API_URL;
+    const serverUrl = process.env.NEON_DATA_API_URL;
+    delete process.env.NEXT_PUBLIC_NEON_DATA_API_URL;
+    delete process.env.NEON_DATA_API_URL;
+    mocks.getCatalogForUserV2.mockRejectedValue(new Error("NEON_DATA_API_URL is required"));
 
     try {
       const { default: R } = await import("react-dom/server");
       const html = R.renderToString((await Page()) as never);
       expect(html).toMatch(/cards:(<!-- -->)?0/);
     } finally {
-      process.env.NEXT_PUBLIC_SUPABASE_URL = url;
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = key;
+      if (publicUrl === undefined) delete process.env.NEXT_PUBLIC_NEON_DATA_API_URL;
+      else process.env.NEXT_PUBLIC_NEON_DATA_API_URL = publicUrl;
+      if (serverUrl === undefined) delete process.env.NEON_DATA_API_URL;
+      else process.env.NEON_DATA_API_URL = serverUrl;
+    }
+  });
+
+  it("arms off the Neon catalogue env, NOT the retired Supabase keys (t_4b1c9124)", async () => {
+    // A production build that has the Neon Data API endpoint and no Supabase
+    // keys at all (i.e. after 2026-11-22) must still refuse to bake an empty hub.
+    process.env.NEXT_PHASE = "phase-production-build";
+    process.env.NEXT_PUBLIC_NEON_DATA_API_URL =
+      "https://stub.apirest.example/neondb/rest/v1";
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    mocks.getCatalogForUserV2.mockResolvedValue({ courses: [], isAdmin: false });
+
+    await expect(Page()).rejects.toThrow(/0 visible courses/);
+  });
+
+  it("is disarmed on that same Neon-configured build by ATLAS_BUILD_GUARD=0", async () => {
+    process.env.NEXT_PHASE = "phase-production-build";
+    process.env.NEXT_PUBLIC_NEON_DATA_API_URL =
+      "https://stub.apirest.example/neondb/rest/v1";
+    process.env.ATLAS_BUILD_GUARD = "0";
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    mocks.getCatalogForUserV2.mockResolvedValue({ courses: [], isAdmin: false });
+
+    const { default: R } = await import("react-dom/server");
+    const html = R.renderToString((await Page()) as never);
+
+    expect(html).toMatch(/cards:(<!-- -->)?0/);
+  });
+
+  it("stays armed when only the server-only NEON_DATA_API_URL is exported", async () => {
+    process.env.NEXT_PHASE = "phase-production-build";
+    const publicUrl = process.env.NEXT_PUBLIC_NEON_DATA_API_URL;
+    delete process.env.NEXT_PUBLIC_NEON_DATA_API_URL;
+    process.env.NEON_DATA_API_URL = "https://stub.apirest.example/neondb/rest/v1";
+    mocks.getCatalogForUserV2.mockResolvedValue({ courses: [], isAdmin: false });
+
+    try {
+      await expect(Page()).rejects.toThrow(/0 visible courses/);
+    } finally {
+      delete process.env.NEON_DATA_API_URL;
+      if (publicUrl === undefined) delete process.env.NEXT_PUBLIC_NEON_DATA_API_URL;
+      else process.env.NEXT_PUBLIC_NEON_DATA_API_URL = publicUrl;
     }
   });
 
