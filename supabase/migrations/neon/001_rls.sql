@@ -24,10 +24,22 @@
 --   what is ported — except where the live Supabase database differs, see
 --   the "LIVE-vs-FILES DIVERGENCE" note below.
 --
--- LIVE-vs-FILES DIVERGENCE — ONE DELIBERATE ONE, DO NOT "RESTORE PARITY"
+-- INVENTORY: 37 POLICIES = 34 SUPABASE-ORIGIN + 3 NEON-ONLY ADMIN SELECT
 --   Baseline: live Supabase (zrggxfdyptiahskogwnn) has 34 policies over 14
---   public tables; this file produces the same 34 (the completion_events
---   INSERT policy is swapped 1-for-1, see 1 below).
+--   public tables; this file produces those same 34 (the completion_events
+--   INSERT policy is swapped 1-for-1, see 1 below) PLUS the 3 Neon-only
+--   admin-read policies from 003_admin_read_policies.sql (§4b below:
+--   user_profiles_admin_select, lesson_completion_admin_select,
+--   read_progress_admin_select), because the Neon Data API has no service key
+--   and an authenticated admin would otherwise read 0 rows on the surfaces
+--   that used to go through the Supabase service role. Total on Neon: 37.
+--   This file creates them itself so a fresh Neon branch converges to the same
+--   37 from 001 alone; 003 remains a no-op idempotent restatement. Any
+--   inventory assertion (this file's §6, scripts/rls-isolation-check.py) must
+--   expect 37; the harness keeps 34 as the ORIGIN count so origin parity
+--   ("did the port lose or rename anything") stays separately answerable.
+--
+-- LIVE-vs-FILES DIVERGENCE — ONE DELIBERATE ONE, DO NOT "RESTORE PARITY"
 --
 --   1. completion_events — Neon INTENTIONALLY DIVERGES from live Supabase.
 --      Live still has `completion_events_insert_own` (WITH CHECK
@@ -44,8 +56,8 @@
 --          so revoking client INSERT breaks nothing server-side.
 --        * The table was empty (0 rows) when the change was made: no data or
 --          backfill risk.
---        * The swap is 1 policy in, 1 out, so the 34-policy baseline of the
---          origin set is undisturbed.
+--      The swap is 1 policy in, 1 out, so the 34-policy origin baseline is
+--      undisturbed.
 --      If you are here to make Neon "match Supabase": re-read this paragraph.
 --      The correct fix is to apply 012 to Supabase, not to reopen Neon.
 --
@@ -57,13 +69,14 @@
 --      receive 42501, and both roles are NOBYPASSRLS/NOLOGIN), and §4 drops any
 --      ad-hoc policy so the posture stays zero-policy. A Neon-only
 --      `user_select_own` policy was considered and rejected: it would make the
---      inventory 35 while the accepted parity baseline is 34, and it would
---      re-open the table to a grant-permitted role. The table owner
+--      inventory 38 (37 + 1) and it would re-open the table to a
+--      grant-permitted role. The table owner
 --      (neondb_owner, which the server connects as) bypasses RLS, so Better
 --      Auth and the Next.js server are unaffected.
---      scripts/rls-isolation-check.py keeps an empty NEON_ONLY_POLICIES list
---      for genuinely Neon-only policies, and asserts both the REVOKE denial and
---      the RLS-on/zero-policy posture (grants.user_table.default_deny).
+--      scripts/rls-isolation-check.py declares the 3 Neon-only admin SELECT
+--      policies in NEON_ONLY_POLICIES (37 = 34 origin + 3), asserts both the
+--      REVOKE denial and the RLS-on/zero-policy posture
+--      (grants.user_table.default_deny), and would fail on a 38th policy.
 --
 -- REWRITE TABLE (Supabase expression → Neon expression)
 --   ┌──────────────────────────────┬───────────────────┬───────────────────────────────────────────┐
@@ -131,7 +144,7 @@ BEGIN;
 -- ─────────────────────────────────────────────────────────────────────
 -- 0. Roles used by the Data API
 --
---    `authenticated` is referenced by 21 of the 34 policies (TO authenticated)
+--    `authenticated` is referenced by 21 of the 37 policies (TO authenticated)
 --    and must exist before CREATE POLICY parses. `anonymous` carries the
 --    public-read path. Both are NOLOGIN/NOSUPERUSER/NOBYPASSRLS so a JWT can
 --    never reach a role that ignores RLS. Creating them here keeps this file
@@ -216,7 +229,7 @@ REVOKE ALL ON TABLE public."user" FROM authenticated, anonymous;
 -- so every non-owner role gets zero rows (SELECT) and a withheld write even
 -- after a stray GRANT. neondb_owner owns the table and bypasses RLS, so Better
 -- Auth and the Next.js server are unaffected. Do NOT add a policy here (§4):
--- it would make the inventory 35 and re-open the table to client reads.
+-- it would make the inventory 38 (37 + 1) and re-open the table to client reads.
 ALTER TABLE public."user" ENABLE ROW LEVEL SECURITY;
 
 -- Future tables created BY THE APPLYING ROLE inherit the same baseline so a
@@ -293,7 +306,8 @@ GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated, anonymous;
 
 -- ═════════════════════════════════════════════════════════════════════
 -- 4. Policies — the 34 policies over 14 tables ported by name from live
---    Supabase. The completion_events INSERT policy is 012's deny guard, not
+--    Supabase, plus the 3 Neon-only admin SELECT policies in §4b.
+--    The completion_events INSERT policy is 012's deny guard, not
 --    live Supabase's forgeable insert_own — see the header note.
 -- ═════════════════════════════════════════════════════════════════════
 
@@ -526,6 +540,51 @@ CREATE POLICY "completion_events deny client insert"
 -- No UPDATE/DELETE policy anywhere: completion_events stays append-only
 -- (ADR-211) for every non-owner role.
 
+-- ═════════════════════════════════════════════════════════════════════
+-- 4b. Admin read policies — NEON-ONLY (003_admin_read_policies.sql)
+--
+--    The admin surface (/api/admin/users, /api/admin/users/:id,
+--    /api/admin/analytics, /api/admin/access/effective) read with the Supabase
+--    service-role key, which bypassed RLS. The Neon Data API has NO service
+--    key: every request is the caller's own JWT, filtered by RLS. With only the
+--    owner policies above, an authenticated admin would read 0 rows — display
+--    names would vanish and analytics would report zeros while the routes still
+--    answered 200. These 3 SELECT-only policies give the admin read paths what
+--    every other admin surface in §4 already has (public.is_admin()).
+--
+--    SELECT only, TO authenticated, USING (public.is_admin()). No write
+--    capability is added: privileged writes still go through the deny-client
+--    guards and the direct-SQL helpers in src/lib/db/services (owner role).
+--    These are NOT Supabase-origin policies — they are the 3 of the 37 that
+--    live only on Neon (34 origin + 3 Neon-only = 37). They are created here so
+--    this file converges a fresh branch to the same inventory it verifies in
+--    §6; 003_admin_read_policies.sql restates the identical definitions and is
+--    now a no-op on branches that applied this file.
+-- ═════════════════════════════════════════════════════════════════════
+-- user_profiles — admin users list / effective-access matrix read every profile
+ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "user_profiles_admin_select" ON public.user_profiles;
+CREATE POLICY "user_profiles_admin_select"
+  ON public.user_profiles FOR SELECT
+  TO authenticated
+  USING (public.is_admin());
+
+-- lesson_completion — /api/admin/analytics aggregates completions per course
+ALTER TABLE public.lesson_completion ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "lesson_completion_admin_select" ON public.lesson_completion;
+CREATE POLICY "lesson_completion_admin_select"
+  ON public.lesson_completion FOR SELECT
+  TO authenticated
+  USING (public.is_admin());
+
+-- read_progress — same analytics aggregate, reads per content slug
+ALTER TABLE public.read_progress ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "read_progress_admin_select" ON public.read_progress;
+CREATE POLICY "read_progress_admin_select"
+  ON public.read_progress FOR SELECT
+  TO authenticated
+  USING (public.is_admin());
+
 -- ── "user" — RLS ON with ZERO policies by design (do NOT add a policy) ──
 -- Not ported from Supabase (auth.users is a different object there and was
 -- never policy'd) and deliberately NOT given a Neon-only policy. The design
@@ -535,9 +594,10 @@ CREATE POLICY "completion_events deny client insert"
 -- write nothing even if a stray GRANT (or a re-created table picked up by
 -- pg_default_acl) re-grants the table; neondb_owner, which owns the table,
 -- bypasses RLS so Better Auth and the Next.js server keep working.
--- A user_select_own policy here would make the inventory 35 and let a
--- grant-permitted role read its own row; the 34-policy parity baseline is what
--- the security review and QA both sign off on. Do not add one.
+-- A user_select_own policy here would make the inventory 38 (37 + 1) and let a
+-- grant-permitted role read its own row; the 37-policy baseline (34 origin +
+-- the 3 Neon-only admin SELECTs in §4b) is what the security review and QA both
+-- sign off on. Do not add one.
 --
 -- This block exists because policy state belongs to THIS file: if an ad-hoc
 -- user_select_own policy was applied to the branch, the file converges the
@@ -596,8 +656,8 @@ $$;
 DO $$
 DECLARE
   expected CONSTANT text[][] := ARRAY[
-    ['read_progress','4'], ['lesson_completion','4'], ['quiz_attempt','4'],
-    ['quiz_run','2'], ['user_profiles','3'], ['user_roles','2'],
+    ['read_progress','5'], ['lesson_completion','5'], ['quiz_attempt','4'],
+    ['quiz_run','2'], ['user_profiles','4'], ['user_roles','2'],
     ['courses','2'], ['user_entitlements','2'], ['subscriptions','1'],
     ['admin_audit_log','2'], ['catalog_sections','2'], ['catalog_groups','2'],
     ['course_prerequisites','2'], ['completion_events','2']
@@ -623,12 +683,13 @@ BEGIN
   END LOOP;
 
   SELECT count(*) INTO actual FROM pg_policies WHERE schemaname = 'public';
-  IF actual <> 34 THEN
+  IF actual <> 37 THEN
     RAISE EXCEPTION
-      'RLS port policy count is %, expected exactly 34 — an extra policy is a '
-      'loosened gate, a short one is a lost one', actual;
+      'RLS port policy count is %, expected exactly 37 (34 Supabase-origin + 3 '
+      'Neon-only admin SELECT) — an extra policy is a loosened gate, a short '
+      'one is a lost one', actual;
   END IF;
-  RAISE NOTICE 'RLS port OK: % policies on public (34 expected across the 14 app tables)', actual;
+  RAISE NOTICE 'RLS port OK: % policies on public (37 expected: 34 origin + 3 Neon-only admin SELECT across the 14 app tables)', actual;
 END
 $$;
 

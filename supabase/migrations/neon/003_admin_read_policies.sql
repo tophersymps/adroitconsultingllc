@@ -16,6 +16,11 @@
 -- Mirrors 001_rls.sql section 5 (user_roles / entitlements / subscriptions / courses),
 -- which already grant admin SELECT via public.is_admin(). Idempotent: safe to re-apply.
 --
+-- NOTE (t_de7db90d): 001_rls.sql §4b now creates these same three policies itself,
+-- so a fresh branch converges to the 37-policy inventory (34 origin + 3 Neon-only)
+-- from 001 alone. This file is kept as the identical, idempotent restatement for
+-- branches/DBs that already applied it; once 001 has run it is a no-op.
+--
 -- Apply:  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/neon/003_admin_read_policies.sql
 -- (RLS policy changes do not need `neon data-api refresh-schema`; that is only for
 --  tables/columns, which the Data API caches.)
