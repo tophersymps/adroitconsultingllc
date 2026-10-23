@@ -181,6 +181,29 @@ export function effectiveAccessState(input: {
   return "none";
 }
 
+/**
+ * Guest-visibility predicate — can a logged-out visitor RESOLVE this course?
+ *
+ * This is the non-admin, no-entitlement path of `decideCourseAccessFromInput`
+ * expressed as a pure check, for surfaces that publish URLs to crawlers
+ * (sitemap, RSS) where a link to a 404 is a SEO defect (LOW L1, t_018620c9):
+ *
+ *   - non-live (pending/archived)  → 404 for a guest  → false
+ *   - `granted` (stealth) model    → 404 for a guest, because the stealth rule
+ *     hides the course's very existence from anyone without a matching grant,
+ *     and a guest never holds one         → false
+ *   - everything else that is live  → true (paywalled series still render
+ *     their syllabus — US-004 — so the URL resolves)
+ *
+ * Keep in sync with the decision core: any change to who can see a live
+ * course must land there first, and `sitemap.test.ts` locks the parity.
+ */
+export function isGuestVisibleCourse(
+  course: Pick<CourseRow, "status" | "access_model">,
+): boolean {
+  return course.status === "live" && course.access_model !== "granted";
+}
+
 /** Pure single-course decision — the heart of the seam. */
 export function decideCourseAccessFromInput(
   input: {

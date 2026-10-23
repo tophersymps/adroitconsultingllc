@@ -4,23 +4,37 @@ import { learnLessons, learnSeries } from "@/data/learn";
 import { getCertExam, getKnowledgeChecks } from "@/lib/quiz";
 import { getAllTags } from "@/lib/tags";
 import { siteConfig } from "@/lib/seo";
+import { isGuestVisibleCourse } from "@/lib/access";
+import type { CourseRow } from "@/shared/contracts-course-catalog";
 
 /**
- * Sitemap — public index. Per AC-5, learn URLs are included ONLY for courses
- * whose `courses` row status is `live` (pending/archived are excluded; a
- * content series with no DB row is treated as not-launched). Blog routes stay
- * fully public and unchanged.
+ * Sitemap — public index. Per AC-5, learn URLs are included ONLY for courses a
+ * logged-out visitor can actually resolve: `courses.status = 'live'` AND the
+ * course is not stealth-gated (pending/archived are excluded; a content series
+ * with no DB row is treated as not-launched). Blog routes stay fully public and
+ * unchanged.
  *
- * The live set is read via the SERVICE client (a system-level read of public
- * data — never used to resolve a per-user decision). If the DB is unreachable
- * at build time we fall back to the content-derived series so the build never
- * fails on a DB hiccup (arch §10 risk mitigation), logging the degradation.
+ * Why the access check matters (SEO L1, t_018620c9): the page-level gate is
+ * `accessSeam` → a `granted`-model course answers 404 to a guest, so emitting
+ * its URL submitted ~600 deep atlas URLs that 404 (local) / 500 (prod) to
+ * crawlers. `isGuestVisibleCourse` is the same rule the seam's guest path
+ * applies, single-sourced in `lib/access` and parity-locked by
+ * `sitemap.test.ts`.
+ *
+ * The visible set is read as the Data API `anonymous` role via
+ * `getSupabaseAnonymousClient()` — a session-less read of public data, never
+ * used to resolve a per-user decision. If the DB is unreachable at build time
+ * we fall back to the content-derived series so the build never fails on a DB
+ * hiccup (arch §10 risk mitigation), logging the degradation; the fallback
+ * cannot see access_model, so it is a content-only approximation.
  */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const blogUrl = `${siteConfig.url}${siteConfig.blogPath}`;
   const learnUrl = `${siteConfig.url}${siteConfig.learnPath}`;
 
-  // Live series slugs from the DB (source of truth for status).
+  // Guest-visible series slugs from the DB (source of truth for status +
+  // access_model). A row that fails `isGuestVisibleCourse` resolves to a 404
+  // for a logged-out visitor, so it must not be advertised to crawlers.
   let liveSlugs: Set<string> | null = null;
   try {
     // Sitemap generation runs outside a request, so there is no session to
@@ -30,11 +44,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const supabase = await getSupabaseAnonymousClient();
     const { data, error } = await supabase
       .from("courses")
-      .select("series_slug")
+      .select("series_slug, status, access_model")
       .eq("status", "live");
     if (!error && data) {
+      const rows = data as Pick<
+        CourseRow,
+        "series_slug" | "status" | "access_model"
+      >[];
       liveSlugs = new Set(
-        (data as { series_slug: string }[]).map((r) => r.series_slug),
+        rows.filter(isGuestVisibleCourse).map((r) => r.series_slug),
       );
     }
   } catch {
