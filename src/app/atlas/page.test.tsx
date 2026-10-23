@@ -1,26 +1,34 @@
 /**
- * /atlas hub page — identity + catalogue wiring (perf P1, review of t_d3c401c9).
+ * /atlas hub page — prerender wiring (perf P1, review of t_d3c401c9; QA F1/F2
+ * on t_3a3d6595).
  *
- * The page must stay PRERENDERABLE: it resolves the visitor through the
- * cookie-backed DATA client (`supabase.auth.getUser()`) and never through
- * `getAccessUserId()` / Managed Better Auth, whose `next/headers` adapter
- * (`cookies()` + `headers()`) is a dynamic API that flips the route to ƒ and
- * costs the public hub its CDN cache. These tests lock the wiring: one cookie
- * read drives BOTH the gate prop and the catalogue `userId`, and the module
- * does not import `getAccessUserId`.
+ * The route MUST be prerendered (○) in a production-configured build, i.e. with
+ * `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` present. The
+ * catalogue reads are cookie-bound (`cookies()` = dynamic API), so the page
+ * declares `dynamic = "force-static"` and resolves NO identity at all: any
+ * cookie/header read here would flip the route to ƒ and cost the public hub its
+ * CDN cache. These tests lock that wiring plus the rendered content (course
+ * links in the JSON-LD ItemList, not just route mode).
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const { mocks } = vi.hoisted(() => {
-  const getUser = vi.fn();
+  const getSupabaseServerClient = vi.fn();
   const getCatalogForUserV2 = vi.fn();
   const getCatalogOrg = vi.fn();
   const getAccessUserId = vi.fn();
-  return { mocks: { getUser, getCatalogForUserV2, getCatalogOrg, getAccessUserId } };
+  return {
+    mocks: {
+      getSupabaseServerClient,
+      getCatalogForUserV2,
+      getCatalogOrg,
+      getAccessUserId,
+    },
+  };
 });
 
 vi.mock("@/lib/supabase/server", () => ({
-  getSupabaseServerClient: () => ({ auth: { getUser: mocks.getUser } }),
+  getSupabaseServerClient: mocks.getSupabaseServerClient,
 }));
 
 vi.mock("@/lib/catalog", () => ({
@@ -48,7 +56,7 @@ vi.mock("@/components/Learn/LearnHub", () => ({
   ),
 }));
 
-import Page from "./page";
+import Page, { dynamic as routeDynamic } from "./page";
 
 const org = {
   sections: [{ id: "s1", slug: "certifications", name: "Certifications" }],
@@ -58,48 +66,50 @@ const org = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.getUser.mockResolvedValue({ data: { user: null }, error: null });
   mocks.getCatalogForUserV2.mockResolvedValue({
-    courses: [{ slug: "agentic-ai", name: "Agentic AI" }],
+    courses: [
+      { slug: "agentic-ai", name: "Agentic AI" },
+      { slug: "salesforce-admin", name: "Salesforce Administrator" },
+    ],
     isAdmin: false,
   });
   mocks.getCatalogOrg.mockResolvedValue(org);
 });
 
-describe("/atlas — prerender-safe identity wiring", () => {
-  it("guest: reads identity from the data client only and renders the guest gate", async () => {
+describe("/atlas — prerender-safe wiring", () => {
+  it("declares a static route (force-static), so env-complete builds cannot emit ƒ", () => {
+    expect(routeDynamic).toBe("force-static");
+  });
+
+  it("renders the guest projection without resolving identity", async () => {
     const { default: R } = await import("react-dom/server");
     const html = R.renderToString((await Page()) as never);
 
     expect(html).toContain('data-gate="guest-locked"');
     // Comment-tolerant: SSR inserts <!-- --> between JSX text nodes.
-    expect(html).toMatch(/cards:(<!-- -->)?1/);
-    // Guest catalogue → null userId, resolved from the cookie read, not Neon.
+    expect(html).toMatch(/cards:(<!-- -->)?2/);
     expect(mocks.getCatalogForUserV2).toHaveBeenCalledWith(null);
+    // No session read at all: cookies() would flip the route back to ƒ.
+    expect(mocks.getSupabaseServerClient).not.toHaveBeenCalled();
     expect(mocks.getAccessUserId).not.toHaveBeenCalled();
   });
 
-  it("signed-in: the SAME cookie read feeds the gate and the catalogue userId", async () => {
-    mocks.getUser.mockResolvedValue({
-      data: { user: { id: "u1", email: "a@b.c" } },
-      error: null,
-    });
-
+  it("prerenders course content (ItemList JSON-LD with /atlas/<slug> URLs)", async () => {
     const { default: R } = await import("react-dom/server");
     const html = R.renderToString((await Page()) as never);
 
-    expect(html).toContain('data-gate="signed-in"');
-    expect(mocks.getCatalogForUserV2).toHaveBeenCalledWith("u1");
-    expect(mocks.getAccessUserId).not.toHaveBeenCalled();
+    expect(html).toContain("ItemList");
+    expect(html).toContain("https://adroit.io/atlas/agentic-ai");
+    expect(html).toContain("Salesforce Administrator");
   });
 
-  it("a failing session read degrades to guest instead of throwing", async () => {
-    mocks.getUser.mockRejectedValue(new Error("no session store"));
+  it("degrades to an empty hub instead of throwing when the catalogue is unreachable", async () => {
+    mocks.getCatalogForUserV2.mockRejectedValue(new Error("Supabase URL and anon key are required"));
 
     const { default: R } = await import("react-dom/server");
     const html = R.renderToString((await Page()) as never);
 
     expect(html).toContain('data-gate="guest-locked"');
-    expect(mocks.getCatalogForUserV2).toHaveBeenCalledWith(null);
+    expect(html).toMatch(/cards:(<!-- -->)?0/);
   });
 });
