@@ -43,6 +43,9 @@ import { POST } from "./route";
 const GENERIC_SIGNIN_ERROR = "Invalid email or password.";
 const GENERIC_SIGNUP_ERROR =
   "Unable to create account. Please try again later.";
+// Designed US-5 recovery body (t_be6b4bd2) — fixed, never the upstream detail.
+const UNCONFIRMED_SIGNIN_ERROR =
+  "Your email hasn't been confirmed yet. Check your inbox for the confirmation link, or resend it below.";
 
 function req(body: unknown, origin: string | null = "http://localhost:3000"): NextRequest {
   const headers: Record<string, string> = {
@@ -171,6 +174,95 @@ describe("POST /api/auth/login — H1 hardening (Neon Auth)", () => {
     expect(body.error).toContain("hasn't been confirmed");
     expect(body.error).not.toBe(GENERIC_SIGNIN_ERROR);
     expect(JSON.stringify(body)).not.toContain("EMAIL_NOT_VERIFIED");
+  });
+
+  // t_2912839f: `@neondatabase/auth` 0.7.x normalises BETTER_AUTH errors
+  // before the route sees them — EMAIL_NOT_VERIFIED becomes
+  // code "email_not_confirmed", status 422, message "Email verification
+  // required" (the SDK's canned descriptor). These two cases pin both shapes so
+  // an SDK bump cannot silently re-break the US-5 recovery path.
+  it("returns the fixed 403 for the NORMALIZED SDK shape (email_not_confirmed/422)", async () => {
+    mocks.signInEmail.mockResolvedValue({
+      error: {
+        status: 422,
+        code: "email_not_confirmed",
+        message: "Email verification required",
+      },
+    });
+    const res = await POST(
+      req({ mode: "signin", email: "unconfirmed@example.com", password: "secret1" }),
+    );
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error).toBe(UNCONFIRMED_SIGNIN_ERROR);
+    // non-enumerating: never echo the upstream/normalized code or message.
+    expect(JSON.stringify(body)).not.toContain("email_not_confirmed");
+    expect(JSON.stringify(body)).not.toContain("Email verification required");
+  });
+
+  it("returns the fixed 403 when the SDK falls back to validation_failed/422 with an upstream message", async () => {
+    mocks.signInEmail.mockResolvedValue({
+      error: { status: 422, code: "validation_failed", message: "Email not verified" },
+    });
+    const res = await POST(
+      req({ mode: "signin", email: "unconfirmed@example.com", password: "secret1" }),
+    );
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe(UNCONFIRMED_SIGNIN_ERROR);
+  });
+
+  it("accepts a bare message signal with no status/code (legacy shape)", async () => {
+    mocks.signInEmail.mockResolvedValue({
+      error: { message: "Email not verified" },
+    });
+    const res = await POST(
+      req({ mode: "signin", email: "unconfirmed@example.com", password: "secret1" }),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("does NOT widen the 403 branch to a 422 validation failure of another kind", async () => {
+    mocks.signInEmail.mockResolvedValue({
+      error: {
+        status: 422,
+        code: "validation_failed",
+        message: "Invalid request parameters",
+      },
+    });
+    const res = await POST(
+      req({ mode: "signin", email: "reader@example.com", password: "secret1" }),
+    );
+    expect(res.status).toBe(401);
+    expect((await res.json()).error).toBe(GENERIC_SIGNIN_ERROR);
+  });
+
+  it("does NOT treat the normalized invalid_credentials/401 as unconfirmed", async () => {
+    mocks.signInEmail.mockResolvedValue({
+      error: {
+        status: 401,
+        code: "invalid_credentials",
+        message: "Invalid email or password",
+      },
+    });
+    const res = await POST(
+      req({ mode: "signin", email: "reader@example.com", password: "wrong!!" }),
+    );
+    expect(res.status).toBe(401);
+    expect((await res.json()).error).toBe(GENERIC_SIGNIN_ERROR);
+  });
+
+  it("does NOT treat a 403 provider/feature failure that mentions confirmation as unconfirmed", async () => {
+    mocks.signInEmail.mockResolvedValue({
+      error: {
+        status: 403,
+        code: "feature_not_supported",
+        message: "Provider not supported",
+      },
+    });
+    const res = await POST(
+      req({ mode: "signin", email: "reader@example.com", password: "secret1" }),
+    );
+    expect(res.status).toBe(401);
   });
 
   it("keeps the generic 401 for non-confirm sign-in failures", async () => {
