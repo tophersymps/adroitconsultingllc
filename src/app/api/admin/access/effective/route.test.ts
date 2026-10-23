@@ -9,11 +9,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const { mocks } = vi.hoisted(() => {
-  const getAccessUserId = vi.fn();
+  const getSessionUserUncached = vi.fn();
   const isAdmin = vi.fn();
   const listAuthUsers = vi.fn();
   const service = { from: vi.fn() };
-  return { mocks: { getAccessUserId, isAdmin, listAuthUsers, service } };
+  return { mocks: { getSessionUserUncached, isAdmin, listAuthUsers, service } };
 });
 
 vi.mock("@/lib/access", async (importOriginal) => {
@@ -21,9 +21,12 @@ vi.mock("@/lib/access", async (importOriginal) => {
   return {
     ...actual,
     accessSeam: { isAdmin: mocks.isAdmin },
-    getAccessUserId: mocks.getAccessUserId,
   };
 });
+
+vi.mock("@/lib/session", () => ({
+  getSessionUserUncached: mocks.getSessionUserUncached,
+}));
 
 // R2-2: the admin surface reads and writes through the Data API client, whose
 // RLS `is_admin()` policies gate it — there is no service-role client any more.
@@ -40,7 +43,7 @@ import { GET } from "./route";
 const ADMIN_ID = "admin-1";
 
 function admin() {
-  mocks.getAccessUserId.mockResolvedValue(ADMIN_ID);
+  mocks.getSessionUserUncached.mockResolvedValue({ id: ADMIN_ID, email: "", name: null });
   mocks.isAdmin.mockResolvedValue(true);
 }
 
@@ -115,14 +118,14 @@ function wire(
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.isAdmin.mockReset();
-  mocks.getAccessUserId.mockReset();
+  mocks.getSessionUserUncached.mockReset();
   mocks.listAuthUsers.mockReset();
   mocks.service.from.mockReset();
 });
 
 describe("GET /api/admin/access/effective — consolidated accessor (ADR-223)", () => {
   it("403s a non-admin", async () => {
-    mocks.getAccessUserId.mockResolvedValue("member");
+    mocks.getSessionUserUncached.mockResolvedValue({ id: "member", email: "", name: null });
     mocks.isAdmin.mockResolvedValue(false);
     const res = await GET();
     expect(res.status).toBe(403);

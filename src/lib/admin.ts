@@ -10,13 +10,29 @@
  * Every mutation writes an `admin_audit_log` row (ADR-205).
  */
 import { NextResponse } from "next/server";
-import { accessSeam, getAccessUserId } from "@/lib/access";
+import { accessSeam } from "@/lib/access";
 import { getSupabaseServerClient } from "@/lib/db/server";
+import { getSessionUserUncached } from "@/lib/session";
 import type { SubscriptionRow } from "@/shared/contracts-course-catalog";
 
-/** Resolve the current admin from the session cookie. Non-admin / guest → false. */
+/**
+ * The acting user's id, resolved WITHOUT the signed `session_data` cookie cache.
+ *
+ * Admin authorization is the one place where a stale identity is a security
+ * problem, not just a latency win: that cookie pins the user for up to 300 s
+ * (SDK default, decision card t_62b515f6 §11), so a deleted/revoked account
+ * would keep passing `accessSeam.isAdmin()` for the rest of the window. Every
+ * gate below therefore pays one upstream `get-session` round trip; learner
+ * surfaces keep the cached `getAccessUserId()`/`getSessionUser()` read.
+ */
+async function actingAdminUserId(): Promise<string | null> {
+  const user = await getSessionUserUncached();
+  return user?.id ?? null;
+}
+
+/** Resolve the current admin from an upstream session read. Non-admin / guest → false. */
 export async function isCurrentUserAdmin(): Promise<boolean> {
-  const userId = await getAccessUserId();
+  const userId = await actingAdminUserId();
   if (!userId) return false;
   return accessSeam.isAdmin(userId);
 }
@@ -26,7 +42,7 @@ export async function requireAdminApi(): Promise<
   | { ok: true; userId: string }
   | { ok: false; response: NextResponse }
 > {
-  const userId = await getAccessUserId();
+  const userId = await actingAdminUserId();
   if (!userId) return { ok: false, response: forbidden() };
   const admin = await accessSeam.isAdmin(userId);
   if (!admin) return { ok: false, response: forbidden() };
@@ -35,7 +51,7 @@ export async function requireAdminApi(): Promise<
 
 /** Admin API guard for pages (layout) — non-admin renders 404 (US-016). */
 export async function requireAdminPage(): Promise<{ userId: string } | null> {
-  const userId = await getAccessUserId();
+  const userId = await actingAdminUserId();
   if (!userId) return null;
   const admin = await accessSeam.isAdmin(userId);
   if (!admin) return null;

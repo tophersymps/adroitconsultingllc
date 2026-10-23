@@ -9,16 +9,19 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const { mocks } = vi.hoisted(() => {
-  const getAccessUserId = vi.fn();
+  const getSessionUserUncached = vi.fn();
   const isAdmin = vi.fn();
   const getAuthUser = vi.fn();
   const service = { from: vi.fn() };
-  return { mocks: { getAccessUserId, isAdmin, getAuthUser, service } };
+  return { mocks: { getSessionUserUncached, isAdmin, getAuthUser, service } };
 });
 
 vi.mock("@/lib/access", () => ({
   accessSeam: { isAdmin: mocks.isAdmin },
-  getAccessUserId: mocks.getAccessUserId,
+}));
+
+vi.mock("@/lib/session", () => ({
+  getSessionUserUncached: mocks.getSessionUserUncached,
 }));
 
 // R2-2: the admin surface reads and writes through the Data API client, whose
@@ -37,7 +40,7 @@ const ADMIN_ID = "admin-1";
 const USER_ID = "u1";
 
 function admin() {
-  mocks.getAccessUserId.mockResolvedValue(ADMIN_ID);
+  mocks.getSessionUserUncached.mockResolvedValue({ id: ADMIN_ID, email: "", name: null });
   mocks.isAdmin.mockResolvedValue(true);
 }
 
@@ -81,14 +84,14 @@ function wire(opts: {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.isAdmin.mockReset();
-  mocks.getAccessUserId.mockReset();
+  mocks.getSessionUserUncached.mockReset();
   mocks.getAuthUser.mockReset();
   mocks.service.from.mockReset();
 });
 
 describe("GET /api/admin/users/[id] — subscription surfacing (t_32ce7d79)", () => {
   it("403s a non-admin", async () => {
-    mocks.getAccessUserId.mockResolvedValue("member");
+    mocks.getSessionUserUncached.mockResolvedValue({ id: "member", email: "", name: null });
     mocks.isAdmin.mockResolvedValue(false);
     const res = await GET(new Request("http://localhost:3000/api/admin/users/u1"), {
       params: Promise.resolve({ id: USER_ID }),

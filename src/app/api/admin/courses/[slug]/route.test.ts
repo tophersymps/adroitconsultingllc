@@ -9,15 +9,18 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
 const { mocks } = vi.hoisted(() => {
-  const getAccessUserId = vi.fn();
+  const getSessionUserUncached = vi.fn();
   const isAdmin = vi.fn();
   const service = { from: vi.fn() };
-  return { mocks: { getAccessUserId, isAdmin, service } };
+  return { mocks: { getSessionUserUncached, isAdmin, service } };
 });
 
 vi.mock("@/lib/access", () => ({
   accessSeam: { isAdmin: mocks.isAdmin },
-  getAccessUserId: mocks.getAccessUserId,
+}));
+
+vi.mock("@/lib/session", () => ({
+  getSessionUserUncached: mocks.getSessionUserUncached,
 }));
 
 // R2-2: the admin surface reads and writes through the Data API client, whose
@@ -53,7 +56,7 @@ function req(body: Record<string, unknown>): NextRequest {
 }
 
 function admin() {
-  mocks.getAccessUserId.mockResolvedValue(ADMIN_ID);
+  mocks.getSessionUserUncached.mockResolvedValue({ id: ADMIN_ID, email: "", name: null });
   mocks.isAdmin.mockResolvedValue(true);
 }
 
@@ -89,7 +92,7 @@ function wire(updated: unknown) {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.isAdmin.mockReset();
-  mocks.getAccessUserId.mockReset();
+  mocks.getSessionUserUncached.mockReset();
   mocks.service.from.mockReset();
 });
 

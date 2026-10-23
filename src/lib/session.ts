@@ -68,6 +68,37 @@ export const PLAIN_SESSION_COOKIE_NAME = "neon-auth.session_token";
  * the same guard `src/proxy.ts` uses.
  */
 export async function getSessionUser(): Promise<SessionUser | null> {
+  return resolveSessionUser(false);
+}
+
+/**
+ * Query flag that forces the SDK to re-resolve the session UPSTREAM instead of
+ * trusting the signed `session_data` cookie.
+ *
+ * `@neondatabase/auth@0.7.0-beta` mints that cookie with a hard 300 s ceiling
+ * (`DEFAULT_SESSION_CACHE_TTL_SECONDS`), and while it is present the SDK never
+ * consults the database — so a revoked/deleted account keeps resolving to its
+ * cached user for up to five minutes. The SDK's documented escape hatch is this
+ * query flag: `getSession()` consults the cache only when
+ * `data?.query?.disableCookieCache !== "true"` (see the SDK's `server-*.mjs`).
+ * Privileged authorization cannot accept that window, so the
+ * admin gates use `getSessionUserUncached()`. Ordinary reads keep the cache.
+ */
+const UNCACHED_SESSION_OPTIONS = {
+  query: { disableCookieCache: "true" },
+} as const;
+
+/**
+ * Shared resolver behind both public readers: guest fast path, then the SDK,
+ * mapping `data.user` to the minimal `SessionUser` shape. Never throws.
+ *
+ * `bypassCookieCache` only changes the `getSession()` call — the guest fast
+ * path (no session cookie for this transport ⇒ `null`, SDK never imported) is
+ * identical for both readers, so an anonymous request still costs nothing.
+ */
+async function resolveSessionUser(
+  bypassCookieCache: boolean,
+): Promise<SessionUser | null> {
   try {
     const { cookies, headers } = await import("next/headers");
     const cookieStore = await cookies();
@@ -83,7 +114,12 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     }
 
     const { getAuthServer } = await import("@/lib/auth/server");
-    const { data } = await getAuthServer().getSession();
+    const auth = getAuthServer();
+    // No args at all on the cached path — `getSession(undefined)` would be
+    // indistinguishable to the SDK but the contract here is "no arguments".
+    const { data } = bypassCookieCache
+      ? await auth.getSession(UNCACHED_SESSION_OPTIONS)
+      : await auth.getSession();
     const user = data?.user;
     if (!user?.id) return null;
     return {
@@ -92,9 +128,27 @@ export async function getSessionUser(): Promise<SessionUser | null> {
       name: user.name ?? null,
     };
   } catch (err) {
-    console.error("[session] getSession failed", err);
+    console.error(
+      bypassCookieCache
+        ? "[session] getSession (uncached) failed"
+        : "[session] getSession failed",
+      err,
+    );
     return null;
   }
+}
+
+/**
+ * Current session user resolved WITHOUT the `session_data` cookie cache — one
+ * upstream `get-session` round trip per call.
+ *
+ * Use this for PRIVILEGED authorization only (admin gates): a deleted or
+ * revoked account must stop being an admin as soon as its upstream session
+ * row is gone, not up to 300 s later (decision card t_62b515f6 §11). Learner
+ * reads keep `getSessionUser()` so they stay on the cached path.
+ */
+export async function getSessionUserUncached(): Promise<SessionUser | null> {
+  return resolveSessionUser(true);
 }
 
 /** Current session user id, or null for guests. */

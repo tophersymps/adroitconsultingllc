@@ -8,15 +8,18 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
 const { mocks } = vi.hoisted(() => {
-  const getAccessUserId = vi.fn();
+  const getSessionUserUncached = vi.fn();
   const isAdmin = vi.fn();
   const service = { from: vi.fn() };
-  return { mocks: { getAccessUserId, isAdmin, service } };
+  return { mocks: { getSessionUserUncached, isAdmin, service } };
 });
 
 vi.mock("@/lib/access", () => ({
   accessSeam: { isAdmin: mocks.isAdmin },
-  getAccessUserId: mocks.getAccessUserId,
+}));
+
+vi.mock("@/lib/session", () => ({
+  getSessionUserUncached: mocks.getSessionUserUncached,
 }));
 
 // R2-2: the admin surface reads and writes through the Data API client, whose
@@ -41,7 +44,7 @@ function req(body: Record<string, unknown>): NextRequest {
 }
 
 function admin() {
-  mocks.getAccessUserId.mockResolvedValue(ADMIN_ID);
+  mocks.getSessionUserUncached.mockResolvedValue({ id: ADMIN_ID, email: "", name: null });
   mocks.isAdmin.mockResolvedValue(true);
 }
 
@@ -65,13 +68,13 @@ function revokeChain(rows: unknown) {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.isAdmin.mockReset();
-  mocks.getAccessUserId.mockReset();
+  mocks.getSessionUserUncached.mockReset();
   mocks.service.from.mockReset();
 });
 
 describe("DELETE /api/admin/entitlements — row-affected check (t_10214e52)", () => {
   it("403s a non-admin before touching data", async () => {
-    mocks.getAccessUserId.mockResolvedValue("member");
+    mocks.getSessionUserUncached.mockResolvedValue({ id: "member", email: "", name: null });
     mocks.isAdmin.mockResolvedValue(false);
     const res = await DELETE(req({ userId: "u2", courseId: "c1" }));
     expect(res.status).toBe(403);

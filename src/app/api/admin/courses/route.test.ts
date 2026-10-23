@@ -6,15 +6,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const { mocks } = vi.hoisted(() => {
-  const getAccessUserId = vi.fn();
+  const getSessionUserUncached = vi.fn();
   const isAdmin = vi.fn();
   const service = { from: vi.fn() };
-  return { mocks: { getAccessUserId, isAdmin, service } };
+  return { mocks: { getSessionUserUncached, isAdmin, service } };
 });
 
 vi.mock("@/lib/access", () => ({
   accessSeam: { isAdmin: mocks.isAdmin },
-  getAccessUserId: mocks.getAccessUserId,
+}));
+
+vi.mock("@/lib/session", () => ({
+  getSessionUserUncached: mocks.getSessionUserUncached,
 }));
 
 // R2-2: the admin surface reads and writes through the Data API client, whose
@@ -31,20 +34,20 @@ const MEMBER_ID = "user-member";
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.isAdmin.mockReset();
-  mocks.getAccessUserId.mockReset();
+  mocks.getSessionUserUncached.mockReset();
   mocks.service.from.mockReset();
 });
 
 describe("GET /api/admin/courses", () => {
   it("403s a guest (no session) — gate fires before any data access", async () => {
-    mocks.getAccessUserId.mockResolvedValue(null);
+    mocks.getSessionUserUncached.mockResolvedValue(null);
     const res = await GET();
     expect(res.status).toBe(403);
     expect(mocks.service.from).not.toHaveBeenCalled();
   });
 
   it("403s a signed-in non-admin", async () => {
-    mocks.getAccessUserId.mockResolvedValue(MEMBER_ID);
+    mocks.getSessionUserUncached.mockResolvedValue({ id: MEMBER_ID, email: "", name: null });
     mocks.isAdmin.mockResolvedValue(false);
     const res = await GET();
     expect(res.status).toBe(403);
@@ -52,7 +55,7 @@ describe("GET /api/admin/courses", () => {
   });
 
   it("200s an admin and returns course rows + active entitlement counts", async () => {
-    mocks.getAccessUserId.mockResolvedValue(ADMIN_ID);
+    mocks.getSessionUserUncached.mockResolvedValue({ id: ADMIN_ID, email: "", name: null });
     mocks.isAdmin.mockResolvedValue(true);
 
     const coursesRes = { data: [{ id: "c1", series_slug: "a", status: "live", access_model: "free", price_cents: null, created_at: "", updated_at: "" }], error: null };

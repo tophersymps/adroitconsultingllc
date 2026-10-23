@@ -40,6 +40,7 @@ vi.mock("next/headers", () => ({
 
 import {
   getSessionUser,
+  getSessionUserUncached,
   getSessionUserId,
   PLAIN_SESSION_COOKIE_NAME,
   SESSION_COOKIE_NAME,
@@ -153,6 +154,65 @@ describe("getSessionUser", () => {
      * Neon Auth `get-session` fetch on an anonymous pageview. */
     expect(mocks.getAuthServer).not.toHaveBeenCalled();
     expect(mocks.getSession).not.toHaveBeenCalled();
+  });
+});
+
+describe("getSessionUserUncached", () => {
+  it("calls getSession with query.disableCookieCache === 'true'", async () => {
+    /* Decision card t_62b515f6 §11: the signed `session_data` cookie pins the
+     * user for up to 300 s, so privileged authorization must ask the SDK to
+     * re-resolve upstream. The SDK reads the flag off `data.query`. */
+    mocks.getSession.mockResolvedValue(SESSION);
+
+    await expect(getSessionUserUncached()).resolves.toEqual({
+      id: "u1",
+      email: "a@adroit.io",
+      name: "A",
+    });
+    expect(mocks.getSession).toHaveBeenCalledTimes(1);
+    expect(mocks.getSession).toHaveBeenCalledWith({
+      query: { disableCookieCache: "true" },
+    });
+  });
+
+  it("leaves getSessionUser on the cached path (no arguments)", async () => {
+    /* The counterpart assertion: learner reads must NOT pay the extra round
+     * trip, so the cached reader calls getSession with no args at all. */
+    mocks.getSession.mockResolvedValue(SESSION);
+
+    await expect(getSessionUser()).resolves.toEqual({
+      id: "u1",
+      email: "a@adroit.io",
+      name: "A",
+    });
+    expect(mocks.getSession).toHaveBeenCalledTimes(1);
+    expect(mocks.getSession.mock.calls[0]).toEqual([]);
+  });
+
+  it("short-circuits guests without touching the auth SDK (perf P2)", async () => {
+    setSessionCookie(false);
+    mocks.getSession.mockResolvedValue(SESSION);
+
+    await expect(getSessionUserUncached()).resolves.toBeNull();
+    expect(mocks.getAuthServer).not.toHaveBeenCalled();
+    expect(mocks.getSession).not.toHaveBeenCalled();
+  });
+
+  it("returns null when upstream has no session for the cached cookie", async () => {
+    /* A still-valid session_data cookie whose upstream session row is gone
+     * (deleted/revoked account) resolves to null, not to the cached user. */
+    mocks.getSession.mockResolvedValue({ data: null, error: null });
+
+    await expect(getSessionUserUncached()).resolves.toBeNull();
+    expect(mocks.getSession).toHaveBeenCalledWith({
+      query: { disableCookieCache: "true" },
+    });
+  });
+
+  it("returns null when the backend throws (never throws)", async () => {
+    mocks.getSession.mockRejectedValue(new Error("ECONNREFUSED"));
+
+    await expect(getSessionUserUncached()).resolves.toBeNull();
   });
 });
 
