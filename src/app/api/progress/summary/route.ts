@@ -44,6 +44,13 @@ function emptySummary(): ProgressSummary {
 }
 
 /**
+ * This payload is per-user. Tell the browser (and any shared intermediary) not
+ * to store it: the client fetch already uses `cache: "no-store"`, but a proxy
+ * between us and the browser is not party to that (SEC-R2-F2, CWE-525).
+ */
+const NO_STORE_HEADERS = { "Cache-Control": "private, no-store" };
+
+/**
  * Resolve which of `series` the user may currently see progress for.
  * Fail-closed: a DB/auth error leaves the series out of the set.
  */
@@ -88,7 +95,7 @@ export async function GET() {
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json(emptySummary());
+      return NextResponse.json(emptySummary(), { headers: NO_STORE_HEADERS });
     }
 
     const [readRes, lessonRes, quizRes] = await Promise.all([
@@ -181,13 +188,18 @@ export async function GET() {
       quizStats,
     };
 
-    return NextResponse.json(summary);
+    return NextResponse.json(summary, { headers: NO_STORE_HEADERS });
   } catch (err) {
     // R2-5: a Data API token failure is the guest state, not a server error —
     // the documented guest contract for this route is an empty summary at 200.
     // Classified, not blanket: any other failure keeps its 500 so a real Data
     // API/RLS outage is never disguised as "you have no progress".
-    if (isDbTokenUnavailable(err)) return NextResponse.json(emptySummary());
-    return NextResponse.json(emptySummary(), { status: 500 });
+    if (isDbTokenUnavailable(err)) {
+      return NextResponse.json(emptySummary(), { headers: NO_STORE_HEADERS });
+    }
+    return NextResponse.json(emptySummary(), {
+      status: 500,
+      headers: NO_STORE_HEADERS,
+    });
   }
 }
