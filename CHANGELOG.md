@@ -2,6 +2,21 @@
 
 All notable changes to the Adroit Consulting Blog project will be documented in this file.
 
+### Fix (LOW, SEC follow-up): event-refresh epoch guard + no-store on the other per-user routes (t_15a53bb8)
+
+**What** - Three files changed, two test files extended, one new test file:
+(1) `src/lib/hooks/useProgressSummary.ts` — the event-driven `refresh()` (fed by `AUTH_CHANGED_EVENT` and the cross-tab `focus` listener) now captures `summaryEpoch` before awaiting and drops the result if the identity changed while the read was open. `fetchProgressSummary` already returns `null` for a read that crossed an identity transition (privacy guard), but applying that `null` erased the new identity's payload whenever the abandoned read settled last — the progress bars rendered empty while the quiz strip correctly kept the new user's `10/1`. Mount effects and `useSessionQuizStats.readAgain` already had this guard; this closes the event path.
+(2) `src/app/api/auth/session/route.ts` — all three returns (signed-in, guest, degraded) now carry `Cache-Control: private, no-store`. The payload is identity (`id`/`email`/`isAdmin`).
+(3) `src/app/api/atlas/cards/route.ts` — the guest return (and the broken-auth fallback that shares it) now carries `private, no-store` too, and the signed-in/503 paths were upgraded from `no-store` to `private, no-store` for consistency with `/api/progress/summary`.
+
+Tests: `src/app/api/auth/session/route.test.ts` is new (5 contract tests + 3 header assertions: signed-in, guest, degraded); `src/app/api/atlas/cards/route.test.ts` gains a 4-case header describe (guest, broken-auth guest, signed-in, 503) and its existing cache assertion now expects `private, no-store`; `src/lib/hooks/useProgressSummary.identity.test.tsx` gains the SEC-L1 race — an event refresh is in flight when the identity changes, B's read lands and renders, then the abandoned read settles last, and B's `lessons`/quiz numbers must survive.
+
+**Why** - Val-el's re-verify of PR #372 head `de2f8cf9` (t_d2303765) closed the MEDIUM F1 and routed these two LOW items: the event-refresh path had no epoch re-check (UI blanking, no data leak — the applied value is `null`), and two per-user JSON routes still shipped no `Cache-Control`. SEC-R2-F2 had added the header only to `/api/progress/summary`. Neither gates deploy; both are defense-in-depth / availability fixes.
+
+**Verified** - RED/GREEN bites: with only the hook change reverted, the new SEC-L1 test fails (`expected "series-2-1", received ""` — exactly the blanking repro); restored → green. Full suite `npx vitest run` **124 files / 1096 tests passed** (123 files / 1083 tests before this card, +13). `npx tsc --noEmit` exit 0; `npx eslint .` 0 errors (6 pre-existing warnings in `src/lib/auth/server.test.ts`). No JSX/route-config change, so the prior a11y/perf verdicts hold.
+
+**Known Issues** - None new. The `focus`-twice-mid-flight repro Val-el described still needs a real identity transition to blank the bars (two plain focus events without an epoch bump collapse into one shared read), which is what the regression test exercises. Neither change alters the request budget.
+
 ### Fix: focus re-read + QA-L1 guard + no-store headers (SEC-R2-F1/F2 delta, t_2dd0e9f9)
 
 **What** - The base branch already carries PERF-P1 (`101da747`) and PERF-CACHE-M1 (`492f9c1e`), including `auth-events.ts` and the central `invalidateProgressSummary()` calls. This commit adds only the remaining PR #372 delta on top:

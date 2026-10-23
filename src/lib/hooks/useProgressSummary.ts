@@ -147,8 +147,18 @@ export function useProgressSummary(
   // localStorage immediately after a mark-read/complete action.
   const [, setChangeTick] = useState(0);
 
+  /*
+   * SEC-L1 (t_15a53bb8): the event-driven refresh needs the same epoch guard as
+   * the mount effects. `fetchProgressSummary` returns null when its read
+   * crossed an identity transition; applying that null here would erase the new
+   * identity's payload when the abandoned read settles last (blank bars until
+   * the next event/remount). Never apply a read from a superseded epoch.
+   */
   const refresh = useCallback(async () => {
-    setSummary(await refreshProgressSummary());
+    const readEpoch = summaryEpoch;
+    const data = await refreshProgressSummary();
+    if (readEpoch !== summaryEpoch) return;
+    setSummary(data);
   }, []);
 
   useEffect(() => {
