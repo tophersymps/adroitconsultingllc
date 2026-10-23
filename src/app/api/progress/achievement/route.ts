@@ -8,7 +8,7 @@
  * (completion.ts) — no denormalized storage.
  */
 import { NextResponse } from "next/server";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import { loadAchievementStats } from "@/lib/sky-server";
 import type { AchievementResponse } from "@/shared/contracts-constellations";
 

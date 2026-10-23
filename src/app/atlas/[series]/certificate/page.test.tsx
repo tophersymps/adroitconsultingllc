@@ -77,7 +77,7 @@ vi.mock("@/lib/access", () => ({
   getCourseRowBySlug: mocks.getCourseRowBySlug,
 }));
 
-vi.mock("@/lib/supabase/server", () => ({
+vi.mock("@/lib/db/server", () => ({
   getSupabaseServerClient: () => ({
     auth: { getUser: mocks.getUser },
     from: () => ({

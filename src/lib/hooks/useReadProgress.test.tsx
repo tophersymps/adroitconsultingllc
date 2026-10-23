@@ -14,7 +14,7 @@ import { renderToString } from "react-dom/server";
 import { useReadProgress } from "./useReadProgress";
 
 // Deterministic guest path: no authed user → hook falls back to localStorage.
-vi.mock("@/lib/supabase/client", () => ({
+vi.mock("@/lib/db/client", () => ({
   getSupabaseClient: () => ({
     auth: { getUser: async () => ({ data: { user: null }, error: null }) },
   }),

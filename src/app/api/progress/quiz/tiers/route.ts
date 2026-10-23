@@ -16,7 +16,7 @@
  * Guests: all zeros / empty (client renders CTA-safe zeros — never question text).
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import {
   getCertExam,
   getKnowledgeCheck,

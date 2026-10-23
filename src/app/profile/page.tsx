@@ -15,7 +15,7 @@ import ProfileForm from "@/components/Profile/ProfileForm";
 import CertificateSection from "@/components/Profile/CertificateSection";
 import LockedSkyTeaser from "@/components/Constellations/LockedSkyTeaser";
 import FullSkySection from "@/components/Constellations/FullSkySection";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import { loadProfileSky } from "@/lib/sky-server";
 import { avatarHueClass, initialsFromEmail } from "@/lib/avatar";
 import { buildMetadata } from "@/lib/seo";

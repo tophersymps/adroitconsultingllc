@@ -11,7 +11,7 @@
  */
 import { NextResponse } from "next/server";
 import { getAllSeries, getLessonsForSeries } from "@/lib/learn";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import { accessSeam } from "@/lib/access";
 import type { ContinueLearningItem } from "@/shared/contracts-account";
 

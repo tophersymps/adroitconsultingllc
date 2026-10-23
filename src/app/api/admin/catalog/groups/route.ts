@@ -6,7 +6,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi, writeAuditLog } from "@/lib/admin";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import { checkOrigin, checkRateLimit, getClientIp } from "@/lib/api-security";
 import type {
   AdminGroupUpsertRequest,
@@ -17,7 +17,7 @@ export async function GET() {
   const gate = await requireAdminApi();
   if (!gate.ok) return gate.response;
   try {
-    const service = getSupabaseServiceClient();
+    const service = await getSupabaseServerClient();
     const { data, error } = await service
       .from("catalog_groups")
       .select("*")
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const service = getSupabaseServiceClient();
+    const service = await getSupabaseServerClient();
     const { data, error } = await service
       .from("catalog_groups")
       .upsert(

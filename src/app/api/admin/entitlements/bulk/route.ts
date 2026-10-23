@@ -6,7 +6,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi, writeAuditLog } from "@/lib/admin";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import { authUserIdsExist } from "@/lib/supabase/auth-admin";
 import {
   checkOrigin,
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "courseId required" }, { status: 400 });
   }
 
-  const service = getSupabaseServiceClient();
+  const service = await getSupabaseServerClient();
   try {
     const courseRes = await service
       .from("courses")
@@ -137,7 +137,7 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "courseId required" }, { status: 400 });
   }
 
-  const service = getSupabaseServiceClient();
+  const service = await getSupabaseServerClient();
   try {
     const courseRes = await service
       .from("courses")

@@ -5,7 +5,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { activeSubscriptionOf, requireAdminApi } from "@/lib/admin";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import { listAuthUsers } from "@/lib/supabase/auth-admin";
 import type {
   AdminUserListRow,
@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   const q = (req.nextUrl.searchParams.get("q") ?? "").trim().toLowerCase();
 
   try {
-    const service = getSupabaseServiceClient();
+    const service = await getSupabaseServerClient();
     // Auth users come from the GoTrue Admin API (the `auth` schema is not
     // exposed to PostgREST — PGRST205). Roles/profiles/subscriptions are
     // public tables.

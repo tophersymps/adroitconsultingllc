@@ -3,7 +3,7 @@ import Footer from "@/components/Footer";
 import LearnHub from "@/components/Learn/LearnHub";
 import { getCatalogForUserV2, toLearnHubCards } from "@/lib/catalog";
 import { getAccessUserId, getCatalogOrg } from "@/lib/access";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import { siteConfig } from "@/lib/seo";
 import type { CardGateState } from "@/shared/contracts-account";
 

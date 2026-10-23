@@ -23,10 +23,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Live series slugs from the DB (source of truth for status).
   let liveSlugs: Set<string> | null = null;
   try {
-    const { getSupabaseServiceClient } = await import(
-      "@/lib/supabase/service"
-    );
-    const supabase = getSupabaseServiceClient();
+    // Sitemap generation runs outside a request, so there is no session to
+    // forward: read the public catalog as the Data API `anonymous` role (the
+    // "courses_select_live_or_admin" policy still restricts it to live rows).
+    const { getSupabaseAnonymousClient } = await import("@/lib/db/server");
+    const supabase = await getSupabaseAnonymousClient();
     const { data, error } = await supabase
       .from("courses")
       .select("series_slug")

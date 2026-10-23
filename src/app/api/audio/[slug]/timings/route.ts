@@ -27,7 +27,7 @@ import { articleAudio } from "@/data/audio";
 import { lessonAudio } from "@/data/lesson-audio";
 import { type AudioRouteContext } from "@/lib/audio/contracts";
 import { getR2Object } from "@/lib/r2/client";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import { accessSeam } from "@/lib/access";
 
 export const dynamic = "force-dynamic";

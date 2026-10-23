@@ -19,7 +19,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import { buildMetadata } from "@/lib/seo";
 import ResetPasswordForm from "./ResetPasswordForm";
 

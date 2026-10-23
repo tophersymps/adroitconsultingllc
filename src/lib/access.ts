@@ -25,7 +25,7 @@
  * Contract types: src/shared/contracts-course-catalog.ts (brainiac, t_22b26cb9).
  */
 import { cache } from "react";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import type {
   AccessModel,
   AccessSeam,

@@ -12,7 +12,7 @@
  */
 import { NextResponse } from "next/server";
 import { activeSubscriptionOf, requireAdminApi } from "@/lib/admin";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import { listAuthUsers } from "@/lib/supabase/auth-admin";
 import { effectiveAccessState } from "@/lib/access";
 import type {
@@ -53,7 +53,7 @@ export async function GET() {
   if (!gate.ok) return gate.response;
 
   try {
-    const service = getSupabaseServiceClient();
+    const service = await getSupabaseServerClient();
     const [authUsers, coursesRes, rolesRes, profilesRes, entRes, subsRes] =
       await Promise.all([
         listAuthUsers(),
@@ -166,8 +166,8 @@ export async function GET() {
     // client). The current admin request cannot be completed without a readable
     // root cause; the client must never see the internal error, so the response
     // stays opaque while Vercel logs carry the exact cause. Covers the missing
-    // SUPABASE_SERVICE_ROLE_KEY env failure (getSupabaseServiceClient fails
-    // closed), a GoTrue listAuthUsers failure, or a PostgREST read error.
+    // NEON_DATA_API_URL / NEON_AUTH_BASE_URL env failure (the Data API client
+    // fails closed), a GoTrue listAuthUsers failure, or a PostgREST read error.
     console.error("[admin-access-effective] failed to load effective access", {
       message: err instanceof Error ? err.message : String(err),
       name: err instanceof Error ? err.name : undefined,
