@@ -25,7 +25,11 @@ const { cookiesMock } = vi.hoisted(() => ({ cookiesMock: vi.fn() }));
 
 vi.mock("next/headers", () => ({ cookies: cookiesMock }));
 
-import { getSupabaseServerClient, DbAuthUnavailableError } from "./server";
+import {
+  getSupabaseServerClient,
+  DbAuthUnavailableError,
+  __resetMintCooldown,
+} from "./server";
 
 const AUTH_BASE = "https://auth.test/neondb/auth";
 const DATA_BASE = "https://data.test/neondb/rest/v1";
@@ -122,6 +126,7 @@ beforeEach(() => {
   process.env.NEON_DATA_API_URL = DATA_BASE;
   captured = [];
   cookiesMock.mockReset();
+  __resetMintCooldown();
 });
 
 afterEach(() => {
@@ -324,5 +329,194 @@ describe("credential-bridge unavailability (t_223f8b3d)", () => {
       warn.mockRestore();
       error.mockRestore();
     }
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  t_81b09ba8 — a HUNG (not failing) auth backend must cost the       */
+/*  render ONE bounded budget, not one per mint endpoint, and must    */
+/*  not be re-paid by every concurrent render during the outage.      */
+/* ------------------------------------------------------------------ */
+
+/** Mint paths hit since the last reset, in order (e.g. ["/token"]). */
+function mintCalls(): string[] {
+  return captured
+    .filter((c) => c.url.startsWith(`${AUTH_BASE}/token`))
+    .map((c) => c.url.slice(AUTH_BASE.length));
+}
+
+/**
+ * An auth backend that HANGS: every mint request stays unanswered until the
+ * client's abort signal fires (the outage shape that produced 2.5 s / 5.0 s
+ * TTFB — a fast 429 was already cheap at 6-25 ms).
+ */
+function stubHangingFetch() {
+  const fetchMock = vi.fn(
+    (input: RequestInfo | URL, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        const url = requestUrl(input);
+        captured.push({ url, headers: requestHeaders(input, init) });
+        const signal = init?.signal;
+        if (!signal) return; // never settles — the test timeout must catch it
+        const abort = () => reject(new Error("aborted"));
+        if (signal.aborted) abort();
+        else signal.addEventListener("abort", abort, { once: true });
+      }),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+describe("bounded total mint budget on the degraded path (t_81b09ba8)", () => {
+  /** The shared budget is 800 ms; allow scheduling slack below and above. */
+  const BUDGET_FLOOR_MS = 500;
+  const BUDGET_CEILING_MS = 1700;
+
+  it("a guest render spends ONE budget and issues ONE mint when auth hangs", async () => {
+    cookiesMock.mockResolvedValue(cookieStore([]));
+    stubHangingFetch();
+
+    const started = Date.now();
+    await expect(getSupabaseServerClient()).rejects.toBeInstanceOf(
+      DbAuthUnavailableError,
+    );
+    const elapsed = Date.now() - started;
+
+    // One mint for a guest (the session mint is skipped with no cookie)…
+    expect(mintCalls()).toEqual(["/token/anonymous"]);
+    // …bounded by the shared budget, not by a per-call 2.5 s timeout.
+    expect(elapsed).toBeGreaterThanOrEqual(BUDGET_FLOOR_MS);
+    expect(elapsed).toBeLessThan(BUDGET_CEILING_MS);
+    // Still no bearer-less request to the Data API.
+    expect(captured.some((c) => c.url.startsWith(DATA_BASE))).toBe(false);
+  });
+
+  it("a session-cookie render spends ONE budget total and does NOT retry the anonymous mint after a timeout", async () => {
+    cookiesMock.mockResolvedValue(cookieStore([SESSION_COOKIE]));
+    stubHangingFetch();
+
+    const started = Date.now();
+    await expect(getSupabaseServerClient()).rejects.toBeInstanceOf(
+      DbAuthUnavailableError,
+    );
+    const elapsed = Date.now() - started;
+
+    // The regression: `/token` then `/token/anonymous`, 2 x 2.5 s = 5.0 s.
+    // A timed-out session mint must NOT be re-attempted on the sibling
+    // endpoint — the backend that just hung is not going to answer that one.
+    expect(mintCalls()).toEqual(["/token"]);
+    expect(elapsed).toBeLessThan(BUDGET_CEILING_MS);
+    expect(elapsed).toBeGreaterThanOrEqual(BUDGET_FLOOR_MS);
+  });
+
+  it("does not fall through to the anonymous mint when the session endpoint is already on cooldown", async () => {
+    cookiesMock.mockResolvedValue(cookieStore([SESSION_COOKIE]));
+    stubHangingFetch();
+
+    // First render: `/token` hangs, is reported unavailable, cooldown recorded.
+    await expect(getSupabaseServerClient()).rejects.toBeInstanceOf(
+      DbAuthUnavailableError,
+    );
+    expect(mintCalls()).toEqual(["/token"]);
+
+    // Second render inside the window: NOT `/token` again and NOT the sibling
+    // `/token/anonymous` either — that second mint is what made the measured
+    // session-cookie render cost 2 x 2.5 s.
+    captured = [];
+    const started = Date.now();
+    await expect(getSupabaseServerClient()).rejects.toBeInstanceOf(
+      DbAuthUnavailableError,
+    );
+    expect(mintCalls()).toEqual([]);
+    expect(Date.now() - started).toBeLessThan(100);
+  });
+
+  it("caches an unhealthy mint for a short window so the next renders pay nothing", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-10-23T12:00:00.000Z"));
+      cookiesMock.mockResolvedValue(cookieStore([]));
+      stubFetch({ anonymousStatus: 429 });
+
+      await expect(getSupabaseServerClient()).rejects.toBeInstanceOf(
+        DbAuthUnavailableError,
+      );
+      expect(mintCalls()).toEqual(["/token/anonymous"]);
+
+      // Second render inside the cooldown window: no mint request at all, and
+      // it fails over instantly instead of re-paying the budget.
+      captured = [];
+      const started = Date.now();
+      await expect(getSupabaseServerClient()).rejects.toBeInstanceOf(
+        DbAuthUnavailableError,
+      );
+      expect(mintCalls()).toEqual([]);
+      expect(Date.now() - started).toBeLessThan(100);
+
+      // …but the window is a cooldown, not a permanent verdict: once it
+      // expires the very next render mints again and succeeds.
+      captured = [];
+      vi.setSystemTime(new Date("2026-10-23T12:00:09.000Z"));
+      stubFetch({ anonymousToken: ANON_JWT });
+      await readRole("88888888-8888-8888-8888-888888888888");
+
+      expect(mintCalls()).toEqual(["/token/anonymous"]);
+      const dataRequest = captured.find((c) => c.url.startsWith(DATA_BASE));
+      expect(dataRequest?.headers.get("Authorization")).toBe(`Bearer ${ANON_JWT}`);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keys the negative cache by endpoint: an outage on the anonymous mint does not suppress a healthy session mint", async () => {
+    cookiesMock.mockResolvedValue(cookieStore([]));
+    stubFetch({ anonymousStatus: 500 });
+    await expect(getSupabaseServerClient()).rejects.toBeInstanceOf(
+      DbAuthUnavailableError,
+    );
+
+    // A signed-in reader arrives during that cooldown window with a working
+    // session mint: it must still be attempted and used (RLS as the user),
+    // never downgraded to another identity's/anonymous state.
+    captured = [];
+    cookiesMock.mockResolvedValue(cookieStore([SESSION_COOKIE]));
+    stubFetch({ sessionToken: SESSION_JWT, anonymousToken: ANON_JWT });
+
+    await readRole("99999999-9999-9999-9999-999999999999");
+
+    expect(mintCalls()).toEqual(["/token"]);
+    const dataRequest = captured.find((c) => c.url.startsWith(DATA_BASE));
+    expect(dataRequest?.headers.get("Authorization")).toBe(`Bearer ${SESSION_JWT}`);
+  });
+
+  it("never puts a SUCCESSFUL mint on the negative cache (healthy path unchanged)", async () => {
+    cookiesMock.mockResolvedValue(cookieStore([SESSION_COOKIE]));
+    stubFetch({ sessionToken: SESSION_JWT, anonymousToken: ANON_JWT });
+
+    await readRole("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+    const firstMints = mintCalls();
+    captured = [];
+    await readRole("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+    const secondMints = mintCalls();
+
+    // Both renders went to the network and both carried the session JWT.
+    expect(firstMints).toEqual(["/token"]);
+    expect(secondMints).toEqual(["/token"]);
+    const dataRequest = captured.find((c) => c.url.startsWith(DATA_BASE));
+    expect(dataRequest?.headers.get("Authorization")).toBe(`Bearer ${SESSION_JWT}`);
+  });
+
+  it("a 401 refusal is NOT a cooldown: the expired-session fallback still runs on every render", async () => {
+    cookiesMock.mockResolvedValue(cookieStore([SESSION_COOKIE]));
+    stubFetch({ sessionToken: null, anonymousToken: ANON_JWT });
+
+    await readRole("cccccccc-cccc-cccc-cccc-cccccccccccc");
+    expect(mintCalls()).toEqual(["/token", "/token/anonymous"]);
+
+    captured = [];
+    await readRole("dddddddd-dddd-dddd-dddd-dddddddddddd");
+    // Per-identity answers are cheap; suppressing them would only starve the
+    // next signed-in reader of a session mint that would have succeeded.
+    expect(mintCalls()).toEqual(["/token", "/token/anonymous"]);
   });
 });

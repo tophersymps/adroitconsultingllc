@@ -2,6 +2,27 @@
 
 All notable changes to the Adroit Consulting Blog project will be documented in this file.
 
+### Perf MEDIUM: bound the TOTAL mint budget and add a negative cache on the degraded path (t_81b09ba8 → perf t_7037d35a)
+
+**What** - `src/lib/db/server.ts` no longer pays one timeout per mint endpoint per render:
+(1) **One shared deadline per request** — `MINT_BUDGET_MS = 800` replaces `TOKEN_TIMEOUT_MS = 2500`. `requestMintDeadline()` resolves once per request (React `cache()`), and both `getSupabaseServerClient()` mints (session then anonymous) draw from it; a mint whose remaining budget is `<= 0` never goes out. A healthy mint is tens of ms, so the healthy path is untouched.
+(2) **Module-scope negative cache** — `MINT_COOLDOWN_MS = 8000`, keyed by mint path only (`/token`, `/token/anonymous`), holding no identity and no token. Recorded only for failures that mean "the endpoint is unhealthy": no answer inside the budget, network error, `429`, `5xx`. A `401`/`403` is a per-identity answer, costs nothing and is **never** cooled down (that is the expired-session fallback). A success clears the entry immediately, so recovery is instant and a succeeded mint never goes through the cache.
+(3) **No sibling retry after a timeout** — `fetchToken` now returns `{ token, unavailable }`. When the session mint did not ANSWER (hung, network error, or already on the negative cache) the anonymous fallback is skipped: re-asking the same dead backend is exactly what doubled the cost. A refusal still falls through to the guest path, so expired-session reads keep working. `getSessionJwt()` (`/api/db/token`) and `getSupabaseAnonymousClient()` (`sitemap.ts`) keep their behaviour, the latter with its own budget.
+(4) Test-only `__resetMintCooldown()` so the module-scope cache cannot leak between cases. No client JS is involved: the file has no `"use client"`, is server-only, and no `db`-module marker appears in `.next/static`.
+
+**Why** - Perf review `t_7037d35a` of `e0bf096a`: the degrade fix bounded *each* mint at 2.5 s but the two mints run sequentially with no negative cache, so on an auth backend that HANGS (rather than fails fast) every render cost **2.51 s guest / 5.01 s session-cookie** TTFB, on all 7 touched routes, for the whole outage window — and each render re-doubled load on the backend that was already struggling. The fast-429 path was already fine (6-25 ms) and stays fine.
+
+**Verified** - `npx tsc --noEmit` clean; `npx eslint` clean on both files; `npx vitest run` **116 files / 975 tests passed** (968 baseline + 7 new). **Discrimination**: the new file run against `e0bf096a`'s `server.ts` → **3 failed / 15 passed** with `expected 2502 to be less than 1700` (guest, one mint) and `5004ms` (session-cookie, `expected [ '/token' ] to deeply equal []` on the second render), i.e. the filed numbers reproduced in-process; with the fix → 19/19 passed. **Live measurement**, `next build --webpack` + `next start` against a stub Neon Auth whose `/token` and `/token/anonymous` HANG (30 s sleep; `/get-session` answers 403 fast so only the mint budget is measured), `curl %{time_starttransfer}`, 7 routes (`/atlas/omni-studio-cert`, `<lesson>`, `/check/1`, `/exam`, `/certificate`, `/profile`, `/settings`), mint calls counted server-side per request:
+
+| shape | before (e0bf096a) | after |
+|---|---|---|
+| guest | 2.51 s, 1 mint/render | **1.04 s** max, **1 mint for all 7 renders** |
+| session-cookie | 5.01 s, 2 mints/render | **0.82 s** max, **1 mint for all 7 renders** |
+
+p95 = max = 1.04 s / 0.82 s (target ≤ 1.2 s); requests 2-7 of each shape return in 4-58 ms off the negative cache; all 7 routes **200** (degraded notice), zero Data-API requests. Healthy path (`/token` + `/token/anonymous` answering a stub JWT): every render mints on its own (7/7, no cache involvement) and TTFB is 4-88 ms. Bundle: cache-warm `next build --webpack` of the same tree before vs after the change, `.next/static` **3,471,641 B → 3,471,641 B (delta 0 B, 136 files both)**, so the §±2 B criterion holds.
+
+**Known Issues** - (1) The negative cache is module-scope, so it is per-server-instance and per-route-bundle: a cold route bundle during an outage still pays ONE budget on its first render (measured: 1.04 s guest max comes from that cold first hit). (2) 800 ms is a deliberate compromise: a mint that would have succeeded after 900 ms now degrades instead. Neon's healthy mint is tens of ms, and the card's target was 800 ms-1 s total. (3) `getNeonSessionUser()`'s `/get-session` fetch is still unbounded — it is not on the render path of these 7 routes (identity comes from the session cookie), but a hung `/get-session` on a surface that calls `db.auth.getUser()` would not be bounded by this budget. That is the same class as the pre-existing LOW on `src/proxy.ts`. (4) `src/app/api/**` route handlers now also inherit the 800 ms budget through the shared factory; no route test asserted the old 2.5 s figure.
+
 ### Fix HIGH: `unavailable` access decision must fail CLOSED — /atlas lesson body + stealth series leak during token-mint outage (t_c4eafa3b F-1/F-2 → t_64253bbc)
 
 **What** - The `{ kind: "unavailable" }` decision (added by the t_223f8b3d JWT-bridge degrade) now fails **closed on content** instead of falling through the gate:

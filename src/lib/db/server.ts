@@ -105,19 +105,89 @@ const requestCookieHeader = cache(async (): Promise<string | null> => {
   }
 });
 
-/** A mint request is bounded so a hung auth backend cannot hang the render. */
-const TOKEN_TIMEOUT_MS = 2500;
+/**
+ * TOTAL mint budget for ONE request, shared by the session mint and the
+ * anonymous fallback (t_81b09ba8).
+ *
+ * Bounding each call was not enough: `getSupabaseServerClient()` mints the
+ * session JWT and then, on failure, the anonymous one — sequentially. With a
+ * per-call 2.5 s timeout a HUNG (not failing) auth backend cost 2.5 s per
+ * guest render and 5.0 s per signed-in render, for every render, for the whole
+ * outage window. A healthy mint is tens of milliseconds, so one shared
+ * deadline costs the healthy path nothing and caps the degraded path once.
+ */
+const MINT_BUDGET_MS = 800;
 
 /**
- * Mint a Data API JWT. Returns null — never throws — when the endpoint is
+ * How long a mint path stays on the negative cache after it failed in a way
+ * that means "the endpoint is unhealthy" (no answer inside the budget, network
+ * error, 429, 5xx). Without this, every concurrent render during an outage
+ * re-paid the whole budget against an endpoint that is already struggling.
+ *
+ * Keyed by endpoint path, holds no identity and no token, and NEVER records a
+ * success — a healthy mint always goes to the network.
+ */
+const MINT_COOLDOWN_MS = 8000;
+
+/** path → epoch-ms until which that mint path is skipped. */
+const mintCooldownUntil = new Map<string, number>();
+
+/** Test-only: drop the module-scope negative cache between cases. */
+export function __resetMintCooldown(): void {
+  mintCooldownUntil.clear();
+}
+
+function cooldownRemainingMs(path: string): number {
+  const until = mintCooldownUntil.get(path);
+  if (until === undefined) return 0;
+  const remaining = until - Date.now();
+  if (remaining <= 0) {
+    mintCooldownUntil.delete(path);
+    return 0;
+  }
+  return remaining;
+}
+
+function markMintUnavailable(path: string): void {
+  // Only the two mint paths ever reach here; the bound is defensive so a
+  // future caller cannot grow this map without bound.
+  if (mintCooldownUntil.size > 8) mintCooldownUntil.clear();
+  mintCooldownUntil.set(path, Date.now() + MINT_COOLDOWN_MS);
+}
+
+/** A success proves the endpoint is healthy again: recover immediately. */
+function clearMintCooldown(path: string): void {
+  mintCooldownUntil.delete(path);
+}
+
+/**
+ * Why a mint produced no token. `unavailable` means the endpoint did not
+ * ANSWER — it hung past the budget, the network failed, or it is on the
+ * negative cache from such a failure — as opposed to answering "no"
+ * (401/403: an expired or absent session). The caller uses it to decide
+ * whether retrying the sibling endpoint is worth another round trip.
+ */
+interface MintOutcome {
+  token: string | null;
+  unavailable: boolean;
+}
+
+/**
+ * Mint a Data API JWT. Returns no token — never throws — when the endpoint is
  * throttled, refuses, times out or answers garbage: the caller decides how to
  * degrade. Only the endpoint path and the HTTP status are ever logged; a token
  * or a cookie value must never reach a log line (t_52f55ea7).
  */
 async function fetchToken(
   path: string,
-  options: { withCookie: boolean },
-): Promise<string | null> {
+  options: { withCookie: boolean; deadline: number },
+): Promise<MintOutcome> {
+  // The endpoint burned the budget moments ago: do not spend the render's
+  // remaining budget re-asking it (t_81b09ba8). Reported as `unavailable` so
+  // a caller does not immediately retry its sibling endpoint either — both
+  // were failing together when this entry was recorded.
+  if (cooldownRemainingMs(path) > 0) return { token: null, unavailable: true };
+
   // The anonymous mint must never see the caller's session cookie: one
   // identity's credentials must not be presented on another identity's mint.
   const cookie = options.withCookie ? await requestCookieHeader() : null;
@@ -128,21 +198,31 @@ async function fetchToken(
   // must throw loudly (fail closed), not masquerade as a mint outage.
   const base = authBaseUrl();
 
+  const remaining = options.deadline - Date.now();
+  if (remaining <= 0) {
+    // The request's mint budget is already spent. Another round trip would
+    // only lengthen the render against an endpoint that is not answering.
+    markMintUnavailable(path);
+    return { token: null, unavailable: true };
+  }
+
   let res: Response;
   try {
     res = await fetch(`${base}${path}`, {
       headers,
       cache: "no-store",
-      signal: AbortSignal.timeout(TOKEN_TIMEOUT_MS),
+      signal: AbortSignal.timeout(remaining),
     });
   } catch {
-    // Network error / abort — same degrade as a refusal.
+    // Network error / abort — same degrade as a refusal, plus a cooldown: the
+    // endpoint is either unreachable or too slow to be worth re-asking.
     console.warn("[db] token mint unavailable", {
       event: "db_token_unavailable",
       path,
       status: null,
     });
-    return null;
+    markMintUnavailable(path);
+    return { token: null, unavailable: true };
   }
   if (!res.ok) {
     console.warn("[db] token mint refused", {
@@ -150,30 +230,48 @@ async function fetchToken(
       path,
       status: res.status,
     });
-    return null;
+    // 401/403 are per-identity answers and cost nothing to retry next render;
+    // 429/5xx mean the endpoint itself is unhealthy.
+    if (res.status === 429 || res.status >= 500) markMintUnavailable(path);
+    return { token: null, unavailable: false };
   }
   const body = (await res.json().catch(() => null)) as { token?: unknown } | null;
-  return typeof body?.token === "string" && body.token.length > 0
-    ? body.token
-    : null;
+  const token =
+    typeof body?.token === "string" && body.token.length > 0 ? body.token : null;
+  if (token) clearMintCooldown(path);
+  return { token, unavailable: false };
 }
 
 /**
- * The signed-in caller's Data API JWT, or null for guests.
- *
- * Skipped entirely when the request carries no cookie: `/token` can only
- * answer 401 in that case, and burning the per-IP mint bucket on every guest
- * render is what empties it for signed-in renders too (t_223f8b3d).
+ * The ONE mint deadline this request may spend, shared by both mints.
+ * `cache()` makes it per-request (a page issuing many reads spends it once).
  */
-export const getSessionJwt = cache(async (): Promise<string | null> => {
+const requestMintDeadline = cache((): number => Date.now() + MINT_BUDGET_MS);
+
+/** The signed-in caller's mint. Skipped when there is no cookie to present. */
+const sessionMint = cache(async (deadline: number): Promise<MintOutcome> => {
+  // `/token` can only answer 401 without a cookie, and burning the per-IP mint
+  // bucket on every guest render is what empties it for signed-in renders too
+  // (t_223f8b3d).
   const cookie = await requestCookieHeader();
-  if (!cookie) return null;
-  return fetchToken("/token", { withCookie: true });
+  // No cookie is NOT an outage: `/token` would only answer 401. The caller may
+  // still fall through to the anonymous path (this is the guest render).
+  if (!cookie) return { token: null, unavailable: false };
+  return fetchToken("/token", { withCookie: true, deadline });
 });
 
-/** The `anonymous` role's JWT — used when nobody is signed in. */
-const getAnonymousJwt = cache((): Promise<string | null> =>
-  fetchToken("/token/anonymous", { withCookie: false }),
+/** The `anonymous` role's mint — used when nobody is signed in. */
+const anonymousMint = cache((deadline: number): Promise<MintOutcome> =>
+  fetchToken("/token/anonymous", { withCookie: false, deadline }),
+);
+
+/**
+ * The signed-in caller's Data API JWT, or null for guests.
+ * Kept as a thin wrapper for `/api/db/token`, which needs the token itself.
+ */
+export const getSessionJwt = cache(
+  async (): Promise<string | null> =>
+    (await sessionMint(requestMintDeadline())).token,
 );
 
 /**
@@ -235,10 +333,24 @@ function createDbClient(jwt: string): DbClient {
  * neither the session nor the anonymous mint yields a JWT the factory throws
  * `DbAuthUnavailableError`, and read paths degrade to their guest/empty state
  * instead of letting the Data API's 400 escape the render as a 500.
+ *
+ * BUDGETED (t_81b09ba8): both mints share ONE deadline, so the worst case for
+ * a hung auth backend is one budget per render rather than one per endpoint.
+ * A session mint that did not ANSWER (hung, network error, or already on the
+ * negative cache) is not retried against `/token/anonymous` — re-asking a dead
+ * backend immediately is exactly what doubled the cost — but a refusal (401 on
+ * an expired session) still falls back to the guest path.
  */
 export const getSupabaseServerClient = cache(
   async (): Promise<DbClient> => {
-    const jwt = (await getSessionJwt()) ?? (await getAnonymousJwt());
+    const deadline = requestMintDeadline();
+
+    const session = await sessionMint(deadline);
+    let jwt = session.token;
+    if (!jwt && !session.unavailable) {
+      jwt = (await anonymousMint(deadline)).token;
+    }
+
     if (!jwt) throw new DbAuthUnavailableError();
     return createDbClient(jwt);
   },
@@ -250,7 +362,7 @@ export const getSupabaseServerClient = cache(
  * `authenticated, anonymous` policies expose — the public catalog.
  */
 export async function getSupabaseAnonymousClient(): Promise<DbClient> {
-  const jwt = await getAnonymousJwt();
+  const jwt = (await anonymousMint(Date.now() + MINT_BUDGET_MS)).token;
   if (!jwt) throw new Error("Neon Data API anonymous token is unavailable");
   return createDbClient(jwt);
 }
