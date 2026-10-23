@@ -26,8 +26,10 @@ What it does
    rows over the Data API for the tables the client does write.
 6. Runs the cross-user / anonymous / no-token read matrix and the cross-user
    write attempts.
-7. Cleans up the seeded rows (users are left in place so re-runs are cheap)
-   and writes machine-readable evidence to
+7. Cleans up the seeded rows, then tears the QA identities back down (public
+   mirror + neon_auth user/session/account rows) so a normal run leaves no
+   enabled account behind. Pass --keep-users to keep them for cheap re-runs.
+8. Writes machine-readable evidence to
    reports/data-api-isolation-evidence.json.
 
 Exit codes
@@ -41,10 +43,27 @@ Usage
 -----
     export NEON_AUTH_BASE_URL=... NEON_DATA_API_URL=...
     export DATABASE_URL_UNPOOLED=...        # seeding + user mirror (owner conn)
-    python3 scripts/data-api-isolation-check.py --password "$QA_PASSWORD"
+    export QA_R15_PASSWORD=...              # env only, never argv
+    python3 scripts/data-api-isolation-check.py
 
 The two endpoint URLs are also resolved from Bitwarden Secrets Manager when
 BWS_ACCESS_TOKEN is set, and the DB URL from .env.local at the repo root.
+
+Credentials
+-----------
+The QA password is read from QA_R15_PASSWORD, never from argv, so it does not
+land in shell history or process listings. The owner DSN's password is moved
+out of the psql argv into PGPASSWORD for the same reason; only the
+user/host/db part of the DSN is passed as an argument.
+
+Cleanup / revocation
+--------------------
+A normal run deletes the QA identities it created (public."user" mirror plus
+the neon_auth user/session/account rows) before it exits, so no standing
+credential lives in the production auth store. --keep-users opts out for cheap
+re-runs; if you use it, revoke the identities afterwards with the same SQL the
+teardown uses (see TEARDOWN_SQL below), which alpha ran for the earlier
+throwaways (kelex1812+steel-hydration@gmail.com, kelex1812+steel-hydr2@gmail.com).
 """
 
 from __future__ import annotations
@@ -60,12 +79,17 @@ import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
+from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 AUTH_URL: str = ""
 DATA_API: str = ""
 DB_URL: str = ""
 USER_A_ID: str = ""
 USER_B_ID: str = ""
+
+# psql target (argv) and password (environment only) — never both in one place
+PSQL_TARGET: str = ""
+PSQL_PASSWORD: str | None = ""
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REPORT_PATH = os.path.join(ROOT, "reports", "data-api-isolation-evidence.json")
@@ -100,13 +124,27 @@ RESULTS: list[dict] = []
 # --------------------------------------------------------------------------
 
 
+JWT_RE = re.compile(r"^eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}$")
+
+
+def _redacted(value):
+    return f"«redacted:{len(value)}chars»"
+
+
 def _scrub(value):
-    """Never persist a bearer token in the evidence file."""
+    """Never persist a bearer token in the evidence file.
+
+    Redacts by shape as well as by key name: a JWT echoed back under some other
+    key (or inside a string detail) is still a live credential.
+    """
     if isinstance(value, dict):
-        return {k: (f"«redacted:{len(v)}chars»" if k == "token" and isinstance(v, str) else _scrub(v))
+        return {k: (_redacted(v) if isinstance(v, str) and (k == "token" or JWT_RE.match(v))
+                    else _scrub(v))
                 for k, v in value.items()}
     if isinstance(value, list):
         return [_scrub(v) for v in value]
+    if isinstance(value, str) and JWT_RE.match(value):
+        return _redacted(value)
     return value
 
 
@@ -192,22 +230,71 @@ def jwt_sub(token):
     return claims
 
 
+def split_dsn(dsn):
+    """Split a libpq URL into (password-free target, password).
+
+    The password must never travel on argv (CWE-214): every process on the host
+    can read another process's command line, and shell history keeps it.
+    """
+    if "://" in dsn:
+        parts = urlsplit(dsn)
+        netloc = parts.netloc
+        password = None
+        if "@" in netloc:
+            userinfo, host = netloc.rsplit("@", 1)
+            if ":" in userinfo:
+                user, raw_password = userinfo.split(":", 1)
+                password = unquote(raw_password)
+                userinfo = quote(user, safe="")
+            netloc = f"{userinfo}@{host}"
+        target = urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+        return target, password
+    # key=value libpq form ("host=... password=...") — strip the password key
+    match = re.search(r"(?:^|\s)password=('(?:[^']|'')*'|\S+)", dsn)
+    if match:
+        password = match.group(1).strip("'")
+        target = (dsn[:match.start()] + dsn[match.end():]).strip()
+        return target, password
+    return dsn, None
+
+
+def configure_db(dsn):
+    """Record the DSN for psql without ever putting the password on argv."""
+    global DB_URL, PSQL_TARGET, PSQL_PASSWORD
+    DB_URL = dsn
+    PSQL_TARGET, PSQL_PASSWORD = split_dsn(dsn)
+
+
 def sql(query):
     """Owner connection — fixture/seed/cleanup only, never part of the proof."""
+    if not PSQL_TARGET:
+        raise RuntimeError("configure_db() must run before sql()")
+    env = dict(os.environ)
+    if PSQL_PASSWORD:
+        env["PGPASSWORD"] = PSQL_PASSWORD
     proc = subprocess.run(
-        ["psql", DB_URL, "-X", "-q", "-A", "-F", "\t", "-t", "-c", query],
-        capture_output=True, text=True, timeout=60,
+        ["psql", PSQL_TARGET, "-X", "-q", "-A", "-F", "\t", "-t", "-v", "ON_ERROR_STOP=1", "-c", query],
+        capture_output=True, text=True, timeout=60, env=env,
     )
     if proc.returncode != 0:
         raise RuntimeError(f"psql failed: {proc.stderr.strip()}")
     return proc.stdout.strip()
 
 
+def assert_uuid(value, label="value"):
+    """Refuse to splice anything that is not a UUID into SQL (CWE-89)."""
+    if not isinstance(value, str) or not UUID_RE.match(value):
+        raise SystemExit(f"refusing to interpolate non-uuid {label} into SQL: {value!r}")
+    return value
+
+
+def sql_literal(value):
+    """Single-quoted SQL string literal with the quote doubled."""
+    return "'" + str(value).replace("'", "''") + "'"
+
+
 def sql_id_list(ids):
-    for value in ids:
-        if not UUID_RE.match(value):
-            raise SystemExit(f"refusing to interpolate non-uuid value into SQL: {value!r}")
-    return ",".join(f"'{value}'" for value in ids)
+    return ",".join(sql_literal(assert_uuid(value)) for value in ids)
 
 
 def load_dotenv():
@@ -350,8 +437,9 @@ def mirror_users(users):
     public.\"user\", which is the Supabase-era table the user-scoped FKs point at.
     Without this mirror every write by a new sign-up fails with FK 23503.
     """
-    values = ",".join(
-        f"('{uid}', '{email}', '{email}', true, now(), now())"
+    values = ", ".join(
+        f"({sql_literal(assert_uuid(uid, 'mirror user id'))}, "
+        f"{sql_literal(email)}, {sql_literal(email)}, true, now(), now())"
         for uid, email in users
     )
     sql(
@@ -377,7 +465,8 @@ def seed_api_rows(table, token, user_id, payload, path=None, prefer="return=repr
 
 
 def seed_owner_rows():
-    a, b = USER_A_ID, USER_B_ID
+    a = assert_uuid(USER_A_ID, "user A id")
+    b = assert_uuid(USER_B_ID, "user B id")
     sql(f"""insert into public.quiz_attempt
               (user_id, quiz_name, question_index, correct_answer_index, user_answer_index, is_correct)
             values ('{a}','qa-r15',0,1,1,true), ('{b}','qa-r15',0,1,1,true);""")
@@ -389,6 +478,29 @@ def seed_owner_rows():
                    ('{b}','qa.r15.seed','qa','qa-b','{{"check":"r1-5"}}');""")
 
 
+# Delete sequence verified by alpha on this project (t_9aba2d2e): the
+# public."user" mirror row, its auth sessions/account, then the identity itself.
+TEARDOWN_SQL = """
+delete from public.user_roles  where user_id  in ({ids});
+delete from public."user"      where id       in ({ids});
+delete from neon_auth.session  where "userId" in ({ids});
+delete from neon_auth.account  where "userId" in ({ids});
+delete from neon_auth."user"   where id       in ({ids});
+"""
+
+
+def remove_qa_users(ids):
+    """Revoke the QA identities so a normal run leaves no enabled account.
+
+    Returns True only when both sides are verified empty afterwards.
+    """
+    id_list = sql_id_list(ids)
+    sql(TEARDOWN_SQL.format(ids=id_list))
+    mirror = int(sql(f'select count(*) from public."user" where id in ({id_list});') or 0)
+    auth_left = int(sql(f'select count(*) from neon_auth."user" where id in ({id_list});') or 0)
+    return mirror == 0 and auth_left == 0
+
+
 # --------------------------------------------------------------------------
 # main
 # --------------------------------------------------------------------------
@@ -398,31 +510,43 @@ def main():
     global AUTH_URL, DATA_API, DB_URL, USER_A_ID, USER_B_ID
 
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--password", default=os.environ.get("QA_R15_PASSWORD"),
-                        help="password for both QA users (or QA_R15_PASSWORD)")
     parser.add_argument("--email-a", default=DEFAULT_EMAIL_A)
     parser.add_argument("--email-b", default=DEFAULT_EMAIL_B)
     parser.add_argument("--no-mirror", action="store_true",
                         help="do not populate public.\"user\"; matrix will mostly fail on FK")
     parser.add_argument("--keep-rows", action="store_true", help="skip cleanup of seeded rows")
+    parser.add_argument("--keep-users", action="store_true",
+                        help="keep the QA identities afterwards (default: revoke them)")
     args = parser.parse_args()
 
-    if not args.password:
-        raise SystemExit("--password or QA_R15_PASSWORD is required")
-
     load_dotenv()
+    # env only: an argv password is visible in ps and kept in shell history
+    password = os.environ.get("QA_R15_PASSWORD")
+    if not password:
+        print(
+            "config error: QA_R15_PASSWORD is required (environment variable only — the "
+            "password is deliberately not accepted on argv)",
+            file=sys.stderr,
+        )
+        return 2
+
     AUTH_URL = resolve_endpoint("NEON_AUTH_BASE_URL", BWS_AUTH_SECRET_ID, "NEON_AUTH_BASE_URL")
     DATA_API = resolve_endpoint("NEON_DATA_API_URL", BWS_DATA_SECRET_ID, "NEON_DATA_API_URL")
-    DB_URL = os.environ.get("DATABASE_URL_UNPOOLED") or os.environ.get("DATABASE_URL") or ""
-    if not DB_URL:
+    dsn = os.environ.get("DATABASE_URL_UNPOOLED") or os.environ.get("DATABASE_URL") or ""
+    if not dsn:
         raise SystemExit("DATABASE_URL_UNPOOLED (or DATABASE_URL) is required for seeding")
+    configure_db(dsn)
 
     print(f"auth={AUTH_URL.split('//')[-1].split('/')[0]}  data={DATA_API.split('//')[-1].split('/')[0]}")
 
     # ---- auth ------------------------------------------------------------
     print("\n== auth")
-    TOK_A, USER_A_ID = sign_in(args.email_a, args.password)
-    TOK_B, USER_B_ID = sign_in(args.email_b, args.password)
+    TOK_A, USER_A_ID = sign_in(args.email_a, password)
+    TOK_B, USER_B_ID = sign_in(args.email_b, password)
+    # ids come from a JWT claim; only splice them into SQL once they are known to
+    # be UUIDs (a substituted auth endpoint could answer with anything)
+    assert_uuid(USER_A_ID, "user A sub")
+    assert_uuid(USER_B_ID, "user B sub")
     print(f"  user A = {USER_A_ID}\n  user B = {USER_B_ID}")
     ANON, anon_status, anon_body = anonymous_token()
     record("anon-role-token", kind="read", table="-", caller="anon", method="GET",
@@ -591,7 +715,30 @@ def main():
                                  ("user_profiles", "user_id"), ("quiz_attempt", "user_id"),
                                  ("quiz_run", "user_id"), ("admin_audit_log", "actor_user_id")):
             clear_user_rows(table, owner_col, [USER_A_ID, USER_B_ID])
-        print("  seeded rows removed (QA users and their public.\"user\" mirror kept for re-runs)")
+        print("  seeded rows removed")
+
+    # ---- revoke the QA identities ----------------------------------------
+    users_left_enabled = None
+    teardown_error = ""
+    if args.keep_users:
+        print("\n== keep-users: QA identities left enabled on purpose")
+        print("  revoke them later with the TEARDOWN_SQL block in this script")
+    else:
+        print("\n== revoke QA identities")
+        try:
+            users_left_enabled = not remove_qa_users([USER_A_ID, USER_B_ID])
+            if users_left_enabled:
+                teardown_error = "teardown ran but the QA identities are still present"
+        except RuntimeError as exc:  # psql failed; the identities are still live
+            users_left_enabled = True
+            teardown_error = str(exc)
+        if teardown_error:
+            print(f"  [FAIL] could not revoke QA identities: {teardown_error}")
+            print('  run manually as auth-admin: delete from public."user" / neon_auth."user" '
+                  "for the two QA emails, plus their neon_auth.session / account rows "
+                  "(TEARDOWN_SQL)")
+        else:
+            print('  QA identities removed (public."user", neon_auth user/session/account)')
 
     # ---- report ----------------------------------------------------------
     failures = [r for r in RESULTS if not r["ok"]]
@@ -602,6 +749,8 @@ def main():
             "auth_host": AUTH_URL.split("//")[-1].split("/")[0],
             "data_host": DATA_API.split("//")[-1].split("/")[0],
             "users": {"a": USER_A_ID, "b": USER_B_ID},
+            "users_retained": bool(args.keep_users),
+            "users_revoked": (not args.keep_users) and users_left_enabled is False,
             "checks_total": len(RESULTS),
             "checks_passed": len(RESULTS) - len(failures),
             "failures": [f["check"] for f in failures],
@@ -614,6 +763,11 @@ def main():
         for item in failures:
             print(f"  - {item['check']}: {item['expected']} (status={item['status']}, detail={str(item['detail'])[:200]})")
     print(f"evidence -> {os.path.relpath(REPORT_PATH, ROOT)}")
+    if teardown_error:
+        # a live QA credential in the production auth store is a config failure,
+        # not a matrix result — never report success while it is still enabled
+        print(f"config error: QA identities not revoked ({teardown_error})")
+        return 2
     return 0 if not failures else 1
 
 

@@ -2,6 +2,21 @@
 
 All notable changes to the Adroit Consulting Blog project will be documented in this file.
 
+### SEC-R2-4: hygiene fixes on the data-API isolation harness (t_17956eb8)
+
+**What** - `scripts/data-api-isolation-check.py` (the manual harness that runs against the production Neon auth/Data API/DB; not shipped, not wired into CI):
+(1) **No standing QA identities** — a normal run now revokes the two QA users it created at the end: `public.user_roles` grants, the `public."user"` mirror, `neon_auth.session`, `neon_auth.account` and the `neon_auth."user"` identity, all by id, in one `psql` call, followed by a read-back that must return 0 on both sides. `--keep-users` opts out for cheap re-runs and prints the revocation recipe; a failed or incomplete teardown makes the script exit **2** (config error) instead of reporting success, and the evidence JSON now records `users_revoked` / `users_retained`.
+(2) **No credentials on argv** — `QA_R15_PASSWORD` is the only way to supply the shared QA password (`--password` is gone; missing env → exit 2 with an env-only message). The owner DSN no longer reaches `psql` intact: `split_dsn()` moves the password into the `PGPASSWORD` environment variable (URL-decoded, `postgres://` and `key=value` forms both handled) and only the user/host/db/query part is passed as an argument. `psql` also now runs with `-v ON_ERROR_STOP=1`, so a failed statement inside the teardown/seed SQL cannot be silently skipped.
+(3) **No unvalidated SQL interpolation** — new `assert_uuid()` guards the JWT `sub` values (asserted right after sign-in and again in `seed_owner_rows`), `sql_id_list()` reuses it, and `mirror_users()` builds its literals through `sql_literal()`, which doubles single quotes in the operator-supplied emails.
+(4) **Scrubbing by shape** — `_scrub()` redacts JWT-shaped strings wherever they appear, not just values under a `token` key.
+New `scripts/test_data_api_isolation_check.py` (13 offline unittest cases, no network/DB) pins all four.
+
+**Why** - val-el's MEDIUM/MEDIUM/LOW/INFO findings (SEC-R2-4-M1/M2/L1) on PR #361 head `c43fb6af`: permanent shared-password QA identities in the production auth store, DSN + QA password readable in `ps` and shell history, and unvalidated interpolation of `--email-*` and the JWT `sub` into SQL on a harness that talks to production. Alpha had already revoked the earlier throwaways (`kelex1812+steel-hydration`, `steel-hydr2`) using exactly this delete sequence (t_9aba2d2e), so the teardown reuses the verified recipe rather than inventing one.
+
+**Verified** - `python3 -m py_compile` OK; `python3 -m unittest scripts/test_data_api_isolation_check.py` **13/13 passed**. Live run against the production Neon branch (endpoints + unpooled DSN from `.env.local`, QA password generated in-process so it never touches a command line): **66/66 checks passed, exit 0**, including `== revoke QA identities → QA identities removed`. Post-run DB read-back: `public."user"` QA rows 0, `neon_auth."user"` QA rows 0, orphaned `neon_auth.account`/`session` rows 0. A `ps -axo command` sampler running throughout the run (~100 samples) found **0** command lines containing the DB password or a `scheme://user:password@` DSN, and the harness itself never appears with a password argument. Evidence JSON: `checks_total 66 / checks_passed 66 / users_revoked true`, 0 JWT-shaped strings.
+
+**Known Issues** - (1) The harness still opens a privileged connection to the production database with no `live_db_guard`-style flag; the R2-4 card did not ask for it and the guard (t_9aba2d2e) is wired only into `verify-user-provisioning.py` / `verify-session-bridge.py` — worth a follow-up if the harness is ever run by someone other than the operator who wrote it. (2) `--keep-users` still leaves a live shared-password account until revoked by hand; the docstring now says so next to the SQL. (3) The report directory (`/reports/`) remains gitignored, so run evidence lives on the kanban card, not in git.
+
 ### R2-4 fix: hydration-clean `/atlas` (console gate) + isolation harness on the branch (t_103b40ca)
 
 **What** - Every client-only read that fed the hydration render is now deferred to a server-snapshot-aware store instead of a `useState` initializer or an effect:
