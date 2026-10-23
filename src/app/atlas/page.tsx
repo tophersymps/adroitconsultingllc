@@ -2,7 +2,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import LearnHub from "@/components/Learn/LearnHub";
 import { getCatalogForUserV2, toLearnHubCards } from "@/lib/catalog";
-import { getAccessUserId, getCatalogOrg } from "@/lib/access";
+import { getCatalogOrg } from "@/lib/access";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { siteConfig } from "@/lib/seo";
 import type { CardGateState } from "@/shared/contracts-account";
@@ -20,13 +20,32 @@ import type { CardGateState } from "@/shared/contracts-account";
 export default async function LearnLandingPage() {
   // Auth state (guest vs signed-in) resolved server-side from the HttpOnly
   // cookie — the same source as every other gated surface.
+  //
+  // PERF (P1, review of t_d3c401c9): /atlas MUST stay prerendered (○). This
+  // route is a public marketing hub, and per-request rendering replaced a CDN
+  // `x-nextjs-cache: HIT` response (~3 ms TTFB) with an origin render that also
+  // runs `getCatalogForUserV2` + `getCatalogOrg` (~60 ms warm, plus cold start).
+  // The identity read below goes through the DATA client (cookie-backed
+  // `supabase.auth.getUser()`), exactly as it did before the R2-1 auth swap,
+  // because the R2-1 replacement (`getAccessUserId()` → Managed Better Auth)
+  // reaches the SDK's `next/headers` adapter (`cookies()` + `headers()`), which
+  // is a dynamic API and flips this route to ƒ. Same reason `userId` used to
+  // come from `getAccessUserId()`: keep one cookie read, from the data client
+  // whose RLS scope the catalog query itself still uses.
+  //
+  // Guests get the prerendered guest catalogue and the client-side gate
+  // resolves personalisation after hydration (unchanged base behaviour).
   let gate: CardGateState = "guest-locked";
+  let userId: string | null = null;
   try {
     const supabase = await getSupabaseServerClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (user) gate = "signed-in";
+    if (user) {
+      gate = "signed-in";
+      userId = user.id;
+    }
   } catch {
     // default to guest on session errors
   }
@@ -37,7 +56,6 @@ export default async function LearnLandingPage() {
   let jsonLd = emptyJsonLd();
 
   try {
-    const userId = await getAccessUserId();
     const catalog = await getCatalogForUserV2(userId);
     const org = await getCatalogOrg();
 
