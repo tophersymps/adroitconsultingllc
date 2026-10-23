@@ -63,6 +63,21 @@ describe("/reset-password server gate (Neon Auth)", () => {
     expect(screen.queryByTestId("reset-form")).not.toBeInTheDocument();
   });
 
+  it("treats an over-long token as a dead link (F-S3: route MAX_TOKEN=512)", async () => {
+    const el = await ResetPasswordPage({ searchParams: params({ token: "a".repeat(513) }) });
+    render(el);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByText(/This link has expired/)).toBeInTheDocument();
+    expect(screen.queryByTestId("reset-form")).not.toBeInTheDocument();
+  });
+
+  it("accepts a token at the 512 boundary", async () => {
+    const token = "a".repeat(512);
+    const el = await ResetPasswordPage({ searchParams: params({ token }) });
+    render(el);
+    expect(screen.getByTestId("reset-form")).toHaveAttribute("data-token", token);
+  });
+
   it("prefers the error state over a token in the same URL", async () => {
     const el = await ResetPasswordPage({
       searchParams: params({ error: "INVALID_TOKEN", token: "tok-123" }),
