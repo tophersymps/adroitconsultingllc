@@ -2,8 +2,8 @@
  * src/lib/db/server.ts — Neon Data API client for route handlers, server
  * components and pages (Phase 3 of the Neon migration, R2-2).
  *
- * Replaces `src/lib/supabase/server.ts` (the `@supabase/ssr` cookie client) with
- * a PostgREST-compatible client pointed at the **Neon Data API**. The call
+ * Replaces the former Supabase SSR cookie client (deleted in R2-2) with a
+ * PostgREST-compatible client pointed at the **Neon Data API**. The call
  * sites do not change shape: `.from("courses").select("*").eq(...)` and the
  * `{ data, error }` contract are identical because both are PostgREST.
  *
