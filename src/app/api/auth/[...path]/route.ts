@@ -64,11 +64,15 @@ function allowlistKey(method: Method, segments: string[]): string {
 /**
  * Map an upstream response to a client-safe one.
  *
- * 2xx/3xx pass through untouched (the SDK owns session cookies and any
- * redirect). Anything else is replaced with a fixed body: upstream status and
- * payload are logged server-side only, never echoed, so duplicate-email 422s
- * and other provider-specific failures are indistinguishable from a generic
- * failure.
+ * 2xx pass through untouched (the SDK owns session cookies). Anything else is
+ * replaced with a fixed body: upstream status and payload are logged
+ * server-side only, never echoed, so duplicate-email 422s and other
+ * provider-specific failures are indistinguishable from a generic failure.
+ *
+ * Redirects never reach this mapping as a 3xx: the proxy mount follows
+ * same-origin hops itself and answers a fixed 502 when the upstream tries to
+ * leave its configured origin (`createProxyHandlers` in `@/lib/auth/server`),
+ * so a followed cross-origin body is never served to the client.
  */
 function mapUpstreamResponse(
   method: Method,
@@ -84,6 +88,12 @@ function mapUpstreamResponse(
 
   if (upstream.status === 429) {
     return NextResponse.json({ error: RATE_LIMIT_ERROR }, { status: 429 });
+  }
+  // Upstream/backend failure — including the proxy's own refusal to surface a
+  // cross-origin redirect body (see `createProxyHandlers`) — is a 502, never a
+  // 400 that would look like a caller error.
+  if (upstream.status >= 500) {
+    return NextResponse.json({ error: UNAVAILABLE_ERROR }, { status: 502 });
   }
   return NextResponse.json({ error: GENERIC_PROXY_ERROR }, { status: 400 });
 }

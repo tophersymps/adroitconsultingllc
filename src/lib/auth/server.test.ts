@@ -31,7 +31,11 @@ vi.mock("next/headers", () => ({
   headers: () => Promise.resolve(mocks.headersStore),
 }));
 
-import { __resetAuthServerForTests, getAuthServer } from "./server";
+import {
+  __fetchWithOriginRedirectGuard,
+  __resetAuthServerForTests,
+  getAuthServer,
+} from "./server";
 import { withAuthCookies } from "./cookie-jar";
 
 /** The mocked `createAuthServer` result exposes its config for inspection. */
@@ -224,10 +228,215 @@ describe("handler() proxy mount", () => {
     ]);
   });
 
+  it("refuses a cross-origin redirect and answers a fixed 502 (QA F1)", async () => {
+    const realFetch = globalThis.fetch;
+    const fetchStub = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(null, {
+          status: 302,
+          headers: { location: "https://evil.example/landed" },
+        }),
+    );
+    globalThis.fetch = fetchStub as unknown as typeof fetch;
+
+    try {
+      // The SDK helper does exactly this: fetch() the configured baseUrl.
+      mocks.handleAuthProxyRequest.mockImplementationOnce(
+        async (config: { baseUrl: string; path: string }) =>
+          fetch(`${config.baseUrl}/${config.path}`),
+      );
+
+      const handlers = getAuthServer().handler();
+      const response = await handlers.GET(
+        new Request("https://adroit.io/api/auth/get-session"),
+        ctx,
+      );
+
+      // The redirect was resolved manually, never chased.
+      expect(fetchStub).toHaveBeenCalledTimes(1);
+      expect(fetchStub.mock.calls[0][1]).toMatchObject({ redirect: "manual" });
+
+      expect(response.status).toBe(502);
+      const body = await response.json();
+      expect(body).toEqual({ error: "Auth service unavailable. Please try again later." });
+    } finally {
+      __resetAuthServerForTests();
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it("still follows a redirect that stays on the configured origin", async () => {
+    const realFetch = globalThis.fetch;
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 302,
+          headers: { location: "/neondb/auth/landed" },
+        }),
+      )
+      .mockResolvedValueOnce(Response.json({ session: null }, { status: 200 }));
+    globalThis.fetch = fetchStub as unknown as typeof fetch;
+
+    try {
+      mocks.handleAuthProxyRequest.mockImplementationOnce(
+        async (config: { baseUrl: string; path: string }) =>
+          fetch(`${config.baseUrl}/${config.path}`),
+      );
+
+      const handlers = getAuthServer().handler();
+      const response = await handlers.GET(
+        new Request("https://adroit.io/api/auth/get-session"),
+        ctx,
+      );
+
+      expect(fetchStub).toHaveBeenCalledTimes(2);
+      expect(fetchStub.mock.calls[1][0]).toBe(
+        "https://auth.example.test/neondb/auth/landed",
+      );
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ session: null });
+    } finally {
+      __resetAuthServerForTests();
+      globalThis.fetch = realFetch;
+    }
+  });
+
   it("exposes the same handler for every proxied method", () => {
     const handlers = getAuthServer().handler();
     for (const method of ["GET", "POST", "PUT", "DELETE", "PATCH"] as const) {
       expect(typeof handlers[method]).toBe("function");
     }
+  });
+});
+
+describe("origin-locked fetch that the proxy mount installs", () => {
+  const origin = "https://auth.example.test";
+  const guard = () => ({ allowedOrigin: origin, blocked: false });
+
+  it("returns a non-redirect upstream response untouched", async () => {
+    const state = guard();
+    const fetchStub = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        Response.json({ session: null }),
+    );
+
+    const response = await __fetchWithOriginRedirectGuard(
+      fetchStub as unknown as typeof fetch,
+      state,
+      `${origin}/neondb/auth/get-session`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(state.blocked).toBe(false);
+    expect(fetchStub).toHaveBeenCalledTimes(1);
+    expect(fetchStub.mock.calls[0][1]).toMatchObject({ redirect: "manual" });
+  });
+
+  it("blocks a redirect to another host without fetching it", async () => {
+    const state = guard();
+    const fetchStub = vi.fn(
+      async () =>
+        new Response(null, {
+          status: 302,
+          headers: { location: "http://169.254.169.254/latest/meta-data/" },
+        }),
+    );
+
+    const response = await __fetchWithOriginRedirectGuard(
+      fetchStub as unknown as typeof fetch,
+      state,
+      `${origin}/neondb/auth/get-session`,
+    );
+
+    expect(response.status).toBe(502);
+    expect(await response.text()).toBe("");
+    expect(state.blocked).toBe(true);
+    expect(fetchStub).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks a protocol-relative redirect that leaves the origin", async () => {
+    const state = guard();
+    const fetchStub = vi.fn(
+      async () =>
+        new Response(null, {
+          status: 307,
+          headers: { location: "//evil.example/landed" },
+        }),
+    );
+
+    const response = await __fetchWithOriginRedirectGuard(
+      fetchStub as unknown as typeof fetch,
+      state,
+      `${origin}/neondb/auth/get-session`,
+    );
+
+    expect(response.status).toBe(502);
+    expect(state.blocked).toBe(true);
+  });
+
+  it("follows same-origin hops and stops at the first successful response", async () => {
+    const state = guard();
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(null, { status: 301, headers: { location: "/neondb/auth/one" } }),
+      )
+      .mockResolvedValueOnce(
+        new Response(null, { status: 302, headers: { location: "/neondb/auth/two" } }),
+      )
+      .mockResolvedValueOnce(Response.json({ session: null }));
+
+    const response = await __fetchWithOriginRedirectGuard(
+      fetchStub as unknown as typeof fetch,
+      state,
+      `${origin}/neondb/auth/get-session`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(state.blocked).toBe(false);
+    expect(fetchStub.mock.calls.map((call) => call[0])).toEqual([
+      `${origin}/neondb/auth/get-session`,
+      `${origin}/neondb/auth/one`,
+      `${origin}/neondb/auth/two`,
+    ]);
+  });
+
+  it("blocks a same-origin redirect loop instead of spinning", async () => {
+    const state = guard();
+    const fetchStub = vi.fn(
+      async () =>
+        new Response(null, { status: 302, headers: { location: "/neondb/auth/loop" } }),
+    );
+
+    const response = await __fetchWithOriginRedirectGuard(
+      fetchStub as unknown as typeof fetch,
+      state,
+      `${origin}/neondb/auth/get-session`,
+    );
+
+    expect(response.status).toBe(502);
+    expect(state.blocked).toBe(true);
+    expect(fetchStub.mock.calls.length).toBeLessThanOrEqual(5);
+  });
+
+  it("leaves a fetch to a non-auth origin completely alone", async () => {
+    const state = guard();
+    const fetchStub = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(null, { status: 302, headers: { location: `${origin}/x` } }),
+    );
+
+    const response = await __fetchWithOriginRedirectGuard(
+      fetchStub as unknown as typeof fetch,
+      state,
+      "https://data.example.test/rest/v1/items",
+      { redirect: "follow" },
+    );
+
+    // Original init forwarded unchanged: no manual-mode coercion, no guard hit.
+    expect(fetchStub.mock.calls[0][1]).toMatchObject({ redirect: "follow" });
+    expect(response.status).toBe(302);
+    expect(state.blocked).toBe(false);
   });
 });
