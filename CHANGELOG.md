@@ -30,9 +30,10 @@ logout clears the session. Neon Auth `allow_localhost` PATCHed to `false` and re
 
 **Known Issues** - (1) `LEGACY_*` Supabase credentials authenticate but every Supabase endpoint answers
 `402 exceed_storage_size_quota`, so a Tier 2 env rollback restores the code path only. (2) The Vercel
-project's trusted-domain list still carries a `https://*.vercel.app` wildcard. (3) Three throwaway
-smoke/QA accounts remain in `neon_auth.user` (deletes are blocked by the worker destructive-command
-guard); they hold no entitlements and no admin role.
+project's trusted-domain list still carries a `https://*.vercel.app` wildcard. (3) Both throwaway
+accounts created by this smoke were deleted afterwards (`neon_auth.user` 37, `public.user` 46, no
+dangling progress rows); the earlier QA-canary accounts left by other cards are still present — they
+hold no entitlements and no admin role.
 
 ### SEC-R2-5-M1/L1/L2: the anonymous Data API token's scope is proven before it is cached (t_52f55ea7)
 
