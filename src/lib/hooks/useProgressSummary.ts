@@ -7,7 +7,7 @@
  */
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useSyncExternalStore } from "react";
 import {
   mergeProgressFromSummary,
   PROGRESS_CHANGED_EVENT,
@@ -27,12 +27,29 @@ interface SupabaseSummary {
   completedLessons?: string[];
 }
 
+/** Shared empty merge — the hydration-safe first-render value (never mutated). */
+const EMPTY_MERGE: ProgressMerge = { read: new Set(), lessons: new Set() };
+
+/** No-op subscription — the hydration flag never changes after mount. */
+const NO_SUBSCRIBE = () => () => {};
+
 export function useProgressSummary(
   readSlugs: string[],
   lessonSlugs: string[],
 ): UseProgressSummaryReturn {
   const [summary, setSummary] = useState<SupabaseSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  // Hydration-safe (QA R2-4 F4): the merge below reads localStorage, which the
+  // server cannot see. Computing it on the first client render made aggregate
+  // counters ("Read N", progress bars) disagree with the server HTML and
+  // tripped React #418 (text) on /field-notes and /atlas for any returning
+  // visitor. `useSyncExternalStore` renders the empty merge during hydration and
+  // switches to the storage-aware merge immediately after.
+  const hydrated = useSyncExternalStore(
+    NO_SUBSCRIBE,
+    () => true,
+    () => false,
+  );
   // Bumped on every PROGRESS_CHANGED_EVENT so aggregate bars re-read
   // localStorage immediately after a mark-read/complete action.
   const [, setChangeTick] = useState(0);
@@ -77,7 +94,9 @@ export function useProgressSummary(
     };
   }, []);
 
-  const merge = mergeProgressFromSummary(summary, readSlugs, lessonSlugs);
+  const merge = hydrated
+    ? mergeProgressFromSummary(summary, readSlugs, lessonSlugs)
+    : EMPTY_MERGE;
 
   return { merge, isLoading, refresh };
 }

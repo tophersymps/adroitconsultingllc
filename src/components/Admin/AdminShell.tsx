@@ -44,9 +44,11 @@ const MD_BREAKPOINT = 768;
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [isDesktop, setIsDesktop] = useState(
-    typeof window !== "undefined" ? window.innerWidth >= MD_BREAKPOINT : false,
-  );
+  // Start from the server value (false) and measure after mount: reading
+  // window.innerWidth in the initializer makes the first client render differ
+  // from the server HTML on every desktop viewport (hydration mismatch, tree
+  // thrown away — same class as QA R2-4 F4).
+  const [isDesktop, setIsDesktop] = useState(false);
   const drawerRef = useRef<HTMLElement | null>(null);
   const isActive = (href: string, exact: boolean | undefined) =>
     exact ? pathname === href : pathname.startsWith(href);
@@ -65,6 +67,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   // back off-canvas if the window narrows while it is open (ADR-230).
   useEffect(() => {
     const update = () => setIsDesktop(window.innerWidth >= MD_BREAKPOINT);
+    update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
   }, []);
