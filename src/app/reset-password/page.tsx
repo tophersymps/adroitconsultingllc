@@ -34,6 +34,13 @@ export const metadata: Metadata = buildMetadata({
   noindex: true,
 });
 
+/**
+ * Mirror of MAX_TOKEN in the update route. A token longer than this can never
+ * be redeemed (the route answers 401 before touching the DB), so the page
+ * treats it as dead rather than rendering a form that can only fail (F-S3).
+ */
+const MAX_TOKEN = 512;
+
 /** Collapse string|string[] search params to the first non-empty value. */
 function firstParam(value: string | string[] | undefined): string | undefined {
   const v = Array.isArray(value) ? value[0] : value;
@@ -133,6 +140,12 @@ export default async function ResetPasswordPage({
   // form would be a guaranteed 401, so it is never rendered.
   if (!tokenParam) {
     return <LinkProblemState kind="missing" />;
+  }
+
+  // Over-long token: the route rejects anything above MAX_TOKEN, so render the
+  // dead-link state instead of a form that is guaranteed to 401 (F-S3).
+  if (tokenParam.length > MAX_TOKEN) {
+    return <LinkProblemState kind="expired" />;
   }
 
   return <ResetPasswordForm token={tokenParam} />;
