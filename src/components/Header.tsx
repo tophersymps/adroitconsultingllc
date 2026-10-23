@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth, notifyAuthChanged } from "@/lib/hooks/useAuth";
+import { invalidateDbToken } from "@/lib/db/token-cache";
 import AvatarMenu from "@/components/AvatarMenu";
 import ThemeToggle from "@/components/Theme/ThemeToggle";
 import SearchOverlay from "@/components/SearchOverlay";
@@ -31,6 +32,9 @@ export default function Header() {
       } catch {
         // best-effort — the session may already be gone
       }
+      // Identity changed: drop the cached Data API token so a signed-out
+      // browser cannot keep sending the previous user's JWT (QA F2, t_51f9ebfb).
+      invalidateDbToken();
       notifyAuthChanged();
       router.refresh();
     });

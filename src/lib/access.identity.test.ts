@@ -8,7 +8,7 @@
  * role read found nothing and every admin resolved as `member` → `/admin` and
  * every `/api/admin/*` route 403'd.
  *
- * The fix is data (supabase/migrations/neon/003_identity_continuity.sql
+ * The fix is data (supabase/migrations/neon/005_identity_continuity.sql
  * imports each legacy identity into neon_auth."user" with its ORIGINAL uuid),
  * so this test pins the CONTRACT the fix relies on:
  *   1. the id from the session is passed to the role lookup unchanged;
@@ -29,7 +29,7 @@ const h = vi.hoisted(() => ({
 
 vi.mock("@/lib/session", () => ({ getSessionUser: h.session.getSessionUser }));
 
-vi.mock("@/lib/supabase/server", () => {
+vi.mock("@/lib/db/server", () => {
   interface FakeQuery {
     select: () => FakeQuery;
     eq: (column: string, value: string) => FakeQuery;
@@ -59,7 +59,7 @@ vi.mock("@/lib/supabase/server", () => {
 
 import { accessSeam, getAccessUserId } from "@/lib/access";
 
-/** Real ids from the legacy public."user" table (imported verbatim by 003). */
+/** Real ids from the legacy public."user" table (imported verbatim by 005). */
 const IMPORTED_ADMIN_ID = "eeafd509-9093-4117-90a4-b9e5ceed790e";
 const IMPORTED_ADMIN_EMAIL = "chris.sympson@gmail.com";
 const IMPORTED_MEMBER_ID = "5552e4cb-895e-4622-b608-efd45b7165f5";

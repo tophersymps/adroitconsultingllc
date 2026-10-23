@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════════
--- 003_identity_continuity.sql — bring pre-existing (Supabase-era)
+-- 005_identity_continuity.sql — bring pre-existing (Supabase-era)
 -- identities into Managed Better Auth PRESERVING their UUIDs, and install
 -- the cutover gate that proves no user-scoped row is stranded.
 -- Task t_33739716 (steel) · HIGH finding from the R2-1 security review
@@ -62,7 +62,7 @@
 --
 -- HOW TO APPLY
 --   psql "$DATABASE_URL_UNPOOLED" -X -v ON_ERROR_STOP=1 --single-transaction \
---     -f supabase/migrations/neon/003_identity_continuity.sql
+--     -f supabase/migrations/neon/005_identity_continuity.sql
 --   node scripts/import-legacy-identities.mjs      # credential accounts
 --   python3 scripts/verify-identity-continuity.py  # read-only gate + report
 -- ═══════════════════════════════════════════════════════════════════

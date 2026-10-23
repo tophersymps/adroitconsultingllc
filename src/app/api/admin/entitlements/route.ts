@@ -5,7 +5,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi, notFoundJson, writeAuditLog } from "@/lib/admin";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import { getAuthUser } from "@/lib/auth/users";
 import {
   checkOrigin,
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
       ? "one-time"
       : "granted";
 
-  const service = getSupabaseServiceClient();
+  const service = await getSupabaseServerClient();
   try {
     const [user, courseRes] = await Promise.all([
       getAuthUser(body.userId),
@@ -113,7 +113,7 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "courseId required" }, { status: 400 });
   }
 
-  const service = getSupabaseServiceClient();
+  const service = await getSupabaseServerClient();
   try {
     const { data: revokedRows, error } = await service
       .from("user_entitlements")

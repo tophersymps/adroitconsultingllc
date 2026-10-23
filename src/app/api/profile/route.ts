@@ -13,7 +13,7 @@
  * Contract: src/shared/contracts-account.ts (brainiac, t_cde0e74a).
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import {
   checkOrigin,
   checkRateLimit,

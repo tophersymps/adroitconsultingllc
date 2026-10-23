@@ -12,18 +12,19 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const { mocks } = vi.hoisted(() => {
   const from = vi.fn();
-  return { mocks: { from } };
+  const insertCompletionEvent = vi.fn();
+  return { mocks: { from, insertCompletionEvent } };
 });
 
-vi.mock("@/lib/supabase/server", () => ({
+vi.mock("@/lib/db/server", () => ({
   getSupabaseServerClient: async () => ({ from: mocks.from }),
 }));
 
-// completion_events INSERT now routes via the service-role client (M2,
-// t_bd7ac2a0, migration 012) — point it at the same capture fake so the
-// course/lesson event assertions still observe the writes.
-vi.mock("@/lib/supabase/service", () => ({
-  getSupabaseServiceClient: () => ({ from: mocks.from }),
+// completion_events INSERT routes via the privileged direct-SQL helper (M2,
+// t_bd7ac2a0, migration 012 / R2-2) — capture the rows so the course/lesson
+// event assertions still observe the writes.
+vi.mock("@/lib/db/service", () => ({
+  insertCompletionEvent: mocks.insertCompletionEvent,
 }));
 
 import {
@@ -94,6 +95,14 @@ beforeEach(() => {
   sink.courseEvents.length = 0;
   sink.lessonEvents.length = 0;
   for (const k of Object.keys(sink.reads)) delete sink.reads[k];
+
+  mocks.insertCompletionEvent.mockImplementation(
+    async (row: { event_type: string }) => {
+      if (row.event_type === "course") sink.courseEvents.push(row);
+      else sink.lessonEvents.push(row);
+      return { error: null };
+    },
+  );
 
   mocks.from.mockImplementation((table: string) => {
     const c = makeFrom(table);

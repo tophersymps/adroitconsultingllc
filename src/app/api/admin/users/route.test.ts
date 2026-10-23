@@ -22,8 +22,10 @@ vi.mock("@/lib/access", () => ({
   getAccessUserId: mocks.getAccessUserId,
 }));
 
-vi.mock("@/lib/supabase/service", () => ({
-  getSupabaseServiceClient: () => mocks.service,
+// R2-2: the admin surface reads and writes through the Data API client, whose
+// RLS `is_admin()` policies gate it — there is no service-role client any more.
+vi.mock("@/lib/db/server", () => ({
+  getSupabaseServerClient: async () => mocks.service,
 }));
 
 vi.mock("@/lib/auth/users", () => ({
@@ -118,7 +120,7 @@ describe("GET /api/admin/users — GoTrue auth source (t_48183726)", () => {
   it("lists imported legacy identities with their admin role (R2-1 identity continuity)", async () => {
     // Regression for t_33739716: the People list is built from
     // listAuthUsers() (neon_auth."user") and joins roles/profiles by id. Before
-    // supabase/migrations/neon/003_identity_continuity.sql imported the legacy
+    // supabase/migrations/neon/005_identity_continuity.sql imported the legacy
     // rows with their ORIGINAL uuids, none of these ids existed in
     // neon_auth."user", so they were dropped from this list entirely and the
     // admins rendered as "member". These are the real ids from the live DB.

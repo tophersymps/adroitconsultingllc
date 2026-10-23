@@ -15,7 +15,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import StubBadge from "@/components/StubBadge";
 import ThemeToggle from "@/components/Theme/ThemeToggle";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import { buildMetadata } from "@/lib/seo";
 import type { ThemePref } from "@/shared/contracts-account";
 

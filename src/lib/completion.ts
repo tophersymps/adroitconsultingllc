@@ -12,8 +12,8 @@
  * Contract types: src/shared/contracts-course-catalog.ts (CompletionInput,
  * DerivedProgress, CompletionEventRow).
  */
-import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { getSupabaseServerClient } from "@/lib/db/server";
+import { insertCompletionEvent } from "@/lib/db/service";
 import type {
   CompletionEventRow,
   CompletionInput,
@@ -187,17 +187,15 @@ export async function appendCompletionEvent(input: {
     // carries BYPASSRLS and remains the only legitimate write path. The reads
     // above stay on the RLS-bound client so a value is never written for a user
     // whose session has not been resolved by auth.
-    await getSupabaseServiceClient()
-      .from("completion_events")
-      .insert({
-        user_id: input.userId,
-        course_id: input.courseId ?? null,
-        event_type: input.eventType,
-        lesson: input.lesson ?? null,
-        lesson_slug: input.lessonSlug ?? null,
-        metadata: input.metadata ?? null,
-        completed_at: new Date().toISOString(),
-      });
+    await insertCompletionEvent({
+      user_id: input.userId,
+      course_id: input.courseId ?? null,
+      event_type: input.eventType,
+      lesson: input.lesson ?? null,
+      lesson_slug: input.lessonSlug ?? null,
+      metadata: (input.metadata ?? null) as Record<string, unknown> | null,
+      completed_at: new Date().toISOString(),
+    });
   } catch (err) {
     console.error("[completion-event]", input.eventType, err);
   }

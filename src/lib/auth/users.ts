@@ -15,6 +15,10 @@
  * "createdAt". The table is read-only here; every write still goes through the
  * app's own public tables.
  */
+
+// Build-time guard (review F-7, restored for R2-2 / SEC-R2-2-M2): these helpers
+// read `DATABASE_URL`, so a Client Component import must fail the build rather
+// than pull the credential path into a client bundle.
 import "server-only";
 
 import { neon } from "@neondatabase/serverless";

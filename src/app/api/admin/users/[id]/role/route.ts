@@ -5,7 +5,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi, notFoundJson, writeAuditLog } from "@/lib/admin";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import { getAuthUser } from "@/lib/auth/users";
 import {
   checkOrigin,
@@ -37,7 +37,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 
   const { id } = await params;
-  const service = getSupabaseServiceClient();
+  const service = await getSupabaseServerClient();
 
   try {
     // Target must exist as an auth user (Neon Auth user table — the `auth` schema

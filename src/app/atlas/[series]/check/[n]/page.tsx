@@ -22,7 +22,7 @@ import {
 } from "@/lib/quiz";
 import { getSeriesBySlug } from "@/lib/learn";
 import { buildMetadata } from "@/lib/seo";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import {
   accessSeam,
   getAccessUserId,

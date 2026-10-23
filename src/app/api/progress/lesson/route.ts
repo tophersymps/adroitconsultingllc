@@ -11,7 +11,7 @@
  * localStorage as the fallback).
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import { getAllCanonicalLessonSlugs, findSeriesForLessonSlug } from "@/lib/learn";
 import { accessSeam } from "@/lib/access";
 import { completeLessonServer } from "@/lib/progress-complete";

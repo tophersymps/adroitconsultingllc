@@ -5,7 +5,7 @@
  */
 import { NextResponse } from "next/server";
 import { activeSubscriptionOf, requireAdminApi, notFoundJson } from "@/lib/admin";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import { getAuthUser } from "@/lib/auth/users";
 import type {
   AdminUserListRow,
@@ -22,8 +22,7 @@ export async function GET(_req: Request, { params }: Params) {
 
   const { id } = await params;
   try {
-    const service = getSupabaseServiceClient();
-    // Auth user comes from the Neon Auth user table (`auth` schema not exposed to
+    const service = await getSupabaseServerClient();
     // PostgREST). null → 404 (matches old `.maybeSingle()` semantics).
     const [user, roleRes, profileRes, entRes, subRes] = await Promise.all([
       getAuthUser(id),

@@ -30,7 +30,7 @@ import DifficultyPill from "@/components/Learn/DifficultyPill";
 import PrerequisitesSection from "@/components/Learn/PrerequisitesSection";
 import SeriesStarChart from "@/components/Constellations/chart/SeriesStarChart";
 import { loadSeriesConstellation, loadExamPassedBySeries } from "@/lib/sky-server";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient } from "@/lib/db/server";
 
 interface Props {
   params: Promise<{ series: string }>;

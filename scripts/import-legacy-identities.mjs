@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
  * scripts/import-legacy-identities.mjs — finish the identity import started by
- * supabase/migrations/neon/003_identity_continuity.sql.
+ * supabase/migrations/neon/005_identity_continuity.sql.
  *
  * WHY THIS IS A SCRIPT AND NOT SQL
- *   Migration 003 moves every stranded Supabase-era identity into
+ *   Migration 005 moves every stranded Supabase-era identity into
  *   neon_auth."user" with its ORIGINAL uuid, so roles / profiles /
  *   entitlements / subscriptions resolve again. What it cannot do is give an
  *   imported identity a Better Auth *credential* row, because Better Auth
@@ -121,7 +121,7 @@ async function main() {
   console.log(`public identities with no neon_auth row:  ${stranded[0].n}`);
   if (stranded[0].n > 0) {
     console.error(
-      "\nApply supabase/migrations/neon/003_identity_continuity.sql first — " +
+      "\nApply supabase/migrations/neon/005_identity_continuity.sql first — " +
         "it imports the stranded identities by id.",
     );
     process.exit(1);

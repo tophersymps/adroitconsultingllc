@@ -14,7 +14,7 @@ import {
   stripMDXFrontmatter,
   linkifySourceCitations,
 } from "@/lib/mdx";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import { isPreviewEmailAllowed } from "@/lib/preview-auth";
 
 interface Props {

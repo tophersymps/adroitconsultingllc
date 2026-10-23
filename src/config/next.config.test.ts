@@ -6,9 +6,13 @@
  * form depends on (www.google.com / www.gstatic.com), which either broke the
  * form or left bot defense inert. This test asserts the reCAPTCHA hosts are
  * present in the served CSP directives.
+ *
+ * Second guard — CSP connect-src for the Neon Data API origin (t_51f9ebfb, QA
+ * F1 on PR #361): the browser fetches that API directly for signed-in progress
+ * reads, so a missing origin silently disabled them.
  */
 import { describe, it, expect } from "vitest";
-import nextConfig from "../../next.config";
+import nextConfig, { NEON_DATA_API_ORIGIN_FALLBACK } from "../../next.config";
 
 type HeaderRow = {
   source: string;
@@ -45,5 +49,49 @@ describe("next.config.ts security headers", () => {
     expect(keys).toContain("X-Content-Type-Options");
     expect(keys).toContain("X-Frame-Options");
     expect(keys).toContain("Referrer-Policy");
+  });
+});
+
+/** Value of a single CSP directive, tokens space-separated. */
+async function connectSrcTokens(): Promise<string[]> {
+  const csp = await cspOf();
+  const directive = csp
+    .split(";")
+    .map((d) => d.trim())
+    .find((d) => d === "connect-src" || d.startsWith("connect-src "));
+  expect(directive, "CSP is missing the connect-src directive").toBeDefined();
+  return directive!.split(/\s+/);
+}
+
+describe("CSP connect-src allows the Neon Data API (t_51f9ebfb)", () => {
+  it("lists the production Neon Data API origin the browser fetches", async () => {
+    const tokens = await connectSrcTokens();
+    expect(tokens).toContain(NEON_DATA_API_ORIGIN_FALLBACK);
+  });
+
+  it("derives an extra origin from NEXT_PUBLIC_NEON_DATA_API_URL (origin only)", async () => {
+    const previous = process.env.NEXT_PUBLIC_NEON_DATA_API_URL;
+    const configured =
+      "https://ep-config-test.apirest.c-13.us-east-1.aws.neon.tech/neondb/rest/v1";
+    process.env.NEXT_PUBLIC_NEON_DATA_API_URL = configured;
+    try {
+      const tokens = await connectSrcTokens();
+      // `headers()` reads the env per call, so a per-environment Data API URL
+      // (preview branch, local proxy) is allowed without a code change.
+      expect(tokens).toContain(
+        "https://ep-config-test.apirest.c-13.us-east-1.aws.neon.tech",
+      );
+      // A path would never match a fetch — only the origin belongs here.
+      expect(tokens).not.toContain(configured);
+      expect(tokens).toContain(NEON_DATA_API_ORIGIN_FALLBACK);
+    } finally {
+      if (previous === undefined) delete process.env.NEXT_PUBLIC_NEON_DATA_API_URL;
+      else process.env.NEXT_PUBLIC_NEON_DATA_API_URL = previous;
+    }
+  });
+
+  it("no longer allows the retired Supabase wildcard", async () => {
+    const tokens = await connectSrcTokens();
+    expect(tokens.some((t) => t.includes("supabase.co"))).toBe(false);
   });
 });

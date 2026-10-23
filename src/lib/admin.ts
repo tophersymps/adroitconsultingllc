@@ -11,7 +11,7 @@
  */
 import { NextResponse } from "next/server";
 import { accessSeam, getAccessUserId } from "@/lib/access";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import type { SubscriptionRow } from "@/shared/contracts-course-catalog";
 
 /** Resolve the current admin from the session cookie. Non-admin / guest → false. */
@@ -84,7 +84,7 @@ export async function writeAuditLog(input: {
   details?: Record<string, unknown> | null;
 }): Promise<void> {
   try {
-    const service = getSupabaseServiceClient();
+    const service = await getSupabaseServerClient();
     await service.from("admin_audit_log").insert({
       actor_user_id: input.actorUserId,
       action: input.action,

@@ -14,25 +14,27 @@ import { NextRequest } from "next/server";
 
 const { mocks } = vi.hoisted(() => {
   const getSupabaseServerClient = vi.fn();
-  const getSupabaseServiceClient = vi.fn();
+  const upsertQuizAttempts = vi.fn();
   const getUser = vi.fn();
   const from = vi.fn();
-  const serviceFrom = vi.fn();
   const decideCourseAccess = vi.fn();
   return {
-    mocks: { getSupabaseServerClient, getSupabaseServiceClient, getUser, from, serviceFrom, decideCourseAccess },
+    mocks: { getSupabaseServerClient, upsertQuizAttempts, getUser, from, decideCourseAccess },
   };
 });
 
-vi.mock("@/lib/supabase/server", () => ({
+vi.mock("@/lib/db/server", () => ({
   getSupabaseServerClient: async () => ({
     auth: { getUser: mocks.getUser },
     from: mocks.from,
   }),
 }));
 
-vi.mock("@/lib/supabase/service", () => ({
-  getSupabaseServiceClient: () => ({ from: mocks.serviceFrom }),
+// Privileged write path (R2-2): the route no longer talks PostgREST on a
+// service client — the deny-client-insert tables are written over direct SQL by
+// these helpers. Each written row lands in the sink individually.
+vi.mock("@/lib/db/service", () => ({
+  upsertQuizAttempts: mocks.upsertQuizAttempts,
 }));
 
 // The route gates through the access seam (t_10214e52). Default: the quiz's
@@ -47,17 +49,10 @@ const CHECK_QUIZ = "omni-studio-cert:check:1"; // canonical: 15 questions
 
 const writeSink = { quizAttemptUpserts: [] as unknown[] };
 
-/** Service-role client: quiz_attempt upsert → sink (the ONLY write). */
-function makeServiceFrom(table: string) {
-  if (table === "quiz_attempt") {
-    return {
-      upsert: async (rows: unknown) => {
-        writeSink.quizAttemptUpserts.push(rows);
-        return { error: null };
-      },
-    };
-  }
-  return {};
+/** Privileged quiz_attempt upsert → sink, one entry per row (the ONLY write). */
+function upsertSink(rows: Record<string, unknown>[]) {
+  for (const row of rows) writeSink.quizAttemptUpserts.push(row);
+  return { error: null };
 }
 
 function authedUser(id = "user-1") {
@@ -78,7 +73,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   writeSink.quizAttemptUpserts.length = 0;
   mocks.decideCourseAccess.mockResolvedValue({ kind: "granted" });
-  mocks.serviceFrom.mockImplementation((table: string) => makeServiceFrom(table));
+  mocks.upsertQuizAttempts.mockImplementation(async (rows: Record<string, unknown>[]) => upsertSink(rows));
 });
 
 describe("POST /api/progress/quiz — server-side recompute (F3)", () => {
@@ -186,7 +181,7 @@ describe("POST /api/progress/quiz — server-side recompute (F3)", () => {
     });
     expect(res.status).toBe(200);
 
-    expect(mocks.serviceFrom).toHaveBeenCalledWith("quiz_attempt");
+    expect(mocks.upsertQuizAttempts).toHaveBeenCalledTimes(1);
     expect(writeSink.quizAttemptUpserts).toHaveLength(1);
 
     // The RLS/anonymous server client must never be used to write quiz_attempt.

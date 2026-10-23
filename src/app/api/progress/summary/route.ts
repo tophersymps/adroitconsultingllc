@@ -12,7 +12,7 @@
  * course is treated as not accessible.
  */
 import { NextResponse } from "next/server";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import { accessSeam } from "@/lib/access";
 import { findSeriesForLessonSlug } from "@/lib/learn";
 

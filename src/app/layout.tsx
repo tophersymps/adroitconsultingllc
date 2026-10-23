@@ -66,6 +66,11 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${inter.variable} ${newsreader.variable} h-full antialiased`}
+      // The FOUC guard below runs before hydration and may add `dark` to this
+      // element, so the attribute the client sees legitimately differs from
+      // the server HTML. Without this opt-out React logs a hydration mismatch
+      // (#418) and throws away the server tree on every themed load.
+      suppressHydrationWarning
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeFoucScript() }} />

@@ -10,7 +10,7 @@
  */
 import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import {
   buildCourseLessonSlugs,
   computeCourseAnalytics,
@@ -24,7 +24,7 @@ export async function GET() {
   if (!gate.ok) return gate.response;
 
   try {
-    const service = getSupabaseServiceClient();
+    const service = await getSupabaseServerClient();
     const [coursesRes, completionsRes, readsRes] = await Promise.all([
       service.from("courses").select("*"),
       service.from("lesson_completion").select("user_id, lesson_slug, completed_at"),
