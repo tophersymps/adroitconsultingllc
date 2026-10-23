@@ -14,6 +14,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/db/server";
+import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
 import {
   checkOrigin,
   checkRateLimit,
@@ -180,7 +181,11 @@ export async function PATCH(req: NextRequest) {
     if (error) throw error;
 
     return NextResponse.json({ profile: toProfile(data as ProfileRow) });
-  } catch {
+  } catch (err) {
+    // R2-5: a write is never attempted without a token; answer the guest shape.
+    if (isDbTokenUnavailable(err)) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

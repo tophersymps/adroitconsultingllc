@@ -8,6 +8,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/db/server";
+import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
 import { denyLessonNotAccessible } from "@/lib/access-gate";
 import { appendCompletionEvent } from "@/lib/completion";
 import {
@@ -183,7 +184,11 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ status: "ok" });
-  } catch {
+  } catch (err) {
+    // R2-5: token unavailable → the guest identity answer, never a 5xx.
+    if (isDbTokenUnavailable(err)) {
+      return NextResponse.json({ status: "unauthenticated" });
+    }
     return NextResponse.json({ status: "error" }, { status: 500 });
   }
 }

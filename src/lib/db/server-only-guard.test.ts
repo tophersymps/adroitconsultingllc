@@ -18,12 +18,24 @@ import { describe, it, expect } from "vitest";
 
 const SRC = join(process.cwd(), "src");
 
-/** Every module that must refuse to be pulled into a client bundle. */
-const PRIVILEGED = [
+/** Modules that read DATABASE_URL / write SQL directly (deny-client-insert tables). */
+const DATABASE_URL_READERS = [
   // Reads DATABASE_URL and writes SQL directly (deny-client-insert tables).
   "src/lib/db/service.ts",
   // Reads DATABASE_URL for admin auth-user reads.
   "src/lib/auth/users.ts",
+];
+
+/** Every module that must refuse to be pulled into a client bundle. */
+const PRIVILEGED = [
+  ...DATABASE_URL_READERS,
+  // R2-1 auth routes (t_d9a07839): holds NEON_AUTH_COOKIE_SECRET. Carried over
+  // from the Supabase-era R1-4 guard (t_c98e662b) when the auth surface moved.
+  "src/lib/auth/server.ts",
+  // R2-5: holds the process-wide anonymous-role JWT — server-only by nature.
+  "src/lib/db/anonymous-token.ts",
+  // R2-5: the classified token-unavailable client (Data API seam).
+  "src/lib/db/degraded-client.ts",
 ];
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -59,6 +71,9 @@ describe("server-only build-time guards (SEC-R2-2-M2)", () => {
     const readers = files.filter((f) =>
       /process\.env\.DATABASE_URL(_UNPOOLED)?\b/.test(readFileSync(join(process.cwd(), f), "utf8")),
     );
-    expect(readers.sort()).toEqual([...PRIVILEGED].sort());
+    // The R2-5 token-cache modules carry the guard because they hold token
+    // material, but they do not open SQL connections — keep that distinction,
+    // so the DATABASE_URL reader list stays service.ts + users.ts only.
+    expect(readers.sort()).toEqual([...DATABASE_URL_READERS].sort());
   });
 });

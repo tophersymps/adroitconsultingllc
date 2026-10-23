@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthServer } from "@/lib/auth/server";
 import { buildVerifyEmailRedirect } from "@/lib/auth-emails";
 import { checkRateLimit, getClientIp, checkOrigin } from "@/lib/api-security";
+import { withAuthCookies } from "@/lib/auth/cookie-jar";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -28,24 +29,71 @@ const GENERIC_SIGNUP_ERROR =
   "Unable to create account. Please try again later.";
 /**
  * Distinct-but-fixed signal for the unconfirmed-email sign-in case (a11y,
- * t_be6b4bd2). Better Auth reports it as 403 EMAIL_NOT_VERIFIED; we map that
- * to a FIXED message and status 403 so the client's US-5 recovery branch
- * (/confirm/i on the response) stays reachable. Credential failures keep the
- * generic 401 — no enumeration. Sign-up mode is untouched.
+ * t_be6b4bd2). Upstream Better Auth reports it as 403 EMAIL_NOT_VERIFIED, but
+ * `@neondatabase/auth` normalises that to 422 `email_not_confirmed` /
+ * "Email verification required" before we see it (t_2912839f), so
+ * `isUnconfirmed()` below accepts both shapes. Either way we map it to a FIXED
+ * message and status 403 so the client's US-5 recovery branch (/confirm/i on
+ * the response) stays reachable. Credential failures keep the generic 401 — no
+ * enumeration. Sign-up mode is untouched.
  */
 const UNCONFIRMED_SIGNIN_ERROR =
   "Your email hasn't been confirmed yet. Check your inbox for the confirmation link, or resend it below.";
 const UNCONFIRMED_SIGNIN_STATUS = 403;
 
-/** Better Auth codes/messages for a not-yet-verified account. */
-function isUnconfirmed(
-  error: { code?: string; message?: string } | null,
-): boolean {
-  const code = (error?.code ?? "").toUpperCase();
+/**
+ * Shape of the error `getAuthServer().signIn.email()` hands back.
+ *
+ * `@neondatabase/auth` (0.7.x) normalises upstream Better Auth errors before
+ * the app ever sees them (`normalizeBetterAuthError()` in
+ * `dist/better-auth-helpers-*.mjs`), so BOTH flavours must be understood:
+ *   - raw Better Auth: `{ status, code: "EMAIL_NOT_VERIFIED", message: "Email not verified" }`
+ *   - normalized SDK : `{ status: 422, code: "email_not_confirmed",
+ *                         message: "Email verification required" }`
+ * (the normalized message is the SDK's *canned* descriptor, not upstream text).
+ */
+interface AuthErrorLike {
+  status?: number;
+  name?: string;
+  code?: string;
+  message?: string;
+}
+
+/** Codes that mean "the account exists but its email is not verified yet". */
+const UNCONFIRMED_CODES = new Set([
+  "email_not_verified", // raw Better Auth (upper-cased before lookup)
+  "email_not_confirmed", // @neondatabase/auth AuthErrorCode.EmailNotConfirmed
+  "email_verification_required", // defensive: adjacent SDK naming
+]);
+
+/**
+ * Statuses the SDK/upstream use for an unverified account: 422 (normalized
+ * descriptor) and 403 (raw Better Auth today, kept as a fallback).
+ */
+const UNCONFIRMED_STATUSES = new Set([422, 403]);
+
+/**
+ * Message fallback. The normalized SDK message is "Email verification
+ * required"; the raw one is "Email not verified". Anchored enough that a
+ * credential failure ("Invalid email or password") can never match.
+ */
+const UNCONFIRMED_MESSAGE_RE =
+  /verification required|not[_ ]verified|not[_ ]confirmed|confirm/i;
+
+/** Does this sign-in error mean "email not verified" (t_be6b4bd2, US-5)? */
+function isUnconfirmed(error: AuthErrorLike | null): boolean {
+  const code = (error?.code ?? "").toLowerCase();
   const message = error?.message ?? "";
-  return (
-    code.includes("EMAIL_NOT_VERIFIED") || /not[_ ]verified|confirm/i.test(message)
-  );
+  const status = error?.status;
+
+  if (code && UNCONFIRMED_CODES.has(code)) return true;
+
+  // A message-only signal is only trusted when the status is absent (legacy)
+  // or one of the statuses that legitimately means "not verified". That keeps
+  // a 401 credential failure with an odd message from leaking the 403 branch.
+  const messageMatches = UNCONFIRMED_MESSAGE_RE.test(message);
+  if (!messageMatches) return false;
+  return status === undefined || UNCONFIRMED_STATUSES.has(status);
 }
 
 /** Safe server-side log line: status + code only, never message/email. */
@@ -59,7 +107,14 @@ function logAuthFailure(
   });
 }
 
-export async function POST(req: NextRequest) {
+export function POST(req: NextRequest): Promise<Response> {
+  // The SDK's session cookies are replayed onto the response by the jar: the
+  // adapter's `cookies().set()` path is silently dropped inside a route
+  // handler (see src/lib/auth/cookie-jar.ts).
+  return withAuthCookies(() => handleLogin(req));
+}
+
+async function handleLogin(req: NextRequest): Promise<Response> {
   // Cross-origin POST protection (H1) — before touching the body.
   const originError = checkOrigin(req);
   if (originError) {

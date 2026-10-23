@@ -17,6 +17,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthServer } from "@/lib/auth/server";
 import { checkRateLimit, getClientIp, checkOrigin } from "@/lib/api-security";
 import { buildPasswordResetRedirect } from "@/lib/auth-emails";
+import { withAuthCookies } from "@/lib/auth/cookie-jar";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -24,7 +25,11 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const GENERIC_MESSAGE =
   "If an account exists for that email, we've sent a password reset link. Please allow a few minutes for it to arrive.";
 
-export async function POST(req: NextRequest) {
+export function POST(req: NextRequest): Promise<Response> {
+  return withAuthCookies(() => handleRequest(req));
+}
+
+async function handleRequest(req: NextRequest): Promise<Response> {
   // Cross-origin POST protection (AC-1.6).
   const originError = checkOrigin(req);
   if (originError) {
