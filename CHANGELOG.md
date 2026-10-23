@@ -14,6 +14,15 @@ All notable changes to the Adroit Consulting Blog project will be documented in 
 `psql "$DATABASE_URL_UNPOOLED" -X -v ON_ERROR_STOP=1 -f supabase/migrations/neon/001_rls.sql` → **exit 0, twice in a row** (idempotent), both ending `NOTICE: RLS port OK: 37 policies on public (37 expected: 34 origin + 3 Neon-only admin SELECT across the 14 app tables)`.
 `python3 scripts/rls-isolation-check.py` → **PASS (119 assertions), exit 0**, with `policy.origin_baseline_size got=34`, `policy.total_count got=37`, `policy.missing_from_neon got=0`, `policy.unexpected_on_neon got=0`, and all three F-1 assertions now executing: `grants.user_table.default_deny got=on`, `grants.user_table.policy_count got=0`, `grants.user_table.stray_grant_rows got=0`.
 AC3 re-read live: `public."user"` `relrowsecurity=true`, **0** policies, `has_table_privilege('authenticated', …,'SELECT')=false`, `anonymous=false`, owner `neondb_owner` reads all 17 rows. Admin read path proved behaviourally: `SET LOCAL ROLE authenticated` + `sub=<an admin>` → `user_profiles` **9**, `lesson_completion` **14**, `read_progress` **7** rows (previously 0 on those three tables), rolled back. No application code changed.
+Re-verified against the production project `dawn-darkness-89797362` / branch `br-small-tree-b7tw8byt` (t_ac9b4a65): `python3 scripts/rls-isolation-check.py` → exit 0, **PASS (119 assertions)**, 37 policies in `pg_policies`; every one of the 37 matches a policy name in `supabase/migrations/**/*.sql` (3 admin SELECTs in `neon/003_admin_read_policies.sql`, created idempotently by `001_rls.sql` §4b).
+
+### Decision record: `requireEmailVerification` at the Neon Auth cutover (t_34b5889c)
+
+**What** - Adds `docs/decisions/2026-10-23-require-email-verification.md`, the accepted decision to enable **`requireEmailVerification = true`** together with **`sendVerificationEmailOnSignIn = true`** on Neon project `dawn-darkness-89797362` / branch `production`, behind four gates (code actually on Neon Auth in production, proof that the emailed verification link redeems server-side, a clean identity census, then the config flip and a canary for QA). The doc records why the original "19 stranded legacy identities" premise was stale (all real identities are already `emailVerified = true`; the 19 were disposable `kelex1812+qa-*` fixtures revoked under t_9aba2d2e), why the toggle matters for authorization (`emailVerified` was a dead field while `003_identity_continuity.sql` keys authorization on identity continuity), and what a failed Gate 2 would have required (a `/field-notes` token consumer calling `getAuthServer().verifyEmail({ query: { token } })` or a dedicated `/auth/verify` route).
+
+**Why** - The decision was taken on review card t_a4565e53 but lived only in that card's workspace; an auth-policy toggle has to be explainable from the repo, not from a Kanban thread.
+
+**Verified** - Doc-only change, no runtime effect. Gate outcomes are recorded in the card t_34b5889c thread (`neon_auth.project_config` before/after, verification-link host/redirect, identity census).
 
 ### A11Y LOW fixes: AdminShell SSR aria-hidden + consent banner semantics/targets (t_b717ec09)
 
