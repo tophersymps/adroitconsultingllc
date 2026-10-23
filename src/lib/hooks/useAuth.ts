@@ -15,6 +15,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { invalidateDbToken } from "@/lib/db/token-cache";
+import { invalidateProgressSummary } from "@/lib/hooks/useProgressSummary";
+import { AUTH_CHANGED_EVENT } from "@/lib/auth-events";
 
 export interface AuthUser {
   id: string;
@@ -23,7 +25,12 @@ export interface AuthUser {
   isAdmin: boolean;
 }
 
-export const AUTH_CHANGED_EVENT = "adroit-blog:auth-changed";
+/**
+ * Re-exported for backward compatibility: the constant now lives in
+ * `@/lib/auth-events` so caches can subscribe without importing this hook
+ * module (PERF-CACHE-M1, t_5f03a8f7).
+ */
+export { AUTH_CHANGED_EVENT };
 
 interface UseAuthReturn {
   user: AuthUser | null;
@@ -118,6 +125,13 @@ export function useAuth(): UseAuthReturn {
      */
     const onAuthChanged = () => {
       invalidateDbToken();
+      /*
+       * PERF-CACHE-M1 (t_5f03a8f7): the progress summary is module state and
+       * per-session. An auth-changed event here also arrives via `focus`, which
+       * is how a sign-out in ANOTHER tab shows up — so this is the only seam
+       * that covers a cross-tab identity change.
+       */
+      invalidateProgressSummary();
       refresh();
     };
     window.addEventListener(AUTH_CHANGED_EVENT, onAuthChanged);
@@ -135,13 +149,20 @@ export function useAuth(): UseAuthReturn {
 /**
  * Broadcast that auth state changed so useAuth instances re-read.
  *
- * Also drops the cached Data API JWT (SEC-R2-2-M3(b)): every caller of this
- * function is announcing an identity transition (sign-in, sign-out, account
- * switch), and the token cache is module state that survives a client-side
- * `router.refresh()`. Dropping it here covers call sites that forget to.
+ * Also drops the cached Data API JWT (SEC-R2-2-M3(b)) and the cached progress
+ * summary (PERF-CACHE-M1, t_5f03a8f7): every caller of this function is
+ * announcing an identity transition (sign-in, sign-out, account switch), and
+ * both caches are module state that survives a client-side `router.refresh()` /
+ * `router.push()`. Dropping them here covers call sites that forget to.
  */
 export function notifyAuthChanged(): void {
   invalidateDbToken();
+  /*
+   * The summary is per-session too. Invalidating here (rather than only at the
+   * sign-out/sign-in seams) means no current or future caller can leak the
+   * previous identity's completedLessons/quizStats into the next session.
+   */
+  invalidateProgressSummary();
   if (typeof window === "undefined") return;
   try {
     window.dispatchEvent(new CustomEvent(AUTH_CHANGED_EVENT));

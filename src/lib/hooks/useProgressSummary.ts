@@ -20,7 +20,13 @@ import {
   PROGRESS_CHANGED_EVENT,
   type ProgressMerge,
 } from "@/lib/progress";
-import { AUTH_CHANGED_EVENT } from "@/lib/hooks/useAuth";
+/*
+ * PERF-CACHE-M1 (t_5f03a8f7): import the event name from its own module, not
+ * from `useAuth`. `useAuth` now calls `invalidateProgressSummary()` on every
+ * identity transition, so importing `useAuth` here would close the cycle
+ * `useAuth → useProgressSummary → useAuth`.
+ */
+import { AUTH_CHANGED_EVENT } from "@/lib/auth-events";
 
 interface UseProgressSummaryReturn {
   /** Merged read/completed sets (slug keys, bare form). */
@@ -105,10 +111,12 @@ export function refreshProgressSummary(): Promise<ProgressSummaryPayload | null>
 /**
  * Drop the cached summary so the next read refetches (identity transition).
  *
- * Called from every seam that changes identity (Header sign-out, login
- * success, password reset) and from this module's own AUTH_CHANGED_EVENT
- * subscription, so a cached *authenticated* payload can never outlive the
- * session that produced it.
+ * Called centrally from `notifyAuthChanged()` (PERF-CACHE-M1, t_5f03a8f7) and
+ * from `useAuth`'s own auth-changed/focus listener, so a cached
+ * *authenticated* payload can never outlive the session that produced it —
+ * including when a future call site announces a transition without knowing
+ * this cache exists. The explicit seam calls in Header/login/reset-password
+ * remain (they run before `notifyAuthChanged`, which is idempotent).
  */
 export function invalidateProgressSummary(): void {
   summaryEpoch += 1;

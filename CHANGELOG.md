@@ -2,6 +2,20 @@
 
 All notable changes to the Adroit Consulting Blog project will be documented in this file.
 
+### Fix: progress-summary invalidation is central and cycle-free (PERF-CACHE-M1, t_5f03a8f7)
+
+**What** - Follow-up to PERF-P1 below. Three code changes, one new module:
+(1) New `src/lib/auth-events.ts` owns the `AUTH_CHANGED_EVENT` constant (`adroit-blog:auth-changed`). `useAuth` imports and re-exports it, so every existing importer (Header, tests, `useProgressSummary`) keeps working unchanged.
+(2) `src/lib/hooks/useAuth.ts` now imports `invalidateProgressSummary` and calls it in **both** identity seams it owns: `notifyAuthChanged()` (next to `invalidateDbToken()`) and the auth-changed/`focus` listener inside `useAuth` (the only path that sees a sign-out in another tab). Every identity transition — sign-in, sign-out, password reset, future callers — therefore drops the summary cache even if the call site does not know the cache exists. The explicit Header/login/reset-password calls remain; invalidation is idempotent.
+(3) `src/lib/hooks/useProgressSummary.ts` imports the event from `@/lib/auth-events` instead of from `useAuth`. Without that move, `useAuth → useProgressSummary → useAuth` would be an import cycle. The invalidator's docblock now states the central contract.
+(4) Tests: `useProgressSummary.identity.test.tsx` gains a behavioural regression — mount as A, unmount, call `notifyAuthChanged()` alone with no explicit seam invalidate, remount ⇒ exactly one NEW `GET /api/progress/summary` returning B's payload and A's `series-1-1` absent. It fails on the previous tree (0 requests, renders A's payload). Two source locks pin the central call in `notifyAuthChanged()` and the `@/lib/auth-events` import in the summary hook.
+
+**Why** - sato's re-verify of PR #358 @ 92611f55 (PERF-CACHE-M1) reproduced the leak with the real hook: after `notifyAuthChanged()`, a fresh mount issued 0 summary requests and served identity A's completedLessons. The PERF-P1 fix invalidated only at the three known seams, so the guarantee lived in call-site discipline rather than in the broadcast function every transition funnels through. Importing the invalidator into `useAuth` directly would have created a cycle with the event constant living there, hence the tiny shared module.
+
+**Verified** - RED/GREEN both bite: reverting only `useAuth.ts` to the pre-fix version makes the new behavioural test fail (remount renders A's `82/3` for identity B); restored → green. Full suite `npx vitest run` **122 files / 1076 tests passed** (1073 + 3 new). `npx tsc --noEmit` exit 0; `npx eslint` clean on all four touched files. `npm run build` exit 0, route table still shows `○ /atlas 1h 1y` (static). Request budget unchanged — the signed-in `/atlas` counted set stays 3 requests and guests stay at 0 session reads; `LearnHub.requests.test.tsx` green.
+
+**Known Issues** - None new. Cross-tab sign-out is now covered by the `focus` listener in `useAuth` (an improvement over PERF-P1's documented gap), but a tab that never fires `focus` or the event still relies on the next seam/reload. No signed-in browser run was possible here (no `.env`/DB in the worktree, same as the base sha), so identity flows are covered by the jsdom tests and the guest hub by the build.
+
 ### Fix: progress-summary cache is dropped on every identity transition (PERF-P1, t_e786efe2)
 
 **What** - Four files, no new request on any normal page load:

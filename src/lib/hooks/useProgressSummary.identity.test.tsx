@@ -138,6 +138,32 @@ describe("progress summary cache × identity transitions (PERF-P1 t_e786efe2)", 
     expect(summaryCalls).toBe(2);
   });
 
+  /*
+   * PERF-CACHE-M1 (t_5f03a8f7): the invalidation must be CENTRAL, not only at
+   * the three known seams. `notifyAuthChanged()` is the one function every
+   * identity transition funnels through, so a future call site that announces a
+   * change without importing the summary module must still drop the cache.
+   * On the previous tree this test fails: the remount issued 0 requests and
+   * rendered A's "series-1-1" for identity B.
+   */
+  it("notifyAuthChanged() alone drops the cache (no explicit seam invalidate)", async () => {
+    const first = render(<Card />);
+    await waitFor(() => expect(screen.getByTestId("best")).toHaveTextContent("82/3"));
+    expect(summaryCalls).toBe(1);
+    first.unmount();
+
+    // Identity switches and the app only broadcasts — no seam invalidate call.
+    who = "B";
+    notifyAuthChanged();
+
+    render(<Card />);
+
+    await waitFor(() => expect(screen.getByTestId("best")).toHaveTextContent("41/1"));
+    expect(screen.getByTestId("lessons")).toHaveTextContent("series-2-1");
+    expect(screen.getByTestId("lessons")).not.toHaveTextContent("series-1-1");
+    expect(summaryCalls).toBe(2);
+  });
+
   it("discards a summary read that was in flight when the identity changed", async () => {
     let release!: (payload: unknown) => void;
     globalThis.fetch = vi.fn(
@@ -177,5 +203,24 @@ describe("identity seams invalidate the summary cache (source lock)", () => {
     expect(src).toContain("invalidateProgressSummary");
     // Imported from the hook module, not re-declared locally.
     expect(src).toMatch(/from\s+"@\/lib\/hooks\/useProgressSummary"/);
+  });
+
+  /*
+   * PERF-CACHE-M1 (t_5f03a8f7): the event constant moved to its own module so
+   * `useAuth → useProgressSummary → useAuth` is not a cycle. Lock both halves:
+   * useAuth must import the invalidator and call it in notifyAuthChanged(), and
+   * the summary module must NOT import the event name from useAuth.
+   */
+  it("useAuth invalidates the summary from notifyAuthChanged (central seam)", () => {
+    const src = readFileSync(path.join(root, "src/lib/hooks/useAuth.ts"), "utf8");
+    expect(src).toMatch(/import\s*\{\s*invalidateProgressSummary\s*\}\s*from\s*"@\/lib\/hooks\/useProgressSummary"/);
+    const notify = src.slice(src.indexOf("export function notifyAuthChanged"));
+    expect(notify).toContain("invalidateProgressSummary()");
+  });
+
+  it("useProgressSummary imports the event from @/lib/auth-events (no cycle)", () => {
+    const src = readFileSync(path.join(root, "src/lib/hooks/useProgressSummary.ts"), "utf8");
+    expect(src).toMatch(/import\s*\{\s*AUTH_CHANGED_EVENT\s*\}\s*from\s*"@\/lib\/auth-events"/);
+    expect(src).not.toMatch(/AUTH_CHANGED_EVENT[^\n]*from\s*"@\/lib\/hooks\/useAuth"/);
   });
 });
