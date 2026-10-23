@@ -509,6 +509,11 @@ def main():
                    path=f"/{table}", status=200, ok=counts["anon"] == counts["user-A"] and counts["anon"] > 0,
                    expected="anonymous sees exactly the same public rows as an authenticated user",
                    detail=counts)
+        # the gateway itself must still refuse an unauthenticated caller
+        status, body, _ = api("GET", f"/{table}?select=*", token=None)
+        record(f"no-token:{table}", kind="read", table=table, caller="no-token", method="GET",
+               path=f"/{table}?select=*", status=status, ok=status in (400, 401),
+               expected="400/401 missing authentication credentials", detail=body)
 
     # ---- write matrix ----------------------------------------------------
     print("\n== write matrix")
