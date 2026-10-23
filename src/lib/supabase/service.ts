@@ -20,6 +20,10 @@
  *
  * Usage: getSupabaseServiceClient()
  */
+// Build-time guard (review F-7): the service-role key must never reach a
+// client bundle. Importing this module from a Client Component fails the
+// build instead of silently shipping the key to the browser.
+import "server-only";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
