@@ -34,15 +34,6 @@ export default function Paywall({
 }) {
   return (
     <div className="max-w-[720px] mx-auto px-6 pt-10 pb-16">
-      {degraded ? (
-        <div
-          role="status"
-          aria-live="polite"
-          className="mb-4 rounded-xl border border-white/25 bg-white/[0.08] px-4 py-3 text-[14px] leading-relaxed text-white"
-        >
-          {DEGRADED_PAYWALL_MESSAGE}
-        </div>
-      ) : null}
       <div className="paywall-panel">
         <div
           aria-hidden
@@ -53,6 +44,22 @@ export default function Paywall({
           }}
         />
         <div className="relative p-8 sm:p-10">
+          {/* R2-5 degraded status. It MUST stay inside .paywall-panel: its
+              text-white / bg-white-8% / border-white-25 styling only reaches
+              AA contrast on the navy panel (#132D54 -> 13.5:1). Outside the
+              panel it paints white-on-#F7F8FA in the default light theme
+              (1.05:1) — the exact light-mode trap documented at
+              globals.css:250-262. Guarded by a regression assertion in
+              Paywall.test.tsx (A11Y-C1, t_01ffc1ea). */}
+          {degraded ? (
+            <div
+              role="status"
+              aria-live="polite"
+              className="mb-4 rounded-xl border border-white/25 bg-white/[0.08] px-4 py-3 text-[14px] leading-relaxed text-white"
+            >
+              {DEGRADED_PAYWALL_MESSAGE}
+            </div>
+          ) : null}
           <div className="inline-flex items-center gap-2 font-mono text-[11px] font-bold text-white/70 uppercase tracking-[0.08em] mb-4">
             <svg
               aria-hidden
