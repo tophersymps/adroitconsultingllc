@@ -2,6 +2,14 @@ import Link from "next/link";
 import type { PaywallView } from "@/shared/contracts-course-catalog";
 
 /**
+ * Copy for the R2-5 degraded state. Deliberately vague: no HTTP status, no
+ * token route, no error class — a member must not learn anything about the
+ * backend from it, only that the answer is not final.
+ */
+export const DEGRADED_PAYWALL_MESSAGE =
+  "Some content is temporarily unavailable — try reloading in a moment.";
+
+/**
  * Paywall — Decide/Learn locked-content surface, server-rendered with the
  * course's REAL access options (from src/lib/access.ts → PaywallView).
  * kara tokens (design-tokens-course-catalog-admin.css §4): deep-navy panel +
@@ -11,12 +19,30 @@ import type { PaywallView } from "@/shared/contracts-course-catalog";
 export default function Paywall({
   view,
   seriesSlug,
+  degraded = false,
 }: {
   view: PaywallView;
   seriesSlug: string;
+  /**
+   * R2-5: the access decision could not be resolved (anonymous Data API token
+   * unavailable), so this paywall is a fail-closed GUEST view rather than a
+   * real access denial. Announced in an aria-live status region so a
+   * screen-reader user learns the page state is provisional, and rendered as
+   * text (never colour alone) so it is distinguishable from a plain lock.
+   */
+  degraded?: boolean;
 }) {
   return (
     <div className="max-w-[720px] mx-auto px-6 pt-10 pb-16">
+      {degraded ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="mb-4 rounded-xl border border-white/25 bg-white/[0.08] px-4 py-3 text-[14px] leading-relaxed text-white"
+        >
+          {DEGRADED_PAYWALL_MESSAGE}
+        </div>
+      ) : null}
       <div className="paywall-panel">
         <div
           aria-hidden

@@ -2,6 +2,21 @@
 
 All notable changes to the Adroit Consulting Blog project will be documented in this file.
 
+### A11Y-M1: the degraded anonymous-token paywall announces itself (t_8d1638a7)
+
+**What** - The R2-5 fail-closed degrade path now tells the reader what it is doing instead of silently rendering the ordinary "this course is locked" paywall:
+(1) **`src/components/Catalog/Paywall.tsx`** gains an optional `degraded` prop and, when it is set, renders a `role="status"` `aria-live="polite"` region above the paywall panel carrying the copy "Some content is temporarily unavailable — try reloading in a moment." (exported as `DEGRADED_PAYWALL_MESSAGE` so the tests assert the same string the component renders). The region is *additive*: the members-only kicker, the lock copy, the access options and the preview link all still render, so the page stays a paywall rather than becoming a new page or a redirect.
+(2) **`src/components/Catalog/LockedContentPage.tsx`** threads `degraded` through to `Paywall` (default `false`), so the lesson/check/exam/certificate surfaces all get it from one place.
+(3) **Surfaces wired**: `src/app/atlas/[series]/[slug]/page.tsx`, `check/[n]/page.tsx`, `exam/page.tsx` and `certificate/page.tsx` pass the `degraded` flag they already compute from the classified `isDbTokenUnavailable()` catch. Nothing else about the degrade path changed — no extra DB read, no new 404, `<main id="main">` still appears exactly once, heading order untouched.
+
+Copy is deliberately vague: no HTTP status, no `/token/anonymous`, no error class, no stack — a signed-in entitled member learns that the answer is provisional, not anything about the backend. The state is distinguished from a plain lock by text (WCAG 1.4.1), not by a colour-only border/background change.
+
+**Why** - lara's a11y review of PR #369 (t_f6cc56cb) carried forward A11Y-M1 from the earlier R2-5 review (t_c9ed38b8): when the anonymous Data API token cannot be resolved, `buildDegradedPaywallView` renders a plain paywall, so a signed-in entitled member sees a false access denial and a screen-reader user is never told the page state changed. Failing closed at `6edad5f7` made that state reachable in strictly more situations (role-less JWT, opaque non-JWT, already-expired mint), so it needed to speak.
+
+**Verified** - Discriminating tests added/ extended: `src/components/Catalog/Paywall.test.tsx` (status region present with the degraded copy and the lock UI still rendered; absent on an ordinary paywall), new `src/app/atlas/[series]/[slug]/page.degraded.test.tsx` (end-to-end page render under a `DbTokenUnavailableError`: `role="status"` + `aria-live="polite"` + copy, paywall still present, no internals in the HTML, exactly one `<main id="main">`; and no status region on the ordinary signed-out paywall), and `src/app/atlas/[series]/certificate/page.test.tsx` (the same pair through `LockedContentPage`). Bite check: forcing the status block off (`{false && degraded ? …}`) turns the three degraded assertions red (`3 failed | 8 passed`); restored, green. `npx vitest run` — **114 files / 970 tests passed**; `npx tsc --noEmit` exit 0; `npx eslint` clean; `npm run build` succeeds. Production server boots (`/` and `/atlas` answer 200); the DB-backed `/atlas/[series]` routes 500 locally only because this worktree has no `.env.local` (`NEON_AUTH_BASE_URL is required`) — pre-existing environment limitation, unrelated to this change.
+
+**Known Issues** - (1) The status region only describes the state; it does not retry or auto-refresh — "try reloading" is literal. (2) The paywall's own lock copy still reads "This course is locked for you right now" in the degraded state; the status region above it is what reframes that as provisional. Rewording the lock copy itself would change a surface governed by the earlier a11y contract, so it is left alone deliberately. (3) No live-screen-reader run was performed in this environment; the announcement guarantee rests on `role="status"` + `aria-live="polite"` on a node present in the initial server render, plus the SSR assertions above.
+
 ### SEC-R2-5-M1/L1/L2: the anonymous Data API token's scope is proven before it is cached (t_52f55ea7)
 
 **What** - Hardening follow-up to R2-5 (PR #363), from val-el's security review of that PR's head (`180297ff`):
