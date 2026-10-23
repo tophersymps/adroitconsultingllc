@@ -32,12 +32,13 @@ function card(overrides: Partial<LearnCardSeries>): LearnCardSeries {
 
 describe("PathCard preview link (ADR-221)", () => {
   it("renders 'Preview first lesson →' on a signed-in locked card", () => {
-    render(<PathCard series={card({ canAccess: false })} gate="signed-in" />);
+    const { container } = render(<PathCard series={card({ canAccess: false })} gate="signed-in" />);
     const preview = screen
       .getAllByRole("link")
       .find((a) => a.getAttribute("href") === "/atlas/agentic-ai/preview");
     expect(preview).toBeTruthy();
     expect(preview).toHaveTextContent("Preview first lesson");
+    expect(container.querySelector("a a")).toBeNull();
   });
 
   it("does not render the preview link on a granted (canAccess) card", () => {

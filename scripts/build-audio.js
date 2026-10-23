@@ -234,7 +234,7 @@ function sortByDateDesc(slugs, fmCache) {
 /* --- narration (shared pure function) --- */
 async function loadNarration() {
   const { mdxToNarration } = await import(
-    fileURLToPath(new URL("../src/lib/audio-narration.ts", import.meta.url))
+    new URL("../src/lib/audio-narration.ts", import.meta.url).href
   );
   return mdxToNarration;
 }
@@ -350,7 +350,7 @@ async function loadR2Client() {
       `node >= ${R2_TYPE_STRIP_NODE_MAJOR} is required to import src/lib/r2/client.ts (running ${process.versions.node})`
     );
   }
-  return import(fileURLToPath(new URL("../src/lib/r2/client.ts", import.meta.url)));
+  return import(new URL("../src/lib/r2/client.ts", import.meta.url).href);
 }
 
 /** True unless AUDIO_DUAL_WRITE_SUPABASE is explicitly switched off. */
