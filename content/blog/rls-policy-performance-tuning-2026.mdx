@@ -1,0 +1,153 @@
+---
+title: "RLS Performance: Diagnose the Policy Before You Rewrite It"
+slug: rls-policy-performance-tuning-2026
+excerpt: "Row-level security pays one predicate per row scanned. Prove the policy is the bottleneck, then index it, wrap the auth call, and reshape the expression."
+category: "React & Web Dev"
+categoryColor: "react"
+categoryGradient: "from-emerald to-emerald-dark"
+date: "October 23, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: 13
+tags: [Supabase, Postgres, RLS, Security, Performance, TypeScript, Next.js, Web Development]
+bannerImage: "/banners/rls-policy-performance-tuning-2026.webp"
+ogImage: "/banners/rls-policy-performance-tuning-2026-og.jpg"
+---
+
+A table crosses a hundred thousand rows and a read that used to answer in a few milliseconds starts taking a fifth of a second. Nothing in the application changed. The policy is the one from the docs, it is still correct, and it still passes security review. The query is untouched. What changed is that the policy now has enough rows to evaluate against that its cost is visible.
+
+Cost lives in the expression, not in the feature. A policy evaluated once per row instead of once per statement is what turns a millisecond read into a fifth of a second, and knowing which of those two shapes you have decides whether the next hour of work helps. This article is the order of operations: prove the policy is the cost, then apply the four changes that account for most of the gap, then check the traps that undo them.
+
+## The policy is a filter, and filters cost rows
+
+Supabase's guidance is blunt about the mental model: think of a policy as adding a `WHERE` clause to every query you run against the table.[^2] Postgres is more specific than that. The expression is evaluated for each row, and it runs before any condition from the user's query is applied.[^1]
+
+Two consequences follow. A read that returns twenty rows still pays for every row it examined, so a policy is priced by rows scanned, not rows returned. Supabase points out that queries using limit and offset usually have to look at all rows to determine order, which means paging does not get you out of the bill.[^3] The second consequence matters more for engineering decisions: the cost is a property of the expression you wrote, not a tax that arrives with RLS as a feature. Two policies that enforce exactly the same rule can differ by four orders of magnitude in execution time.[^4]
+
+![Where the policy cost lands in a Supabase read: PostgREST sets the role and JWT claims, the planner builds a plan, the policy predicate is evaluated against every candidate row, and only then does any limit or filter from the client apply.](/diagrams/rls-policy-performance-tuning-2026/1-cost-model.png)
+
+## Prove the cost is the policy
+
+Teams usually skip this step, rewrite a policy from memory, and then cannot tell whether the rewrite helped. Postgres will tell you the answer in one command, if you reproduce the request faithfully.
+
+Start with the cheapest test: run the query with RLS enabled, then with it disabled on a non-production database, and compare execution times. If the two are close, the policy is not your cost and rewriting it will not move the number.[^3]
+
+The next step is the one people get wrong. A policy reads its identity out of session settings, so a plain `explain analyze` run as the postgres superuser bypasses it entirely, because superusers and roles with `BYPASSRLS` skip row security when they touch a table.[^1] Supabase's performance guide walks through the correct reproduction: switch to the role the API request runs as, set the JWT claims, then explain the query.[^3]
+
+```sql
+set session role authenticated;
+set request.jwt.claims to '{"role":"authenticated", "sub":"5950b438-b07c-4012-8190-6ce79e4bd8e5"}';
+
+explain analyze select count(*) from rlstest;
+
+set session role postgres;
+```
+
+Read past the total time to two other fields. The `Filter:` line should show your policy expression as a predicate, and it is where Postgres reports conditions applied per row rather than satisfied by an index lookup.[^5] Next to it, `Rows Removed by Filter` is the count of rows the policy rejected, and it is the number that tells you what kind of fix you need. Supabase's own example prints a sequential scan, a filter on the JWT subject, 100,000 rows removed by the filter, and an execution time of 171.033 ms on a 100,000-row table.[^3] A policy that discards most of the table on every read is a policy whose filter column needs an index.[^3] A filter line that repeats a function call inside the loop is a policy that needs wrapping. Those are different repairs, and the plan tells you which one you are looking at.
+
+You can also reach the plan through the Data API. Enable `pgrst.db_plan_enabled` on the authenticator role, reload the PostgREST config, and call `.explain({ analyze: true })` on a Supabase client query. It returns the plan as data, which is useful when the slow path is a PostgREST request rather than something you can reproduce in psql. The docs are explicit that this setting stays out of production.[^3]
+
+![Diagnosis tree for a slow read: compare timings with RLS on and off; if the timings match, the query is the problem; if they diverge, read the plan for a sequential scan, an inline auth call inside the loop, or a correlated subquery, and each points at one repair.](/diagrams/rls-policy-performance-tuning-2026/2-diagnosis-tree.png)
+
+## Fix one: index the column the policy filters on
+
+This is the first thing to try because it is the cheapest and it is also the largest single improvement in Supabase's published test suite. On a 100,000-row table, `auth.uid() = user_id` with no index ran in 171 ms; with a btree index on `user_id` the same policy ran in under 0.1 ms.[^4]
+
+```sql
+create index userid on test_table using btree (user_id);
+```
+
+The rule that catches people is about leading columns. A column counts as indexed only when it comes first in a btree index, so a composite primary key indexes its first column and nothing after it.[^2] A membership table keyed on `(team_id, user_id)` has no usable index for a policy that filters on `user_id`, and a policy like `team_id in (select team_id from team_members where user_id = auth.uid())` depends on exactly that lookup. The fix is a second index on `user_id`, not a wider composite.[^2]
+
+One caution from the same guide: if an index does not change the RLS timings and you are not using it for query filtering either, back it out. Every index costs write throughput and vacuum work, and an index that only serves a policy you are about to rewrite is pure overhead.[^4]
+
+## Fix two: make the call run once per statement
+
+`auth.uid()` is a function, and a function inside a per-row predicate is invoked per row. Wrapping the call in a subquery changes what the planner can do with it: `(select auth.uid())` is an uncorrelated subquery, so it becomes an InitPlan, evaluated once per statement and substituted into the scan filter as a constant.[^2] One JSON parse per statement instead of one per row.
+
+The 100,000-row benchmark measures that difference across several policy shapes:[^4]
+
+- `auth.uid() = user_id` to `(select auth.uid()) = user_id`: 179 ms to 9 ms
+- `is_admin()` with a table join to `(select is_admin())` with the same join: 11,000 ms to 7 ms
+- `is_admin() or auth.uid() = user_id` to the wrapped form of both: 11,000 ms to 10 ms
+- `has_role() = role` to `(select has_role()) = role`: 178,000 ms to 12 ms
+- `team_id = any(user_teams())` to `team_id = any(array(select user_teams()))`: 173,000 ms to 16 ms
+
+The caveat is load bearing. You can only wrap a call this way when its result does not depend on the row being evaluated.[^2] A function that takes a row column as an argument cannot be hoisted into an InitPlan, and pretending otherwise produces a policy that is wrong rather than slow. Supabase's knowledge base flags this directly: a security definer function that takes row information as a parameter cannot use the wrap, and needs its own performance test.[^4]
+
+![Two panels comparing per-row evaluation against an InitPlan: the first runs the auth call once for each of 100,000 candidate rows, the second runs it once and substitutes the constant, with the measured timings from the published test suite under each.](/diagrams/rls-policy-performance-tuning-2026/3-initplan.png)
+
+## Fix three: reshape the expression so it stops joining
+
+The third repair is structural. A policy that joins the protected table back to a membership table forces a correlated lookup for every candidate row. Inverting it so the subquery resolves the caller's set first, and the outer expression becomes a membership test against that set, removes the correlation.
+
+Before: `(select auth.uid()) in (select user_id from team_user where team_user.team_id = test_table.team_id)`. After: `team_id in (select team_id from team_user where user_id = (select auth.uid()))`. Same enforcement, 9,000 ms down to 20 ms in the benchmark.[^4]
+
+The 1,000,000-row test shows why order matters when you combine repairs. A 1M-row table with a 1,000-row team table, policy `team_id = any(user_teams())`, timed out past three minutes. Adding an index to `team_id` did not help, because the function still ran per row. Wrapping the function brought it to 170 ms at ten teams and 3.3 seconds at five hundred. Only the wrap and the index together reached 2 ms at ten teams and 3 ms at a hundred or five hundred.[^4]
+
+That result is the whole article in one row of a table: the repairs compound, and applying the index alone to a per-row function call buys nothing.
+
+There is a ceiling worth knowing. Supabase's performance guide warns that once the resolved set exceeds a thousand items, a membership test needs a different approach, or at least a careful look at whether the plan is still acceptable.[^3]
+
+A security definer helper is the other way to break the per-row lookup, because it reads the membership table with the owner's privileges and skips that table's own policies.[^2] It is also the only practical cure for the recursion trap covered below, so teams usually end up writing one anyway.
+
+![Policy shape compared: a join back to the membership table evaluated once per candidate row, against an inverted subquery that resolves the caller's team set once and tests membership against it, with the measured timings beneath.](/diagrams/rls-policy-performance-tuning-2026/4-policy-shape.png)
+
+## Two smaller changes that still pay
+
+Name the role. Adding `to authenticated` to a policy means the expression never runs for anon requests at all, because evaluation stops at the role check.[^2] In the benchmark, an anon request against a policy with no role clause took 170 ms; with `to authenticated` it took under 0.1 ms, because the policy was skipped rather than evaluated.[^4] There is also a correctness reason to be explicit here: `auth.uid()` returns null when a request is unauthenticated, so a bare `auth.uid() = user_id` policy silently matches nothing instead of raising an error.[^2]
+
+Filter in the client too. It reads as redundant to add `.eq('user_id', userId)` to a query whose policy already restricts rows to that user, and it is not. Policies are implicit where clauses, so a query with no explicit filter gives the planner nothing to build a selective plan from. Supabase's guide recommends the explicit filter precisely because the duplicate predicate is what lets Postgres choose an index scan, and the benchmark shows 171 ms to 9 ms from the added filter alone.[^3][^4] The rule that falls out: use RLS for security, use the query for filtering.
+
+## The traps that undo the work
+
+Four patterns keep a policy slow, or worse, keep it fast and unenforced.
+
+Views bypass RLS by default. Postgres creates views as security definer objects, so a view over a protected table hands out every row the policies were meant to withhold.[^2] In Postgres 15 and later, `with (security_invoker = true)` makes the view obey the policies of the tables underneath it.[^2]
+
+Two tables whose policies read each other never resolve. Postgres raises `42P17`, `infinite recursion detected in policy for relation`, and every query from an affected role fails.[^2] Sharing features produce this shape constantly: a policy on lists that checks membership, and a policy on membership that checks the list. The fix is a security definer function that reads the membership table as its owner and returns the caller's list ids, with both policies rewritten to test membership against that function.[^2] Two details decide whether the cure works. The function only skips RLS when its owner can bypass it, which is the case for the `postgres` owner on Supabase; a function owned by a role without `bypassrls`, or reading a table set to `force row level security`, evaluates the membership policy again and stays recursive.[^2]
+
+Every security definer function needs `set search_path = ''` with schema-qualified names inside it, because without a pinned search path a caller can point an unqualified name at their own object and run it with the function owner's privileges.[^2] And a security definer function in an exposed schema is callable over the Data API with the creator's privileges, so helper functions belong in a schema you have not exposed.[^2]
+
+Multiple permissive policies are combined with OR and all of them run, while restrictive policies are combined with AND.[^1] A table carrying four permissive select policies is evaluating four predicates per row, and consolidating them is often a bigger win than any index.
+
+## Verify the rewrite mechanically
+
+A performance rewrite that changes enforcement is a security incident with good latency. Two checks catch most of that.
+
+Policy tests first. Supabase's RLS guide now treats a pgTAP test file as part of securing a table: one file per table under `supabase/tests/`, run with `supabase test db`, asserting allow and deny for select, insert, update, and delete across both `anon` and `authenticated`.[^2] Two testing details are worth stealing. Never prove that an allowed write worked with `lives_ok`, because it passes when the write matched zero rows; add `returning` and assert the value.[^2] And when a write is denied through a `using` clause, assert that the target row survived, otherwise a policy that silently deletes everything looks like a pass.
+
+Then the lints. Supabase's Advisors run deterministic checks over the project and flag exactly the shapes this article covers: `auth_rls_initplan` for unwrapped auth calls in policies, `multiple_permissive_policies` for tables where several permissive policies run on every query, `function_search_path_mutable` for helpers without a pinned path, `rls_enabled_no_policy` for tables that look protected and are not, and `rls_disabled_in_public` for tables that never had RLS enabled.[^6] You can run them from Studio, from the CLI with `supabase db advisors`, through the `get_advisors` MCP tool, or over the Management API, which means the check belongs in CI rather than in someone's memory.[^6]
+
+![The five advisor lints that catch row-level security defects, each paired with what it detects and the repair it points to, alongside the three surfaces the same check runs from.](/diagrams/rls-policy-performance-tuning-2026/5-advisor-lints.png)
+
+## The order to do it in
+
+Sequence matters because each repair changes what the next measurement shows, and because a rewrite that bundles them cannot be reviewed.
+
+1. Capture a baseline. Reproduce the request, explain analyze it, and write the execution time and `Rows Removed by Filter` into the pull request.
+2. Index the policy columns. Re-measure. Back out the index if nothing moved.
+3. Wrap the fixed-value function calls in subqueries. Re-measure.
+4. Invert joins into set membership, or move the lookup into a security definer helper. Re-measure.
+5. Add `to authenticated`, and add the explicit filter to the client query.
+6. Run the pgTAP suite and the advisors. Both have to pass before the migration merges.
+
+Keep logic and shape in separate changes. Supabase's guide makes the same point about the mechanical rewrite: drop and recreate the policies with wrapped calls and change nothing else, so a failing test points at one variable instead of six.[^2]
+
+## What the numbers actually mean
+
+The timings in this article come from one public test suite, run on one machine, against tables of 100,000 and 1,000,000 rows.[^7] Do not carry the percentages into a capacity plan. Your row counts, your Postgres version, your index bloat, and your `shared_buffers` all move them, and a policy that is fine on a million rows with a rare write load can be the wrong shape on a hundred thousand rows with heavy updates.
+
+The mechanisms do transfer. A function called from a per-row predicate costs N times what it costs once per statement. An unindexed predicate column costs a sequential scan on every read. A correlated subquery inside a per-row predicate is the most expensive thing you can put in a policy, and it is the shape most sharing features produce by default. Fix those three and the remaining variance is tuning.
+
+If your policies are slow, they are telling you what they were written to do: evaluate against rows. The fix is to write expressions the planner can evaluate once, filter with an index, and prove correct with a test that runs in CI.
+
+Two companion pieces cover the neighbouring problems. [How RLS gates a realtime stream](/blog/realtime-rls-enforcement-boundary-2026) deals with the same policies at the subscription boundary, where a misconfiguration leaks silently. [Declarative schemas with pg-delta](/blog/supabase-declarative-schemas-pg-delta-2026) covers getting the policy and the index into version control together, which is what makes a six-step rewrite reviewable in the first place.
+
+[^1]: PostgreSQL 18 Documentation, "5.9. Row Security Policies." The policy expression is evaluated for each row before any condition from the user's query, with a leakproof-function exception; permissive policies combine with OR and restrictive policies with AND; table owners bypass RLS unless FORCE ROW LEVEL SECURITY is set. [postgresql.org](https://www.postgresql.org/docs/current/ddl-rowsecurity.html)
+[^2]: Supabase Docs, "Row Level Security." The full security guide: a policy as an implicit where clause, grants versus policies, the enable-revoke-grant procedure, per-operation policies, naming the role, indexing the filter columns and the leading-column rule, wrapping calls in select, security definer functions with a pinned search path, recursive policies and error 42P17, views and security_invoker, pgTAP policy tests, and the null-returning auth.uid() behavior. [supabase.com](https://supabase.com/docs/guides/database/postgres/row-level-security)
+[^3]: Supabase Docs, "Row Level Security performance." Cost scales with rows scanned and limit/offset does not avoid it, diagnosing with RLS enabled and disabled, the explain analyze reproduction with session role and JWT claims, plan output over the Data API with pgrst.db_plan_enabled, filtering in the client query, avoiding joins in policy expressions, and the one-thousand-item note. [supabase.com](https://supabase.com/docs/guides/database/postgres/row-level-security-performance)
+[^4]: Supabase Knowledge Base, "RLS Performance and Best Practices." The published benchmark behind the numbers here: the 100,000-row table results for indexing, wrapping, role scoping, and client-side filters, plus the 1,000,000-row team-membership test showing why wrapping and indexing compound. [supabase.com](https://supabase.com/kb/troubleshooting/rls-performance-and-best-practices-Z5Jjwv)
+[^5]: PostgreSQL 18 Documentation, "14.1. Using EXPLAIN." Reading plan nodes and filters, Rows Removed by Filter, and the timing fields Explain Analyze reports. [postgresql.org](https://www.postgresql.org/docs/current/using-explain.html)
+[^6]: Supabase Docs, "Advisors." Deterministic project checks, the security, performance, and health advisor surfaces, the Studio, CLI, MCP, and Management API entry points, and the lint identifiers used above. [supabase.com](https://supabase.com/docs/guides/observability/advisors)
+[^7]: Gary Austin, "RLS-Performance." The public test suite behind the published benchmark, with the per-test SQL for the 100,000-row and 1,000,000-row cases, so a team can reproduce the measurements against its own schema. [github.com](https://github.com/GaryAustin1/RLS-Performance)

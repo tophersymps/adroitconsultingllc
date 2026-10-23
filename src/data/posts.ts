@@ -2,6 +2,32 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "rls-policy-performance-tuning-2026",
+    "title": "RLS Performance: Diagnose the Policy Before You Rewrite It",
+    "excerpt": "Row-level security pays one predicate per row scanned. Prove the policy is the bottleneck, then index it, wrap the auth call, and reshape the expression.",
+    "category": "React & Web Dev",
+    "categoryColor": "react",
+    "categoryGradient": "from-emerald to-emerald-dark",
+    "date": "October 23, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "13",
+    "featured": false,
+    "tags": [
+      "Supabase",
+      "Postgres",
+      "RLS",
+      "Security",
+      "Performance",
+      "TypeScript",
+      "Next.js",
+      "Web Development"
+    ],
+    "bannerImage": "/banners/rls-policy-performance-tuning-2026.webp",
+    "ogImage": "/banners/rls-policy-performance-tuning-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "async-batch-inference-2026",
     "title": "Half Price If It Can Wait: The Batch Inference Lane",
     "excerpt": "Your nightly model calls are paying interactive prices. The batch lane is half price, 24 hours, and a state machine you have to own.",
