@@ -35,10 +35,25 @@ export type DbBrowserClient = ReturnType<typeof createClient> & {
   };
 };
 
-/** One in-flight token request per page is enough; cache it briefly. */
+/**
+ * One in-flight token request per page is enough; cache it briefly.
+ *
+ * The cache is NOT identity-aware: a 60 s TTL on a guest `null` would keep the
+ * client unauthenticated for up to a minute after sign-in, and a 60 s TTL on a
+ * user JWT would keep sending it for up to a minute after sign-out. Both
+ * transitions therefore call invalidateDbToken() (login page + Header sign-out)
+ * so the next Data API request re-reads /api/db/token with the new cookie. The
+ * TTL only bounds ordinary staleness (session refresh), not identity changes.
+ */
 let tokenPromise: Promise<string | null> | null = null;
 let tokenFetchedAt = 0;
 const TOKEN_TTL_MS = 60_000;
+
+/** Drop the cached token so the next request re-reads the session cookie. */
+export function invalidateDbToken(): void {
+  tokenPromise = null;
+  tokenFetchedAt = 0;
+}
 
 async function getToken(): Promise<string | null> {
   const now = Date.now();
