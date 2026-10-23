@@ -15,6 +15,8 @@
  * "createdAt". The table is read-only here; every write still goes through the
  * app's own public tables.
  */
+import "server-only";
+
 import { neon } from "@neondatabase/serverless";
 
 export interface AuthUserRef {

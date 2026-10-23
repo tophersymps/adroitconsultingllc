@@ -20,6 +20,8 @@
  * The cookie names are `__Secure-neon-auth.*`; `__Secure-` cookies are accepted
  * on http://localhost by Chromium, so local dev works without TLS.
  */
+import "server-only";
+
 import { createNeonAuth } from "@neondatabase/auth/next/server";
 
 export type NeonAuthServer = ReturnType<typeof createNeonAuth>;
