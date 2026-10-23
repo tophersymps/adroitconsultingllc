@@ -2,6 +2,14 @@ import Link from "next/link";
 import type { PaywallView } from "@/shared/contracts-course-catalog";
 
 /**
+ * Copy for the R2-5 degraded state. Deliberately vague: no HTTP status, no
+ * token route, no error class — a member must not learn anything about the
+ * backend from it, only that the answer is not final.
+ */
+export const DEGRADED_PAYWALL_MESSAGE =
+  "Some content is temporarily unavailable — try reloading in a moment.";
+
+/**
  * Paywall — Decide/Learn locked-content surface, server-rendered with the
  * course's REAL access options (from src/lib/access.ts → PaywallView).
  * kara tokens (design-tokens-course-catalog-admin.css §4): deep-navy panel +
@@ -11,9 +19,18 @@ import type { PaywallView } from "@/shared/contracts-course-catalog";
 export default function Paywall({
   view,
   seriesSlug,
+  degraded = false,
 }: {
   view: PaywallView;
   seriesSlug: string;
+  /**
+   * R2-5: the access decision could not be resolved (anonymous Data API token
+   * unavailable), so this paywall is a fail-closed GUEST view rather than a
+   * real access denial. Announced in an aria-live status region so a
+   * screen-reader user learns the page state is provisional, and rendered as
+   * text (never colour alone) so it is distinguishable from a plain lock.
+   */
+  degraded?: boolean;
 }) {
   return (
     <div className="max-w-[720px] mx-auto px-6 pt-10 pb-16">
@@ -27,6 +44,22 @@ export default function Paywall({
           }}
         />
         <div className="relative p-8 sm:p-10">
+          {/* R2-5 degraded status. It MUST stay inside .paywall-panel: its
+              text-white / bg-white-8% / border-white-25 styling only reaches
+              AA contrast on the navy panel (#132D54 -> 13.5:1). Outside the
+              panel it paints white-on-#F7F8FA in the default light theme
+              (1.05:1) — the exact light-mode trap documented at
+              globals.css:250-262. Guarded by a regression assertion in
+              Paywall.test.tsx (A11Y-C1, t_01ffc1ea). */}
+          {degraded ? (
+            <div
+              role="status"
+              aria-live="polite"
+              className="mb-4 rounded-xl border border-white/25 bg-white/[0.08] px-4 py-3 text-[14px] leading-relaxed text-white"
+            >
+              {DEGRADED_PAYWALL_MESSAGE}
+            </div>
+          ) : null}
           <div className="inline-flex items-center gap-2 font-mono text-[11px] font-bold text-white/70 uppercase tracking-[0.08em] mb-4">
             <svg
               aria-hidden

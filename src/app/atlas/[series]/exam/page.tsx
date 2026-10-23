@@ -26,6 +26,7 @@ import { getSeriesBySlug } from "@/lib/learn";
 import { buildMetadata } from "@/lib/seo";
 import { getSupabaseServerClient } from "@/lib/db/server";
 import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
+import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
 import type { CheckProgress } from "@/shared/contracts";
 import {
   accessSeam,
@@ -87,6 +88,11 @@ export default async function ExamPage({ params }: Props) {
     degraded = true;
   }
   if (decision?.kind === "not-launched") notFound();
+  // F-2 (t_c4eafa3b MEDIUM, CWE-200): the degraded path cannot prove the series
+  // is publicly launched, so fail CLOSED on EXISTENCE — an unpublished series
+  // 404s under an outage exactly as the healthy seam does (R2-5 availability
+  // for the seeded live series is unchanged).
+  if (degraded && !isPubliclyLaunchedSeries(series)) notFound();
   if (degraded || decision?.kind === "paywall") {
     const lessons = getLessonsForSeries(series);
     const courseRow = degraded ? null : await getCourseRowBySlug(series);
@@ -94,6 +100,7 @@ export default async function ExamPage({ params }: Props) {
     return (
       <LockedContentPage
         seriesSlug={series}
+        degraded={degraded}
         view={
           courseRow
             ? buildPaywallView({

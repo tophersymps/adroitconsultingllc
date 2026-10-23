@@ -26,6 +26,7 @@ import GuestCTA from "@/components/Progress/GuestCTA";
 import { getQuizForLesson } from "@/lib/quiz";
 import { getSupabaseServerClient } from "@/lib/db/server";
 import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
+import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
 import MDXArticle from "@/components/MDX/MDXArticle";
 import Paywall from "@/components/Catalog/Paywall";
 import { AudioPlayerLazy } from "@/components/BlogPost/AudioPlayerLazy";
@@ -55,6 +56,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { series, slug } = await params;
   const lesson = getLesson(series, slug);
   if (!lesson) return {};
+  // LOW (t_91a3e30b, CWE-200): generateMetadata runs BEFORE notFound(), so a
+  // stealth series' lesson title/excerpt used to leak into the 404 head. Only
+  // a publicly launched series may appear here.
+  if (!isPubliclyLaunchedSeries(series)) {
+    return buildMetadata({
+      title: "Atlas | Adroit Learn",
+      description: "Course catalogue for Salesforce and AI practitioners.",
+      path: `/atlas/${series}/${slug}`,
+      noindex: true,
+    });
+  }
   const s = getSeriesBySlug(series);
   return buildMetadata({
     // lesson.title already carries the "Lesson N:" prefix — do NOT re-prefix
@@ -106,6 +118,12 @@ export default async function LessonPage({ params }: Props) {
     if (!isDbTokenUnavailable(err)) throw err;
     degraded = true;
   }
+  // F-2 (t_c4eafa3b MEDIUM, CWE-200): the degraded path cannot prove the
+  // series is publicly launched — the static catalogue also carries stealth
+  // slugs — so fail CLOSED on EXISTENCE. An unpublished series 404s during an
+  // outage exactly as the healthy seam does. Availability for the four seeded
+  // live series is unchanged (R2-5).
+  if (degraded && !isPubliclyLaunchedSeries(series)) notFound();
   if (decision?.kind === "not-launched") notFound();
 
   // Server-side session gate (ADR-104): guests NEVER receive question text —
@@ -128,7 +146,7 @@ export default async function LessonPage({ params }: Props) {
       <div className="min-h-screen flex flex-col">
         <Header />
         <main id="main" className="flex-1">
-          <Paywall seriesSlug={series} view={view} />
+          <Paywall seriesSlug={series} view={view} degraded={degraded} />
         </main>
         <Footer />
       </div>
