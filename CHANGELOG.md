@@ -2,6 +2,18 @@
 
 All notable changes to the Adroit Consulting Blog project will be documented in this file.
 
+### Fix: the session cache dies on identity transitions too (PERF-CACHE-M1b, t_c0eaa6f2)
+
+**What** - Two files. The summary cache was already invalidated centrally by t_5f03a8f7; its twin — the module-level `/api/auth/session` read — still had no production invalidator.
+(1) `src/lib/hooks/useAuth.ts`: `invalidateAuthSession()` now bumps a new `sessionEpoch`, clears the settled read (`sessionPromise`) and the collapsing refresh (`sessionRefresh`), and marks the cache stale. Previously it only set `sessionStale`, so it could not discard a read that was already in flight, and it had **no production caller at all** (only `LearnHub.requests.test.tsx`). `fetchSessionUser(epoch)` now discards a payload whose epoch moved while it was open, and both `refresh()` and the mount effect ignore a result superseded by a newer transition, so a late account-A response can neither be cached nor blank out account B. `notifyAuthChanged()` calls `invalidateAuthSession()` next to `invalidateDbToken()`/`invalidateProgressSummary()` and *before* dispatching the event, and `useAuth`'s auth-changed/`focus` listener does the same — the `focus` path is the only one that sees a sign-out in another tab.
+(2) `src/lib/hooks/useAuth.identity.test.tsx` (new, 2 tests) drives ONLY the production entry point (`notifyAuthChanged()`, no direct invalidator call) with the real hook: A mounts, the tab unmounts, A signs out and B signs in, a fresh mount must issue a **second** `GET /api/auth/session` and render `b@example.com`, never `a@example.com`; and a session read in flight across the transition must be discarded so A's payload never lands after B's.
+
+**Why** - Security review of PR #358 (val-el, t_cd7259c4, CWE-226/CWE-212) and the a11y lane both flagged the pair of un-invalidated module caches. The summary half was closed by t_e786efe2/t_5f03a8f7; this card's remaining items were the session half (item 2's "refresh joins a stale in-flight read" case in `refreshSession()`) and item 3 ("wire `invalidateAuthSession()` or delete it as dead code"). With `sessionStale` as the only effect, a cross-account chain that announced itself only via `notifyAuthChanged()` — or a sign-out in another tab picked up by `focus` while no `useAuth` was mounted — kept serving the previous session promise to the next mount, so account B rendered A's signed-in chrome until a reload.
+
+**Verified** - RED/GREEN bites: with only `useAuth.ts` stashed, `useAuth.identity.test.tsx` → **2 failed / 0 passed** (`a@example.com` where B was expected); restored → green. Full suite `npx vitest run` **123 files / 1078 tests passed** (1076 + 2). `npx tsc --noEmit` exit 0; `npx eslint` clean on both touched files. `LearnHub.requests.test.tsx` green — signed-in `/atlas` still exactly 3 requests, guest exactly 1; `Header.identity.test.tsx` and the summary identity suite unchanged and passing.
+
+**Known Issues** - None new. A tab that never fires `AUTH_CHANGED_EVENT` and never regains focus still relies on the next seam or a reload — the same residual documented for the summary cache. No signed-in browser run is possible in this worktree (no `.env`/DB, `/api/auth/session` has no session), so identity flows are covered by the jsdom tests.
+
 ### Fix: progress-summary invalidation is central and cycle-free (PERF-CACHE-M1, t_5f03a8f7)
 
 **What** - Follow-up to PERF-P1 below. Three code changes, one new module:
