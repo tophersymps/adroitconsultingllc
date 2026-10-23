@@ -56,6 +56,18 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { series } = await params;
   const s = getSeriesBySlug(series);
   if (!s) return {};
+  // LOW (t_91a3e30b, CWE-200): metadata is generated BEFORE the page's
+  // notFound(), so an unpublished ("stealth") series used to publish its name
+  // and description in the 404 document head. Only a publicly launched series
+  // may appear here.
+  if (!isPubliclyLaunchedSeries(series)) {
+    return buildMetadata({
+      title: "Atlas | Adroit Learn",
+      description: "Course catalogue for Salesforce and AI practitioners.",
+      path: `/atlas/${series}`,
+      noindex: true,
+    });
+  }
   return buildMetadata({
     title: `${s.name} | Adroit Learn`,
     description: s.description,

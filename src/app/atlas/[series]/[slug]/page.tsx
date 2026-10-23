@@ -56,6 +56,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { series, slug } = await params;
   const lesson = getLesson(series, slug);
   if (!lesson) return {};
+  // LOW (t_91a3e30b, CWE-200): generateMetadata runs BEFORE notFound(), so a
+  // stealth series' lesson title/excerpt used to leak into the 404 head. Only
+  // a publicly launched series may appear here.
+  if (!isPubliclyLaunchedSeries(series)) {
+    return buildMetadata({
+      title: "Atlas | Adroit Learn",
+      description: "Course catalogue for Salesforce and AI practitioners.",
+      path: `/atlas/${series}/${slug}`,
+      noindex: true,
+    });
+  }
   const s = getSeriesBySlug(series);
   return buildMetadata({
     // lesson.title already carries the "Lesson N:" prefix — do NOT re-prefix

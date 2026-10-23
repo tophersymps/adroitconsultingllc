@@ -73,6 +73,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { series } = await params;
   const s = getSeriesBySlug(series);
   if (!s) return {};
+  // LOW (t_91a3e30b, CWE-200): generateMetadata runs BEFORE notFound(), so a
+  // stealth series used to name itself in the 404 document head.
+  if (!isPubliclyLaunchedSeries(series)) {
+    return buildMetadata({
+      title: "Completion Record | Adroit Learn",
+      description: "Course completion records for Adroit Learn courses.",
+      path: `/atlas/${series}/certificate`,
+      noindex: true,
+    });
+  }
   const hasExam = getCertExam(series) !== null;
   return buildMetadata({
     title: hasExam
