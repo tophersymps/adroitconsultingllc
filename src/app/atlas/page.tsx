@@ -3,7 +3,6 @@ import Footer from "@/components/Footer";
 import LearnHub from "@/components/Learn/LearnHub";
 import { getCatalogForUserV2, toLearnHubCards } from "@/lib/catalog";
 import { getCatalogOrg } from "@/lib/access";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { siteConfig } from "@/lib/seo";
 import type { CardGateState } from "@/shared/contracts-account";
 
@@ -16,39 +15,32 @@ import type { CardGateState } from "@/shared/contracts-account";
  *
  * Guest hardening (t_3dbf4826): the client receives only the LearnCardSeries
  * projection (card-render fields + DB org) — per-lesson metadata never ships.
+ *
+ * PERF (P1, review of t_d3c401c9): /atlas MUST stay prerendered (○). This
+ * route is a public marketing hub, and per-request rendering replaces a CDN
+ * `x-nextjs-cache: HIT` response (~3 ms TTFB) with an origin render that also
+ * runs `getCatalogForUserV2` + `getCatalogOrg` (~60 ms warm, plus cold start).
+ *
+ * `dynamic = "force-static"` is what actually guarantees that, and it has to
+ * be explicit: the catalogue reads below go through the cookie-bound data
+ * client (`getSupabaseServerClient` → `cookies()`), a dynamic API, so ANY
+ * build in which the Supabase env vars are set — i.e. every production build —
+ * would otherwise emit `ƒ /atlas` (QA F1 on t_3a3d6595: appearing static only
+ * because this workspace's `.env.local` lacks NEXT_PUBLIC_SUPABASE_URL, which
+ * makes the client throw before `cookies()` is reached). Under force-static the
+ * request APIs resolve to empty during the build, which is exactly the
+ * projection this hub publishes: the visitor is the anonymous RLS scope, and
+ * per-user identity is deliberately NOT resolved here (a cookie read would
+ * flip the route back to ƒ and cost the hub its CDN cache).
  */
+export const dynamic = "force-static";
+
 export default async function LearnLandingPage() {
-  // Auth state (guest vs signed-in) resolved server-side from the HttpOnly
-  // cookie — the same source as every other gated surface.
-  //
-  // PERF (P1, review of t_d3c401c9): /atlas MUST stay prerendered (○). This
-  // route is a public marketing hub, and per-request rendering replaced a CDN
-  // `x-nextjs-cache: HIT` response (~3 ms TTFB) with an origin render that also
-  // runs `getCatalogForUserV2` + `getCatalogOrg` (~60 ms warm, plus cold start).
-  // The identity read below goes through the DATA client (cookie-backed
-  // `supabase.auth.getUser()`), exactly as it did before the R2-1 auth swap,
-  // because the R2-1 replacement (`getAccessUserId()` → Managed Better Auth)
-  // reaches the SDK's `next/headers` adapter (`cookies()` + `headers()`), which
-  // is a dynamic API and flips this route to ƒ. Same reason `userId` used to
-  // come from `getAccessUserId()`: keep one cookie read, from the data client
-  // whose RLS scope the catalog query itself still uses.
-  //
-  // Guests get the prerendered guest catalogue and the client-side gate
-  // resolves personalisation after hydration (unchanged base behaviour).
-  let gate: CardGateState = "guest-locked";
-  let userId: string | null = null;
-  try {
-    const supabase = await getSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (user) {
-      gate = "signed-in";
-      userId = user.id;
-    }
-  } catch {
-    // default to guest on session errors
-  }
+  // Guest projection — server-side identity is not resolved on this route.
+  // Signed-in visitors still get the same guest catalogue (per-lesson slugs are
+  // only projected for signed-in reads, which this route no longer performs).
+  const gate: CardGateState = "guest-locked";
+  const userId: string | null = null;
 
   let courses: ReturnType<typeof toLearnHubCards> = [];
   let sections: { slug: string; name: string }[] = [];
@@ -60,7 +52,8 @@ export default async function LearnLandingPage() {
     const org = await getCatalogOrg();
 
     courses = toLearnHubCards(catalog.courses, {
-      includeLessonSlugs: gate === "signed-in",
+      // Prerendered guest projection: per-lesson slugs never ship from here.
+      includeLessonSlugs: false,
     });
     sections = org.sections.map((s) => ({ slug: s.slug, name: s.name }));
     groups = org.groups.map((g) => ({
