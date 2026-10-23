@@ -57,6 +57,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const exam = getCertExam(series);
   const s = getSeriesBySlug(series);
   if (!exam || !s) return {};
+  // LOW (t_dc472f8f, CWE-200): generateMetadata runs BEFORE the page's
+  // notFound(), so a stealth series used to name its unpublished exam in the
+  // 404 document head. Only a publicly launched series may appear here.
+  if (!isPubliclyLaunchedSeries(series)) {
+    return buildMetadata({
+      title: "Atlas | Adroit Learn",
+      description: "Course catalogue for Salesforce and AI practitioners.",
+      path: `/atlas/${series}/exam`,
+      noindex: true,
+    });
+  }
   return buildMetadata({
     title: `${exam.title} | Adroit Learn`,
     description: exam.description ?? `Certification prep exam for ${s.name}.`,

@@ -55,6 +55,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const check = getKnowledgeCheck(series, parseInt(n, 10));
   const s = getSeriesBySlug(series);
   if (!check || !s) return {};
+  // LOW (t_dc472f8f, CWE-200): generateMetadata runs BEFORE the page's
+  // notFound(), so a stealth series used to name its unpublished check in the
+  // 404 document head. Only a publicly launched series may appear here.
+  if (!isPubliclyLaunchedSeries(series)) {
+    return buildMetadata({
+      title: "Atlas | Adroit Learn",
+      description: "Course catalogue for Salesforce and AI practitioners.",
+      path: `/atlas/${series}/check/${n}`,
+      noindex: true,
+    });
+  }
   return buildMetadata({
     title: `${check.title} | Adroit Learn`,
     description: check.description ?? `Knowledge check for ${s.name}.`,

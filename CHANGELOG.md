@@ -2,6 +2,25 @@
 
 All notable changes to the Adroit Consulting Blog project will be documented in this file.
 
+### exam and check 404 heads no longer name a stealth series — the last two `generateMetadata` leaks closed (t_dc472f8f, CWE-200)
+
+**What** - The last two of the six atlas route families now gate `generateMetadata` on `isPubliclyLaunchedSeries(series)`, mirroring the four already fixed in t_91a3e30b:
+(1) `src/app/atlas/[series]/exam/page.tsx` — `generateMetadata` returned `title: `${exam.title} | Adroit Learn`` and `description: exam.description ?? `Certification prep exam for ${s.name}.`` **before** the page's `notFound()` ran, so a stealth series answered 404 with its unpublished certification name in the document head. It now returns generic `Atlas | Adroit Learn` + `noindex: true` for any series outside the static launch mirror.
+(2) `src/app/atlas/[series]/check/[n]/page.tsx` — same shape; the check title always leaked and `s.name` leaked through the `check.description ?? `Knowledge check for ${s.name}.`` fallback (latent today, since every shipped check has a description). Same generic + `noindex` branch.
+
+No page-body logic changed: the `degraded && !isPubliclyLaunchedSeries(series)` gate and the healthy access decisions are untouched. The guard is unconditional (like the four sibling routes), so a stealth series' 404 head is identical whether the token bridge is healthy or down — no oracle either way.
+
+Tests: 2 new cases in each existing suite (`exam/page.test.tsx`, `check/[n]/page.test.tsx`) — a stealth slug's `generateMetadata` must contain neither the series name nor the exam/check title and must set `noindex`; a publicly launched slug must still name itself and must not carry `noindex`. **Discrimination proven:** with the source fix reverted, 2 of the 8 fail; with it, 8/8 pass.
+
+**Why** - val-el's security re-review of t_3b6d832e (t_5ebe86d6) measured this live on head `6147fe44` behind a 429 token stub: `/atlas/salesforce-data-architect/exam` and `/atlas/salesforce-sharing-visibility-architect/exam` answered 404 **while naming the unpublished certifications** ("Platform Data Architect Certification", "Platform Sharing and Visibility Architect Certification"); the other 46 stealth routes were clean. `generateMetadata` runs before `notFound()`, so it is the one surface a 404 cannot suppress. LOW severity, pre-existing, carded as the residual of that review.
+
+**Verified** -
+- **429 harness (live):** stub on `:4994` answering 429 to every request, `next dev -p 3425 --webpack` with `NEON_AUTH_BASE_URL`/`NEON_DATA_API_URL`/`NEXT_PUBLIC_NEON_DATA_API_URL` pointed at it; server log confirms the outage fired (`[db] token unavailable … status: 429`). `/atlas/salesforce-data-architect/exam` → **404**, 0 occurrences of "Platform Data Architect"; `/atlas/salesforce-sharing-visibility-architect/exam` → **404**, 0 of "Platform Sharing and Visibility"; `/atlas/ai-adoption/check/1` → **404**, 0 of "AI Adoption" / check title. Head is the generic `<title>The Atlas | Adroit Consulting</title>` + `<meta name="robots" content="noindex"/>`, byte-shape identical to an unrelated 404 (`/atlas/no-such-series-xyz/exam`). `/atlas/salesforce-architect/exam` → **200**, still `Salesforce Architect: Practice Exam | Adroit Learn`.
+- **Unit:** `npx vitest run` → **140 files / 1206 tests passed**; `npx tsc --noEmit` exit 0; eslint on the four touched files clean.
+- **Scope:** this is a stacked branch on `fix/atlas-jwt-bridge-main-reconcile-t_3b6d832e` (PR #381) and is not merged into it, so the signed-in-500 fix is not delayed.
+
+**Known Issues** - None new. The static-mirror trade-off documented in `src/lib/atlas-launch.ts` still applies: add a slug to `PUBLICLY_LAUNCHED_SERIES` in the PR that seeds its live `courses` row, or its exam/check metadata stays generic during an outage.
+
 ### /sitemap.xml fails CLOSED on a credential outage — stealth series are no longer advertised to crawlers (t_2cc94bb7, decision t_0194c233)
 
 **What** - `src/app/sitemap.ts` no longer fails open when the `courses` table cannot be read. Before: `const liveSet = liveSlugs ?? new Set(learnSeries.map(s => s.slug))` — every content series was treated as live, so an outage sitemap published **136 unpublished-series URLs** (40 `ai-adoption`, 96 `hermes-consultant{,-intermediate,-advanced}`), measured live by val-el (t_5ebe86d6) on this branch's head. Now the fallback is the static launch mirror, the same DB-free predicate the atlas routes use on their `unavailable` path: `learnSeries.filter(s => isPubliclyLaunchedSeries(s.slug))`. Only the four seeded live series (`agentic-ai`, `ai-at-work`, `omni-studio-cert`, `salesforce-architect`) contribute learn URLs while the DB is unreachable; static marketing, blog, tag and `/atlas` hub URLs are unchanged, so the build still never fails on a DB hiccup (arch §10). The degradation is still logged exactly once, with the message updated to `courses table unreachable — restricting learn series to the static launched-series mirror`.
