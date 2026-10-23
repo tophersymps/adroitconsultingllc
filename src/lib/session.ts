@@ -21,6 +21,8 @@
  * read at request time does.
  */
 
+import { isSecureRequest } from "@/lib/auth/transport";
+
 export interface SessionUser {
   id: string;
   email: string;
@@ -43,7 +45,11 @@ export const SESSION_COOKIE_NAME = "__Secure-neon-auth.session_token";
  * `__Secure-`-prefixed name is used; on plain http over a non-loopback host
  * browsers reject a `__Secure-` cookie unless it carries `Secure`, so the
  * session is stored unprefixed instead (see `src/lib/auth/transport.ts`).
- * Both names must be checked or those deployments degrade to guest.
+ *
+ * Only ONE of the two is accepted per request, chosen by `isSecureRequest()`
+ * (M2, t_7ecb98d7): accepting the plain name on https would let a sibling
+ * subdomain plant it under a registrable-domain cookie scope and be read as a
+ * session token (session fixation, CWE-384).
  */
 export const PLAIN_SESSION_COOKIE_NAME = "neon-auth.session_token";
 
@@ -63,12 +69,16 @@ export const PLAIN_SESSION_COOKIE_NAME = "neon-auth.session_token";
  */
 export async function getSessionUser(): Promise<SessionUser | null> {
   try {
-    const { cookies } = await import("next/headers");
+    const { cookies, headers } = await import("next/headers");
     const cookieStore = await cookies();
-    if (
-      !cookieStore.has(SESSION_COOKIE_NAME) &&
-      !cookieStore.has(PLAIN_SESSION_COOKIE_NAME)
-    ) {
+    // Only the cookie name that is valid on this transport counts (M2,
+    // t_7ecb98d7): the plain name on https is a planting vector, and the
+    // `__Secure-` name on plain http would have been dropped by the browser.
+    const secure = isSecureRequest(await headers());
+    const expectedCookie = secure
+      ? SESSION_COOKIE_NAME
+      : PLAIN_SESSION_COOKIE_NAME;
+    if (!cookieStore.has(expectedCookie)) {
       return null;
     }
 

@@ -213,9 +213,23 @@ export function toUpstreamCookieName(name: string): string {
  * Re-serialise an inbound `Cookie:` header with the SDK's names, keeping only
  * Neon Auth cookies (the SDK forwards nothing else and rejects the rest).
  * Returns `""` when the request carries no auth cookie.
+ *
+ * M2 (t_7ecb98d7, CWE-384): accept ONLY the cookie family that can legitimately
+ * exist on this transport. On a secure (https/loopback) request that is
+ * `__Secure-neon-auth.*`; a plain `neon-auth.*` cookie is DROPPED, never
+ * up-converted. If `NEON_AUTH_COOKIE_DOMAIN` is a registrable-domain scope, a
+ * sibling subdomain can plant a plain parent-domain cookie — up-converting it
+ * would let that value be read as a session token (session fixation). On a
+ * non-secure (plain http) request the split is mirrored: only plain names are
+ * accepted, and any inbound `__Secure-*` name is ignored. Accepted plain names
+ * are still translated to the SDK's `__Secure-` wire names for the upstream.
  */
-export function authCookiesForUpstream(cookieHeader: string | null | undefined): string {
+export function authCookiesForUpstream(
+  cookieHeader: string | null | undefined,
+  secure: boolean,
+): string {
   if (!cookieHeader) return "";
+  const acceptedPrefix = secure ? SECURE_COOKIE_PREFIX : PLAIN_COOKIE_PREFIX;
   const pairs: string[] = [];
   for (const raw of cookieHeader.split(";")) {
     const entry = raw.trim();
@@ -223,6 +237,8 @@ export function authCookiesForUpstream(cookieHeader: string | null | undefined):
     const eq = entry.indexOf("=");
     if (eq <= 0) continue;
     const name = entry.slice(0, eq).trim();
+    // Reject the other family outright — never rename it into the accepted one.
+    if (!name.startsWith(`${acceptedPrefix}.`)) continue;
     const wireName = toUpstreamCookieName(name);
     if (!wireName.startsWith(SECURE_COOKIE_PREFIX)) continue;
     pairs.push(`${wireName}${entry.slice(eq)}`);
@@ -230,10 +246,25 @@ export function authCookiesForUpstream(cookieHeader: string | null | undefined):
   return pairs.join("; ");
 }
 
-/** True when the cookie header carries a session token under either name. */
-export function hasSessionCookie(cookieHeader: string | null | undefined): boolean {
+/**
+ * True when the cookie header carries a session token under the name that is
+ * valid for this transport. Plain and `__Secure-` names are compared exactly:
+ * `"__Secure-neon-auth.session_token".includes("neon-auth.session_token")` is
+ * true, so a substring test cannot distinguish them (M2, t_7ecb98d7).
+ */
+export function hasSessionCookie(
+  cookieHeader: string | null | undefined,
+  secure: boolean,
+): boolean {
   if (!cookieHeader) return false;
-  return SESSION_COOKIE_NAMES.some((name) => cookieHeader.includes(name));
+  const expected = secure ? SECURE_SESSION_COOKIE_NAME : PLAIN_SESSION_COOKIE_NAME;
+  for (const raw of cookieHeader.split(";")) {
+    const entry = raw.trim();
+    const eq = entry.indexOf("=");
+    if (eq <= 0) continue;
+    if (entry.slice(0, eq).trim() === expected) return true;
+  }
+  return false;
 }
 
 /**
@@ -284,13 +315,18 @@ export function adaptResponseCookies(response: Response, secure: boolean): Respo
 /**
  * Request headers to hand to the SDK proxy: a synthesised `Origin` (never
  * empty) and the auth cookies under their SDK names. Everything else is
- * copied through untouched.
+ * copied through untouched. The cookie family is chosen from the request's
+ * transport (`isSecureRequest`) so a planted plain cookie cannot be read as a
+ * session token on https (M2, t_7ecb98d7).
  */
 export function forwardableAuthHeaders(headers: Headers): Headers {
   const forwarded = new Headers(headers);
   forwarded.set("origin", resolveRequestOrigin(headers));
 
-  const cookies = authCookiesForUpstream(headers.get("cookie"));
+  const cookies = authCookiesForUpstream(
+    headers.get("cookie"),
+    isSecureRequest(headers),
+  );
   if (cookies) forwarded.set("cookie", cookies);
   else forwarded.delete("cookie");
 

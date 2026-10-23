@@ -21,7 +21,12 @@ const { mocks } = vi.hoisted(() => {
     has: (name: string) => cookies.has(name),
     get: (name: string) => (cookies.has(name) ? { name, value: "v" } : undefined),
   };
-  return { mocks: { getSession, getAuthServer, cookies, cookieStore } };
+  /* Request headers stand-in for `next/headers`; transport decides which
+   * cookie family is accepted from `x-forwarded-proto`. */
+  const requestHeaders = new Headers({ "x-forwarded-proto": "https" });
+  return {
+    mocks: { getSession, getAuthServer, cookies, cookieStore, requestHeaders },
+  };
 });
 
 vi.mock("@/lib/auth/server", () => ({
@@ -30,6 +35,7 @@ vi.mock("@/lib/auth/server", () => ({
 
 vi.mock("next/headers", () => ({
   cookies: () => Promise.resolve(mocks.cookieStore),
+  headers: () => Promise.resolve(mocks.requestHeaders),
 }));
 
 import {
@@ -58,7 +64,8 @@ function setSessionCookie(present: boolean): void {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  /* Default: a signed-in request. Guest tests opt out explicitly. */
+  /* Default: a signed-in https request. Guest tests opt out explicitly. */
+  mocks.requestHeaders.set("x-forwarded-proto", "https");
   setSessionCookie(true);
 });
 
@@ -99,6 +106,7 @@ describe("getSessionUser", () => {
     /* Plain-http deployments (LAN staging / http preview) cannot store a
      * `__Secure-` cookie, so the SDK writes `neon-auth.session_token` there
      * (t_ab6c1cb6 F2). The fast path must not treat that as a guest. */
+    mocks.requestHeaders.set("x-forwarded-proto", "http");
     setSessionCookie(false);
     mocks.cookies.add(PLAIN_SESSION_COOKIE_NAME);
     mocks.getSession.mockResolvedValue(SESSION);
@@ -109,6 +117,30 @@ describe("getSessionUser", () => {
       name: "A",
     });
     expect(mocks.getSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores a planted plain cookie on https (M2, CWE-384)", async () => {
+    /* A sibling subdomain plants `neon-auth.session_token` under a
+     * registrable-domain cookie scope. On https only the `__Secure-` name is
+     * a session, so this must be a guest — and must not drive the SDK. */
+    setSessionCookie(false);
+    mocks.cookies.add(PLAIN_SESSION_COOKIE_NAME);
+    mocks.getSession.mockResolvedValue(SESSION);
+
+    await expect(getSessionUser()).resolves.toBeNull();
+    expect(mocks.getAuthServer).not.toHaveBeenCalled();
+    expect(mocks.getSession).not.toHaveBeenCalled();
+  });
+
+  it("ignores a `__Secure-` cookie on plain http", async () => {
+    /* A browser on plain http drops such a cookie anyway; accepting it would
+     * let a stale/planted header masquerade as a session. */
+    mocks.requestHeaders.set("x-forwarded-proto", "http");
+    setSessionCookie(true);
+    mocks.getSession.mockResolvedValue(SESSION);
+
+    await expect(getSessionUser()).resolves.toBeNull();
+    expect(mocks.getSession).not.toHaveBeenCalled();
   });
 
   it("short-circuits guests without touching the auth SDK (perf P2)", async () => {

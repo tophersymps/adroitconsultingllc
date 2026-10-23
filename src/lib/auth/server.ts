@@ -96,7 +96,8 @@ export async function createNextRequestContext(): Promise<RequestContext> {
   const secure = isSecureRequest(headerStore);
 
   return {
-    getCookies: () => authCookiesForUpstream(headerStore.get("cookie")),
+    getCookies: () =>
+      authCookiesForUpstream(headerStore.get("cookie"), secure),
     // Captured, not written through `cookies().set()`: inside a route handler
     // that path is silently dropped (see cookie-jar.ts). `withAuthCookies()`
     // replays the jar onto the response the route returns.

@@ -99,15 +99,17 @@ describe("getAuthServer", () => {
     expect(ctx.getOrigin()).toBe("https://preview.example.dev");
   });
 
-  it("echoes a browser Origin and reads cookies under the SDK's names on https", async () => {
+  it("echoes a browser Origin and reads only __Secure- cookies on https (M2)", async () => {
     setHeaders({
       origin: "https://adroit.io",
       "x-forwarded-proto": "https",
-      cookie: "neon-auth.session_token=tok",
+      cookie:
+        "neon-auth.session_token=ATTACKER; __Secure-neon-auth.session_token=tok",
     });
 
     const ctx = await configOf().context();
     expect(ctx.getOrigin()).toBe("https://adroit.io");
+    // The planted plain name is dropped, not up-converted (CWE-384).
     expect(ctx.getCookies()).toBe("__Secure-neon-auth.session_token=tok");
   });
 

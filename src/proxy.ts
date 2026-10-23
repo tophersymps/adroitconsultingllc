@@ -41,7 +41,7 @@ export async function proxy(request: NextRequest) {
   }
 
   const cookieHeader = request.headers.get("cookie") ?? "";
-  if (!hasSessionCookie(cookieHeader)) {
+  if (!hasSessionCookie(cookieHeader, isSecureRequest(request.headers))) {
     // Guest: nothing to refresh.
     return NextResponse.next({ request });
   }

@@ -177,23 +177,56 @@ describe("cookie name translation", () => {
     );
   });
 
-  it("maps every auth cookie to its wire name and drops foreign cookies", () => {
+  it("on a secure request maps auth cookies to wire names and drops foreign cookies", () => {
     expect(
       authCookiesForUpstream(
-        "adroit_cookie_consent=granted; neon-auth.session_token=tok; neon-auth.local.session_data=data; other=1",
+        "adroit_cookie_consent=granted; __Secure-neon-auth.session_token=tok; __Secure-neon-auth.local.session_data=data; other=1",
+        true,
       ),
     ).toBe(
       "__Secure-neon-auth.session_token=tok; __Secure-neon-auth.local.session_data=data",
     );
-    expect(authCookiesForUpstream(null)).toBe("");
-    expect(authCookiesForUpstream("nothing=here")).toBe("");
+    expect(authCookiesForUpstream(null, true)).toBe("");
+    expect(authCookiesForUpstream("nothing=here", true)).toBe("");
   });
 
-  it("detects a session token under either name", () => {
-    expect(hasSessionCookie("__Secure-neon-auth.session_token=a")).toBe(true);
-    expect(hasSessionCookie("neon-auth.session_token=a")).toBe(true);
-    expect(hasSessionCookie("adroit_cookie_consent=granted")).toBe(false);
-    expect(hasSessionCookie(null)).toBe(false);
+  it("on https drops a planted plain neon-auth.* cookie instead of up-converting it (M2, CWE-384)", () => {
+    // The proven exploit: a sibling subdomain plants the plain parent-domain
+    // cookie alongside the victim's real secure cookie.
+    expect(
+      authCookiesForUpstream(
+        "neon-auth.session_token=ATTACKER; __Secure-neon-auth.session_token=VICTIM",
+        true,
+      ),
+    ).toBe("__Secure-neon-auth.session_token=VICTIM");
+
+    // And the plain name alone is not a session on https at all.
+    expect(
+      authCookiesForUpstream("neon-auth.session_token=ATTACKER", true),
+    ).toBe("");
+  });
+
+  it("on plain http accepts only plain neon-auth.* and drops __Secure-* names", () => {
+    expect(
+      authCookiesForUpstream(
+        "neon-auth.session_token=CLIENT; __Secure-neon-auth.session_token=PLANTED",
+        false,
+      ),
+    ).toBe("__Secure-neon-auth.session_token=CLIENT");
+
+    // A `__Secure-` name cannot exist over plain http; ignore it entirely.
+    expect(
+      authCookiesForUpstream("__Secure-neon-auth.session_token=VICTIM", false),
+    ).toBe("");
+  });
+
+  it("detects a session token only under the name valid for the transport", () => {
+    expect(hasSessionCookie("__Secure-neon-auth.session_token=a", true)).toBe(true);
+    expect(hasSessionCookie("neon-auth.session_token=a", true)).toBe(false);
+    expect(hasSessionCookie("neon-auth.session_token=a", false)).toBe(true);
+    expect(hasSessionCookie("__Secure-neon-auth.session_token=a", false)).toBe(false);
+    expect(hasSessionCookie("adroit_cookie_consent=granted", true)).toBe(false);
+    expect(hasSessionCookie(null, true)).toBe(false);
   });
 
   it("keeps the prefixed+Secure form on secure transports", () => {
