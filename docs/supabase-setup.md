@@ -1,5 +1,11 @@
 # Supabase Setup — adroit-blog
 
+> **HISTORICAL (2026-10-23):** Supabase is decommissioned; the adroit stack runs on Neon
+> Postgres + Managed Better Auth + Neon Data API. This document is kept for history only.
+> `scripts/qa-create-test-user.cjs` referenced below now lives in
+> `scripts/_archive/supabase/` — see `docs/supabase-decommission.md` for every archived
+> script and the current data-access rule.
+
 **Task:** t_596af0ac · **Completed by:** alpha (DevOps) · **Date:** 2026-08-06
 
 ## What Was Provisioned
