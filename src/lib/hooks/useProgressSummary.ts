@@ -20,7 +20,13 @@ import {
   PROGRESS_CHANGED_EVENT,
   type ProgressMerge,
 } from "@/lib/progress";
-import { AUTH_CHANGED_EVENT } from "@/lib/hooks/useAuth";
+/*
+ * SEC-R2-F1 (t_2dd0e9f9): import the event name from its own module, not from
+ * `useAuth`. `useAuth` now calls `invalidateProgressSummary()` on every
+ * identity transition — including the cross-tab `focus` path — so importing
+ * `useAuth` here would close the cycle `useAuth → useProgressSummary → useAuth`.
+ */
+import { AUTH_CHANGED_EVENT } from "@/lib/auth-events";
 
 interface UseProgressSummaryReturn {
   /** Merged read/completed sets (slug keys, bare form). */
@@ -105,10 +111,13 @@ export function refreshProgressSummary(): Promise<ProgressSummaryPayload | null>
 /**
  * Drop the cached summary so the next read refetches (identity transition).
  *
- * Called from every seam that changes identity (Header sign-out, login
- * success, password reset) and from this module's own AUTH_CHANGED_EVENT
- * subscription, so a cached *authenticated* payload can never outlive the
- * session that produced it.
+ * Called centrally from `notifyAuthChanged()` and from `useAuth`'s own
+ * auth-changed/**focus** listener (SEC-R2-F1, t_2dd0e9f9), so a cached
+ * *authenticated* payload can never outlive the session that produced it —
+ * including when the sign-out/sign-in happened in ANOTHER tab and this tab only
+ * learns about it through `focus`. The explicit seam calls in
+ * Header/login/reset-password remain (they run before `notifyAuthChanged`,
+ * which is idempotent).
  */
 export function invalidateProgressSummary(): void {
   summaryEpoch += 1;
@@ -144,12 +153,21 @@ export function useProgressSummary(
 
   useEffect(() => {
     let cancelled = false;
+    /*
+     * QA-L1 (t_2dd0e9f9): capture the identity epoch this read belongs to.
+     * `fetchProgressSummary` already returns null for a read that crossed an
+     * identity transition (privacy), but that null must not be applied here:
+     * a stale mount read settling AFTER the post-transition refresh delivered
+     * the new user's payload would erase it (`setSummary(null)`), leaving the
+     * card blank until the next remount.
+     */
+    const epoch = summaryEpoch;
     (async () => {
       const data = await readProgressSummary();
-      if (!cancelled) {
-        setSummary(data);
-        setIsLoading(false);
-      }
+      if (cancelled) return;
+      if (epoch !== summaryEpoch) return; // identity changed mid-flight; the seam re-reads
+      setSummary(data);
+      setIsLoading(false);
     })();
     return () => {
       cancelled = true;
@@ -168,24 +186,41 @@ export function useProgressSummary(
   }, []);
 
   /*
-   * Identity transition (PERF-P1, t_e786efe2): sign-in, sign-out or an account
-   * switch means the cached summary belongs to someone else. Re-read it in
-   * place so a mounted card never keeps rendering the previous user's bars.
+   * Identity transition (PERF-P1, t_e786efe2 / SEC-R2-F1, t_2dd0e9f9): sign-in,
+   * sign-out or an account switch means the cached summary belongs to someone
+   * else. Re-read it in place so a mounted card never keeps rendering the
+   * previous user's bars.
    *
-   * The cache is dropped by the identity seams themselves
-   * (`invalidateProgressSummary()` next to `invalidateDbToken()` — Header
-   * sign-out, login success, password reset). Subscribers deliberately do NOT
-   * invalidate here: `invalidateProgressSummary` bumps the identity epoch, so
-   * N mounted cards each invalidating would kill the previous card's in-flight
-   * read (only the last one would resolve). `refreshProgressSummary` collapses
-   * the whole fan-out into ONE request instead.
+   * The cache is dropped at the identity seams (`invalidateProgressSummary()`
+   * next to `invalidateDbToken()`) and by `useAuth`'s auth-changed/**focus**
+   * listener — the latter is the only seam that sees a sign-out in ANOTHER tab.
+   * Subscribers deliberately do NOT invalidate here: `invalidateProgressSummary`
+   * bumps the identity epoch, so N mounted cards each invalidating would kill
+   * the previous card's in-flight read (only the last one would resolve).
+   * `refreshProgressSummary` collapses the whole fan-out into ONE request
+   * instead.
+   *
+   * The `focus` re-read is deferred to a microtask so it runs AFTER every
+   * synchronous focus listener — notably `useAuth`'s epoch bump — regardless of
+   * listener registration order.
    */
   useEffect(() => {
+    let cancelled = false;
     const onAuthChanged = () => {
       void refresh();
     };
+    const onFocus = () => {
+      queueMicrotask(() => {
+        if (!cancelled) void refresh();
+      });
+    };
     window.addEventListener(AUTH_CHANGED_EVENT, onAuthChanged);
-    return () => window.removeEventListener(AUTH_CHANGED_EVENT, onAuthChanged);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(AUTH_CHANGED_EVENT, onAuthChanged);
+      window.removeEventListener("focus", onFocus);
+    };
   }, [refresh]);
 
   const merge = hydrated
@@ -215,23 +250,39 @@ export function useSessionQuizStats(
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
+    // QA-L1 (t_2dd0e9f9): a mount read that crossed an identity transition
+    // resolves to null; applying it would erase the new user's quiz strip that
+    // the seam refresh already delivered. Only apply a read from our epoch.
+    const epoch = summaryEpoch;
     (async () => {
       const data = await readProgressSummary();
-      if (!cancelled) setSummary(data);
+      if (cancelled || epoch !== summaryEpoch) return;
+      setSummary(data);
     })();
-    // Identity transition (PERF-P1, t_e786efe2): the quiz strip must switch to
-    // the new user's aggregates, not keep the previous user's numbers. The
-    // seam's invalidate already dropped the cache; this re-read collapses with
-    // every other mounted subscriber into one request.
-    const onAuthChanged = () => {
+    // Identity transition (PERF-P1, t_e786efe2 / SEC-R2-F1, t_2dd0e9f9): the
+    // quiz strip must switch to the new user's aggregates, not keep the
+    // previous user's numbers. The seam's invalidate already dropped the cache;
+    // this re-read collapses with every other mounted subscriber into one
+    // request. `focus` is a cross-tab sign-out/sign-in, and is deferred to a
+    // microtask so it runs after `useAuth`'s synchronous epoch bump.
+    const readAgain = () => {
+      const readEpoch = summaryEpoch;
       void refreshProgressSummary().then((data) => {
-        if (!cancelled) setSummary(data);
+        if (cancelled || readEpoch !== summaryEpoch) return;
+        setSummary(data);
       });
     };
-    window.addEventListener(AUTH_CHANGED_EVENT, onAuthChanged);
+    const onFocus = () => {
+      queueMicrotask(() => {
+        if (!cancelled) readAgain();
+      });
+    };
+    window.addEventListener(AUTH_CHANGED_EVENT, readAgain);
+    window.addEventListener("focus", onFocus);
     return () => {
       cancelled = true;
-      window.removeEventListener(AUTH_CHANGED_EVENT, onAuthChanged);
+      window.removeEventListener(AUTH_CHANGED_EVENT, readAgain);
+      window.removeEventListener("focus", onFocus);
     };
   }, [quizName, enabled]);
 

@@ -15,6 +15,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { invalidateDbToken } from "@/lib/db/token-cache";
+import { invalidateProgressSummary } from "@/lib/hooks/useProgressSummary";
+import { AUTH_CHANGED_EVENT } from "@/lib/auth-events";
 
 export interface AuthUser {
   id: string;
@@ -23,7 +25,12 @@ export interface AuthUser {
   isAdmin: boolean;
 }
 
-export const AUTH_CHANGED_EVENT = "adroit-blog:auth-changed";
+/**
+ * Re-exported for backward compatibility: the constant now lives in
+ * `@/lib/auth-events` so caches can subscribe without importing this hook
+ * module (t_2dd0e9f9 — breaks the `useAuth` → `useProgressSummary` cycle).
+ */
+export { AUTH_CHANGED_EVENT };
 
 interface UseAuthReturn {
   user: AuthUser | null;
@@ -115,9 +122,15 @@ export function useAuth(): UseAuthReturn {
      * sign-out in another tab shows up here) means the identity behind the
      * session cookie may have changed. Drop the cached Data API JWT before
      * re-reading, so this tab cannot keep sending the previous user's token.
+     *
+     * SEC-R2-F1 (t_2dd0e9f9): the progress-summary cache is per-session module
+     * state too. This is the ONLY seam that sees a cross-tab sign-out/sign-in,
+     * so it must bump the summary epoch as well — otherwise user B keeps
+     * seeing user A's completedLessons/quizStats until a hard reload.
      */
     const onAuthChanged = () => {
       invalidateDbToken();
+      invalidateProgressSummary();
       refresh();
     };
     window.addEventListener(AUTH_CHANGED_EVENT, onAuthChanged);
@@ -135,13 +148,21 @@ export function useAuth(): UseAuthReturn {
 /**
  * Broadcast that auth state changed so useAuth instances re-read.
  *
- * Also drops the cached Data API JWT (SEC-R2-2-M3(b)): every caller of this
- * function is announcing an identity transition (sign-in, sign-out, account
- * switch), and the token cache is module state that survives a client-side
- * `router.refresh()`. Dropping it here covers call sites that forget to.
+ * Also drops the cached Data API JWT (SEC-R2-2-M3(b)) and the cached progress
+ * summary (SEC-R2-F1, t_2dd0e9f9): every caller of this function is announcing
+ * an identity transition (sign-in, sign-out, account switch), and both caches
+ * are module state that survives a client-side `router.refresh()` /
+ * `router.push()`. Dropping them here covers call sites that forget to.
  */
 export function notifyAuthChanged(): void {
   invalidateDbToken();
+  /*
+   * The summary is per-session module state too. Invalidating here (rather than
+   * only at the sign-out/sign-in seams) means no current or future caller can
+   * leak the previous identity's completedLessons/quizStats into the next
+   * session.
+   */
+  invalidateProgressSummary();
   if (typeof window === "undefined") return;
   try {
     window.dispatchEvent(new CustomEvent(AUTH_CHANGED_EVENT));

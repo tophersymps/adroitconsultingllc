@@ -26,7 +26,7 @@ import {
   useProgressSummary,
   useSessionQuizStats,
 } from "./useProgressSummary";
-import { notifyAuthChanged } from "./useAuth";
+import { notifyAuthChanged, useAuth } from "./useAuth";
 
 type Who = "A" | "B" | "guest";
 
@@ -44,8 +44,15 @@ const PAYLOADS: Record<Who, unknown> = {
   guest: { readContent: { blog: [], lesson: [] }, completedLessons: [], quizStats: {} },
 };
 
+const SESSIONS: Record<Who, { id: string; email: string; isAdmin: boolean } | null> = {
+  A: { id: "user-a", email: "a@example.com", isAdmin: false },
+  B: { id: "user-b", email: "b@example.com", isAdmin: false },
+  guest: null,
+};
+
 let who: Who = "A";
 let summaryCalls = 0;
+let sessionCalls = 0;
 
 /** One card's worth of hooks: progress bars + quiz strip. */
 function Card() {
@@ -53,6 +60,20 @@ function Card() {
   const stats = useSessionQuizStats("series-1", true);
   return (
     <div data-testid="card">
+      <span data-testid="lessons">{[...merge.lessons].sort().join(",")}</span>
+      <span data-testid="best">{stats ? `${stats.bestScore}/${stats.attempts}` : "none"}</span>
+    </div>
+  );
+}
+
+/** A card plus its own useAuth instance (the /atlas hub shape). */
+function AuthCard() {
+  const { user, isLoading } = useAuth();
+  const { merge } = useProgressSummary([], []);
+  const stats = useSessionQuizStats("series-1", true);
+  return (
+    <div data-testid="card">
+      <span data-testid="email">{isLoading ? "loading" : (user?.email ?? "guest")}</span>
       <span data-testid="lessons">{[...merge.lessons].sort().join(",")}</span>
       <span data-testid="best">{stats ? `${stats.bestScore}/${stats.attempts}` : "none"}</span>
     </div>
@@ -75,11 +96,19 @@ const originalFetch = globalThis.fetch;
 beforeEach(() => {
   who = "A";
   summaryCalls = 0;
+  sessionCalls = 0;
   invalidateProgressSummary();
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : String(input);
-    if (url === "/api/progress/summary") summaryCalls += 1;
-    return { ok: true, json: async () => PAYLOADS[who] } as unknown as Response;
+    if (url === "/api/progress/summary") {
+      summaryCalls += 1;
+      return { ok: true, json: async () => PAYLOADS[who] } as unknown as Response;
+    }
+    if (url === "/api/auth/session") {
+      sessionCalls += 1;
+      return { ok: true, json: async () => ({ user: SESSIONS[who] }) } as unknown as Response;
+    }
+    return { ok: true, json: async () => ({}) } as unknown as Response;
   }) as never;
 });
 
@@ -161,6 +190,89 @@ describe("progress summary cache × identity transitions (PERF-P1 t_e786efe2)", 
 
     // A's payload must not be handed back across the transition.
     await expect(inFlight).resolves.toBeNull();
+  });
+});
+
+describe("cross-tab identity change via focus (SEC-R2-F1 t_2dd0e9f9)", () => {
+  it("refetches the summary on focus and renders B's stats, one request for the fan-out", async () => {
+    render(
+      <>
+        <AuthCard />
+        <AuthCard />
+        <AuthCard />
+      </>,
+    );
+    await waitFor(() =>
+      expect(screen.getAllByTestId("email").every((n) => n.textContent === "a@example.com")).toBe(true),
+    );
+    await waitFor(() =>
+      expect(screen.getAllByTestId("best").every((n) => n.textContent === "82/3")).toBe(true),
+    );
+    expect(summaryCalls).toBe(1);
+
+    // Another tab signs A out and B in; the cookie jar changed underneath us.
+    // The only signal this tab gets is `focus` (SEC-R2-2-M3b's seam).
+    who = "B";
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    // useAuth must report B ...
+    await waitFor(() =>
+      expect(screen.getAllByTestId("email").every((n) => n.textContent === "b@example.com")).toBe(true),
+    );
+    // ... and every mounted card must show B's progress/quiz stats, not A's.
+    await waitFor(() =>
+      expect(screen.getAllByTestId("best").every((n) => n.textContent === "41/1")).toBe(true),
+    );
+    for (const node of screen.getAllByTestId("lessons")) {
+      expect(node).toHaveTextContent("series-2-1");
+      expect(node).not.toHaveTextContent("series-1-1");
+    }
+    // 3 cards × 2 summary hooks + 3 useAuth instances still collapse into ONE
+    // new summary read (and one session read).
+    expect(summaryCalls).toBe(2);
+    expect(sessionCalls).toBe(2);
+  });
+
+  it("a stale mount read settling after the identity refresh does not wipe B's payload", async () => {
+    // QA-L1 (t_2dd0e9f9): A's read is in flight when the identity changes. The
+    // post-transition refresh delivers B first; A's read then settles to null
+    // (epoch discard). That null must NOT be applied to the mounted card.
+    const resolvers: Array<(payload: unknown) => void> = [];
+    globalThis.fetch = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolvers.push((payload) =>
+            resolve({ ok: true, json: async () => payload } as unknown as Response),
+          );
+        }),
+    ) as never;
+
+    render(<Card />);
+    await waitFor(() => expect(resolvers.length).toBe(1));
+    const staleRead = resolvers[0];
+
+    who = "B";
+    await act(async () => {
+      invalidateProgressSummary();
+      notifyAuthChanged();
+    });
+    await waitFor(() => expect(resolvers.length).toBe(2));
+
+    // B's read lands first and renders.
+    await act(async () => {
+      resolvers[1](PAYLOADS["B"]);
+    });
+    await waitFor(() => expect(screen.getByTestId("best")).toHaveTextContent("41/1"));
+
+    // A's stale read settles last: discarded, never `setSummary(null)`.
+    await act(async () => {
+      staleRead(PAYLOADS["A"]);
+    });
+    expect(screen.getByTestId("best")).toHaveTextContent("41/1");
+    expect(screen.getByTestId("lessons")).toHaveTextContent("series-2-1");
+    expect(screen.getByTestId("lessons")).not.toHaveTextContent("series-1-1");
   });
 });
 
