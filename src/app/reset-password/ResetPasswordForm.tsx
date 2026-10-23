@@ -1,12 +1,11 @@
 /**
  * /reset-password — new-password form (client component).
  *
- * Rendered ONLY after a server-side gate in page.tsx: either a `?token=` from
- * the reset email (the credential — imported legacy users are signed out and
- * must still be able to reset) or an authed session (see the t_4fbc8f48
- * finding: the SSR HTML previously leaked the form to guests because the gate
- * was client-only). The useAuth check below stays as a defensive backstop for
- * the session path only.
+ * Rendered ONLY when the server component in page.tsx has a `?token=` from the
+ * reset email — the token is the credential (the update route redeems it, and
+ * imported legacy users are signed out and must still be able to reset). There
+ * is no session path: the route 401s without a token, so a session-gated form
+ * could only fail (t_233b6f61).
  *
  * Handles: form validation (min 6, match),
  * POST /api/auth/reset-password/update { password, token }, success state
@@ -15,29 +14,18 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { useAuth, notifyAuthChanged } from "@/lib/hooks/useAuth";
+import { notifyAuthChanged } from "@/lib/hooks/useAuth";
 
-export default function ResetPasswordForm({ token }: { token?: string }) {
-  const router = useRouter();
-  const { user, isLoading } = useAuth();
-
+export default function ResetPasswordForm({ token }: { token: string }) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [isPending, startTransition] = useTransition();
-
-  // Defensive backstop for the SESSION path only (the token path is
-  // deliberately open to guests, and page.tsx is the primary gate).
-  if (!token && !isLoading && !user) {
-    router.replace("/login?next=/reset-password");
-    return null;
-  }
 
   if (success) {
     return (
@@ -113,7 +101,7 @@ export default function ResetPasswordForm({ token }: { token?: string }) {
         const res = await fetch("/api/auth/reset-password/update", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(token ? { password, token } : { password }),
+          body: JSON.stringify({ password, token }),
         });
         const data = (await res.json().catch(() => null)) as {
           error?: string;
