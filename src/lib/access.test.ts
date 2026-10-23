@@ -610,3 +610,108 @@ describe("accessSeam (createAccessSeam over fake loader)", () => {
     expect(res.entries[0].canAccess).toBe(true); // free model
   });
 });
+
+/* ------------------------------------------------------------------ */
+/*  PERF-LOW-2 (t_10a6b284): batched catalog read == per-series seam  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * `/api/continue-learning` now gates every series off ONE
+ * `getCatalogForUser` call instead of one `decideCourseAccess` per series.
+ * That substitution is only sound if, for the same loader, a series is
+ * "accessible" under both paths. Pin the equivalence here (the route test
+ * pins the read count and the response body).
+ */
+describe("PERF-LOW-2: getCatalogForUser.canAccess ⇔ decideCourseAccess granted|admin-preview", () => {
+  const matrix: CourseRow[] = [
+    course({ id: "free-live", series_slug: "free-live", access_model: "free" }),
+    course({ id: "granted-live", series_slug: "granted-live", access_model: "granted" }),
+    course({ id: "granted-live-held", series_slug: "granted-live-held", access_model: "granted" }),
+    course({ id: "one-time", series_slug: "one-time", access_model: "one-time" }),
+    course({ id: "one-time-held", series_slug: "one-time-held", access_model: "one-time" }),
+    course({ id: "sub", series_slug: "sub", access_model: "subscription" }),
+    course({
+      id: "sub-one-time",
+      series_slug: "sub-one-time",
+      access_model: "sub-or-one-time",
+    }),
+    course({ id: "pending", series_slug: "pending", status: "pending", access_model: "free" }),
+    course({ id: "archived", series_slug: "archived", status: "archived", access_model: "free" }),
+    // "no-row" is deliberately absent from the loader.
+  ];
+
+  const heldEntitlements = [
+    entitlement({ id: "e-granted", course_id: "granted-live-held", source: "granted" }),
+    entitlement({ id: "e-one-time", course_id: "one-time-held", source: "one-time" }),
+  ];
+  const subs = [sub({})];
+
+  function loaderFor(opts: {
+    courses: CourseRow[];
+    isAdmin: boolean;
+    entitlements?: UserEntitlementRow[];
+    subscriptions?: SubscriptionRow[];
+  }): PlatformDataLoader {
+    return fakeLoader({
+      getCatalogCourses: vi.fn().mockResolvedValue(opts.courses),
+      getCourseBySlug: vi.fn(async (slug: string) =>
+        opts.courses.find((c) => c.series_slug === slug) ?? null,
+      ),
+      getRole: vi.fn().mockResolvedValue(opts.isAdmin ? "admin" : null),
+      getActiveEntitlements: vi.fn().mockResolvedValue(opts.entitlements ?? []),
+      getActiveSubscriptions: vi.fn().mockResolvedValue(opts.subscriptions ?? []),
+    });
+  }
+
+  const slugs = [...matrix.map((c) => c.series_slug), "no-row"];
+
+  const cases: Array<{ name: string; opts: Parameters<typeof loaderFor>[0] }> = [
+    { name: "member, no grants, no sub", opts: { courses: matrix, isAdmin: false } },
+    {
+      name: "member with grants + subscription",
+      opts: {
+        courses: matrix,
+        isAdmin: false,
+        entitlements: heldEntitlements,
+        subscriptions: subs,
+      },
+    },
+    {
+      name: "member whose catalogue read is live-only (RLS)",
+      opts: {
+        courses: matrix.filter((c) => c.status === "live"),
+        isAdmin: false,
+        entitlements: heldEntitlements,
+        subscriptions: subs,
+      },
+    },
+    {
+      name: "admin",
+      opts: { courses: matrix, isAdmin: true, entitlements: heldEntitlements, subscriptions: subs },
+    },
+  ];
+
+  for (const c of cases) {
+    it(`agrees per series — ${c.name}`, async () => {
+      const seam = createAccessSeam(loaderFor(c.opts));
+      const catalog = await seam.getCatalogForUser(c.opts.isAdmin ? "u-admin" : "u1");
+      const viaCatalog = new Set(
+        catalog.entries.filter((e) => e.canAccess).map((e) => e.course.series_slug),
+      );
+
+      const viaPerSeries = new Set<string>();
+      for (const slug of slugs) {
+        const decision = await seam.decideCourseAccess(
+          c.opts.isAdmin ? "u-admin" : "u1",
+          slug,
+        );
+        if (decision.kind === "granted" || decision.kind === "admin-preview") {
+          viaPerSeries.add(slug);
+        }
+      }
+
+      expect([...viaCatalog].sort()).toEqual([...viaPerSeries].sort());
+    });
+  }
+});
+
