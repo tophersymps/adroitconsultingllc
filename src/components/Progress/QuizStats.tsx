@@ -3,16 +3,24 @@
  *
  * Reads quiz stats from two sources and merges them:
  *  - localStorage (authoritative client copy via useQuizProgress)
- *  - Supabase quiz_run rows (GET /api/progress/quiz/run) for authed users
+ *  - the caller's quiz_run aggregates, shipped with the shared
+ *    GET /api/progress/summary read (`quizStats`) for authed users
+ *
+ * PERF (t_22e18719): this used to issue GET /api/progress/quiz/run per strip,
+ * so the signed-in /atlas hub fired one such request per card. It now reads the
+ * one summary payload the pages already fetch for the progress bars.
  *
  * Renders nothing when there are no attempts — never invents stats.
  */
 "use client";
 
-import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useQuizProgress } from "@/lib/hooks/useQuizProgress";
 import { useAuth } from "@/lib/hooks/useAuth";
+import {
+  useSessionQuizStats,
+  type ProgressQuizStats,
+} from "@/lib/hooks/useProgressSummary";
 
 interface QuizStatsProps {
   seriesSlug: string;
@@ -33,11 +41,6 @@ interface QuizStatsProps {
   scope?: "lesson" | "check" | "exam" | "all";
 }
 
-interface ServerStats {
-  bestScore: number;
-  attempts: number;
-}
-
 export default function QuizStats({
   seriesSlug,
   onGradient = false,
@@ -49,32 +52,16 @@ export default function QuizStats({
   const quizName = scope === "all" ? seriesSlug : `${seriesSlug}:${scope}`;
   const { progress, hydrated } = useQuizProgress(quizName);
   const { user } = useAuth();
-  const [server, setServer] = useState<ServerStats | null>(null);
 
   // Local stats: bestScore + attemptCount persisted by useQuizProgress
   const localAttempts = progress.attemptCount;
   const localBest = progress.bestScore;
 
-  useEffect(() => {
-    let cancelled = false;
-    if (!user) return;
-    (async () => {
-      try {
-        const res = await fetch(`/api/progress/quiz/run?quizName=${encodeURIComponent(quizName)}`, {
-          cache: "no-store",
-        });
-        if (cancelled) return;
-        if (!res.ok) return;
-        const data = (await res.json()) as ServerStats;
-        if (!cancelled) setServer(data);
-      } catch {
-        // no server stats — local (localStorage) is authoritative
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user, quizName]);
+  // Cross-device stats come from the ONE shared `/api/progress/summary` read
+  // (PERF t_22e18719) instead of one `/api/progress/quiz/run` per card. A
+  // missing entry means the user has no server-side runs for this quiz, so the
+  // localStorage copy stays authoritative. Guests never trigger the read.
+  const server: ProgressQuizStats | null = useSessionQuizStats(quizName, !!user);
 
   // Merge: server wins for authed users (cross-device), local as fallback
   const attempts = user ? (server?.attempts ?? localAttempts) : localAttempts;
