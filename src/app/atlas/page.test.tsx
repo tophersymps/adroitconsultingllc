@@ -118,27 +118,89 @@ describe("/atlas — prerender-safe wiring", () => {
   });
 });
 
-describe("/atlas — empty-catalogue prerender guard (SEO-M2)", () => {
+describe("/atlas — empty-catalogue prerender guard (SEO-M2 / SEO-H1)", () => {
   const originalPhase = process.env.NEXT_PHASE;
+  const originalVercelEnv = process.env.VERCEL_ENV;
+  const originalGuard = process.env.ATLAS_BUILD_GUARD;
+
+  beforeEach(() => {
+    // Plain (non-Vercel) production build: the guard is armed by default.
+    delete process.env.VERCEL_ENV;
+    delete process.env.ATLAS_BUILD_GUARD;
+  });
 
   afterEach(() => {
     if (originalPhase === undefined) delete process.env.NEXT_PHASE;
     else process.env.NEXT_PHASE = originalPhase;
+    if (originalVercelEnv === undefined) delete process.env.VERCEL_ENV;
+    else process.env.VERCEL_ENV = originalVercelEnv;
+    if (originalGuard === undefined) delete process.env.ATLAS_BUILD_GUARD;
+    else process.env.ATLAS_BUILD_GUARD = originalGuard;
+    vi.restoreAllMocks();
   });
 
-  it("fails the BUILD when the catalogue read throws (no empty hub gets published)", async () => {
+  it("WARNS (does not fail) when the catalogue read throws — infra failure is not 'empty catalogue'", async () => {
     process.env.NEXT_PHASE = "phase-production-build";
     mocks.getCatalogForUserV2.mockRejectedValue(new Error("connection refused"));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    await expect(Page()).rejects.toThrow(/atlas prerender aborted/i);
-    await expect(Page()).rejects.toThrow(/connection refused/);
+    const { default: R } = await import("react-dom/server");
+    const html = R.renderToString((await Page()) as never);
+
+    expect(html).toMatch(/cards:(<!-- -->)?0/);
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/build warning[\s\S]*connection refused/),
+    );
   });
 
   it("fails the BUILD when the catalogue resolves to zero visible courses", async () => {
     process.env.NEXT_PHASE = "phase-production-build";
     mocks.getCatalogForUserV2.mockResolvedValue({ courses: [], isAdmin: false });
 
+    await expect(Page()).rejects.toThrow(/atlas prerender aborted/i);
     await expect(Page()).rejects.toThrow(/0 visible courses/);
+  });
+
+  it("does NOT fail the build on a read failure in a Vercel Preview deploy (SEO-H1)", async () => {
+    process.env.NEXT_PHASE = "phase-production-build";
+    process.env.VERCEL_ENV = "preview";
+    mocks.getCatalogForUserV2.mockRejectedValue(new Error("RLS denied"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { default: R } = await import("react-dom/server");
+    const html = R.renderToString((await Page()) as never);
+
+    expect(html).toMatch(/cards:(<!-- -->)?0/);
+  });
+
+  it("does NOT fail a Preview build even when the catalogue resolves to zero courses", async () => {
+    process.env.NEXT_PHASE = "phase-production-build";
+    process.env.VERCEL_ENV = "preview";
+    mocks.getCatalogForUserV2.mockResolvedValue({ courses: [], isAdmin: false });
+
+    const { default: R } = await import("react-dom/server");
+    const html = R.renderToString((await Page()) as never);
+
+    expect(html).toMatch(/cards:(<!-- -->)?0/);
+  });
+
+  it("stays armed on a Vercel PRODUCTION deploy (0 visible courses still fails)", async () => {
+    process.env.NEXT_PHASE = "phase-production-build";
+    process.env.VERCEL_ENV = "production";
+    mocks.getCatalogForUserV2.mockResolvedValue({ courses: [], isAdmin: false });
+
+    await expect(Page()).rejects.toThrow(/0 visible courses/);
+  });
+
+  it("honours ATLAS_BUILD_GUARD=0 as an explicit opt-out", async () => {
+    process.env.NEXT_PHASE = "phase-production-build";
+    process.env.ATLAS_BUILD_GUARD = "0";
+    mocks.getCatalogForUserV2.mockResolvedValue({ courses: [], isAdmin: false });
+
+    const { default: R } = await import("react-dom/server");
+    const html = R.renderToString((await Page()) as never);
+
+    expect(html).toMatch(/cards:(<!-- -->)?0/);
   });
 
   it("does NOT fail the build when Supabase env is absent (env-less CI/local builds)", async () => {

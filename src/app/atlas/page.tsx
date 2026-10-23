@@ -73,8 +73,23 @@ function describeError(err: unknown): string {
  * it cannot resolve a catalogue by definition (see the env check in
  * `lib/supabase/server.ts`), and failing there would break every CI/local build
  * that intentionally runs without data credentials.
+ *
+ * Scope (SEO-H1, t_b5e0b4bf): the guard is a PRODUCTION-only refusal. Vercel
+ * sets the Supabase vars on every environment, so phase+env alone armed it on
+ * Preview deployments too — a preview with an unreachable/RLS-restricted
+ * catalogue then could not build at all, turning a "publish an empty hub" risk
+ * into "cannot ship". Previews fall back to the graceful empty hub; only a
+ * production deploy refuses to bake one. `ATLAS_BUILD_GUARD=0` explicitly
+ * disables the guard (e.g. a production build against a empty staging DB).
  */
 function isProdCatalogueBuild(): boolean {
+  if (process.env.ATLAS_BUILD_GUARD === "0") return false;
+  // VERCEL_ENV is "production" | "preview" | "development" on Vercel; absent
+  // in plain CI/local builds, where a phase-production-build is a real prod
+  // build and the guard should stay armed.
+  if (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== "production") {
+    return false;
+  }
   return (
     process.env.NEXT_PHASE === "phase-production-build" &&
     Boolean(
@@ -140,16 +155,27 @@ export default async function LearnLandingPage() {
   // course text behind `s-maxage=31536000` — permanently, until the next
   // redeploy. Fail the build instead; the graceful empty state stays for the
   // runtime/ISR path (where `revalidate = 3600` self-heals within the hour).
+  //
+  // SEO-H1 (t_b5e0b4bf): only a resolved-to-zero catalogue fails the build.
+  // An infra read failure (network/creds/RLS blip) is a WARNING — it says
+  // nothing about whether the catalogue is really empty, and hard-failing on
+  // it made every Vercel build unshippable when the build env could not read
+  // the DB. The empty hub is still CDN-cached for at most one ISR period.
   if (courses.length === 0 && isProdCatalogueBuild()) {
-    const detail =
-      catalogueError === null
-        ? "the catalogue resolved to 0 visible courses"
-        : `the catalogue read failed (${describeError(catalogueError)})`;
-    throw new Error(
-      `/atlas prerender aborted: ${detail}. Refusing to publish an empty, ` +
-        `CDN-cached Atlas hub (SEO-M2 / t_80131e31). Check the data layer ` +
-        `before deploying.`,
-    );
+    if (catalogueError !== null) {
+      console.error(
+        `/atlas build warning: the catalogue read failed (${describeError(
+          catalogueError,
+        )}). Publishing the graceful empty hub; ISR will retry within ` +
+          `revalidate=3600s. Fix the data layer if this is a production build.`,
+      );
+    } else {
+      throw new Error(
+        `/atlas prerender aborted: the catalogue resolved to 0 visible ` +
+          `courses. Refusing to publish an empty, CDN-cached Atlas hub ` +
+          `(SEO-M2 / t_80131e31). Check the data layer before deploying.`,
+      );
+    }
   }
 
   return (
