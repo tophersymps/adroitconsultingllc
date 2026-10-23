@@ -2,6 +2,38 @@
 
 All notable changes to the Adroit Consulting Blog project will be documented in this file.
 
+### OPS: production cutover to Neon + Managed Better Auth is complete (R2-5, t_3682070b)
+
+**What** - Production (`adroit.io`) now runs entirely on Neon (Data API + Managed Better Auth): the
+Release 2 env swap (Neon keys live from 2026-10-23T16:59:44Z) plus the R2-1 auth routes and R2-2 Neon
+data client (PR #361) reached production with deployment `dpl_9TXJJTpBJQ9sZi56HFVaW5Xj6Xz9`
+(`d3d24bc3`). `docs/ROLLBACK-auth-migration.md` §4 is now fully filled in: the rollback target is
+re-captured (`dpl_8AfUtKyqo1qjwZx4xhJEqFwWG9yN`, the last deployment built before the Neon env existed —
+the pre-flight ID `dpl_6S5sEBX…` has been garbage-collected and returns `not_found`), the `LEGACY_*`
+Supabase secrets are re-verified against their recorded hashes, and the `neon_auth` post-cutover export
+(9 tables + schema + per-file SHA256SUMS) is recorded with tarball sha256
+`5f26b3038b51c1ae5ce049367f6b1877c13260496a8f93724fa9ec855abe3375`. `docs/migration-delta-verification.md`
+and `scripts/migration-delta-fingerprint.sql` from PR #354 land here too.
+
+**Why** - The migration's irreversible-looking steps needed a tested way back *and* a record of what
+production actually is afterwards; the pre-flight runbook target was a moving pointer that has since
+disappeared, and Supabase must stay paused (not deleted) for 30 days.
+
+**Verified** - Production smoke on the live alias, 15/15 assertions: signup → verification state →
+signin (session cookies `__Secure-neon-auth.*`) → `GET /api/auth/session`; signed-in
+`GET /api/atlas/cards` returns **12 series** (4 accessible); `POST /api/progress/lesson` persists to
+`public.lesson_completion`; `POST /api/progress/quiz` persists to `public.quiz_attempt` and grades
+server-side; temp-admin `GET /api/admin/users` returns 39 users, then role and entitlements reverted;
+logout clears the session. Neon Auth `allow_localhost` PATCHed to `false` and re-read; trusted domains
+`https://adroit.io`, `https://www.adroit.io`, `https://*.vercel.app`. Supabase project
+`zrggxfdyptiahskogwnn` paused (`INACTIVE`, verified) with a deletion reminder at 2026-11-22.
+
+**Known Issues** - (1) `LEGACY_*` Supabase credentials authenticate but every Supabase endpoint answers
+`402 exceed_storage_size_quota`, so a Tier 2 env rollback restores the code path only. (2) The Vercel
+project's trusted-domain list still carries a `https://*.vercel.app` wildcard. (3) Three throwaway
+smoke/QA accounts remain in `neon_auth.user` (deletes are blocked by the worker destructive-command
+guard); they hold no entitlements and no admin role.
+
 ### SEC-R2-5-M1/L1/L2: the anonymous Data API token's scope is proven before it is cached (t_52f55ea7)
 
 **What** - Hardening follow-up to R2-5 (PR #363), from val-el's security review of that PR's head (`180297ff`):
