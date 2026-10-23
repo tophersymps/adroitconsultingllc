@@ -2,6 +2,21 @@
 
 All notable changes to the Adroit Consulting Blog project will be documented in this file.
 
+### Perf follow-up: /atlas card footer no longer reflows on the signed-in upgrade (PERF-M2 + PERF-L2, t_c54f6999)
+
+**What** - Four source files + two test files, no new mechanism:
+(1) `src/components/Learn/PathCard.tsx` — both footers (guest CTA and signed-in progress) now reserve `min-h-[96px]`, and the quiz row is reserved with `min-h-[16px]` so `QuizStats` rendering nothing (no attempts yet) cannot grow the card later.
+(2) `src/components/Progress/SeriesProgress.tsx` — the loading state is now the FULL `ProgressIndicator` at 0% (`animate-pulse opacity-70`, `aria-hidden`) instead of a bare 6px pulse bar, so the prerendered HTML and the hydrated render are the same height.
+(3) `src/app/atlas/page.tsx` — `getCatalogForUserV2` and `getCatalogOrg` now run in one `Promise.all` instead of two serial awaits (PERF-L2).
+(4) `src/lib/hooks/useProgressSummary.ts` — the shared per-session summary is now marked stale on `PROGRESS_CHANGED_EVENT` / `storage` / `AUTH_CHANGED_EVENT`, closing Known Issue (4) of t_22e18719 (`invalidateProgressSummary()` had no caller, so a cached summary could outlive a progress write or a sign-out in the same tab).
+(5) Tests: `src/components/Progress/SeriesProgress.test.tsx` (new) pins the final-height loading shape; `src/components/Learn/PathCard.test.tsx` gains the footer/quiz-row reservation cases.
+
+**Why** - sato's performance review of PR #358 (t_b3882a78, PERF-M2) measured the signed-in hub upgrade shrinking each card ~15-25px (guest footer ~95px vs signed-in ~70-82px, then `QuizStats` adding a strip after hydration) and reflowing every row below it in the 2-column grid — a post-hydration CLS on the route that now upgrades its card gate client-side. PERF-M1 (the ~25-request fan-out) was **already fixed on this branch** by `92611f55` (t_22e18719: one shared `/api/progress/summary` carrying `quizStats`, `LearnHub.requests.test.tsx` asserting the budget); this card re-verified that fix rather than adding a second, competing cache, and only closed its one open gap (stale invalidation).
+
+**Verified** - `npx vitest run` **121 files / 1069 tests passed** (includes `LearnHub.requests.test.tsx`: 9 signed-in cards ⇒ exactly `[/api/atlas/cards, /api/auth/session, /api/progress/summary]`, 0 `/api/progress/quiz/run`; guest ⇒ exactly 1 request). `npx tsc --noEmit` exit 0; `npx eslint` clean on all six touched files. `npm run build` succeeds and still emits `○ /atlas 1h 1y` (`dynamic = "force-static"` + `revalidate = 3600` intact); `next start` + `curl -D -` on `/atlas` → `HTTP 200`, `x-nextjs-cache: HIT`, `s-maxage=3600, stale-while-revalidate=31532400`, and a real browser load renders `<h1>The Atlas</h1>`.
+
+**Known Issues** - (1) No live signed-in measurement was possible in this worktree (no `.env`/DB ⇒ local `/atlas` renders the empty catalogue, same gap sato recorded), so the CLS fix is verified structurally (footer floor + reserved quiz row + same-height loading skeleton in jsdom) and **still needs a Lighthouse re-measure on a green Vercel deployment**. (2) Signed-in-but-locked cards additionally render the 44px "Preview first lesson" link (ADR-221), which is part of the final signed-in layout — the guest→signed-in swap therefore still grows those cards by ~56px; the affordance is core UX and is uniform per access state, so it is documented rather than reserved away. (3) PERF-L1 (guest `cache-control` on `/api/atlas/cards`) and PERF-I1 (ISR can cache a 0-card hub on a revalidation-time DB error) remain open per the audit.
+
 ### Perf: /atlas signed-in upgrade stops fanning out to 19 requests (PERF-MEDIUM, t_22e18719)
 
 **What** - Five files, no architecture change — the client islands now share ONE read each instead of one per card:

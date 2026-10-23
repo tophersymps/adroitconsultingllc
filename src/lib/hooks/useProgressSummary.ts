@@ -20,6 +20,7 @@ import {
   PROGRESS_CHANGED_EVENT,
   type ProgressMerge,
 } from "@/lib/progress";
+import { AUTH_CHANGED_EVENT } from "@/lib/hooks/useAuth";
 
 interface UseProgressSummaryReturn {
   /** Merged read/completed sets (slug keys, bare form). */
@@ -134,14 +135,23 @@ export function useProgressSummary(
     };
   }, []);
 
-  // Live-update aggregate bars when any progress hook writes localStorage.
+  // Live-update aggregate bars when any progress hook writes localStorage, and
+  // mark the shared summary stale: the next read (e.g. navigating back to the
+  // hub) must not reuse a summary that predates the write. Same for an identity
+  // transition — the cached summary belongs to the previous session.
   useEffect(() => {
-    const onChanged = () => setChangeTick((t) => t + 1);
+    const onChanged = () => {
+      invalidateProgressSummary();
+      setChangeTick((t) => t + 1);
+    };
+    const onAuthChanged = () => invalidateProgressSummary();
     window.addEventListener(PROGRESS_CHANGED_EVENT, onChanged);
     window.addEventListener("storage", onChanged);
+    window.addEventListener(AUTH_CHANGED_EVENT, onAuthChanged);
     return () => {
       window.removeEventListener(PROGRESS_CHANGED_EVENT, onChanged);
       window.removeEventListener("storage", onChanged);
+      window.removeEventListener(AUTH_CHANGED_EVENT, onAuthChanged);
     };
   }, []);
 

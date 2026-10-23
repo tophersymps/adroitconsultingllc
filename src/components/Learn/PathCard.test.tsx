@@ -52,3 +52,35 @@ describe("PathCard preview link (ADR-221)", () => {
     expect(screen.getByRole("link", { name: /sign in to access courses/i })).toBeTruthy();
   });
 });
+
+/**
+ * PERF-M2 (t_c54f6999): the post-hydration guest→signed-in swap must not change
+ * the card's footer height. The guest footer is ~95px; the signed-in footer is
+ * shorter, so each card shrank after hydration and reflowed every row below it
+ * in the 2-column grid. Both footers now reserve a 96px floor, and the quiz row
+ * (which QuizStats leaves empty until it has attempts) is reserved too.
+ */
+describe("PathCard footer height reservation (PERF-M2)", () => {
+  function footers(container: HTMLElement): HTMLElement[] {
+    return Array.from(container.querySelectorAll("div.border-t")) as HTMLElement[];
+  }
+
+  it("reserves a 96px floor on the guest footer", () => {
+    const { container } = render(
+      <PathCard series={card({ canAccess: false })} gate="guest-locked" />,
+    );
+    const [footer] = footers(container);
+    expect(footer.className).toContain("min-h-[96px]");
+  });
+
+  it("reserves the same 96px floor plus a quiz row on the signed-in footer", () => {
+    const { container } = render(
+      <PathCard series={card({ canAccess: true })} gate="signed-in" />,
+    );
+    const [footer] = footers(container);
+    expect(footer.className).toContain("min-h-[96px]");
+
+    const quizSlot = screen.getByTestId("quiz-stats").parentElement;
+    expect(quizSlot?.className).toContain("min-h-[16px]");
+  });
+});
