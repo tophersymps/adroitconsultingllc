@@ -77,15 +77,38 @@ describe("anonymous token cache", () => {
     expect(mint).toHaveBeenCalledTimes(2);
   });
 
-  it("never caches for less than a minute when exp is already near", async () => {
+  it("never serves past the token's own exp when exp is already near", async () => {
     const mint = vi.fn(async () => okToken(30_000));
-    await getAnonymousJwtResult(mint);
+    const first = await getAnonymousJwtResult(mint);
+    // The hard stop is exp itself — NOT a 60 s floor above it.
+    expect(first.ok).toBe(true);
+    expect(first.ok && first.expiresAtMs).toBe(NOW + 30_000);
 
     vi.advanceTimersByTime(20_000);
     await getAnonymousJwtResult(mint);
-
-    // Floored at 60 s of freshness, so still a hit at 20 s.
+    // Still inside the token's 30 s lifetime → a hit.
     expect(mint).toHaveBeenCalledTimes(1);
+
+    // Past exp → a new mint, never the expired entry.
+    vi.advanceTimersByTime(11_000);
+    await getAnonymousJwtResult(mint);
+    expect(mint).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses a mint that is already at/over its exp (SEC-R2-5-L2)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const mint = vi.fn(async () => okToken(-30_000, "expired.jwt.token"));
+
+    const result = await getAnonymousJwtResult(mint);
+
+    // Never cached, never served: the caller degrades instead.
+    expect(result.ok).toBe(false);
+    expect(anonTokenStats.mints).toBe(0);
+    expect(anonTokenStats.failures).toBe(1);
+    const calls = warn.mock.calls.filter((c) => c[0] === "[db] token unavailable");
+    expect(calls).toHaveLength(1);
+    expect(JSON.stringify(calls)).toContain("\"errorClass\":\"malformed\"");
+    warn.mockRestore();
   });
 
   it("single-flights concurrent misses", async () => {

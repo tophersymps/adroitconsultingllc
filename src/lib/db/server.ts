@@ -132,9 +132,17 @@ async function fetchTokenResult(
   path: "/token" | "/token/anonymous",
 ): Promise<AnonTokenResult> {
   const base = authBaseUrl(); // fail closed on missing env (outside the try)
-  const cookie = await requestCookieHeader();
   const headers: Record<string, string> = { Accept: "application/json" };
-  if (cookie) headers.Cookie = cookie;
+  // The caller's httpOnly session cookie is the ONLY way user identity enters
+  // this module, so it is sent to `/token` alone. `/token/anonymous` needs no
+  // caller identity, and the token it returns is cached process-wide
+  // (./anonymous-token) — minting that shared credential with a specific
+  // user's cookie attached is exactly how user context could leak into it
+  // (SEC-R2-5-L1). Never attach it there.
+  if (path === "/token") {
+    const cookie = await requestCookieHeader();
+    if (cookie) headers.Cookie = cookie;
+  }
 
   let res: Response;
   try {
@@ -159,10 +167,15 @@ async function fetchTokenResult(
   }
 
   const payload = decodeJwtPayload(token);
-  // Defence in depth on the anonymous path: this token is cached process-wide,
-  // so it must never be anything but the identity-free `anonymous` role.
-  if (path === "/token/anonymous" && payload && typeof payload.role === "string") {
-    if (payload.role !== "anonymous") {
+  // The anonymous token is cached process-wide, so its scope must be PROVEN
+  // before it can be used: only a decodable JWT whose `role` is exactly
+  // `anonymous` is acceptable. Fail CLOSED — a role-less payload, a payload
+  // with a user `sub` but no role, and an opaque non-JWT string are all
+  // rejected as `malformed` (the route then degrades, never 500s).
+  // SEC-R2-5-M1.
+  if (path === "/token/anonymous") {
+    const role = payload?.role;
+    if (role !== "anonymous") {
       return { ok: false, status: res.status, errorClass: "malformed" };
     }
   }
