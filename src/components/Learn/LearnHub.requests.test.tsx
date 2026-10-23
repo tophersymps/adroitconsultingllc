@@ -11,12 +11,20 @@
  * — 19 requests at the 9-card production size (sato's probe on PR #358).
  *
  * These tests mount the REAL components (no component mocks) and count
- * requests by URL against the acceptance budget:
- *   - signed-in, 9 cards → ≤ 3 post-hydration requests
- *   - guest               → still exactly 1 (no identity read, no progress read)
+ * requests by URL against the acceptance budget. The true post-hydration set
+ * (PERF-LOW-1, t_ea10119b — `ContinueLearning` used to be mocked out here, so
+ * these numbers were one request optimistic):
+ *   - signed-in, 9 cards → exactly 4:
+ *       /api/atlas/cards, /api/auth/session, /api/progress/summary,
+ *       /api/continue-learning
+ *   - guest               → exactly 2:
+ *       /api/atlas/cards, /api/continue-learning
  *
  * The guest half is the regression guard: `/atlas` must keep building as ○, so
- * nothing here may turn into a per-visitor server identity read.
+ * nothing here may turn into a per-visitor server identity read. Its second
+ * request is `/api/continue-learning`, which fires for guests too (it answers
+ * `{ items: [] }` from a session read) — worth watching, because everything
+ * else on this route is static.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -25,7 +33,6 @@ import { invalidateAuthSession } from "@/lib/hooks/useAuth";
 import { invalidateProgressSummary } from "@/lib/hooks/useProgressSummary";
 import type { LearnCardSeries } from "@/data/types";
 
-vi.mock("./ContinueLearning", () => ({ default: () => null }));
 vi.mock("@/components/Constellations/PathConstellation", () => ({
   default: () => <div data-testid="constellation" />,
 }));
@@ -77,6 +84,26 @@ function respond(url: string, signedIn: boolean): unknown {
       quizStats: { "series-1": { bestScore: 82, attempts: 3 } },
     };
   }
+  if (url === "/api/continue-learning") {
+    // Signed-in with one in-progress series; guests get the empty list.
+    return {
+      items: signedIn
+        ? [
+            {
+              seriesSlug: "series-1",
+              seriesName: "Series 1",
+              gradient: "from-navy to-navy-light",
+              nextLessonSlug: "series-1-2",
+              nextLessonTitle: "Lesson 2",
+              totalLessons: 3,
+              completedCount: 1,
+              percent: 33,
+              lastCompletedAt: null,
+            },
+          ]
+        : [],
+    };
+  }
   return {};
 }
 
@@ -108,8 +135,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("LearnHub request budget (PERF t_22e18719)", () => {
-  it(`signed-in with ${SERIES_COUNT} cards issues at most 3 API requests`, async () => {
+describe("LearnHub request budget (PERF t_22e18719, corrected t_ea10119b)", () => {
+  it(`signed-in with ${SERIES_COUNT} cards issues exactly 4 API requests`, async () => {
     const calls = installFetch(true);
 
     render(<LearnHub courses={courses} gate="guest-locked" sections={sections} groups={[]} />);
@@ -122,29 +149,52 @@ describe("LearnHub request budget (PERF t_22e18719)", () => {
     await waitFor(() =>
       expect(screen.queryByText(/sign in to track progress/i)).toBeNull(),
     );
+    // The ContinueLearning island resolved into its resume card (not the
+    // reserved placeholder), i.e. its request really happened.
+    await waitFor(() =>
+      expect(screen.getByRole("link", { name: /resume lesson/i })).toBeTruthy(),
+    );
 
-    expect(calls.length).toBeLessThanOrEqual(3);
+    expect([...calls].sort()).toEqual([
+      "/api/atlas/cards",
+      "/api/auth/session",
+      "/api/continue-learning",
+      "/api/progress/summary",
+    ]);
     expect(calls.filter((u) => u === "/api/atlas/cards")).toHaveLength(1);
     expect(calls.filter((u) => u === "/api/auth/session")).toHaveLength(1);
     expect(calls.filter((u) => u === "/api/progress/summary")).toHaveLength(1);
+    expect(calls.filter((u) => u === "/api/continue-learning")).toHaveLength(1);
     // The per-card quiz fan-out is gone.
     expect(calls.filter((u) => u.startsWith("/api/progress/quiz/run"))).toHaveLength(0);
   });
 
-  it("guest path stays at exactly 1 request (the card upgrade probe only)", async () => {
+  it("guest path stays at exactly 2 requests (card upgrade probe + continue-learning)", async () => {
     const calls = installFetch(false);
 
     render(<LearnHub courses={courses} gate="guest-locked" sections={sections} groups={[]} />);
 
-    await waitFor(() =>
-      expect(calls).toContain("/api/atlas/cards"),
-    );
+    await waitFor(() => expect(calls).toContain("/api/atlas/cards"));
+    await waitFor(() => expect(calls).toContain("/api/continue-learning"));
     // Let any (wrong) follow-up fetches settle before asserting.
     await new Promise((r) => setTimeout(r, 20));
 
-    expect(calls).toEqual(["/api/atlas/cards"]);
+    // No identity read (/api/auth/session) and no progress read: the route
+    // must keep building as ○ Static.
+    expect([...calls].sort()).toEqual(["/api/atlas/cards", "/api/continue-learning"]);
     expect(screen.getAllByText(/sign in to track progress on this path/i)).toHaveLength(
       SERIES_COUNT,
+    );
+    // Empty continue-learning → the START STRIP stays in the reserved slot
+    // (t_bbc735da): it is not a pending skeleton, and the slot must not
+    // collapse on the guest path either.
+    await waitFor(() => expect(screen.getByTestId("continue-learning-start")).toBeTruthy());
+    expect(screen.queryByTestId("continue-learning-placeholder")).toBeNull();
+    expect(screen.queryByRole("link", { name: /resume lesson/i })).toBeNull();
+    // The strip names the first published track from the unfiltered list.
+    expect(screen.getByRole("link", { name: /start track/i })).toHaveAttribute(
+      "href",
+      "/atlas/series-1",
     );
   });
 });
