@@ -46,22 +46,51 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   } catch {
     liveSlugs = null;
   }
-  // F-2 / CWE-200 (t_0194c233): FAIL CLOSED. When the courses table cannot be
-  // read we cannot prove ANY series is live, so the learn section falls back to
-  // the static launch mirror — never to every content series, which would
-  // advertise unpublished ("stealth") courses to crawlers from a session-free
-  // surface. Static marketing/blog/tag URLs are unaffected.
-  const liveSet =
-    liveSlugs ??
-    new Set(
-      learnSeries
-        .filter((s) => isPubliclyLaunchedSeries(s.slug))
-        .map((s) => s.slug),
-    );
+  // Publication requires BOTH authorities (t_0194c233 doctrine, Q1 of
+  // t_466b3b10): `courses.status = 'live'` is the authority for ACCESS
+  // (rendering), the static launch mirror `isPubliclyLaunchedSeries` is the
+  // authority for DISCLOSURE (naming). A slug may be listed publicly IFF it is
+  // in the mirror AND (the DB is unreadable OR the row is live).
+  //
+  // F-2 / CWE-200 (t_0194c233): FAIL CLOSED on the outage path. When the
+  // courses table cannot be read we cannot prove ANY series is live, so the
+  // learn section falls back to the static launch mirror — never to every
+  // content series, which would advertise unpublished ("stealth") courses to
+  // crawlers from a session-free surface.
+  //
+  // Q1 (t_466b3b10): INTERSECT on the healthy path too. The `/admin` course
+  // surface can flip a `courses` row to `live` at runtime, bypassing the seed
+  // migration the mirror is asserted against. Without the intersection such a
+  // row would be listed here while its own `generateMetadata` emits the generic
+  // `noindex` title — handing Google an indexable URL that says "do not index"
+  // and advertising an unpublished series from the most crawler-visible
+  // surface on the site. Static marketing/blog/tag URLs are unaffected.
+  const launchedSeries = learnSeries.filter((s) =>
+    isPubliclyLaunchedSeries(s.slug),
+  );
+  const liveSet = new Set(
+    (liveSlugs
+      ? launchedSeries.filter((s) => liveSlugs!.has(s.slug))
+      : launchedSeries
+    ).map((s) => s.slug),
+  );
   if (!liveSlugs) {
     console.warn(
       "[sitemap] courses table unreachable — restricting learn series to the static launched-series mirror",
     );
+  } else {
+    // Drift visibility: a `courses` row marked live for a series the mirror does
+    // not know is silently omitted by the intersection above. Omission is the
+    // safe direction, but it must never be invisible — log the offending slugs
+    // ONCE (build log, never per URL). Silent when there is no drift.
+    const drifted = [...liveSlugs]
+      .filter((slug) => !isPubliclyLaunchedSeries(slug))
+      .sort();
+    if (drifted.length > 0) {
+      console.warn(
+        `[sitemap] courses live but absent from the static launch mirror — omitting: ${drifted.join(", ")}`,
+      );
+    }
   }
   const isLive = (slug: string) => liveSet.has(slug);
   const visibleSeries = learnSeries.filter((s) => isLive(s.slug));
