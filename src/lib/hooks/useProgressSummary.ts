@@ -20,6 +20,7 @@ import {
   PROGRESS_CHANGED_EVENT,
   type ProgressMerge,
 } from "@/lib/progress";
+import { AUTH_CHANGED_EVENT } from "@/lib/hooks/useAuth";
 
 interface UseProgressSummaryReturn {
   /** Merged read/completed sets (slug keys, bare form). */
@@ -53,17 +54,28 @@ const NO_SUBSCRIBE = () => () => {};
  *  - `summaryPromise` is the settled/in-flight read;
  *  - `summaryStale` is set by an invalidation so the next read refetches;
  *  - `summaryRefresh` collapses concurrent forced refreshes (N `refresh()`
- *    calls from N mounted cards) into a single network request.
+ *    calls from N mounted cards) into a single network request;
+ *  - `summaryEpoch` is the identity generation (PERF-P1, t_e786efe2). An
+ *    invalidation bumps it, so a summary read that was already in flight when
+ *    the identity changed is discarded instead of cached — otherwise user A's
+ *    payload could land *after* user B's sign-in.
  */
 let summaryPromise: Promise<ProgressSummaryPayload | null> | null = null;
 let summaryStale = false;
 let summaryRefresh: Promise<ProgressSummaryPayload | null> | null = null;
+let summaryEpoch = 0;
 
-async function fetchProgressSummary(): Promise<ProgressSummaryPayload | null> {
+async function fetchProgressSummary(
+  epoch: number,
+): Promise<ProgressSummaryPayload | null> {
   try {
     const res = await fetch("/api/progress/summary", { cache: "no-store" });
     if (!res.ok) return null;
-    return (await res.json()) as ProgressSummaryPayload;
+    const data = (await res.json()) as ProgressSummaryPayload;
+    // The identity changed while this read was in flight: this payload belongs
+    // to the previous user (or to a guest). Never hand it to a subscriber.
+    if (epoch !== summaryEpoch) return null;
+    return data;
   } catch {
     return null;
   }
@@ -73,7 +85,7 @@ async function fetchProgressSummary(): Promise<ProgressSummaryPayload | null> {
 export function readProgressSummary(): Promise<ProgressSummaryPayload | null> {
   if (summaryPromise && !summaryStale) return summaryPromise;
   summaryStale = false;
-  summaryPromise = fetchProgressSummary();
+  summaryPromise = fetchProgressSummary(summaryEpoch);
   return summaryPromise;
 }
 
@@ -81,7 +93,7 @@ export function readProgressSummary(): Promise<ProgressSummaryPayload | null> {
 export function refreshProgressSummary(): Promise<ProgressSummaryPayload | null> {
   if (summaryRefresh) return summaryRefresh;
   summaryStale = false;
-  const next = fetchProgressSummary();
+  const next = fetchProgressSummary(summaryEpoch);
   summaryPromise = next;
   summaryRefresh = next;
   void next.finally(() => {
@@ -90,9 +102,19 @@ export function refreshProgressSummary(): Promise<ProgressSummaryPayload | null>
   return next;
 }
 
-/** Drop the cached summary so the next read refetches (identity transition). */
+/**
+ * Drop the cached summary so the next read refetches (identity transition).
+ *
+ * Called from every seam that changes identity (Header sign-out, login
+ * success, password reset) and from this module's own AUTH_CHANGED_EVENT
+ * subscription, so a cached *authenticated* payload can never outlive the
+ * session that produced it.
+ */
 export function invalidateProgressSummary(): void {
+  summaryEpoch += 1;
   summaryStale = true;
+  summaryPromise = null;
+  summaryRefresh = null;
 }
 
 export function useProgressSummary(
@@ -145,6 +167,27 @@ export function useProgressSummary(
     };
   }, []);
 
+  /*
+   * Identity transition (PERF-P1, t_e786efe2): sign-in, sign-out or an account
+   * switch means the cached summary belongs to someone else. Re-read it in
+   * place so a mounted card never keeps rendering the previous user's bars.
+   *
+   * The cache is dropped by the identity seams themselves
+   * (`invalidateProgressSummary()` next to `invalidateDbToken()` — Header
+   * sign-out, login success, password reset). Subscribers deliberately do NOT
+   * invalidate here: `invalidateProgressSummary` bumps the identity epoch, so
+   * N mounted cards each invalidating would kill the previous card's in-flight
+   * read (only the last one would resolve). `refreshProgressSummary` collapses
+   * the whole fan-out into ONE request instead.
+   */
+  useEffect(() => {
+    const onAuthChanged = () => {
+      void refresh();
+    };
+    window.addEventListener(AUTH_CHANGED_EVENT, onAuthChanged);
+    return () => window.removeEventListener(AUTH_CHANGED_EVENT, onAuthChanged);
+  }, [refresh]);
+
   const merge = hydrated
     ? mergeProgressFromSummary(summary, readSlugs, lessonSlugs)
     : EMPTY_MERGE;
@@ -176,8 +219,19 @@ export function useSessionQuizStats(
       const data = await readProgressSummary();
       if (!cancelled) setSummary(data);
     })();
+    // Identity transition (PERF-P1, t_e786efe2): the quiz strip must switch to
+    // the new user's aggregates, not keep the previous user's numbers. The
+    // seam's invalidate already dropped the cache; this re-read collapses with
+    // every other mounted subscriber into one request.
+    const onAuthChanged = () => {
+      void refreshProgressSummary().then((data) => {
+        if (!cancelled) setSummary(data);
+      });
+    };
+    window.addEventListener(AUTH_CHANGED_EVENT, onAuthChanged);
     return () => {
       cancelled = true;
+      window.removeEventListener(AUTH_CHANGED_EVENT, onAuthChanged);
     };
   }, [quizName, enabled]);
 
