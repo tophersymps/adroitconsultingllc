@@ -2,6 +2,19 @@
 
 All notable changes to the Adroit Consulting Blog project will be documented in this file.
 
+### Fix: focus re-read + QA-L1 guard + no-store headers (SEC-R2-F1/F2 delta, t_2dd0e9f9)
+
+**What** - The base branch already carries PERF-P1 (`101da747`) and PERF-CACHE-M1 (`492f9c1e`), including `auth-events.ts` and the central `invalidateProgressSummary()` calls. This commit adds only the remaining PR #372 delta on top:
+(1) `src/lib/hooks/useProgressSummary.ts` — both `useProgressSummary` and `useSessionQuizStats` now listen for `focus` and re-read via `refreshProgressSummary()`; the re-read is deferred to a microtask so it runs after `useAuth`'s synchronous epoch bump regardless of listener order. Mount effects capture the identity epoch and discard a read that settles after it changed (QA-L1), so a stale `null` cannot erase B's payload.
+(2) `src/app/api/progress/summary/route.ts` — guest, authenticated and fail-closed 500 responses now carry `Cache-Control: private, no-store` (SEC-R2-F2/CWE-525).
+(3) `src/lib/hooks/useAuth.ts` — the auth-changed/`focus` listener now defers its refresh to a microtask so N mounted `useAuth` instances invalidate first and share ONE final-epoch session read. Without this, each listener started its own read at an intermediate epoch and only the last instance updated after a cross-tab change.
+
+Tests: `src/app/api/progress/summary/route.test.ts` gains three header assertions (200 authenticated, 200 guest, 500 fail-closed); `src/lib/hooks/useProgressSummary.identity.test.tsx` gains the focus fan-out case and the QA-L1 stale-read race case. The base's `notifyAuthChanged()` regression test and source locks are retained.
+
+**Why** - PR #372 was built in parallel to the base rather than on top of `101da747`/`492f9c1e`, so merging its head conflicted on duplicate cache logic. Reconciling as a clean delta avoids hand-merging duplicate auth-events/invalidation lines while preserving the genuinely new cross-tab `focus` coverage and the cache headers. Val-el's re-verify on `de2f8cf9` closed the F1 MEDIUM; this commit brings those guarantees to the current base tip.
+
+**Verified** - Full suite `npx vitest run` **123 files / 1083 tests passed**; `npx tsc --noEmit` exit 0; `npx eslint` clean on the five touched files; `npm run build` exit 0 with `/atlas` still prerendered static (`initialRevalidateSeconds: 3600`). Request budget unchanged: the N-card fan-out collapses to ONE summary request, signed-in `/atlas` stays ≤3 and guests exactly 1. No JSX or route-config changes, so the prior a11y/perf PASS verdicts only need a delta check if that changes.
+
 ### Fix: the session cache dies on identity transitions too (PERF-CACHE-M1b, t_c0eaa6f2)
 
 **What** - Two files. The summary cache was already invalidated centrally by t_5f03a8f7; its twin — the module-level `/api/auth/session` read — still had no production invalidator.
