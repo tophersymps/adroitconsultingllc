@@ -14,6 +14,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { invalidateDbToken } from "@/lib/db/client";
 
 export interface AuthUser {
   id: string;
@@ -74,7 +75,16 @@ export function useAuth(): UseAuthReturn {
         if (!cancelled) setIsLoading(false);
       }
     })();
-    const onAuthChanged = () => refresh();
+    /*
+     * SEC-R2-2-M3(b): an auth-changed event (or a focus, which is how a
+     * sign-out in another tab shows up here) means the identity behind the
+     * session cookie may have changed. Drop the cached Data API JWT before
+     * re-reading, so this tab cannot keep sending the previous user's token.
+     */
+    const onAuthChanged = () => {
+      invalidateDbToken();
+      refresh();
+    };
     window.addEventListener(AUTH_CHANGED_EVENT, onAuthChanged);
     window.addEventListener("focus", onAuthChanged);
     return () => {
@@ -87,8 +97,16 @@ export function useAuth(): UseAuthReturn {
   return { user, isLoading, refresh };
 }
 
-/** Broadcast that auth state changed so useAuth instances re-read. */
+/**
+ * Broadcast that auth state changed so useAuth instances re-read.
+ *
+ * Also drops the cached Data API JWT (SEC-R2-2-M3(b)): every caller of this
+ * function is announcing an identity transition (sign-in, sign-out, account
+ * switch), and the token cache is module state that survives a client-side
+ * `router.refresh()`. Dropping it here covers call sites that forget to.
+ */
 export function notifyAuthChanged(): void {
+  invalidateDbToken();
   if (typeof window === "undefined") return;
   try {
     window.dispatchEvent(new CustomEvent(AUTH_CHANGED_EVENT));

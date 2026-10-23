@@ -28,6 +28,12 @@
  * FAILS CLOSED: a missing `DATABASE_URL` throws when a helper is called, which
  * the routes surface as a 500 — never a silently skipped progress write.
  */
+
+// Build-time guard (review F-7, restored for R2-2 / SEC-R2-2-M2):
+// `DATABASE_URL` is the most privileged credential in the app. Importing this
+// module from a Client Component must fail the build instead of silently
+// shipping the direct-SQL path to the browser.
+import "server-only";
 import { neon } from "@neondatabase/serverless";
 
 export interface QuizAttemptWrite {

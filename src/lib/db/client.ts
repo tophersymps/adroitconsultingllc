@@ -38,12 +38,20 @@ export type DbBrowserClient = ReturnType<typeof createClient> & {
 /**
  * One in-flight token request per page is enough; cache it briefly.
  *
- * The cache is NOT identity-aware: a 60 s TTL on a guest `null` would keep the
- * client unauthenticated for up to a minute after sign-in, and a 60 s TTL on a
- * user JWT would keep sending it for up to a minute after sign-out. Both
- * transitions therefore call invalidateDbToken() (login page + Header sign-out)
- * so the next Data API request re-reads /api/db/token with the new cookie. The
- * TTL only bounds ordinary staleness (session refresh), not identity changes.
+ * The time-based TTL is NOT identity-aware: a 60 s TTL on a guest `null` would
+ * keep the client unauthenticated for up to a minute after sign-in, and a 60 s
+ * TTL on a user JWT would keep sending it for up to a minute after sign-out.
+ * Identity changes are therefore signalled explicitly and drop the cache:
+ *
+ *   1. sign-in / sign-out (login page, Header) — SEC-R2-2-M3(a)
+ *   2. every auth-changed broadcast (notifyAuthChanged) plus window focus,
+ *      which is where a stale identity is most likely to hide — M3(b)
+ *   3. any 401 from the Data API (revoked or rotated JWT) — M3(c)
+ *
+ * The cache is identity-keyed *by construction*: it is only ever filled for the
+ * identity the session cookie currently names, and every transition that can
+ * change that identity clears it before the next read. The TTL only bounds
+ * ordinary staleness (session refresh), never an identity change.
  */
 let tokenPromise: Promise<string | null> | null = null;
 let tokenFetchedAt = 0;
@@ -54,6 +62,27 @@ export function invalidateDbToken(): void {
   tokenPromise = null;
   tokenFetchedAt = 0;
 }
+
+/**
+ * Alias with the name the R2-2 security review uses (SEC-R2-2-M3). Kept in
+ * addition to `invalidateDbToken` because both names are already in call sites
+ * and review notes; they are the same operation.
+ */
+export const resetDbTokenCache = invalidateDbToken;
+
+/**
+ * Data API fetch wrapper: a 401 means the JWT we just sent is no longer
+ * accepted (revoked session, rotated signing key). Drop the cache so the next
+ * request re-reads `/api/db/token` instead of replaying the dead token for the
+ * rest of the TTL. The failing request is NOT retried — a write rejected for
+ * auth did not happen server-side, but a blind replay from a fetch wrapper
+ * would double-submit it once the cache refills.
+ */
+const dataApiFetch: typeof fetch = async (input, init) => {
+  const response = await fetch(input, init);
+  if (response.status === 401) invalidateDbToken();
+  return response;
+};
 
 async function getToken(): Promise<string | null> {
   const now = Date.now();
@@ -87,7 +116,12 @@ export function getSupabaseClient(): DbBrowserClient {
 
   if (!client) {
     const db = createClient({
-      dataApi: { url: dataApiUrl, getToken },
+      dataApi: {
+        url: dataApiUrl,
+        getToken,
+        // 401 -> drop the cached JWT (SEC-R2-2-M3(c)).
+        options: { global: { fetch: dataApiFetch } },
+      },
     }) as DbBrowserClient;
 
     db.auth = {
