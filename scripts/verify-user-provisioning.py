@@ -26,7 +26,8 @@ Endpoints and the database URL come from the environment / the repo's
 .env.local; nothing secret is printed or written.
 
 Usage:
-  python3 scripts/verify-user-provisioning.py [--email ...] [--password ...]
+  QA_PROVISION_PASSWORD=... python3 scripts/verify-user-provisioning.py [--email ...]
+  (or pass --password; the script refuses to run without one — no built-in default)
 Exit 0 = all checks pass. Exit 1 = a check failed (printed as FAIL).
 """
 
@@ -336,8 +337,9 @@ def main() -> int:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--email", default=DEFAULT_EMAIL, help="fresh QA account A")
     parser.add_argument("--email-b", default=OTHER_EMAIL, help="second QA account (isolation)")
-    parser.add_argument("--password", default=os.environ.get("QA_PROVISION_PASSWORD",
-                                                             "Provision-QA-R15!2026"))
+    parser.add_argument("--password", default=None,
+                        help="QA account password; falls back to $QA_PROVISION_PASSWORD "
+                             "(there is deliberately no built-in default)")
     parser.add_argument("--auth-url", default=os.environ.get("NEON_AUTH_BASE_URL",
                                                              f"https://{DEFAULT_AUTH_HOST}{AUTH_BASE_PATH}"))
     parser.add_argument("--data-url", default=os.environ.get("NEON_DATA_API_URL",
@@ -347,6 +349,12 @@ def main() -> int:
     args = parser.parse_args()
 
     load_dotenv()
+    # Resolved after load_dotenv() so .env.local counts. No constant fallback:
+    # this script creates/signs in to live auth accounts and the repo is public.
+    password = args.password or os.environ.get("QA_PROVISION_PASSWORD")
+    if not password:
+        raise SystemExit("--password or QA_PROVISION_PASSWORD is required "
+                         "(no built-in default; export a throwaway QA password first)")
     db_url = os.environ.get("DATABASE_URL_UNPOOLED") or os.environ.get("DATABASE_URL")
     if not db_url:
         raise SystemExit("DATABASE_URL_UNPOOLED (or DATABASE_URL) is required")
@@ -361,13 +369,13 @@ def main() -> int:
     if email_a == DEFAULT_EMAIL:
         email_a = f"kelex1812+qa-provision-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}@gmail.com"
 
-    token, user_id, created = sign_up_or_in(auth_url, email_a, args.password)
+    token, user_id, created = sign_up_or_in(auth_url, email_a, password)
     print(f"qa user A = {user_id} ({email_a}, created_this_run={created})")
 
     check_eager(auth_url, data_url, db_url, token, user_id, created)
     check_function(db_url, user_id)
     check_lazy(data_url, db_url, token, user_id)
-    check_isolation(data_url, auth_url, db_url, token, user_id, args.email_b, args.password)
+    check_isolation(data_url, auth_url, db_url, token, user_id, args.email_b, password)
 
     passed = sum(1 for r in RESULTS if r["ok"])
     failed = [r["check"] for r in RESULTS if not r["ok"]]
