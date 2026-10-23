@@ -159,6 +159,14 @@ export function useProgressSummary(
     const data = await refreshProgressSummary();
     if (readEpoch !== summaryEpoch) return;
     setSummary(data);
+    /*
+     * QA-L1b (t_4e6198a6): a refresh that applies a read is a completed load —
+     * clear `isLoading` here too. The mount effect is the only other place that
+     * clears it, and its read can be discarded by an identity transition (see
+     * below), which used to leave the skeleton pulsing forever on a card whose
+     * merged progress is empty (guest / fresh sign-in).
+     */
+    setIsLoading(false);
   }, []);
 
   useEffect(() => {
@@ -175,7 +183,18 @@ export function useProgressSummary(
     (async () => {
       const data = await readProgressSummary();
       if (cancelled) return;
-      if (epoch !== summaryEpoch) return; // identity changed mid-flight; the seam re-reads
+      /*
+       * QA-L1b (t_4e6198a6): identity changed mid-flight; the seam re-reads.
+       * Still clear loading — this hook instance is no longer waiting on any
+       * read it owns. The replacement read (via `refresh()`) applies the new
+       * identity's payload and keeps `isLoading === false`; leaving it true here
+       * made SeriesProgress render its `animate-pulse` skeleton forever for any
+       * identity with zero merged progress.
+       */
+      if (epoch !== summaryEpoch) {
+        setIsLoading(false);
+        return;
+      }
       setSummary(data);
       setIsLoading(false);
     })();

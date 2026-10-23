@@ -2,6 +2,21 @@
 
 All notable changes to the Adroit Consulting Blog project will be documented in this file.
 
+### Fix (LOW, robustness): discarded mount read clears `isLoading`; epoch-guarded refresh (t_4e6198a6)
+
+**What** - One file changed, one test file extended. `src/lib/hooks/useProgressSummary.ts`:
+(1) QA-L1 — when an identity transition discards the mount read (`epoch !== summaryEpoch`), the hook now sets `isLoading(false)` before returning instead of leaving it `true` for the lifetime of the instance. `refresh()` only called `setSummary(...)`, so a discarded mount read left the skeleton pulsing forever on any identity with zero merged progress (guest, or a fresh sign-in): `SeriesProgress` renders `isLoading && done === 0`.
+(2) QA-L1 — the event `refresh()` now also clears `isLoading` when it applies a read, so the replacement read's delivery ends the loading state even if the mount read is discarded.
+QA-L2's epoch guard in `refresh()` already landed in `dc154afa` (SEC-L1, t_15a53bb8); this card only adds the regression lock for it.
+
+Tests: `src/lib/hooks/useProgressSummary.identity.test.tsx` gains a `LoadingCard` probe plus two cases — QA-L1 (hold the mount read, sign out, resolve the new guest read, then let the stale mount read settle last ⇒ `isLoading === false` and `done:none`, no `series-1-1` leak) and QA-L2 (a superseded refresh settles last after the newer payload rendered ⇒ lesson bars keep `series-2-1` and the quiz strip keeps `41/1`).
+
+**Why** - Val-el's LOW robustness findings while re-verifying PR #375 head `0aaaf698` (card t_fc5c82e6). Both fail closed — no cross-user data can leak or be misattributed — but both are user-visible. L1 was still open on the PR head; L2's guard was already delivered by t_15a53bb8.
+
+**Verified** - RED/GREEN bites: with only the hook change reverted, the QA-L1 test times out waiting for `done:none` (state stays `loading`); restored → green. Full suite `npx vitest run` **124 files / 1098 tests passed**. `npx tsc --noEmit` exit 0; `npx eslint` clean on both touched files. No JSX or request-budget change (`SeriesProgress` consumes the same `isLoading` flag).
+
+**Known Issues** - The discard branch clears loading even when the replacement read is still in flight, so a zero-progress card can briefly render empty bars instead of the skeleton during an identity transition. Cosmetic only; no extra request is issued.
+
 ### Fix (LOW, SEC follow-up): event-refresh epoch guard + no-store on the other per-user routes (t_15a53bb8)
 
 **What** - Three files changed, two test files extended, one new test file:
