@@ -2,6 +2,16 @@
 
 All notable changes to the Adroit Consulting Blog project will be documented in this file.
 
+### LOW (observability): a degraded admin deny is no longer silent (t_a2660e8c)
+
+**What** - `src/lib/admin.ts`: the sentinel branch of `isAdminOrDeny()` (the `catch` that calls `isDbTokenUnavailable`) now raises one throttled server-side signal before answering the uniform deny. New exported `signalDegradedAdminDeny(now = Date.now())` increments a process aggregate hit counter and emits a single `console.warn` line — `[admin-gate] degraded-deny reason=token-unavailable code=TOKEN_UNAVAILABLE hits=<n> window_ms=60000` — at most once per `DEGRADED_ADMIN_DENY_LOG_INTERVAL_MS` (60 s); further sentinel hits inside the window only advance the counter. The line deliberately carries **no** user id, token, token path, or raw error message: the deny is uniform by design (CWE-755), so the signal must not become the PII/CWE-209 side channel the response refuses to be. The deny response is untouched — 403 `{"error":"Forbidden"}` from the API guards, `null` → `notFound()` from `requireAdminPage()` — and a non-sentinel error is still rethrown (no blanket catch). `src/lib/admin-gate.test.ts` gains a second suite (6 tests): the signal fires exactly once on a sentinel; 50 sustained sentinel denies still produce exactly one line while `hits=` keeps climbing; the throttle re-emits one window later; the emitted line contains no `user-1`, no `/token/anonymous`, no raw message and no `tokenPath`; a non-sentinel error still propagates with **no** signal; ordinary non-admins and guests emit nothing.
+
+**Why** - SEC-C1 (val-el), P1 (sato) and QA-L3 (zod) on the CWE-755 degrade shipped as `d3d24bc3` (audited `cba9a21c`): the sentinel used to surface as a 500, which monitoring caught, and turning it into a uniform 403/404 removed the last server-side trace of a token-route lockout. A sustained lockout now looks exactly like ordinary "not an admin" traffic, and `anonTokenStats` is an in-process counter exposed by no route or log, so nothing compensated. This restores the signal without restoring the oracle.
+
+**Verified** - Bite check: removing the `signalDegradedAdminDeny()` call from the sentinel branch turns the two wiring tests red (`2 failed | 11 passed`); with it restored the file is green (`13 passed`). `npx vitest run` — **135 files / 1187 tests passed**; `npx tsc --noEmit` exit 0; `npx eslint src/lib/admin.ts src/lib/admin-gate.test.ts` exit 0. `~/.hermes/scripts/build-headroom-guard.sh` — OK (18 GB available, need 6 GB) before the suite ran.
+
+**Known Issues** - (1) The throttle state is per process, so on a multi-instance deployment each instance emits up to one line per window (N lines per minute, not one) — that is the intended bound; a fleet-wide count needs a real metrics sink, which this repo still has none of. (2) `hits=` resets on redeploy/cold start and is an aggregate, not a per-user count — deliberate, since per-user attribution would recreate the identity side channel. (3) `anonTokenStats` remains unexposed and is still not a substitute for this signal.
+
 ### SEC-R2-5-M1/L1/L2: the anonymous Data API token's scope is proven before it is cached (t_52f55ea7)
 
 **What** - Hardening follow-up to R2-5 (PR #363), from val-el's security review of that PR's head (`180297ff`):
