@@ -2,6 +2,14 @@
 
 All notable changes to the Adroit Consulting Blog project will be documented in this file.
 
+### Decision record: `requireEmailVerification` at the Neon Auth cutover (t_34b5889c)
+
+**What** - Adds `docs/decisions/2026-10-23-require-email-verification.md`, the accepted decision to enable **`requireEmailVerification = true`** together with **`sendVerificationEmailOnSignIn = true`** on Neon project `dawn-darkness-89797362` / branch `production`, behind four gates (code actually on Neon Auth in production, proof that the emailed verification link redeems server-side, a clean identity census, then the config flip and a canary for QA). The doc records why the original "19 stranded legacy identities" premise was stale (all real identities are already `emailVerified = true`; the 19 were disposable `kelex1812+qa-*` fixtures revoked under t_9aba2d2e), why the toggle matters for authorization (`emailVerified` was a dead field while `003_identity_continuity.sql` keys authorization on identity continuity), and what a failed Gate 2 would have required (a `/field-notes` token consumer calling `getAuthServer().verifyEmail({ query: { token } })` or a dedicated `/auth/verify` route).
+
+**Why** - The decision was taken on review card t_a4565e53 but lived only in that card's workspace; an auth-policy toggle has to be explainable from the repo, not from a Kanban thread.
+
+**Verified** - Doc-only change, no runtime effect. Gate outcomes are recorded in the card t_34b5889c thread (`neon_auth.project_config` before/after, verification-link host/redirect, identity census).
+
 ### A11Y LOW fixes: AdminShell SSR aria-hidden + consent banner semantics/targets (t_b717ec09)
 
 **What** - Three LOW a11y findings from lara's review of PR #361 (`c43fb6af`), all pre-existing:
