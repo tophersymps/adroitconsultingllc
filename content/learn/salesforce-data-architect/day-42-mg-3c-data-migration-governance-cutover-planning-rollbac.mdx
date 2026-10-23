@@ -28,6 +28,8 @@ Quality thresholds are numeric gates agreed before loading starts, not opinions 
 
 Decision rights are the fourth piece, and the one most often skipped. Someone has to be named in advance as the person who can declare go, declare no-go, and call a rollback. If the answer to "who decides" is "the steering committee, if we can get them on a call", you have no decision rights. You have a hope.
 
+![The four components of migration governance: a versioned migration plan, a RACI with distinct business owner, steward, and technical roles, quality thresholds agreed before loading, and decision rights named in advance](</diagrams/day-42-mg-3c-data-migration-governance-cutover-planning-rollbac/1-governance-components.png>)
+
 ### The cutover plan and its six documented elements
 
 Salesforce documents cutover planning as a set of elements that must be decided and written down before anyone commits to a go-live window: the go-live window itself (duration, who is on call, sign-off authority, escalation path, and communication to affected users), rollback criteria (what conditions trigger a reversal, who has authority to call it, expected duration, and whether the rollback fits inside the maintenance window), a data validation gate listing the reconciliation checks that must pass before go-live is called successful, a freeze on in-flight transactional work, a hypercare period, and a communication plan that assigns each message to an owner and an audience. [^2] Those elements are written for a Revenue Management migration, and the shape transfers to any cutover: the questions do not change when the object model does.
@@ -48,11 +50,15 @@ Deletions are the part teams forget. A delta keyed on modified timestamps catche
 
 This is why the rehearsal exists. Salesforce recommends running multiple dry-run cutovers in a sandbox for a big bang go-live so the team practices the sequence before production. [^3] Rehearse once end to end, with production-like volumes, on the same clock, and record the actual duration of every step. Then rehearse the delta specifically: measure how long the real change volume takes to move, because that is the step most likely to overrun and the one with the least slack.
 
+![The final delta sync as a measurement: change volume from the source audit query divided by throughput measured on this org gives a delta duration, which is compared against the remaining freeze slack, with a branch for the deletes a modified-date delta misses](</diagrams/day-42-mg-3c-data-migration-governance-cutover-planning-rollbac/2-delta-sync-measurement.png>)
+
 ### A worked cutover with real numbers
 
 Take a B2B manufacturer consolidating two legacy CRMs into one Sales Cloud org. Scope: 900,000 accounts, 3.2 million contacts, 1.1 million opportunities, and 8.4 million cases, 13.6 million records before deduplication, with attachments out of scope.
 
 The first rehearsal runs on a production-sized full sandbox. Historic load: 5 hours 40 minutes. Delta of 52,000 records: 42 minutes. Post-load validation queries: 1 hour 15 minutes. Sharing recalculations and duplicate-rule evaluation: 38 minutes. Total: 8 hours 15 minutes. The business had agreed to an 8 hour freeze window. The plan overruns before anyone touches production, which is the good outcome: the gap surfaced in a rehearsal instead of at 3am on a Saturday.
+
+![Two rehearsals against the freeze window: the first runs 8 hours 15 minutes against an 8 hour window, the second lands at 7 hours 5 minutes inside a 10 hour window with 2 hours 55 minutes of buffer](</diagrams/day-42-mg-3c-data-migration-governance-cutover-planning-rollbac/3-rehearsal-vs-freeze-window.png>)
 
 Three moves fix it. Pre-stage the heaviest object (cases) in a prior wave so the cutover carries only the delta. Defer sharing calculations for the bulk window, which Salesforce documents as suspending sharing rule and group membership evaluation during large changes, with a full recalculation afterward. [^6] And extend the freeze window by two hours rather than compressing validation, because validation is the step that produces the evidence the business signs. The second rehearsal lands at 7 hours 5 minutes inside a 10 hour window, with roughly three hours of buffer. That buffer is the deliverable of the rehearsal, not a rounding error.
 
@@ -70,6 +76,8 @@ The viability window is how long a full reversal stays possible, and it is set b
 
 Authority is who can call it. Salesforce's cutover guidance names the authority question directly: who has the authority to call a rollback, and is the rollback feasible inside the maintenance window. [^2] A rollback called by the wrong person, or not called by the right one, is a governance failure regardless of how good the rollback script is. Name one decision-maker and one alternate, put their phone numbers in the runbook, and state that a trigger breach produces a decision within a stated number of minutes, not a discussion.
 
+![Rollback design: numeric triggers each with a watcher, a decision maker with a response time, and a timeline where the legacy system stays authoritative until the point of no return, after which the strategy becomes fix forward](</diagrams/day-42-mg-3c-data-migration-governance-cutover-planning-rollbac/4-rollback-viability-window.png>)
+
 A related point the exam likes: retaining access to the legacy system has a licensing dimension. Salesforce's migration guidance for one such path recommends retaining at least one active license in both production and sandbox during the migration period specifically so the team can reference, validate against, or roll back to the old data. [^3] Whatever your platform, the rollback path is only real if the old system is still reachable and still paid for.
 
 ### Post-go-live validation across four families of checks
@@ -83,6 +91,8 @@ Critical business scenarios. Walk the processes the business runs daily, end to 
 Integrations and downstream keys. Every consumer of the old system has to be pointed at the new one and has to resolve identifiers correctly. Verify that external IDs are populated and unique (upsert depends on that uniqueness, and a duplicated external ID fails the match rather than silently updating the wrong record [^7]), that middleware maps the new record IDs, that the data warehouse's incremental extracts pick up the migrated rows, and that any event or CDC subscription is re-established. Then run a smoke test per integration and record the timestamps.
 
 Access and sharing. Migrated records are only useful if the right people can see them and the wrong people cannot. Validate role hierarchy placement, permission set and profile assignment counts against the intended population, public group membership, and the results of the sharing rules on a sample of records: can a rep in the western region see a western account, and can a rep in the east see it too? Check the owner distribution as well, because a migration that dumps 12 million records on one integration user creates the ownership skew from lesson 41 on day one. [^6] Checks here are the ones auditors care about most, since a visibility defect is a data protection incident with a timestamp.
+
+![Post-go-live validation in four families run in order: counts and aggregates, critical business scenarios, integrations and downstream keys, then access and sharing, with the defect each family is designed to catch](</diagrams/day-42-mg-3c-data-migration-governance-cutover-planning-rollbac/5-post-go-live-validation-families.png>)
 
 ### Hypercare: the defined period, not the vague one
 
