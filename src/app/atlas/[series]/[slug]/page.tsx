@@ -128,7 +128,7 @@ export default async function LessonPage({ params }: Props) {
       <div className="min-h-screen flex flex-col">
         <Header />
         <main id="main" className="flex-1">
-          <Paywall seriesSlug={series} view={view} />
+          <Paywall seriesSlug={series} view={view} degraded={degraded} />
         </main>
         <Footer />
       </div>

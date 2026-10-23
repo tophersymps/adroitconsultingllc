@@ -97,6 +97,7 @@ export default async function KnowledgeCheckPage({ params }: Props) {
     return (
       <LockedContentPage
         seriesSlug={series}
+        degraded={degraded}
         view={
           courseRow
             ? buildPaywallView({
