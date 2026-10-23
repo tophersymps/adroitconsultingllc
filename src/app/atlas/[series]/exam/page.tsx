@@ -25,13 +25,17 @@ import {
 import { getSeriesBySlug } from "@/lib/learn";
 import { buildMetadata } from "@/lib/seo";
 import { getSupabaseServerClient } from "@/lib/db/server";
+import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
 import type { CheckProgress } from "@/shared/contracts";
 import {
   accessSeam,
   getAccessUserId,
   getCourseRowBySlug,
 } from "@/lib/access";
-import { buildPaywallView } from "@/lib/paywall";
+import {
+  buildDegradedPaywallView,
+  buildPaywallView,
+} from "@/lib/paywall";
 import { LockedContentPage } from "@/components/Catalog/LockedContentPage";
 import { getLessonsForSeries } from "@/lib/learn";
 
@@ -72,20 +76,33 @@ export default async function ExamPage({ params }: Props) {
   // Access seam gate (ADR-201): DB-backed status + entitlements. not-launched →
   // 404; paywall → locked-content page (never the exam, never 404).
   const userId = await getAccessUserId();
-  const decision = await accessSeam.decideCourseAccess(userId, series);
-  if (decision.kind === "not-launched") notFound();
-  if (decision.kind === "paywall") {
-    const courseRow = await getCourseRowBySlug(series);
-    if (!courseRow) notFound();
+  let decision: Awaited<ReturnType<typeof accessSeam.decideCourseAccess>> | null =
+    null;
+  let degraded = false;
+  try {
+    decision = await accessSeam.decideCourseAccess(userId, series);
+  } catch (err) {
+    // R2-5: a token-route failure is a classified degrade, never a 404/500.
+    if (!isDbTokenUnavailable(err)) throw err;
+    degraded = true;
+  }
+  if (decision?.kind === "not-launched") notFound();
+  if (degraded || decision?.kind === "paywall") {
     const lessons = getLessonsForSeries(series);
+    const courseRow = degraded ? null : await getCourseRowBySlug(series);
+    if (!degraded && !courseRow) notFound();
     return (
       <LockedContentPage
         seriesSlug={series}
-        view={buildPaywallView({
-          course: courseRow,
-          series: s,
-          peekLessonSlug: lessons[0]?.slug ?? null,
-        })}
+        view={
+          courseRow
+            ? buildPaywallView({
+                course: courseRow,
+                series: s,
+                peekLessonSlug: lessons[0]?.slug ?? null,
+              })
+            : buildDegradedPaywallView(s, lessons[0]?.slug ?? null)
+        }
       />
     );
   }
