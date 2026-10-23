@@ -1,18 +1,18 @@
 /**
- * ContinueLearning — reserved-height contract (PERF-MEDIUM-1, t_ea10119b).
+ * ContinueLearning — the shelf never collapses (PERF-MEDIUM-1 / t_bbc735da).
  *
- * The section renders ABOVE the /atlas card grid. It used to return `null`
- * while `GET /api/continue-learning` was in flight, so for a signed-in visitor
- * with an in-progress series the whole section was inserted after hydration and
- * pushed every card row down ~160-190px (the dominant remaining CLS on the
- * route after #371 fixed the card footers).
+ * The section renders ABOVE the /atlas card grid inside a fixed reservation
+ * (`min-h-[208px] md:min-h-[112px]`, measured in a real browser by 987d4bf6 and
+ * re-measured by t_92956e91). Two regressions are locked here:
  *
- * These tests pin the structural half of the fix:
- *   - pending state renders a placeholder at the SAME reserved height classes
- *     as the real resume card (one card's space, no insertion)
- *   - the resolved card carries that same reservation, so it cannot grow past
- *     the placeholder either
- *   - empty / failed reads still render nothing (`null`), as before
+ *   1. the slot is filled on the FIRST paint (the prerendered start strip), so
+ *      hydration cannot insert a section above the grid, and
+ *   2. it is STILL filled when the read resolves to `[]` / fails, so the
+ *      catalogue cannot collapse upward afterwards.
+ *
+ * The old implementation shipped a pulsing skeleton for (1) and `null` for (2);
+ * both are gone. Tests assert the start strip by its copy + CTA instead of the
+ * removed `continue-learning-placeholder*` test ids.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -29,6 +29,8 @@ const ITEM = {
   percent: 25,
   lastCompletedAt: "2026-10-20T10:00:00.000Z",
 };
+
+const FIRST_TRACK = { slug: "series-1", name: "Salesforce Certified Administrator Path" };
 
 /** Fetch double whose response only settles when the test says so. */
 function deferredFetch() {
@@ -57,29 +59,63 @@ afterEach(() => {
 /** The reserved-height utility both states must share. */
 const RESERVE = "min-h-[208px] md:min-h-[112px]";
 
-describe("ContinueLearning reserved height (PERF-MEDIUM-1)", () => {
-  it("reserves one card's height while the read is in flight", () => {
+describe("ContinueLearning start strip — the slot never collapses", () => {
+  it("renders the start strip on the first paint, before the read settles", () => {
     deferredFetch();
-    render(<ContinueLearning />);
+    render(<ContinueLearning firstTrack={FIRST_TRACK} />);
 
-    const placeholder = screen.getByTestId("continue-learning-placeholder-card");
-    expect(placeholder.className).toContain(RESERVE);
-    // Same frame as the card (radius/border/shadow/margins), so the section
-    // occupies exactly the space the card will occupy.
-    expect(placeholder.className).toContain("rounded-[20px]");
-    expect(placeholder.className).toContain("mb-3");
-    expect(placeholder.className).toContain("last:mb-0");
-    // Not announced as content; the section itself is busy.
-    expect(placeholder).toHaveAttribute("aria-hidden", "true");
-    expect(screen.getByRole("region", { name: /continue learning/i })).toHaveAttribute(
-      "aria-busy",
-      "true",
+    const strip = screen.getByTestId("continue-learning-start");
+    expect(strip.className).toContain(RESERVE);
+    // Same frame as the resume card (radius/border/shadow/margins), so the
+    // section occupies exactly the space the card will occupy.
+    expect(strip.className).toContain("rounded-[20px]");
+    expect(strip.className).toContain("mb-3");
+    expect(strip.className).toContain("last:mb-0");
+
+    // Copy is the real, indexable first paint — not a skeleton.
+    expect(screen.getByText("Continue learning")).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Start with Salesforce Certified Administrator Path" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Tracks are read in order. Open lesson 1 to begin.")).toBeTruthy();
+    expect(screen.getByRole("link", { name: /start track/i })).toHaveAttribute(
+      "href",
+      "/atlas/series-1",
     );
+
+    // Nothing claims to be loading, and no shimmer ships.
+    const region = screen.getByRole("region", { name: /continue learning/i });
+    expect(region).not.toHaveAttribute("aria-busy");
+    expect(region.querySelector(".animate-pulse")).toBeNull();
+    expect(strip.querySelector(".animate-pulse")).toBeNull();
+    expect(region.querySelector(".continue-fade")).toBeNull();
+  });
+
+  it("keeps the start strip when the read resolves to no in-progress series", async () => {
+    const release = deferredFetch();
+    render(<ContinueLearning firstTrack={FIRST_TRACK} />);
+
+    release({ items: [] });
+
+    // The collapse this task exists to delete: `items.length === 0 → null`.
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("continue-learning-start").parentElement!.className,
+      ).toContain("continue-fade"),
+    );
+    const strip = screen.getByTestId("continue-learning-start");
+    expect(strip.className).toContain(RESERVE);
+    expect(strip.className).toContain("rounded-[20px]");
+    expect(screen.getByRole("link", { name: /start track/i })).toHaveAttribute(
+      "href",
+      "/atlas/series-1",
+    );
+    expect(screen.queryByRole("link", { name: /resume lesson/i })).toBeNull();
   });
 
   it("renders the resume card in the same reserved height once the read lands", async () => {
     const release = deferredFetch();
-    render(<ContinueLearning />);
+    render(<ContinueLearning firstTrack={FIRST_TRACK} />);
 
     release({ items: [ITEM] });
 
@@ -92,50 +128,70 @@ describe("ContinueLearning reserved height (PERF-MEDIUM-1)", () => {
     expect(card.className).toContain("mb-3");
     expect(card.className).toContain("last:mb-0");
 
-    // Placeholder is gone — the card took its place, not its space plus more.
-    expect(screen.queryByTestId("continue-learning-placeholder")).toBeNull();
+    // The strip swapped out — the card took its space, not its space plus more.
+    expect(screen.queryByTestId("continue-learning-start")).toBeNull();
     expect(
       screen.getByText(/3 of 12 lessons complete · next: Introduction to Salesforce Objects/),
     ).toBeTruthy();
+    // The pulse dot is a live-data signal: present only on the resume card.
+    expect(card.querySelector(".animate-pulse")).not.toBeNull();
     expect(screen.getByRole("region", { name: /continue learning/i })).not.toHaveAttribute(
       "aria-busy",
     );
   });
 
-  it("renders nothing when there is no in-progress series", async () => {
+  it("keeps the start strip when the read fails", async () => {
     const release = deferredFetch();
-    render(<ContinueLearning />);
-
-    release({ items: [] });
-
-    await waitFor(() =>
-      expect(screen.queryByTestId("continue-learning-placeholder")).toBeNull(),
-    );
-    expect(screen.queryByRole("region", { name: /continue learning/i })).toBeNull();
-  });
-
-  it("renders nothing when the read fails (no placeholder left pulsing)", async () => {
-    const release = deferredFetch();
-    render(<ContinueLearning />);
-    expect(screen.getByTestId("continue-learning-placeholder")).toBeTruthy();
+    render(<ContinueLearning firstTrack={FIRST_TRACK} />);
+    expect(screen.getByTestId("continue-learning-start")).toBeTruthy();
 
     release({}, false);
 
     await waitFor(() =>
-      expect(screen.queryByTestId("continue-learning-placeholder")).toBeNull(),
+      expect(
+        screen.getByTestId("continue-learning-start").parentElement!.className,
+      ).toContain("continue-fade"),
     );
-    expect(screen.queryByRole("region", { name: /continue learning/i })).toBeNull();
+    expect(screen.getByRole("link", { name: /start track/i })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /resume lesson/i })).toBeNull();
   });
 
-  it("renders nothing when the request rejects", async () => {
+  it("keeps the start strip when the request rejects", async () => {
     globalThis.fetch = vi.fn(async () => {
       throw new Error("network down");
     }) as never;
-    render(<ContinueLearning />);
+    render(<ContinueLearning firstTrack={FIRST_TRACK} />);
 
     await waitFor(() =>
-      expect(screen.queryByTestId("continue-learning-placeholder")).toBeNull(),
+      expect(
+        screen.getByTestId("continue-learning-start").parentElement!.className,
+      ).toContain("continue-fade"),
     );
-    expect(screen.queryByRole("region", { name: /continue learning/i })).toBeNull();
+    expect(screen.getByRole("heading", { name: /start with/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /start track/i })).toBeTruthy();
+  });
+
+  it("falls back to Variant A copy and the section anchor when no track is known", () => {
+    deferredFetch();
+    render(<ContinueLearning browseHref="#section-certifications" />);
+
+    expect(screen.getByRole("heading", { name: "Start with any track below" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /browse tracks/i })).toHaveAttribute(
+      "href",
+      "#section-certifications",
+    );
+    expect(screen.getByTestId("continue-learning-start").className).toContain(RESERVE);
+  });
+
+  it("draws the shared rail empty (0%, no gradient) in the start state", () => {
+    deferredFetch();
+    render(<ContinueLearning firstTrack={FIRST_TRACK} />);
+
+    const strip = screen.getByTestId("continue-learning-start");
+    const fill = strip.querySelector('[aria-hidden="true"] > div') as HTMLElement;
+    expect(fill.style.width).toBe("0%");
+    expect(fill.style.background).toBe("");
+    // No red radial glow — that is the live-data signal.
+    expect(strip.innerHTML).not.toContain("radial-gradient");
   });
 });

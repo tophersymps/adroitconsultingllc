@@ -185,9 +185,16 @@ describe("LearnHub request budget (PERF t_22e18719, corrected t_ea10119b)", () =
     expect(screen.getAllByText(/sign in to track progress on this path/i)).toHaveLength(
       SERIES_COUNT,
     );
-    // Empty continue-learning → the section is hidden entirely (unchanged),
-    // placeholder included.
+    // Empty continue-learning → the START STRIP stays in the reserved slot
+    // (t_bbc735da): it is not a pending skeleton, and the slot must not
+    // collapse on the guest path either.
+    await waitFor(() => expect(screen.getByTestId("continue-learning-start")).toBeTruthy());
     expect(screen.queryByTestId("continue-learning-placeholder")).toBeNull();
     expect(screen.queryByRole("link", { name: /resume lesson/i })).toBeNull();
+    // The strip names the first published track from the unfiltered list.
+    expect(screen.getByRole("link", { name: /start track/i })).toHaveAttribute(
+      "href",
+      "/atlas/series-1",
+    );
   });
 });
