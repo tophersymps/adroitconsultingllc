@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import {
   getConsentState,
@@ -17,31 +17,54 @@ import {
  * AnalyticsInit gating so returning visitors with a saved grant do not see the
  * banner and analytics stays granted.
  */
+const CONSENT_KEY = "adroit_cookie_consent";
+
+/**
+ * Undecided-visitor predicate. `denied` is ALSO the default when nothing is
+ * stored, so the banner only shows for the truly-undecided (no stored key) —
+ * repeat deniers are not nagged.
+ */
+function needsConsentDecision(): boolean {
+  if (getConsentState() !== "denied") return false;
+  return !window.localStorage.getItem(CONSENT_KEY);
+}
+
+/** localStorage never emits events here; the value only changes via our CTA. */
+function subscribeToConsent(): () => void {
+  return () => {};
+}
+
+/**
+ * Hydration safety (t_80131e31): the banner is decided from localStorage, which
+ * the server cannot read. Resolving that in a lazy `useState` initializer made
+ * the client's FIRST render differ from the server's (empty) markup — a React
+ * hydration mismatch (#418) on every page for first-time visitors.
+ *
+ * `useSyncExternalStore` is the supported way to read an external store with a
+ * distinct server snapshot: React renders `getServerSnapshot` (false → nothing)
+ * during SSR *and* hydration, then re-reads the client snapshot and re-renders,
+ * so the banner appears immediately after hydration with no mismatch.
+ */
 export default function CookieConsent() {
-  // Lazy initializer (not an effect): show the banner only when no consent
-  // decision is persisted. SSR renders nothing (no window); on the client the
-  // initializer runs once at first render so no effect-driven setState is
-  // needed and the banner appears for first-time / undecided visitors.
-  const [visible, setVisible] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    const state = getConsentState();
-    if (state !== "denied") return false;
-    // "denied" is also the default when nothing is stored yet; only show the
-    // banner for the truly-undecided (no stored key), not repeat deniers.
-    return !window.localStorage.getItem("adroit_cookie_consent");
-  });
+  const [dismissed, setDismissed] = useState(false);
+  const needsDecision = useSyncExternalStore(
+    subscribeToConsent,
+    needsConsentDecision,
+    () => false,
+  );
+  const visible = needsDecision && !dismissed;
 
   function accept() {
     grantAnalyticsConsent();
     // A first-time grant: gtag.js was not loaded yet (AnalyticsInit defers
     // loading until a decision exists), so load it now that consent is granted.
     initAnalytics();
-    setVisible(false);
+    setDismissed(true);
   }
 
   function decline() {
     revokeAnalyticsConsent();
-    setVisible(false);
+    setDismissed(true);
   }
 
   if (!visible) return null;

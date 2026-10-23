@@ -35,10 +35,62 @@ import type { CardGateState } from "@/shared/contracts-account";
  */
 export const dynamic = "force-static";
 
+/**
+ * ISR (SEO-M2, t_dd870a3a): static + `revalidate` = ISR — the route is still
+ * prerendered (○) and CDN-served, but re-rendered in the background every
+ * hour. Daily publishing therefore no longer needs a redeploy, and a bad
+ * runtime render (e.g. a DB blip during a revalidation) self-heals within the
+ * hour instead of freezing until the next release.
+ */
+export const revalidate = 3600;
+
+/** Readable one-liner for the build log (PostgREST errors are plain objects). */
+function describeError(err: unknown): string {
+  let text: string;
+  if (err instanceof Error) text = err.message;
+  else if (typeof err === "string") text = err;
+  else {
+    try {
+      text = JSON.stringify(err) ?? String(err);
+    } catch {
+      text = String(err);
+    }
+  }
+  return text.length > 240 ? `${text.slice(0, 240)}…` : text;
+}
+
+/**
+ * Build-phase detection for the empty-catalogue guard (SEO-M2).
+ *
+ * Under `force-static` the catalogue reads happen ONCE, at build time, and the
+ * resulting HTML is served with `s-maxage=31536000` / `x-nextjs-cache: HIT` —
+ * so an empty hub baked at deploy time would be permanent. `NEXT_PHASE` is set
+ * by `next build` for the whole build (including prerenders) and is unset in
+ * `next start` / `next dev`, which is exactly the "prerender vs runtime"
+ * distinction we need.
+ *
+ * Only armed when the Supabase env is configured: a build environment without
+ * it cannot resolve a catalogue by definition (see the env check in
+ * `lib/supabase/server.ts`), and failing there would break every CI/local build
+ * that intentionally runs without data credentials.
+ */
+function isProdCatalogueBuild(): boolean {
+  return (
+    process.env.NEXT_PHASE === "phase-production-build" &&
+    Boolean(
+      process.env.NEXT_PUBLIC_SUPABASE_URL &&
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    )
+  );
+}
+
 export default async function LearnLandingPage() {
   // Guest projection — server-side identity is not resolved on this route.
-  // Signed-in visitors still get the same guest catalogue (per-lesson slugs are
-  // only projected for signed-in reads, which this route no longer performs).
+  // A signed-in visitor's cards are upgraded AFTER hydration by the
+  // `useCardGateUpgrade` island inside LearnHub (GET /api/atlas/cards), which
+  // re-renders the real gate/access/lesson-slug projection client-side. That
+  // keeps this render identity-free (hence ○) while the copy is no longer
+  // false for signed-in readers (A11Y-M1, t_dd870a3a).
   const gate: CardGateState = "guest-locked";
   const userId: string | null = null;
 
@@ -46,6 +98,7 @@ export default async function LearnLandingPage() {
   let sections: { slug: string; name: string }[] = [];
   let groups: { slug: string; name: string; sectionSlug: string }[] = [];
   let jsonLd = emptyJsonLd();
+  let catalogueError: unknown = null;
 
   try {
     const catalog = await getCatalogForUserV2(userId);
@@ -76,9 +129,27 @@ export default async function LearnLandingPage() {
         url: `${siteConfig.url}/atlas/${c.slug}`,
       })),
     };
-  } catch {
+  } catch (err) {
     // DB unreachable → render an empty-but-graceful hub; per-course pages
     // still enforce the seam. (Org + visibility are DB-backed by design.)
+    catalogueError = err;
+  }
+
+  // SEO-M2 (t_dd870a3a): NEVER bake an empty hub into the prerender. A DB
+  // blip during `next build` would otherwise ship 0 cards, no ItemList and no
+  // course text behind `s-maxage=31536000` — permanently, until the next
+  // redeploy. Fail the build instead; the graceful empty state stays for the
+  // runtime/ISR path (where `revalidate = 3600` self-heals within the hour).
+  if (courses.length === 0 && isProdCatalogueBuild()) {
+    const detail =
+      catalogueError === null
+        ? "the catalogue resolved to 0 visible courses"
+        : `the catalogue read failed (${describeError(catalogueError)})`;
+    throw new Error(
+      `/atlas prerender aborted: ${detail}. Refusing to publish an empty, ` +
+        `CDN-cached Atlas hub (SEO-M2 / t_80131e31). Check the data layer ` +
+        `before deploying.`,
+    );
   }
 
   return (

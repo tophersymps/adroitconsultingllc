@@ -15,6 +15,7 @@ import PathCard from "./PathCard";
 import LearnFilters from "./LearnFilters";
 import ContinueLearning from "./ContinueLearning";
 import EmptyState from "./EmptyState";
+import { useCardGateUpgrade } from "@/lib/hooks/useCardGateUpgrade";
 import type { LearnCardSeries } from "@/data/types";
 import type { CardGateState } from "@/shared/contracts-account";
 
@@ -50,17 +51,25 @@ export default function LearnHub({
   const [groupSlug, setGroupSlug] = useState<string | null>(null);
   const [query, setQuery] = useState("");
 
+  // A11Y-M1 (t_dd870a3a): the page ships the guest projection (it must stay
+  // static). This island upgrades it for a signed-in visitor AFTER hydration,
+  // so accessible cards get their real link + progress instead of a
+  // "Sign in to access courses" CTA. Guests keep the prerendered markup.
+  const upgrade = useCardGateUpgrade(courses, gate);
+  const cardCourses = upgrade.courses;
+  const cardGate = upgrade.gate;
+
   // Sections that actually contain a course (skip empty sections), with counts.
   const presentSections = sections
-    .filter((s) => courses.some((c) => c.section?.slug === s.slug))
+    .filter((s) => cardCourses.some((c) => c.section?.slug === s.slug))
     .map((s) => ({
       slug: s.slug,
       name: s.name,
-      count: courses.filter((c) => c.section?.slug === s.slug).length,
+      count: cardCourses.filter((c) => c.section?.slug === s.slug).length,
     }));
 
   const visible = useMemo(() => {
-    let list = courses;
+    let list = cardCourses;
     if (sectionSlug) list = list.filter((c) => c.section?.slug === sectionSlug);
     if (groupSlug) list = list.filter((c) => c.group?.slug === groupSlug);
     const q = query.trim().toLowerCase();
@@ -74,7 +83,7 @@ export default function LearnHub({
       );
     }
     return list;
-  }, [courses, sectionSlug, groupSlug, query]);
+  }, [cardCourses, sectionSlug, groupSlug, query]);
 
   return (
     <>
@@ -151,7 +160,7 @@ export default function LearnHub({
                       <PathCard
                         key={c.slug}
                         series={c}
-                        gate={gate}
+                        gate={cardGate}
                         loginNext={`/atlas/${c.slug}`}
                       />
                     ))}

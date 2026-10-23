@@ -10,7 +10,7 @@
  * CDN cache. These tests lock that wiring plus the rendered content (course
  * links in the JSON-LD ItemList, not just route mode).
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const { mocks } = vi.hoisted(() => {
   const getSupabaseServerClient = vi.fn();
@@ -56,7 +56,7 @@ vi.mock("@/components/Learn/LearnHub", () => ({
   ),
 }));
 
-import Page, { dynamic as routeDynamic } from "./page";
+import Page, { dynamic as routeDynamic, revalidate } from "./page";
 
 const org = {
   sections: [{ id: "s1", slug: "certifications", name: "Certifications" }],
@@ -103,7 +103,7 @@ describe("/atlas — prerender-safe wiring", () => {
     expect(html).toContain("Salesforce Administrator");
   });
 
-  it("degrades to an empty hub instead of throwing when the catalogue is unreachable", async () => {
+  it("degrades to an empty hub instead of throwing when the catalogue is unreachable (runtime path)", async () => {
     mocks.getCatalogForUserV2.mockRejectedValue(new Error("Supabase URL and anon key are required"));
 
     const { default: R } = await import("react-dom/server");
@@ -111,5 +111,61 @@ describe("/atlas — prerender-safe wiring", () => {
 
     expect(html).toContain('data-gate="guest-locked"');
     expect(html).toMatch(/cards:(<!-- -->)?0/);
+  });
+
+  it("is ISR-revalidated hourly (static + revalidate = 3600, SEO-M2)", () => {
+    expect(revalidate).toBe(3600);
+  });
+});
+
+describe("/atlas — empty-catalogue prerender guard (SEO-M2)", () => {
+  const originalPhase = process.env.NEXT_PHASE;
+
+  afterEach(() => {
+    if (originalPhase === undefined) delete process.env.NEXT_PHASE;
+    else process.env.NEXT_PHASE = originalPhase;
+  });
+
+  it("fails the BUILD when the catalogue read throws (no empty hub gets published)", async () => {
+    process.env.NEXT_PHASE = "phase-production-build";
+    mocks.getCatalogForUserV2.mockRejectedValue(new Error("connection refused"));
+
+    await expect(Page()).rejects.toThrow(/atlas prerender aborted/i);
+    await expect(Page()).rejects.toThrow(/connection refused/);
+  });
+
+  it("fails the BUILD when the catalogue resolves to zero visible courses", async () => {
+    process.env.NEXT_PHASE = "phase-production-build";
+    mocks.getCatalogForUserV2.mockResolvedValue({ courses: [], isAdmin: false });
+
+    await expect(Page()).rejects.toThrow(/0 visible courses/);
+  });
+
+  it("does NOT fail the build when Supabase env is absent (env-less CI/local builds)", async () => {
+    process.env.NEXT_PHASE = "phase-production-build";
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    mocks.getCatalogForUserV2.mockRejectedValue(new Error("Supabase URL and anon key are required"));
+
+    try {
+      const { default: R } = await import("react-dom/server");
+      const html = R.renderToString((await Page()) as never);
+      expect(html).toMatch(/cards:(<!-- -->)?0/);
+    } finally {
+      process.env.NEXT_PUBLIC_SUPABASE_URL = url;
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = key;
+    }
+  });
+
+  it("renders normally during the build when the catalogue resolves", async () => {
+    process.env.NEXT_PHASE = "phase-production-build";
+
+    const { default: R } = await import("react-dom/server");
+    const html = R.renderToString((await Page()) as never);
+
+    expect(html).toMatch(/cards:(<!-- -->)?2/);
+    expect(html).toContain("https://adroit.io/atlas/agentic-ai");
   });
 });
