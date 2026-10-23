@@ -2,8 +2,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import LearnHub from "@/components/Learn/LearnHub";
 import { getCatalogForUserV2, toLearnHubCards } from "@/lib/catalog";
-import { getAccessUserId, getCatalogOrg } from "@/lib/access";
-import { getSupabaseServerClient } from "@/lib/db/server";
+import { getCatalogOrg } from "@/lib/access";
 import { siteConfig } from "@/lib/seo";
 import type { CardGateState } from "@/shared/contracts-account";
 
@@ -16,33 +15,113 @@ import type { CardGateState } from "@/shared/contracts-account";
  *
  * Guest hardening (t_3dbf4826): the client receives only the LearnCardSeries
  * projection (card-render fields + DB org) — per-lesson metadata never ships.
+ *
+ * PERF (P1, review of t_d3c401c9): /atlas MUST stay prerendered (○). This
+ * route is a public marketing hub, and per-request rendering replaces a CDN
+ * `x-nextjs-cache: HIT` response (~3 ms TTFB) with an origin render that also
+ * runs `getCatalogForUserV2` + `getCatalogOrg` (~60 ms warm, plus cold start).
+ *
+ * `dynamic = "force-static"` is what actually guarantees that, and it has to
+ * be explicit: the catalogue reads below go through the cookie-bound data
+ * client (`getSupabaseServerClient` → `cookies()`), a dynamic API, so ANY
+ * build in which the Supabase env vars are set — i.e. every production build —
+ * would otherwise emit `ƒ /atlas` (QA F1 on t_3a3d6595: appearing static only
+ * because this workspace's `.env.local` lacks NEXT_PUBLIC_SUPABASE_URL, which
+ * makes the client throw before `cookies()` is reached). Under force-static the
+ * request APIs resolve to empty during the build, which is exactly the
+ * projection this hub publishes: the visitor is the anonymous RLS scope, and
+ * per-user identity is deliberately NOT resolved here (a cookie read would
+ * flip the route back to ƒ and cost the hub its CDN cache).
  */
-export default async function LearnLandingPage() {
-  // Auth state (guest vs signed-in) resolved server-side from the HttpOnly
-  // cookie — the same source as every other gated surface.
-  let gate: CardGateState = "guest-locked";
-  try {
-    const supabase = await getSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (user) gate = "signed-in";
-  } catch {
-    // default to guest on session errors
+export const dynamic = "force-static";
+
+/**
+ * ISR (SEO-M2, t_dd870a3a): static + `revalidate` = ISR — the route is still
+ * prerendered (○) and CDN-served, but re-rendered in the background every
+ * hour. Daily publishing therefore no longer needs a redeploy, and a bad
+ * runtime render (e.g. a DB blip during a revalidation) self-heals within the
+ * hour instead of freezing until the next release.
+ */
+export const revalidate = 3600;
+
+/** Readable one-liner for the build log (PostgREST errors are plain objects). */
+function describeError(err: unknown): string {
+  let text: string;
+  if (err instanceof Error) text = err.message;
+  else if (typeof err === "string") text = err;
+  else {
+    try {
+      text = JSON.stringify(err) ?? String(err);
+    } catch {
+      text = String(err);
+    }
   }
+  return text.length > 240 ? `${text.slice(0, 240)}…` : text;
+}
+
+/**
+ * Build-phase detection for the empty-catalogue guard (SEO-M2).
+ *
+ * Under `force-static` the catalogue reads happen ONCE, at build time, and the
+ * resulting HTML is served with `s-maxage=31536000` / `x-nextjs-cache: HIT` —
+ * so an empty hub baked at deploy time would be permanent. `NEXT_PHASE` is set
+ * by `next build` for the whole build (including prerenders) and is unset in
+ * `next start` / `next dev`, which is exactly the "prerender vs runtime"
+ * distinction we need.
+ *
+ * Only armed when the Supabase env is configured: a build environment without
+ * it cannot resolve a catalogue by definition (see the env check in
+ * `lib/supabase/server.ts`), and failing there would break every CI/local build
+ * that intentionally runs without data credentials.
+ *
+ * Scope (SEO-H1, t_b5e0b4bf): the guard is a PRODUCTION-only refusal. Vercel
+ * sets the Supabase vars on every environment, so phase+env alone armed it on
+ * Preview deployments too — a preview with an unreachable/RLS-restricted
+ * catalogue then could not build at all, turning a "publish an empty hub" risk
+ * into "cannot ship". Previews fall back to the graceful empty hub; only a
+ * production deploy refuses to bake one. `ATLAS_BUILD_GUARD=0` explicitly
+ * disables the guard (e.g. a production build against a empty staging DB).
+ */
+function isProdCatalogueBuild(): boolean {
+  if (process.env.ATLAS_BUILD_GUARD === "0") return false;
+  // VERCEL_ENV is "production" | "preview" | "development" on Vercel; absent
+  // in plain CI/local builds, where a phase-production-build is a real prod
+  // build and the guard should stay armed.
+  if (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== "production") {
+    return false;
+  }
+  return (
+    process.env.NEXT_PHASE === "phase-production-build" &&
+    Boolean(
+      process.env.NEXT_PUBLIC_SUPABASE_URL &&
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    )
+  );
+}
+
+export default async function LearnLandingPage() {
+  // Guest projection — server-side identity is not resolved on this route.
+  // A signed-in visitor's cards are upgraded AFTER hydration by the
+  // `useCardGateUpgrade` island inside LearnHub (GET /api/atlas/cards), which
+  // re-renders the real gate/access/lesson-slug projection client-side. That
+  // keeps this render identity-free (hence ○) while the copy is no longer
+  // false for signed-in readers (A11Y-M1, t_dd870a3a).
+  const gate: CardGateState = "guest-locked";
+  const userId: string | null = null;
 
   let courses: ReturnType<typeof toLearnHubCards> = [];
   let sections: { slug: string; name: string }[] = [];
   let groups: { slug: string; name: string; sectionSlug: string }[] = [];
   let jsonLd = emptyJsonLd();
+  let catalogueError: unknown = null;
 
   try {
-    const userId = await getAccessUserId();
     const catalog = await getCatalogForUserV2(userId);
     const org = await getCatalogOrg();
 
     courses = toLearnHubCards(catalog.courses, {
-      includeLessonSlugs: gate === "signed-in",
+      // Prerendered guest projection: per-lesson slugs never ship from here.
+      includeLessonSlugs: false,
     });
     sections = org.sections.map((s) => ({ slug: s.slug, name: s.name }));
     groups = org.groups.map((g) => ({
@@ -65,9 +144,38 @@ export default async function LearnLandingPage() {
         url: `${siteConfig.url}/atlas/${c.slug}`,
       })),
     };
-  } catch {
+  } catch (err) {
     // DB unreachable → render an empty-but-graceful hub; per-course pages
     // still enforce the seam. (Org + visibility are DB-backed by design.)
+    catalogueError = err;
+  }
+
+  // SEO-M2 (t_dd870a3a): NEVER bake an empty hub into the prerender. A DB
+  // blip during `next build` would otherwise ship 0 cards, no ItemList and no
+  // course text behind `s-maxage=31536000` — permanently, until the next
+  // redeploy. Fail the build instead; the graceful empty state stays for the
+  // runtime/ISR path (where `revalidate = 3600` self-heals within the hour).
+  //
+  // SEO-H1 (t_b5e0b4bf): only a resolved-to-zero catalogue fails the build.
+  // An infra read failure (network/creds/RLS blip) is a WARNING — it says
+  // nothing about whether the catalogue is really empty, and hard-failing on
+  // it made every Vercel build unshippable when the build env could not read
+  // the DB. The empty hub is still CDN-cached for at most one ISR period.
+  if (courses.length === 0 && isProdCatalogueBuild()) {
+    if (catalogueError !== null) {
+      console.error(
+        `/atlas build warning: the catalogue read failed (${describeError(
+          catalogueError,
+        )}). Publishing the graceful empty hub; ISR will retry within ` +
+          `revalidate=3600s. Fix the data layer if this is a production build.`,
+      );
+    } else {
+      throw new Error(
+        `/atlas prerender aborted: the catalogue resolved to 0 visible ` +
+          `courses. Refusing to publish an empty, CDN-cached Atlas hub ` +
+          `(SEO-M2 / t_80131e31). Check the data layer before deploying.`,
+      );
+    }
   }
 
   return (

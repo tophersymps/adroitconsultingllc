@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthServer } from "@/lib/auth/server";
 import { buildVerifyEmailRedirect } from "@/lib/auth-emails";
 import { checkRateLimit, getClientIp, checkOrigin } from "@/lib/api-security";
+import { withAuthCookies } from "@/lib/auth/cookie-jar";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -106,7 +107,14 @@ function logAuthFailure(
   });
 }
 
-export async function POST(req: NextRequest) {
+export function POST(req: NextRequest): Promise<Response> {
+  // The SDK's session cookies are replayed onto the response by the jar: the
+  // adapter's `cookies().set()` path is silently dropped inside a route
+  // handler (see src/lib/auth/cookie-jar.ts).
+  return withAuthCookies(() => handleLogin(req));
+}
+
+async function handleLogin(req: NextRequest): Promise<Response> {
   // Cross-origin POST protection (H1) — before touching the body.
   const originError = checkOrigin(req);
   if (originError) {

@@ -494,6 +494,15 @@ export const accessSeam = createAccessSeam();
  * Neon R2-1: identity now comes from Managed Better Auth via `getSessionUser()`
  * (src/lib/session.ts). The Supabase client below is still the DATA client
  * until the Phase 3 swap — it must not be trusted for identity any more.
+ *
+ * DO NOT call this from a route that must stay prerendered (○). The Managed
+ * Better Auth server instance reads the request through the SDK's
+ * `next/headers` adapter (`cookies()` + `headers()`), i.e. a dynamic API, so
+ * any page using it renders per request: `/atlas` flipped from ○ (CDN HIT,
+ * ~3 ms TTFB) to ƒ (~60 ms, `no-store`) purely because of this call (perf P1,
+ * review of t_d3c401c9). Public/prerendered routes resolve the visitor from
+ * the cookie-backed DATA client themselves and keep this seam for
+ * `force-dynamic` routes only.
  */
 export async function getAccessUserId(): Promise<UserId> {
   const user = await getSessionUser();

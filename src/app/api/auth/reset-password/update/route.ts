@@ -16,6 +16,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthServer } from "@/lib/auth/server";
 import { checkRateLimit, getClientIp, checkOrigin } from "@/lib/api-security";
+import { withAuthCookies } from "@/lib/auth/cookie-jar";
 
 const MAX_PASSWORD = 128;
 const MAX_TOKEN = 512;
@@ -25,7 +26,11 @@ const EXPIRED_MESSAGE =
 const BAD_LINK_MESSAGE =
   "This reset link is invalid or has expired. Please request a new one.";
 
-export async function POST(req: NextRequest) {
+export function POST(req: NextRequest): Promise<Response> {
+  return withAuthCookies(() => handleUpdate(req));
+}
+
+async function handleUpdate(req: NextRequest): Promise<Response> {
   // Cross-origin POST protection (CWE-352), mirroring the request route.
   const originError = checkOrigin(req);
   if (originError) {
