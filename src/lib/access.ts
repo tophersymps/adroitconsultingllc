@@ -26,6 +26,7 @@
  */
 import { cache } from "react";
 import { getSupabaseServerClient } from "@/lib/db/server";
+import { getSessionUser } from "@/lib/session";
 import type {
   AccessModel,
   AccessSeam,
@@ -488,12 +489,13 @@ export const accessSeam = createAccessSeam();
 /**
  * Resolve the current signed-in user id from the HttpOnly session cookie.
  * Guests → null. Reuse this from server components/routes before calling the
- * seam so the userId matches the RLS-scoped cookie user.
+ * seam so the userId matches the cookie user.
+ *
+ * Neon R2-1: identity now comes from Managed Better Auth via `getSessionUser()`
+ * (src/lib/session.ts). The Supabase client below is still the DATA client
+ * until the Phase 3 swap — it must not be trusted for identity any more.
  */
 export async function getAccessUserId(): Promise<UserId> {
-  const supabase = await getSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   return user?.id ?? null;
 }

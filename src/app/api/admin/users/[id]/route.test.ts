@@ -27,7 +27,7 @@ vi.mock("@/lib/db/server", () => ({
   getSupabaseServerClient: async () => mocks.service,
 }));
 
-vi.mock("@/lib/supabase/auth-admin", () => ({
+vi.mock("@/lib/auth/users", () => ({
   getAuthUser: mocks.getAuthUser,
 }));
 

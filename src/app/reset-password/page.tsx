@@ -1,25 +1,26 @@
 /**
- * /reset-password — set a new password after a recovery-code exchange.
+ * /reset-password — set a new password with a reset token (Managed Better Auth).
  *
- * SERVER component. Auth gating happens server-side (t_4fbc8f48 finding):
- * a guest with no session is redirected to /login?next=/reset-password BEFORE
- * the new-password form markup is ever emitted, closing the SSR HTML leak of
- * the sensitive form state to guests.
+ * SERVER component. Two ways to be allowed in, both server-side:
+ *   1. `?token=…` — the single-use token from the reset email is the
+ *      credential. Legacy/imported users are signed OUT and still must be able
+ *      to reset, so the token path renders the form for guests.
+ *   2. No token, but an authed session — the old session-gated path is kept
+ *      for anyone who lands here signed in.
+ * Anything else redirects to /login BEFORE the form markup is emitted, so the
+ * sensitive form is never in the SSR HTML for an unauthorised visitor
+ * (t_4fbc8f48).
  *
- * Reads the `error` query param (set by /auth/callback, ADR-PWR-3):
- *   - error=expired / error=invalid → "request a new link" state (role=alert).
- *     These MUST remain reachable by guests (the /auth/callback redirects
- *     guests to /reset-password?error=expired), so they are rendered BEFORE
- *     the session gate, for any visitor.
- *   - otherwise → server-side session check: no session ⇒ redirect to login.
- *     Authed session ⇒ render <ResetPasswordForm /> (the new-password form).
+ * Reads the `error` query param (set by /auth/callback or by Better Auth's
+ * `?error=INVALID_TOKEN`): any error → "request a new link" state
+ * (role=alert), reachable by guests, rendered BEFORE the gates (ADR-PWR-3).
  */
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { getSupabaseServerClient } from "@/lib/db/server";
+import { getSessionUser } from "@/lib/session";
 import { buildMetadata } from "@/lib/seo";
 import ResetPasswordForm from "./ResetPasswordForm";
 
@@ -32,18 +33,28 @@ export const metadata: Metadata = buildMetadata({
   noindex: true,
 });
 
+/** Collapse string|string[] search params to the first non-empty value. */
+function firstParam(value: string | string[] | undefined): string | undefined {
+  const v = Array.isArray(value) ? value[0] : value;
+  return typeof v === "string" && v.length > 0 ? v : undefined;
+}
+
 export default async function ResetPasswordPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string | string[] }>;
+  searchParams: Promise<{
+    error?: string | string[];
+    token?: string | string[];
+  }>;
 }) {
   const params = await searchParams;
-  const errorParam = Array.isArray(params.error) ? params.error[0] : params.error;
+  const errorParam = firstParam(params.error);
+  const tokenParam = firstParam(params.token);
 
-  // Expired / invalid code state (ADR-PWR-3) — shown to ANY visitor (guest or
-  // authed), before the session gate. Guests with a dead code land here via
-  // the /auth/callback redirect.
-  if (errorParam === "expired" || errorParam === "invalid") {
+  // Expired / invalid link state (ADR-PWR-3) — shown to ANY visitor (guest or
+  // authed), before any gate. Better Auth uses `INVALID_TOKEN`, the callback
+  // uses expired/invalid; all mean the same thing to the reader.
+  if (errorParam) {
     return (
       <div className="min-h-screen flex flex-col">
         <Header />
@@ -99,13 +110,16 @@ export default async function ResetPasswordPage({
     );
   }
 
-  // Server-side auth gate: only an authed session may see the new-password
-  // form. Guests are redirected to login; the form markup is never rendered
+  // Token path: the emailed single-use token is the credential. Imported
+  // legacy users are signed out, so this must work for guests.
+  if (tokenParam) {
+    return <ResetPasswordForm token={tokenParam} />;
+  }
+
+  // Session path: an authed user may set a new password from here too.
+  // Everyone else is redirected to login; the form markup is never rendered
   // into the SSR HTML for them (closes t_4fbc8f48).
-  const supabase = await getSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) {
     redirect("/login?next=/reset-password");
   }

@@ -2,16 +2,21 @@
  * POST /api/auth/reset-password/request — request a password-reset email.
  *
  * Enumeration-safe (AC-1.2/1.7): returns the SAME generic success message
- * whether or not the email is registered, and on Supabase-side failures.
+ * whether or not the email is registered, and on auth-backend failures.
  * Rate-limited per-IP via the shared checkRateLimit pattern (AC-1.5), and
  * origin-checked for cross-origin POST protection (AC-1.6).
+ *
+ * Mechanism change (Neon R2-1): Managed Better Auth appends the single-use
+ * token to `redirectTo` itself (`<redirectTo>?token=…`), so the redirect is the
+ * reset page directly — no code-exchange hop. `buildPasswordResetRedirect()`
+ * therefore returns a query-free URL.
  *
  * Body: { email }
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getAuthServer } from "@/lib/auth/server";
 import { checkRateLimit, getClientIp, checkOrigin } from "@/lib/api-security";
-import { buildAuthRedirect } from "@/lib/auth-emails";
+import { buildPasswordResetRedirect } from "@/lib/auth-emails";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -48,13 +53,16 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const supabase = await getSupabaseServerClient();
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: buildAuthRedirect("/reset-password"),
+    const { error } = await getAuthServer().requestPasswordReset({
+      email,
+      redirectTo: buildPasswordResetRedirect(req.headers.get("origin")),
     });
     if (error) {
-      // Supabase-side failure (email service down, etc.) — log, return generic.
-      console.error("[reset-request] resetPasswordForEmail failed", error.message);
+      // Auth/email-service failure — log status + code only, return generic.
+      console.error("[reset-request] requestPasswordReset failed", {
+        status: error.status,
+        code: error.code,
+      });
     }
   } catch (err) {
     console.error("[reset-request] unexpected error", err);
