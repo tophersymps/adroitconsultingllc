@@ -84,6 +84,13 @@ BEGIN;
 -- ─────────────────────────────────────────────────────────────────────
 ALTER TABLE public."user" ADD COLUMN IF NOT EXISTS provider text;
 
+-- Re-assert the reviewed posture (001_rls.sql §4, t_77f4d97e): RLS ENABLED with
+-- ZERO policies = default-deny for every non-owner role. Adding a column must
+-- never become the thing that lets a client role reach the auth table, and the
+-- Neon Data API has been observed toggling this flag, so it is set explicitly
+-- here rather than inherited from the previous apply.
+ALTER TABLE public."user" ENABLE ROW LEVEL SECURITY;
+
 -- ─────────────────────────────────────────────────────────────────────
 -- 2. The one provisioning function
 --    Copies the identity row out of neon_auth."user" (email, name,
@@ -392,6 +399,19 @@ BEGIN
   -- no client role can invoke the functions directly
   IF has_function_privilege('authenticated', 'public.provision_public_user(uuid)', 'EXECUTE') THEN
     RAISE EXCEPTION 'authenticated can EXECUTE provision_public_user — lock it down';
+  END IF;
+
+  -- the auth table is still default-deny for client roles (t_77f4d97e posture)
+  SELECT count(*) INTO n
+    FROM pg_class c JOIN pg_namespace nsp ON nsp.oid = c.relnamespace
+   WHERE nsp.nspname = 'public' AND c.relname = 'user' AND c.relrowsecurity;
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'public."user" lost RLS — it must stay default-deny';
+  END IF;
+  SELECT count(*) INTO n
+    FROM pg_policies WHERE schemaname = 'public' AND tablename = 'user';
+  IF n <> 0 THEN
+    RAISE EXCEPTION 'public."user" has % policy/policies — default-deny requires zero', n;
   END IF;
 
   -- nothing in neon_auth is left without a public mirror
