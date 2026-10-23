@@ -36,6 +36,8 @@
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { NeonPostgrestClient } from "@neondatabase/postgrest-js";
+import { getAnonymousJwtResult, type AnonTokenResult } from "./anonymous-token";
+import { createTokenUnavailableClient } from "./degraded-client";
 
 /** The minimal user projection the app reads off the session. */
 export interface DbSessionUser {
@@ -86,31 +88,127 @@ const requestCookieHeader = cache(async (): Promise<string | null> => {
   }
 });
 
-async function fetchToken(path: string): Promise<string | null> {
-  const cookie = await requestCookieHeader();
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (cookie) headers.Cookie = cookie;
+/** Conservative cache lifetime when the token's `exp` claim cannot be read. */
+const FALLBACK_TTL_MS = 5 * 60_000;
 
-  const res = await fetch(`${authBaseUrl()}${path}`, {
-    headers,
-    cache: "no-store",
-  });
-  if (!res.ok) return null;
-  const body = (await res.json().catch(() => null)) as { token?: unknown } | null;
-  return typeof body?.token === "string" && body.token.length > 0
-    ? body.token
-    : null;
+/** Decode a JWT payload without verifying it — only `exp`/`role` are read. */
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+  try {
+    const json = Buffer.from(parts[1], "base64url").toString("utf8");
+    const payload = JSON.parse(json) as unknown;
+    return payload && typeof payload === "object"
+      ? (payload as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
 }
 
-/** The signed-in caller's Data API JWT, or null for guests. */
-export const getSessionJwt = cache((): Promise<string | null> =>
-  fetchToken("/token"),
-);
+/**
+ * The rate limiter's countdown is the NON-STANDARD `x-retry-after` header
+ * (seconds). There is no `Retry-After` on this service, so honouring that
+ * would silently no-op.
+ */
+function parseRetryAfter(headers: Headers): number | undefined {
+  const raw = headers.get("x-retry-after");
+  if (!raw) return undefined;
+  const seconds = Number.parseInt(raw, 10);
+  if (!Number.isFinite(seconds)) return undefined;
+  return Math.min(Math.max(seconds, 1), 120);
+}
 
-/** The `anonymous` role's JWT — used when nobody is signed in. */
-const getAnonymousJwt = cache((): Promise<string | null> =>
-  fetchToken("/token/anonymous"),
-);
+/**
+ * Resolve a token from the Managed Better Auth token route.
+ *
+ * NEVER rejects for an HTTP/network/malformed outcome — those are returned as
+ * `ok: false` so a guest read degrades instead of throwing (the old
+ * unguarded `fetch` here was one of the two 500 mechanisms). A MISSING
+ * `NEON_AUTH_BASE_URL` still throws: a misconfigured runtime must fail closed,
+ * never silently degrade.
+ */
+async function fetchTokenResult(
+  path: "/token" | "/token/anonymous",
+): Promise<AnonTokenResult> {
+  const base = authBaseUrl(); // fail closed on missing env (outside the try)
+  const headers: Record<string, string> = { Accept: "application/json" };
+  // The caller's httpOnly session cookie is the ONLY way user identity enters
+  // this module, so it is sent to `/token` alone. `/token/anonymous` needs no
+  // caller identity, and the token it returns is cached process-wide
+  // (./anonymous-token) — minting that shared credential with a specific
+  // user's cookie attached is exactly how user context could leak into it
+  // (SEC-R2-5-L1). Never attach it there.
+  if (path === "/token") {
+    const cookie = await requestCookieHeader();
+    if (cookie) headers.Cookie = cookie;
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${base}${path}`, { headers, cache: "no-store" });
+  } catch {
+    return { ok: false, errorClass: "network" };
+  }
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      status: res.status,
+      errorClass: "http",
+      retryAfterSeconds: parseRetryAfter(res.headers),
+    };
+  }
+
+  const body = (await res.json().catch(() => null)) as { token?: unknown } | null;
+  const token = body?.token;
+  if (typeof token !== "string" || token.length === 0) {
+    return { ok: false, status: res.status, errorClass: "malformed" };
+  }
+
+  const payload = decodeJwtPayload(token);
+  // The anonymous token is cached process-wide, so its scope must be PROVEN
+  // before it can be used: only a decodable JWT whose `role` is exactly
+  // `anonymous` is acceptable. Fail CLOSED — a role-less payload, a payload
+  // with a user `sub` but no role, and an opaque non-JWT string are all
+  // rejected as `malformed` (the route then degrades, never 500s).
+  // SEC-R2-5-M1.
+  if (path === "/token/anonymous") {
+    const role = payload?.role;
+    if (role !== "anonymous") {
+      return { ok: false, status: res.status, errorClass: "malformed" };
+    }
+  }
+
+  const exp = payload && typeof payload.exp === "number" ? payload.exp * 1000 : null;
+  return {
+    ok: true,
+    token,
+    expiresAtMs: exp ?? Date.now() + FALLBACK_TTL_MS,
+  };
+}
+
+/**
+ * The signed-in caller's Data API JWT, or null for guests. Per-request only
+ * (React `cache`): a session token is NEVER cached across requests/users.
+ */
+export const getSessionJwt = cache(async (): Promise<string | null> => {
+  const result = await fetchTokenResult("/token");
+  return result.ok ? result.token : null;
+});
+
+/**
+ * The `anonymous` role's JWT — used when nobody is signed in. Backed by the
+ * cross-request cache in ./anonymous-token (TTL from `exp`, single-flight,
+ * circuit breaker). Returns null when no token is available; callers then use
+ * the classified degraded client instead of issuing a bare request.
+ */
+async function getAnonymousJwt(): Promise<string | null> {
+  const result = await getAnonymousJwtResult(() =>
+    fetchTokenResult("/token/anonymous"),
+  );
+  return result.ok ? result.token : null;
+}
 
 /**
  * The current user, resolved by Managed Better Auth from the session cookie.
@@ -139,7 +237,13 @@ export const getNeonSessionUser = cache(
   },
 );
 
-function createDbClient(jwt: string | null): DbClient {
+function createDbClient(jwt: string): DbClient {
+  if (!jwt) {
+    // Unrepresentable by construction (R2-5 S-9): a Data API request without
+    // an Authorization header is answered 400 "missing authentication
+    // credentials" and is an implicit, unpinnable Postgres role.
+    throw new Error("Neon Data API JWT is required");
+  }
   const client = new NeonPostgrestClient({
     dataApiUrl: dataApiUrl(),
     options: {
@@ -147,7 +251,7 @@ function createDbClient(jwt: string | null): DbClient {
       global: {
         // A plain fetch keeps the client's own header merge intact.
         fetch: (...args: Parameters<typeof fetch>) => fetch(...args),
-        ...(jwt ? { headers: { Authorization: `Bearer ${jwt}` } } : {}),
+        headers: { Authorization: `Bearer ${jwt}` },
       },
     },
   });
@@ -162,15 +266,27 @@ function createDbClient(jwt: string | null): DbClient {
   return db;
 }
 
+/** A client whose reads answer the classified token-unavailable error. */
+function createDegradedDbClient(): DbClient {
+  return createTokenUnavailableClient(async () => {
+    const user = await getNeonSessionUser();
+    return { data: { user }, error: null };
+  });
+}
+
 /**
  * Cookie-bound Data API client for the current request.
  * `await getSupabaseServerClient()` — name kept from the Supabase era so the
  * call sites moved by import path only (R2-2 scope item 1).
+ *
+ * ALWAYS resolves (R2-5 AC-1): when neither a session JWT nor the anonymous
+ * role token can be resolved, the caller gets a classified degraded client
+ * instead of a rejection — a guest page must render, never 500.
  */
 export const getSupabaseServerClient = cache(
   async (): Promise<DbClient> => {
     const jwt = (await getSessionJwt()) ?? (await getAnonymousJwt());
-    return createDbClient(jwt);
+    return jwt ? createDbClient(jwt) : createDegradedDbClient();
   },
 );
 
@@ -178,11 +294,14 @@ export const getSupabaseServerClient = cache(
  * `anonymous`-role Data API client for surfaces that run without a request
  * session (sitemap generation, static metadata). Reads only what the
  * `authenticated, anonymous` policies expose — the public catalog.
+ *
+ * Returns the degraded client rather than throwing when the anonymous token is
+ * unavailable (R2-5): /sitemap.xml already falls back to its static series
+ * list, and a thrown 500 there was the wrong failure mode.
  */
 export async function getSupabaseAnonymousClient(): Promise<DbClient> {
   const jwt = await getAnonymousJwt();
-  if (!jwt) throw new Error("Neon Data API anonymous token is unavailable");
-  return createDbClient(jwt);
+  return jwt ? createDbClient(jwt) : createDegradedDbClient();
 }
 
 export type SupabaseServerClient = DbClient;

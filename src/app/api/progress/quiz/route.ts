@@ -19,6 +19,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/db/server";
+import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
 import { upsertQuizAttempts } from "@/lib/db/service";
 import { parseQuizName, resolveQuizByName } from "@/lib/quiz";
 import { denyQuizNotAccessible } from "@/lib/access-gate";
@@ -156,8 +157,12 @@ export async function POST(req: NextRequest) {
           : {}),
       },
     });
-  } catch {
-    // Client keeps the authoritative copy in localStorage
+  } catch (err) {
+    // R2-5: a Data API token failure is the guest identity answer (the client
+    // keeps the authoritative copy in localStorage), never a 500.
+    if (isDbTokenUnavailable(err)) {
+      return NextResponse.json({ status: "unauthenticated" });
+    }
     return NextResponse.json({ status: "error" }, { status: 500 });
   }
 }

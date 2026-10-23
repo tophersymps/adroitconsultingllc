@@ -19,6 +19,7 @@
  */
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/db/server";
+import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
 import { accessSeam } from "@/lib/access";
 import { findSeriesForLessonSlug } from "@/lib/learn";
 import { parseQuizName } from "@/lib/quiz";
@@ -181,7 +182,12 @@ export async function GET() {
     };
 
     return NextResponse.json(summary);
-  } catch {
+  } catch (err) {
+    // R2-5: a Data API token failure is the guest state, not a server error —
+    // the documented guest contract for this route is an empty summary at 200.
+    // Classified, not blanket: any other failure keeps its 500 so a real Data
+    // API/RLS outage is never disguised as "you have no progress".
+    if (isDbTokenUnavailable(err)) return NextResponse.json(emptySummary());
     return NextResponse.json(emptySummary(), { status: 500 });
   }
 }

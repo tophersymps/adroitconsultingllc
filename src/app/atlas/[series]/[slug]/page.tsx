@@ -25,12 +25,16 @@ import LessonQuiz from "@/components/Progress/LessonQuiz";
 import GuestCTA from "@/components/Progress/GuestCTA";
 import { getQuizForLesson } from "@/lib/quiz";
 import { getSupabaseServerClient } from "@/lib/db/server";
+import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
 import MDXArticle from "@/components/MDX/MDXArticle";
 import Paywall from "@/components/Catalog/Paywall";
 import { AudioPlayerLazy } from "@/components/BlogPost/AudioPlayerLazy";
 import { lessonAudio } from "@/data/lesson-audio";
 import { accessSeam, getAccessUserId, getCourseRowBySlug } from "@/lib/access";
-import { buildPaywallView } from "@/lib/paywall";
+import {
+  buildDegradedPaywallView,
+  buildPaywallView,
+} from "@/lib/paywall";
 import { loadSeriesConstellation } from "@/lib/sky-server";
 import LessonCelebration from "@/components/Constellations/LessonCelebration";
 import type { ConstellationState } from "@/shared/contracts-constellations";
@@ -90,9 +94,19 @@ export default async function LessonPage({ params }: Props) {
 
   // Access seam gate (ADR-201) — DB-backed status + entitlements. not-launched
   // → 404; paywall → render the Paywall instead of content (AC-3).
+  // R2-5: a token-route failure degrades to the GUEST/paywall view (static
+  // series data only) — never 404, never a quiz payload.
   const userId = await getAccessUserId();
-  const decision = await accessSeam.decideCourseAccess(userId, series);
-  if (decision.kind === "not-launched") notFound();
+  let decision: Awaited<ReturnType<typeof accessSeam.decideCourseAccess>> | null =
+    null;
+  let degraded = false;
+  try {
+    decision = await accessSeam.decideCourseAccess(userId, series);
+  } catch (err) {
+    if (!isDbTokenUnavailable(err)) throw err;
+    degraded = true;
+  }
+  if (decision?.kind === "not-launched") notFound();
 
   // Server-side session gate (ADR-104): guests NEVER receive question text —
   // the quiz JSON is loaded only in the authed branch.
@@ -103,25 +117,18 @@ export default async function LessonPage({ params }: Props) {
 
   // Paywall branch — live + not entitled. Server-rendered with the course's
   // real access options + first published lesson as the peek.
-  if (decision.kind === "paywall") {
-    const courseRow = await getCourseRowBySlug(series);
+  // R2-5: a token-route failure lands here too (guest/paywall view at 200).
+  if (degraded || decision?.kind === "paywall") {
+    const courseRow = degraded ? null : await getCourseRowBySlug(series);
     const peekLessonSlug = lessons[0]?.slug ?? null;
+    const view = courseRow
+      ? buildPaywallView({ course: courseRow, series: seriesInfo, peekLessonSlug })
+      : buildDegradedPaywallView(seriesInfo, peekLessonSlug);
     return (
       <div className="min-h-screen flex flex-col">
         <Header />
         <main id="main" className="flex-1">
-          {courseRow ? (
-            <Paywall
-              seriesSlug={series}
-              view={buildPaywallView({
-                course: courseRow,
-                series: seriesInfo,
-                peekLessonSlug,
-              })}
-            />
-          ) : (
-            notFound()
-          )}
+          <Paywall seriesSlug={series} view={view} degraded={degraded} />
         </main>
         <Footer />
       </div>
