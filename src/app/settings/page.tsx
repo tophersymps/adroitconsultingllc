@@ -9,6 +9,7 @@
  * backend (Email updates, Clear history) — those render static + COMING SOON.
  */
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -24,24 +25,32 @@ export const metadata: Metadata = buildMetadata({
   title: "Settings — Adroit Blog",
   path: "/settings",
   description: "Account and reading preferences for Adroit Academy.",
+  // Account-only route: never index (t_e7dac838 F2). Previously the guest
+  // redirect meant crawlers only ever saw a 3xx; the outage render can now
+  // answer 200 with boilerplate, so declare noindex explicitly.
+  noindex: true,
 });
 
 const kicker = "inline-flex items-center gap-2 font-mono text-[11px] font-semibold text-[var(--accent)] uppercase tracking-[0.08em] mb-3";
 
 export default async function SettingsPage() {
   // t_223f8b3d: no bearer mint → render an honest unavailable state instead of
-  // 500ing (or bouncing a signed-in user to /login).
+  // 500ing (or bouncing a signed-in user to /login). t_e7dac838: keep that
+  // outage state strictly for DbAuthUnavailableError — a plain guest with a
+  // healthy client must still be redirected to /login.
   let supabase: Awaited<ReturnType<typeof getSupabaseServerClient>> | null = null;
   let user: { id: string } | null = null;
+  let outage = false;
   try {
     supabase = await getSupabaseServerClient();
     const res = await supabase.auth.getUser();
     user = res.data.user;
   } catch (err) {
     if (!(err instanceof DbAuthUnavailableError)) throw err;
+    outage = true;
   }
 
-  if (!user || !supabase) {
+  if (outage || !supabase) {
     return (
       <div className="min-h-screen flex flex-col">
         <Header />
@@ -60,6 +69,10 @@ export default async function SettingsPage() {
       </div>
     );
   }
+
+  // t_e7dac838 F1: plain guest (healthy client, no session user) → login gate,
+  // as before the degrade patch. Never show a false "cannot verify session".
+  if (!user) redirect("/login?next=/settings");
 
   // Seed ThemeProvider with the account's persisted theme (avoids a flash of
   // guest-localStorage theme before the account pref applies).
