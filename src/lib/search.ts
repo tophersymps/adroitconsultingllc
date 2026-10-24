@@ -1,34 +1,22 @@
 /**
- * B-21 — Client-side site search (discovery/consolidated-backlog.md).
+ * B-21 — Client-side site search matching (discovery/consolidated-backlog.md).
  *
- * Searches the static datasets `posts.ts` + `learn.ts` (both plain generated
- * TS — no Node-only imports, safe for client bundles). Results are grouped by
- * post / series / lesson. No backend needed: both datasets are static imports.
+ * ADR-220: this module is DATASET-AGNOSTIC and pure. It matches a
+ * already-filtered, body-free document index (`SearchDoc[]`, delivered by
+ * `GET /api/search`) — it does NOT import `@/data/posts` or `@/data/learn`.
+ * The old version did, which shipped the whole learn dataset (stealth series,
+ * lesson bodies) to every visitor in one static client chunk (S2).
  *
- * Pure functions only — mirrors the learn-client.ts convention.
+ * Pure functions only — safe for the client bundle.
  */
 
-import type { BlogPost, LearnLesson, LearningSeries } from "@/data/types";
+import type {
+  SearchDoc,
+  SearchHit,
+  SearchResults,
+} from "@/shared/contracts-search";
 
-export interface SearchHit {
-  type: "post" | "series" | "lesson";
-  title: string;
-  /** Route to navigate to when the result is clicked. */
-  href: string;
-  /** Group label shown in the overlay (post/series/lesson). */
-  group: string;
-  /** Short excerpt snippet (post excerpt, series description, lesson excerpt). */
-  snippet: string;
-  /** Optional secondary meta (series name for lessons, etc.). */
-  meta?: string;
-}
-
-export interface SearchResults {
-  posts: SearchHit[];
-  series: SearchHit[];
-  lessons: SearchHit[];
-  total: number;
-}
+export type { SearchDoc, SearchHit, SearchResults } from "@/shared/contracts-search";
 
 /** Lowercase + trim, with diacritics folded for forgiving matching. */
 function normalize(input: string): string {
@@ -46,62 +34,58 @@ function matches(query: string, ...fields: string[]): boolean {
   return fields.some((f) => normalize(f).includes(q));
 }
 
-/**
- * Build a grouped search index over all three datasets. Runs on the client at
- * open time (cold import of the static modules, then cheap substring scans).
- */
-export function buildSearchIndex(
-  allPosts: BlogPost[],
-  allSeries: LearningSeries[],
-  allLessons: LearnLesson[],
-): (query: string) => SearchResults {
-  return function search(query: string): SearchResults {
-    const q = normalize(query);
-    if (!q) return { posts: [], series: [], lessons: [], total: 0 };
-
-    const posts: SearchHit[] = allPosts
-      .filter((p) =>
-        matches(q, p.title, p.excerpt, p.category, ...p.tags, p.slug),
-      )
-      .slice(0, 8)
-      .map((p) => ({
-        type: "post" as const,
-        title: p.title,
-        href: `/field-notes/${p.slug}`,
-        group: "Posts",
-        snippet: p.excerpt,
-        meta: p.category,
-      }));
-
-    const series: SearchHit[] = allSeries
-      .filter((s) => matches(q, s.name, s.description, s.slug))
-      .slice(0, 5)
-      .map((s) => ({
-        type: "series" as const,
-        title: s.name,
-        href: `/atlas/${s.slug}`,
-        group: "Series",
-        snippet: s.description,
-      }));
-
-    const lessons: SearchHit[] = allLessons
-      .filter((l) =>
-        matches(q, l.title, l.excerpt, l.series, ...l.tags, l.slug),
-      )
-      .slice(0, 10)
-      .map((l) => ({
-        type: "lesson" as const,
-        title: l.title,
-        href: `/atlas/${l.series}/${l.slug}`,
-        group: "Lessons",
-        snippet: l.excerpt,
-      }));
-
-    return {
-      posts,
-      series,
-      lessons,
-      total: posts.length + series.length + lessons.length,
-    };
+function toHit(doc: SearchDoc): SearchHit {
+  return {
+    type: doc.type,
+    title: doc.title,
+    href: doc.href,
+    group: doc.group,
+    snippet: doc.snippet,
+    ...(doc.meta ? { meta: doc.meta } : {}),
   };
 }
+
+/** A document matches when its title, snippet or any match term contains the query. */
+function docMatches(query: string, doc: SearchDoc): boolean {
+  return matches(query, doc.title, doc.snippet, ...(doc.terms ?? []));
+}
+
+/**
+ * Match a query against the fetched document index. Grouped by post / series /
+ * lesson, with the same limits and ordering as before (source order, capped).
+ * Empty query ⇒ empty result set.
+ */
+export function searchDocs(
+  docs: readonly SearchDoc[],
+  query: string,
+): SearchResults {
+  const q = normalize(query);
+  if (!q) return { posts: [], series: [], lessons: [], total: 0 };
+
+  const posts: SearchHit[] = [];
+  const series: SearchHit[] = [];
+  const lessons: SearchHit[] = [];
+
+  for (const doc of docs) {
+    if (!docMatches(q, doc)) continue;
+    if (doc.type === "post" && posts.length < 8) posts.push(toHit(doc));
+    else if (doc.type === "series" && series.length < 5) series.push(toHit(doc));
+    else if (doc.type === "lesson" && lessons.length < 10)
+      lessons.push(toHit(doc));
+  }
+
+  return {
+    posts,
+    series,
+    lessons,
+    total: posts.length + series.length + lessons.length,
+  };
+}
+
+/** Empty result set (shared constant shape for the overlay's initial state). */
+export const EMPTY_SEARCH_RESULTS: SearchResults = {
+  posts: [],
+  series: [],
+  lessons: [],
+  total: 0,
+};
