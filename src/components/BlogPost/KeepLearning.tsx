@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { BlogPost } from "@/data/types";
 import { learnSeries } from "@/data/learn";
+import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
 import { toLearnCardSeries } from "@/lib/learn";
 import {
   getRelatedPosts,
@@ -25,9 +26,19 @@ interface KeepLearningProps {
  *
  * Server component: resolves the recommendation from the static learn dataset
  * and renders the same card component the /atlas hub uses (no divergence).
+ *
+ * DISCLOSURE BOUNDARY (security t_0071d4a0, CWE-200): the collection is
+ * filtered to the static launch mirror BEFORE it reaches the resolver, so a
+ * stealth series is never selected in the first place. Filtering the input
+ * (not merely skipping the render) is what keeps the series record out of the
+ * RSC flight payload: `PathCard` receives the series as a prop, so anything
+ * the resolver returns is serialised into the prerendered HTML. Doctrine
+ * (t_0194c233 / t_2cc94bb7): a series may be named publicly iff
+ * `isPubliclyLaunchedSeries(slug)` — do not add an unfiltered fallback.
  */
 export default function KeepLearning({ post, allPosts }: KeepLearningProps) {
-  const rec = resolveRecommendedSeries(post, learnSeries);
+  const launchedSeries = learnSeries.filter((s) => isPubliclyLaunchedSeries(s.slug));
+  const rec = resolveRecommendedSeries(post, launchedSeries);
   const related = getRelatedPosts(post, allPosts);
 
   return (
