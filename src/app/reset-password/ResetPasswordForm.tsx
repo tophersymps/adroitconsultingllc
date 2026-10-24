@@ -1,39 +1,32 @@
 /**
  * /reset-password — new-password form (client component).
  *
- * Rendered ONLY after the server-side gate in page.tsx confirms an authed
- * session (see the t_4fbc8f48 finding: the SSR HTML previously leaked the
- * form to guests because the gate was client-only). The useAuth check below
- * stays as a defensive backstop only.
+ * Rendered ONLY when the server component in page.tsx has a `?token=` from the
+ * reset email — the token is the credential (the update route redeems it, and
+ * imported legacy users are signed out and must still be able to reset). There
+ * is no session path: the route 401s without a token, so a session-gated form
+ * could only fail (t_233b6f61).
  *
- * Handles: form validation (min 6, match), POST /api/auth/reset-password/update,
- * success state with "Continue to blog" (ADR-PWR-2).
+ * Handles: form validation (min 6, match),
+ * POST /api/auth/reset-password/update { password, token }, success state
+ * (ADR-PWR-2).
  */
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { useAuth, notifyAuthChanged } from "@/lib/hooks/useAuth";
+import { notifyAuthChanged } from "@/lib/hooks/useAuth";
+import { invalidateProgressSummary } from "@/lib/hooks/useProgressSummary";
 
-export default function ResetPasswordForm() {
-  const router = useRouter();
-  const { user, isLoading } = useAuth();
-
+export default function ResetPasswordForm({ token }: { token: string }) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [isPending, startTransition] = useTransition();
-
-  // Defensive backstop (the server gate in page.tsx is the primary guard).
-  if (!isLoading && !user) {
-    router.replace("/login?next=/reset-password");
-    return null;
-  }
 
   if (success) {
     return (
@@ -66,13 +59,13 @@ export default function ResetPasswordForm() {
                 Password updated
               </h1>
               <p className="text-[13px] text-gray-500 leading-relaxed mb-6 dark:text-[var(--ink-muted)]">
-                All set. Your password has been changed, and you&rsquo;re signed in on this device.
+                All set. Your password has been changed. Sign in with your new password to continue.
               </p>
               <Link
-                href="/field-notes"
+                href="/login"
                 className="block h-11 rounded-xl bg-navy text-white text-sm font-bold text-center leading-[2.75rem] no-underline hover:bg-navy-light active:scale-[0.98] transition-all duration-150"
               >
-                Continue to blog &rarr;
+                Sign in &rarr;
               </Link>
             </div>
             <p className="text-center mt-6">
@@ -109,7 +102,7 @@ export default function ResetPasswordForm() {
         const res = await fetch("/api/auth/reset-password/update", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ password }),
+          body: JSON.stringify({ password, token }),
         });
         const data = (await res.json().catch(() => null)) as {
           error?: string;
@@ -120,6 +113,10 @@ export default function ResetPasswordForm() {
           return;
         }
 
+        // Identity changed: the progress summary is per-session, so a password
+        // change must not leave the previous session's payload cached
+        // (PERF-P1, t_e786efe2).
+        invalidateProgressSummary();
         notifyAuthChanged();
         setSuccess(true);
       } catch {

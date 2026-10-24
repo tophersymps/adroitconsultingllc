@@ -15,7 +15,7 @@ const { mocks } = vi.hoisted(() => {
   return { mocks: { getSupabaseServerClient, getUser, from } };
 });
 
-vi.mock("@/lib/supabase/server", () => ({
+vi.mock("@/lib/db/server", () => ({
   getSupabaseServerClient: async () => ({
     auth: { getUser: mocks.getUser },
     from: mocks.from,
@@ -137,14 +137,38 @@ describe("PATCH /api/profile", () => {
     expect(await res.json()).toEqual({ error: "Forbidden origin" });
   });
 
-  it("does NOT reject the live deployed origin (t_34f01164 regression)", async () => {
-    // Origin: https://adroit-blog-two.vercel.app must pass the CSRF check and
-    // proceed to the session check (guest → 401, not 403 Forbidden origin).
-    const res = await patch(
-      { displayName: "Jane" },
-      { origin: "https://adroit-blog-two.vercel.app" },
+  it("does NOT reject a same-origin POST from the deployment's own host", async () => {
+    // t_34f01164 regression, generalised (t_ab6c1cb6 F1): a first-party POST
+    // from whatever host serves the app must pass the CSRF check — the old
+    // literal allowlist 403'd every preview/custom domain.
+    const res = await PATCH(
+      new NextRequest("http://192.168.1.20:3111/api/profile", {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+          host: "192.168.1.20:3111",
+          origin: "http://192.168.1.20:3111",
+        },
+        body: JSON.stringify({ displayName: "Jane" }),
+      }),
     );
+    // Guest → 401 from the session check, not 403 from the origin check.
     expect(res.status).toBe(401);
+  });
+
+  it("does NOT reject a configured deployment origin (configured allowlist)", async () => {
+    // A cross-origin first-party caller is allowed when its origin is
+    // configured — the deployment no longer needs a code change.
+    process.env.NEXT_PUBLIC_SITE_URL = "https://staging.adroit.io";
+    try {
+      const res = await patch(
+        { displayName: "Jane" },
+        { origin: "https://staging.adroit.io", host: "app.internal:8080" },
+      );
+      expect(res.status).toBe(401);
+    } finally {
+      delete process.env.NEXT_PUBLIC_SITE_URL;
+    }
   });
 
   it("429s when the per-IP rate limit is exceeded", async () => {

@@ -1,23 +1,31 @@
 /**
- * POST /api/auth/resend-confirmation — resend the signup confirmation email.
+ * POST /api/auth/resend-confirmation — resend the signup verification email.
  *
  * ADR-PWR-4: lives only in the login unconfirmed-email error state. Generic,
  * non-enumerating response (identical whether or not the email is registered),
  * rate-limited per-IP, origin-checked. Mirrors the reset-request route.
  *
+ * Managed Better Auth exposes this as `sendVerificationEmail`; upstream
+ * failures are logged server-side (status + code only) and never surfaced.
+ *
  * Body: { email }
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getAuthServer } from "@/lib/auth/server";
 import { checkRateLimit, getClientIp, checkOrigin } from "@/lib/api-security";
-import { buildAuthRedirect } from "@/lib/auth-emails";
+import { buildVerifyEmailRedirect } from "@/lib/auth-emails";
+import { withAuthCookies } from "@/lib/auth/cookie-jar";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const GENERIC_MESSAGE =
   "If that account needs confirmation, we've sent a new confirmation link. Please allow a few minutes for it to arrive.";
 
-export async function POST(req: NextRequest) {
+export function POST(req: NextRequest): Promise<Response> {
+  return withAuthCookies(() => handleResend(req));
+}
+
+async function handleResend(req: NextRequest): Promise<Response> {
   const originError = checkOrigin(req);
   if (originError) {
     return NextResponse.json({ error: "Forbidden origin" }, { status: 403 });
@@ -41,14 +49,15 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const supabase = await getSupabaseServerClient();
-    const { error } = await supabase.auth.resend({
-      type: "signup",
+    const { error } = await getAuthServer().sendVerificationEmail({
       email,
-      options: { emailRedirectTo: buildAuthRedirect("/field-notes") },
+      callbackURL: buildVerifyEmailRedirect(req.headers.get("origin")),
     });
     if (error) {
-      console.error("[resend-confirmation] resend failed", error.message);
+      console.error("[resend-confirmation] sendVerificationEmail failed", {
+        status: error.status,
+        code: error.code,
+      });
     }
   } catch (err) {
     console.error("[resend-confirmation] unexpected error", err);

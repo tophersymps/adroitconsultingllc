@@ -7,7 +7,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi, notFoundJson } from "@/lib/admin";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import { computeCourseReadiness } from "@/lib/course-readiness";
 import type { CourseRow } from "@/shared/contracts-course-catalog";
 
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   }
 
   try {
-    const service = getSupabaseServiceClient();
+    const service = await getSupabaseServerClient();
     const { data, error } = await service
       .from("courses")
       .select("*")

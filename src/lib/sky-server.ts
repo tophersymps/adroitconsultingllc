@@ -7,7 +7,7 @@
  * These loaders are called from server components and API routes ONLY — they
  * touch the HttpOnly-session Supabase client, so nothing here is client-safe.
  */
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import { deriveProgress } from "@/lib/completion";
 import { getCompletedLessonSlugs } from "@/lib/completion";
 import { buildAchievementStats, buildConstellation, buildProfileSky } from "@/lib/sky";

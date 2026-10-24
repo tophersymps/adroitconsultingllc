@@ -2,11 +2,14 @@
 """RLS isolation check for the Neon database (task t_ce10555b, reused by R1-4/R1-5).
 
 Proves, against the live Neon database, that:
-  1. the policy inventory on Neon is complete — exactly the 34 policies over
-     the same 14 public tables as the Supabase origin (checked by name AND
-     command, so a dropped or renamed policy fails here even if it happens not
-     to leak). No Neon-only policy is declared, which is the point: public."user"
-     is RLS-on with zero policies (default-deny), so the total stays 34;
+  1. the policy inventory on Neon is complete — exactly the 37 policies this
+     deployment is designed to carry: the 34 Supabase-origin policies over the
+     same 14 public tables (checked by name AND command, so a dropped or
+     renamed policy fails here even if it happens not to leak) plus the 3
+     Neon-only admin SELECT policies declared in NEON_ONLY_POLICIES (003:
+     admin surfaces read through the Data API, which has no service key).
+     public."user" stays RLS-on with zero policies (default-deny), so it
+     contributes nothing to the total;
   2. every user-scoped table has RLS enabled and at least one policy;
   3. user A cannot read user B's rows on any of the ten user-scoped tables;
   4. cross-user writes are rejected, and the legitimate own-user writes the
@@ -53,6 +56,7 @@ import os
 import re
 import subprocess
 import sys
+from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -74,7 +78,9 @@ USER_SCOPED = [
 ]
 
 # The authoritative inventory of the Supabase origin, read from
-# pg_policies on zrggxfdyptiahskogwnn on 2026-10-23 (34 policies, 14 tables).
+# pg_policies on zrggxfdyptiahskogwnn on 2026-10-23 (34 origin policies over 14
+# tables; the 3 Neon-only admin SELECT policies in NEON_ONLY_POLICIES below
+# bring the live inventory to 37).
 EXPECTED_POLICIES = [
     ("admin_audit_log", "audit_insert_admin", "INSERT"),
     ("admin_audit_log", "audit_select_admin", "SELECT"),
@@ -121,14 +127,23 @@ EXPECTED_POLICIES = [
 # answerable, while the total still has to match exactly (a stray policy hiding
 # in here is the only way a loosened one could slip past the count).
 NEON_ONLY_POLICIES = [
-    # Empty by decision (t_77f4d97e F-1): public."user" is RLS ENABLED with
-    # ZERO policies, which is default-deny, on top of the REVOKE ALL from
-    # 001_rls.sql §2 (R1-4 verified authenticated and anonymous both receive
-    # 42501, both roles are NOBYPASSRLS/NOLOGIN). Do NOT add a user_select_own
-    # policy here: it would make the inventory 35, break the 34-policy parity
-    # AC, and re-open the table to a grant-permitted role. Keep the list as the
-    # single place where a genuinely Neon-only policy would be declared (with
-    # its reason), not as a parking space for extras.
+    # The 3 admin-read policies from 003_admin_read_policies.sql. The Neon Data
+    # API has no service key, so the /api/admin/* surfaces that used to read
+    # with the Supabase service role now read with the caller's own JWT; without
+    # these an authenticated admin sees 0 rows on user_profiles (users list),
+    # lesson_completion and read_progress (analytics). SELECT only,
+    # TO authenticated, USING (public.is_admin()) — no write capability.
+    # 34 origin + 3 Neon-only = 37. 001_rls.sql §4b creates the same three, so
+    # a fresh branch converges to 37 from 001 alone.
+    ("user_profiles", "user_profiles_admin_select", "SELECT"),
+    ("lesson_completion", "lesson_completion_admin_select", "SELECT"),
+    ("read_progress", "read_progress_admin_select", "SELECT"),
+    # Do NOT add a user_select_own policy on public."user" as "Neon-only": that
+    # table is RLS ENABLED with ZERO policies (default-deny) on top of the
+    # REVOKE ALL in 001_rls.sql §2 (R1-4 verified authenticated and anonymous
+    # both receive 42501; both roles are NOBYPASSRLS/NOLOGIN). Such a policy
+    # would make the inventory 38, break the reviewed baseline, and re-open the
+    # table to a grant-permitted role.
 ]
 
 ALL_EXPECTED_POLICIES = EXPECTED_POLICIES + NEON_ONLY_POLICIES
@@ -190,17 +205,30 @@ end $$;
 """
 
 
+def _unquote(value: str) -> str:
+    """Strip whitespace and any wrapping quote characters (`'`, `"`, or both).
+
+    `str.strip('"\'').strip('"')` is order-dependent and leaves a quote behind for
+    `"'postgresql://…'"`; stripping the quote character set on both ends at once
+    handles single, double and nested wrapping.
+    """
+    return value.strip().strip("\"'")
+
+
 def load_database_url() -> str:
     url = os.environ.get("DATABASE_URL_UNPOOLED") or os.environ.get("DATABASE_URL")
     if url:
-        return url
+        # Worker shells export the value with literal wrapping quotes. Left
+        # unstripped, psql exits with `invalid connection option` after parsing
+        # 0 assertions, which reads like an RLS regression when the DB is fine.
+        return _unquote(url)
     env_path = os.path.join(REPO_ROOT, ".env.local")
     if os.path.exists(env_path):
         with open(env_path, encoding="utf-8") as fh:
             for line in fh:
                 line = line.strip()
                 if line.startswith("DATABASE_URL_UNPOOLED="):
-                    return line.split("=", 1)[1].strip().strip('"').strip("'")
+                    return _unquote(line.split("=", 1)[1])
     sys.exit(
         "FAIL: no DATABASE_URL_UNPOOLED in the environment and none found in "
         f"{env_path}"
@@ -217,9 +245,9 @@ def build_sql() -> str:
         for t, p, c in NEON_ONLY_POLICIES
     )
     # Joining the two groups must survive an EMPTY NEON_ONLY_POLICIES list
-    # (the current state: public."user" is RLS-on/zero-policy, i.e. default-deny
-    # behind the REVOKE, and needs no Neon-only policy), otherwise the generated
-    # VALUES list ends in a stray comma.
+    # (an empty list is a valid state — it is what the F-1 default-deny posture
+    # looked like before 003 — otherwise the generated VALUES list ends in a
+    # stray comma).
     expected_values_sql = ",\n    ".join(
         part for part in (policy_values, neon_only_values) if part
     )
@@ -413,7 +441,7 @@ def build_sql() -> str:
         "-- role can read or write the table even if a stray GRANT (or a",
         "-- re-created table inheriting pg_default_acl) re-grants it. Assert both",
         "-- halves so a DISABLE, or an ad-hoc user_select_own policy, fails here",
-        "-- (a policy would also make the inventory 35 and break the 34 baseline).",
+        "-- (a policy would also make the inventory 38 and break the 37 baseline).",
         "select pg_temp.is_('grants.user_table.default_deny', (",
         "  select case when c.relrowsecurity then 'on' else 'off' end from pg_class c",
         "  join pg_namespace n on n.oid = c.relnamespace",
@@ -531,14 +559,51 @@ def build_sql() -> str:
     return "\n".join(script)
 
 
+def split_dsn(dsn: str) -> tuple[str, str | None]:
+    """Split a libpq URL into (password-free target, password).
+
+    The password must never travel on argv (CWE-214): every process on the host
+    can read another process's command line, and shell history keeps it.
+    """
+    if "://" in dsn:
+        parts = urlsplit(dsn)
+        netloc = parts.netloc
+        password = None
+        if "@" in netloc:
+            userinfo, host = netloc.rsplit("@", 1)
+            if ":" in userinfo:
+                user, raw_password = userinfo.split(":", 1)
+                password = unquote(raw_password)
+                userinfo = quote(user, safe="")
+            netloc = f"{userinfo}@{host}"
+        target = urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+        return target, password
+    # key=value libpq form ("host=... password=...") — strip the password key
+    match = re.search(r"(?:^|\s)password=('(?:[^']|'')*'|\S+)", dsn)
+    if match:
+        password = match.group(1).strip("'")
+        target = (dsn[:match.start()] + dsn[match.end():]).strip()
+        return target, password
+    return dsn, None
+
+
+def configure_db(dsn: str) -> tuple[str, dict]:
+    """Password-free psql target plus the child env that carries PGPASSWORD."""
+    target, password = split_dsn(dsn)
+    env = dict(os.environ)
+    env["PGAPPNAME"] = "rls-isolation-check"
+    if password:
+        env["PGPASSWORD"] = password
+    return target, env
+
+
 def main() -> int:
     url = load_database_url()
     sql = build_sql()
 
-    env = dict(os.environ)
-    env["PGAPPNAME"] = "rls-isolation-check"
+    target, env = configure_db(url)
     proc = subprocess.run(
-        ["psql", url, "-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-f", "-"],
+        ["psql", target, "-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-f", "-"],
         input=sql,
         capture_output=True,
         text=True,
@@ -554,8 +619,18 @@ def main() -> int:
             print(f"    {line}")
 
     if proc.returncode != 0 or "RLS ISOLATION CHECK COMPLETE" not in proc.stdout:
-        print("\nRLS ISOLATION CHECK: FAIL", file=sys.stderr)
         error = re.sub(re.escape(url), "<redacted-db-url>", proc.stderr.strip())
+        if not passes and "RLS ISOLATION CHECK COMPLETE" not in proc.stdout:
+            # psql never ran the assertions (bad DSN, unreachable host, ...).
+            # Report that distinctly: "FAIL" here reads like an RLS regression.
+            print(
+                "RLS ISOLATION CHECK: HARNESS ERROR (0 assertions ran — this is a "
+                "connection/DSN problem, not an RLS result)",
+                file=sys.stderr,
+            )
+            print(error, file=sys.stderr)
+            return 1
+        print("\nRLS ISOLATION CHECK: FAIL", file=sys.stderr)
         print(error, file=sys.stderr)
         return 1
 

@@ -12,17 +12,17 @@ import { NextRequest } from "next/server";
 
 const { mocks } = vi.hoisted(() => {
   const getSupabaseServerClient = vi.fn();
-  const getSupabaseServiceClient = vi.fn();
+  const upsertQuizAttempts = vi.fn();
+  const insertQuizRun = vi.fn();
   const getUser = vi.fn();
   const from = vi.fn();
-  const serviceFrom = vi.fn();
   const decideCourseAccess = vi.fn();
   return {
-    mocks: { getSupabaseServerClient, getSupabaseServiceClient, getUser, from, serviceFrom, decideCourseAccess },
+    mocks: { getSupabaseServerClient, upsertQuizAttempts, insertQuizRun, getUser, from, decideCourseAccess },
   };
 });
 
-vi.mock("@/lib/supabase/server", () => ({
+vi.mock("@/lib/db/server", () => ({
   getSupabaseServerClient: async () => ({
     auth: { getUser: mocks.getUser },
     from: mocks.from,
@@ -30,9 +30,11 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 // Server-write-only (t_bb6ed113): quiz_attempt/quiz_run writes MUST go
-// through the service-role client, never the RLS-bound (anon/cookie) client.
-vi.mock("@/lib/supabase/service", () => ({
-  getSupabaseServiceClient: () => ({ from: mocks.serviceFrom }),
+// through the privileged direct-SQL helpers (R2-2), never the RLS-bound
+// (anon/cookie) client.
+vi.mock("@/lib/db/service", () => ({
+  upsertQuizAttempts: mocks.upsertQuizAttempts,
+  insertQuizRun: mocks.insertQuizRun,
 }));
 
 // The route gates through the access seam (t_10214e52). Default granted;
@@ -85,25 +87,15 @@ function makeFrom(table: string, checkRows: unknown) {
   return {};
 }
 
-/** Service-role client — quiz_attempt upsert + quiz_run insert (the ONLY writes). */
-function makeServiceFrom(table: string) {
-  if (table === "quiz_run") {
-    return {
-      insert: async (row: unknown) => {
-        writeSink.quizRunInserts.push(row);
-        return { error: null };
-      },
-    };
-  }
-  if (table === "quiz_attempt") {
-    return {
-      upsert: async (rows: unknown) => {
-        writeSink.quizAttemptUpserts.push(rows);
-        return { error: null };
-      },
-    };
-  }
-  return {};
+/** Privileged writers — quiz_attempt upsert + quiz_run insert (the ONLY writes). */
+function upsertAttemptsSink(rows: unknown) {
+  writeSink.quizAttemptUpserts.push(rows);
+  return { error: null };
+}
+
+function insertRunSink(row: unknown) {
+  writeSink.quizRunInserts.push(row);
+  return { error: null };
 }
 
 function authedUser(id = "user-1") {
@@ -120,7 +112,8 @@ beforeEach(() => {
   writeSink.quizRunInserts.length = 0;
   mocks.decideCourseAccess.mockResolvedValue({ kind: "granted" });
   mocks.from.mockImplementation((table: string) => makeFrom(table, []));
-  mocks.serviceFrom.mockImplementation((table: string) => makeServiceFrom(table));
+  mocks.upsertQuizAttempts.mockImplementation(async (rows: unknown) => upsertAttemptsSink(rows));
+  mocks.insertQuizRun.mockImplementation(async (row: unknown) => insertRunSink(row));
 });
 
 describe("POST /api/progress/quiz/batch — exam unlock gate", () => {
@@ -257,8 +250,8 @@ describe("POST /api/progress/quiz/batch — exam unlock gate", () => {
     expect(res.status).toBe(200);
 
     // Graded writes are on the service-role client only.
-    expect(mocks.serviceFrom).toHaveBeenCalledWith("quiz_attempt");
-    expect(mocks.serviceFrom).toHaveBeenCalledWith("quiz_run");
+    expect(mocks.upsertQuizAttempts).toHaveBeenCalledTimes(1);
+    expect(mocks.insertQuizRun).toHaveBeenCalledTimes(1);
     expect(writeSink.quizAttemptUpserts).toHaveLength(1);
     expect(writeSink.quizRunInserts).toHaveLength(1);
 

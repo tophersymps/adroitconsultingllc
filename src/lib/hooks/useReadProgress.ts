@@ -9,7 +9,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { getSupabaseClient } from "@/lib/supabase/client";
+import { getSupabaseClient } from "@/lib/db/client";
 import { notifyProgressChanged, PROGRESS_CHANGED_EVENT } from "@/lib/progress";
 
 const STORAGE_KEY_PREFIX = "adroit-blog:read:";

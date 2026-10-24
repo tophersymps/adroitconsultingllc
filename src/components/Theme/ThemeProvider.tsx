@@ -20,6 +20,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import {
@@ -38,6 +39,25 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
+const MEDIA_QUERY = "(prefers-color-scheme: dark)";
+
+/** No-op subscription — for client-only values that never change under us. */
+const NO_SUBSCRIBE = () => () => {};
+
+function subscribePrefersDark(onChange: () => void): () => void {
+  const mq = window.matchMedia(MEDIA_QUERY);
+  mq.addEventListener("change", onChange);
+  return () => mq.removeEventListener("change", onChange);
+}
+
+function getPrefersDark(): boolean {
+  try {
+    return window.matchMedia(MEDIA_QUERY).matches;
+  } catch {
+    return false;
+  }
+}
+
 export function ThemeProvider({
   children,
   accountPref,
@@ -45,25 +65,36 @@ export function ThemeProvider({
   children: ReactNode;
   accountPref?: ThemeMode;
 }) {
-  const [mode, setModeState] = useState<ThemeMode>(() =>
-    accountPref ?? readStoredMode(),
+  // Hydration-safe by construction (QA R2-4 F4). localStorage and matchMedia do
+  // not exist on the server, so the persisted/OS preference is read through
+  // `useSyncExternalStore`, whose *server* snapshot is used for the hydration
+  // render and whose client snapshot takes over immediately afterwards. Reading
+  // storage in a useState initializer made the first client render disagree
+  // with the server HTML — React logged #418, threw the server tree away and,
+  // on re-render, dropped the `dark` class the FOUC guard had applied.
+  const storedMode = useSyncExternalStore<ThemeMode>(
+    NO_SUBSCRIBE,
+    readStoredMode,
+    () => "light",
   );
-  const [prefersDark, setPrefersDark] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return window.matchMedia("(prefers-color-scheme: dark)").matches;
-    } catch {
-      return false;
-    }
-  });
+  const prefersDark = useSyncExternalStore<boolean>(
+    subscribePrefersDark,
+    getPrefersDark,
+    () => false,
+  );
 
-  // Track OS preference changes (subscription callbacks only — no sync setState).
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = (e: MediaQueryListEvent) => setPrefersDark(e.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
+  // Local overrides from the toggle win over both the account pref and storage.
+  const [modeOverride, setModeOverride] = useState<ThemeMode | null>(null);
+  const mode: ThemeMode = modeOverride ?? accountPref ?? storedMode;
+  // True only once React has switched from the server snapshot to the client
+  // ones. The apply/persist effect below must not run on the hydration commit:
+  // `persistStoredMode("light")` there would overwrite the visitor's stored
+  // preference before the client snapshot is ever read.
+  const hydrated = useSyncExternalStore(
+    NO_SUBSCRIBE,
+    () => true,
+    () => false,
+  );
 
   // Adopt a server-provided account pref when it arrives/changes — adjusted
   // during render (React's "adjust state when a prop changes" pattern), not
@@ -73,16 +104,17 @@ export function ThemeProvider({
   );
   if (prevAccountPref !== accountPref) {
     setPrevAccountPref(accountPref);
-    if (accountPref) setModeState(accountPref);
+    if (accountPref) setModeOverride(accountPref);
   }
 
   const resolvedDark = mode === "dark" || (mode === "system" && prefersDark);
 
   // Apply to <html>; persist for guests (accounts persist via PATCH too).
   useEffect(() => {
+    if (!hydrated) return;
     applyDarkClass(resolvedDark);
     persistStoredMode(mode);
-  }, [resolvedDark, mode]);
+  }, [hydrated, resolvedDark, mode]);
 
   // Overlay color while a theme-switch cross-fade is in flight (null = none).
   const [overlayColor, setOverlayColor] = useState<string | null>(null);
@@ -97,7 +129,7 @@ export function ThemeProvider({
         typeof window !== "undefined" &&
         window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
       if (reduce) {
-        setModeState(next);
+        setModeOverride(next);
         return;
       }
 
@@ -118,7 +150,7 @@ export function ThemeProvider({
       }
       if (hadDark !== targetDark) root.classList.toggle("dark", hadDark);
       if (!targetBg) {
-        setModeState(next);
+        setModeOverride(next);
         return;
       }
 
@@ -127,7 +159,7 @@ export function ThemeProvider({
       // Unmount via setTimeout (not onAnimationEnd) — deterministic, and the
       // animation end event isn't reliable if the tab is backgrounded.
       setOverlayColor(targetBg);
-      window.setTimeout(() => setModeState(next), 220);
+      window.setTimeout(() => setModeOverride(next), 220);
       window.setTimeout(() => setOverlayColor(null), 480);
     },
     [mode, prefersDark, resolvedDark],

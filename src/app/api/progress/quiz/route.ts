@@ -18,8 +18,9 @@
  * minimal-disclosure model as POST /api/progress/quiz/batch (t_c0c452f5).
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { getSupabaseServerClient } from "@/lib/db/server";
+import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
+import { upsertQuizAttempts } from "@/lib/db/service";
 import { parseQuizName, resolveQuizByName } from "@/lib/quiz";
 import { denyQuizNotAccessible } from "@/lib/access-gate";
 import { completeCheckLessonsOnPerfectScore } from "@/lib/progress-complete";
@@ -105,20 +106,17 @@ export async function POST(req: NextRequest) {
     // clients (migration 006) — a direct anon-key + JWT write is now denied.
     // The privileged service-role client performs the write; correctness was
     // recomputed above from the canonical quiz JSON, never the client payload.
-    const { error } = await getSupabaseServiceClient()
-      .from("quiz_attempt")
-      .upsert(
-        {
-          user_id: user.id,
-          quiz_name: quizName,
-          question_index: questionIndex,
-          correct_answer_index: correctAnswerIndex,
-          user_answer_index: userAnswerIndex,
-          is_correct: isCorrect,
-          attempted_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id,quiz_name,question_index" },
-      );
+    const { error } = await upsertQuizAttempts([
+      {
+        user_id: user.id,
+        quiz_name: quizName,
+        question_index: questionIndex,
+        correct_answer_index: correctAnswerIndex,
+        user_answer_index: userAnswerIndex,
+        is_correct: isCorrect,
+        attempted_at: new Date().toISOString(),
+      },
+    ]);
 
     if (error) {
       return NextResponse.json({ status: "error", error: sanitiseDbError(error) }, { status: 500 });
@@ -159,8 +157,12 @@ export async function POST(req: NextRequest) {
           : {}),
       },
     });
-  } catch {
-    // Client keeps the authoritative copy in localStorage
+  } catch (err) {
+    // R2-5: a Data API token failure is the guest identity answer (the client
+    // keeps the authoritative copy in localStorage), never a 500.
+    if (isDbTokenUnavailable(err)) {
+      return NextResponse.json({ status: "unauthenticated" });
+    }
     return NextResponse.json({ status: "error" }, { status: 500 });
   }
 }

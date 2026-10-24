@@ -25,7 +25,8 @@
  * Contract types: src/shared/contracts-course-catalog.ts (brainiac, t_22b26cb9).
  */
 import { cache } from "react";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient } from "@/lib/db/server";
+import { getSessionUser } from "@/lib/session";
 import type {
   AccessModel,
   AccessSeam,
@@ -488,12 +489,22 @@ export const accessSeam = createAccessSeam();
 /**
  * Resolve the current signed-in user id from the HttpOnly session cookie.
  * Guests → null. Reuse this from server components/routes before calling the
- * seam so the userId matches the RLS-scoped cookie user.
+ * seam so the userId matches the cookie user.
+ *
+ * Neon R2-1: identity now comes from Managed Better Auth via `getSessionUser()`
+ * (src/lib/session.ts). The Supabase client below is still the DATA client
+ * until the Phase 3 swap — it must not be trusted for identity any more.
+ *
+ * DO NOT call this from a route that must stay prerendered (○). The Managed
+ * Better Auth server instance reads the request through the SDK's
+ * `next/headers` adapter (`cookies()` + `headers()`), i.e. a dynamic API, so
+ * any page using it renders per request: `/atlas` flipped from ○ (CDN HIT,
+ * ~3 ms TTFB) to ƒ (~60 ms, `no-store`) purely because of this call (perf P1,
+ * review of t_d3c401c9). Public/prerendered routes resolve the visitor from
+ * the cookie-backed DATA client themselves and keep this seam for
+ * `force-dynamic` routes only.
  */
 export async function getAccessUserId(): Promise<UserId> {
-  const supabase = await getSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   return user?.id ?? null;
 }

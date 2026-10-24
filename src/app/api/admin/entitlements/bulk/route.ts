@@ -6,8 +6,8 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi, writeAuditLog } from "@/lib/admin";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { authUserIdsExist } from "@/lib/supabase/auth-admin";
+import { getSupabaseServerClient } from "@/lib/db/server";
+import { authUserIdsExist } from "@/lib/auth/users";
 import {
   checkOrigin,
   checkRateLimit,
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "courseId required" }, { status: 400 });
   }
 
-  const service = getSupabaseServiceClient();
+  const service = await getSupabaseServerClient();
   try {
     const courseRes = await service
       .from("courses")
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
     const note = typeof body.note === "string" ? body.note.trim() || null : null;
 
     // Validate all users exist (skip unknown ids silently). Auth users come
-    // from the GoTrue Admin API (`auth` schema not exposed to PostgREST).
+    // from the Neon Auth user table (managed table, replaces GoTrue).
     const knownIds = await authUserIdsExist(userIds);
     const validUserIds = userIds.filter((id) => knownIds.has(id));
 
@@ -137,7 +137,7 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "courseId required" }, { status: 400 });
   }
 
-  const service = getSupabaseServiceClient();
+  const service = await getSupabaseServerClient();
   try {
     const courseRes = await service
       .from("courses")

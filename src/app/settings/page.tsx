@@ -15,7 +15,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import StubBadge from "@/components/StubBadge";
 import ThemeToggle from "@/components/Theme/ThemeToggle";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import { buildMetadata } from "@/lib/seo";
 import type { ThemePref } from "@/shared/contracts-account";
 
@@ -25,6 +25,9 @@ export const metadata: Metadata = buildMetadata({
   title: "Settings — Adroit Blog",
   path: "/settings",
   description: "Account and reading preferences for Adroit Academy.",
+  // Account-only route: never index (lara t_e653885e F2). Absent from the
+  // sitemap and reachable only behind a session cookie.
+  noindex: true,
 });
 
 const kicker = "inline-flex items-center gap-2 font-mono text-[11px] font-semibold text-[var(--accent)] uppercase tracking-[0.08em] mb-3";

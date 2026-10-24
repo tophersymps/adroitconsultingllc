@@ -7,7 +7,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi, notFoundJson, writeAuditLog } from "@/lib/admin";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import {
   checkOrigin,
   checkRateLimit,
@@ -132,7 +132,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 
   const { slug } = await params;
-  const service = getSupabaseServiceClient();
+  const service = await getSupabaseServerClient();
 
   try {
     const { data: existing, error: findErr } = await service

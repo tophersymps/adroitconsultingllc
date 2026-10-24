@@ -15,6 +15,8 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { notifyAuthChanged } from "@/lib/hooks/useAuth";
+import { invalidateDbToken } from "@/lib/db/token-cache";
+import { invalidateProgressSummary } from "@/lib/hooks/useProgressSummary";
 import { sanitizeRedirectPath } from "@/lib/redirect";
 
 function LoginForm() {
@@ -70,6 +72,11 @@ function LoginForm() {
           return;
         }
 
+        // Identity changed: the cached token (guest null or the previous
+        // user's JWT) must not survive the transition (QA F2, t_51f9ebfb).
+        invalidateDbToken();
+        // The progress summary is per-session as well (PERF-P1, t_e786efe2).
+        invalidateProgressSummary();
         notifyAuthChanged();
         router.push(next);
         router.refresh();

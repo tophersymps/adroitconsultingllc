@@ -24,7 +24,7 @@ const { mocks } = vi.hoisted(() => {
   return { mocks: { mockData, dataByTable } };
 });
 
-vi.mock("@/lib/supabase/server", () => ({
+vi.mock("@/lib/db/server", () => ({
   getSupabaseServerClient: async () => {
     // from(table) returns rows for that table; select(...).eq/not chains resolve.
     return {

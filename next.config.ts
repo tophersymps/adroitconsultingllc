@@ -1,5 +1,40 @@
 import type { NextConfig } from "next";
 
+/**
+ * Origins the BROWSER itself must be allowed to reach (CSP connect-src).
+ *
+ * The Neon Data API is fetched directly from the browser by
+ * src/lib/db/client.ts — signed-in reads of read_progress / lesson_completion
+ * go straight there, not through a same-origin route. If the origin is missing
+ * from connect-src the CSP blocks those reads, the client swallows the error
+ * and a signed-in user on a new device always sees "unread / incomplete"
+ * while writes (which use /api/progress/*) still work — a silent regression
+ * (QA F1 on PR #361, t_51f9ebfb).
+ *
+ * Source of truth is NEXT_PUBLIC_NEON_DATA_API_URL, the same value the browser
+ * client reads. The literal is the production project endpoint and stays in the
+ * list unconditionally: the env var is present on the normal build path, but a
+ * build/start that loses it must not silently emit a CSP that blocks reads
+ * again.
+ */
+export const NEON_DATA_API_ORIGIN_FALLBACK =
+  "https://ep-noisy-glade-b7jpeudp.apirest.c-13.us-east-1.aws.neon.tech";
+
+/** Unique origins to allow in connect-src for the Neon Data API. */
+function neonDataApiOrigins(): string[] {
+  const origins = new Set<string>([NEON_DATA_API_ORIGIN_FALLBACK]);
+  const configured = process.env.NEXT_PUBLIC_NEON_DATA_API_URL;
+  if (configured) {
+    try {
+      origins.add(new URL(configured).origin);
+    } catch {
+      // Malformed env value — keep the known production origin rather than
+      // emitting an unusable CSP token.
+    }
+  }
+  return [...origins];
+}
+
 const nextConfig: NextConfig = {
 
   // The /preview/* routes read content/*.mdx at request time, but Vercel
@@ -128,7 +163,12 @@ const nextConfig: NextConfig = {
               // the form (site key set) or is inert (key unset). See
               // src/app/contact/page.tsx:139. (t_fd9f68c2)
               "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://www.google.com https://www.gstatic.com",
-              "connect-src 'self' https://*.supabase.co https://www.google-analytics.com https://*.google-analytics.com https://analytics.google.com https://*.analytics.google.com https://googleads.g.doubleclick.net https://www.google.com https://www.gstatic.com",
+              // connect-src must carry the Neon Data API origin: the browser
+              // client fetches it directly for signed-in progress reads
+              // (src/lib/db/client.ts). See neonDataApiOrigins() above.
+              // *.supabase.co is gone — Supabase was removed in R2-2 and no
+              // browser code talks to it any more.
+              `connect-src 'self' ${neonDataApiOrigins().join(" ")} https://www.google-analytics.com https://*.google-analytics.com https://analytics.google.com https://*.analytics.google.com https://googleads.g.doubleclick.net https://www.google.com https://www.gstatic.com`,
               "frame-src 'self' https://www.google.com",
               "object-src 'none'",
               "frame-ancestors 'none'",
