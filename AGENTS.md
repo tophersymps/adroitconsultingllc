@@ -7,3 +7,15 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+## Changelog fragments (not CHANGELOG.md)
+
+Do not edit `CHANGELOG.md` in a pull request. Add `changelog.d/<ticket-id>.md` instead.
+
+`CHANGELOG.md` is a single shared append target: every branch editing the top of it conflicts with
+every other branch as soon as `main` moves. On 2026-10-23 that caused 50 resolution merges in one
+day, and one resolution silently deleted a release body (PR #361 dropped the R1-6 provisioning
+section, restored later by PR #367). A fragment path is unique per change, so it cannot conflict.
+
+`node scripts/compose-changelog.js` merges fragments into `CHANGELOG.md` at release time and moves
+them to `changelog.d/.shipped/`. See `changelog.d/README.md` for the entry shape and rules.
