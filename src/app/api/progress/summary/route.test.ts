@@ -157,3 +157,30 @@ describe("GET /api/progress/summary — quizStats aggregate (PERF t_22e18719)", 
     expect(json.quizStats).toEqual({ "agentic-ai": { bestScore: 70, attempts: 1 } });
   });
 });
+
+/**
+ * SEC-R2-F2 (t_2dd0e9f9) — the per-user payload must never be stored by the
+ * browser or a shared intermediary. The client passes `cache: "no-store"`, but
+ * a proxy in front of the app is not party to that.
+ */
+describe("GET /api/progress/summary — cache headers (SEC-R2-F2 t_2dd0e9f9)", () => {
+  it("marks the authenticated payload private and no-store", async () => {
+    authed();
+    const res = await GET();
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  it("marks the guest payload private and no-store", async () => {
+    mocks.getUser.mockResolvedValue({ data: { user: null } });
+    const res = await GET();
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  it("marks the fail-closed 500 payload no-store", async () => {
+    mocks.getUser.mockRejectedValue(new Error("auth down"));
+    const res = await GET();
+    expect(res.status).toBe(500);
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+  });
+});
