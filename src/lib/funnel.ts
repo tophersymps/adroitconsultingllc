@@ -12,6 +12,7 @@
  */
 
 import type { BlogPost, LearningSeries } from "@/data/types";
+import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
 
 export interface FunnelRecommendation {
   /** Recommended Learn series slug (route /atlas/<slug>). */
@@ -42,11 +43,12 @@ export const CATEGORY_FUNNEL: Record<string, FunnelRecommendation> = {
     reason:
       "Build the agentic systems the modern web stack is converging on — a practitioner's path from single-agent to multi-agent.",
   },
-  "Project Management": {
-    seriesSlug: "hermes-consultant",
-    reason:
-      "Turn the delivery discipline this post describes into a repeatable engagement — the agent-consultant track.",
-  },
+  // NOTE (t_b4c0da5f, CWE-200): "Project Management" used to point at
+  // `hermes-consultant`, which is NOT in the static launch mirror — 21
+  // published posts therefore named an unpublished series and linked to a
+  // route that 404s for guests. No live series matches that category, so the
+  // entry is REMOVED rather than silently re-pointed at an unrelated course:
+  // a post whose category has no entry renders no pitch card.
   "UI/UX": {
     seriesSlug: "ai-at-work",
     reason:
@@ -81,7 +83,14 @@ export function getRelatedPosts(
 /**
  * Resolve the recommended series object for a blog post (server-side only —
  * imports the full LearningSeries dataset). Returns undefined when the
- * category has no mapped course OR the series slug doesn't exist.
+ * category has no mapped course, the series slug doesn't exist, or the mapped
+ * series is not publicly launched.
+ *
+ * DISCLOSURE GATE (t_b4c0da5f, CWE-200): this block renders on every public
+ * blog post and shows the series' real name/description, so it may only name a
+ * series that is in the static launch mirror (`isPubliclyLaunchedSeries`). The
+ * gate lives here, in the single resolver, so no stale CATEGORY_FUNNEL entry
+ * (or future admin-written one) can publish a stealth series by accident.
  */
 export function resolveRecommendedSeries(
   post: BlogPost,
@@ -89,6 +98,7 @@ export function resolveRecommendedSeries(
 ): { series: LearningSeries; reason: string } | undefined {
   const rec = getFunnelRecommendation(post.category);
   if (!rec) return undefined;
+  if (!isPubliclyLaunchedSeries(rec.seriesSlug)) return undefined;
   const series = seriesList.find((s) => s.slug === rec.seriesSlug);
   if (!series) return undefined;
   return { series, reason: rec.reason };
