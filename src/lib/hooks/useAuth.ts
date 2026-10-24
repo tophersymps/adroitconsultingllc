@@ -151,15 +151,29 @@ export function useAuth(): UseAuthReturn {
      * session cookie may have changed. Drop the cached Data API JWT before
      * re-reading, so this tab cannot keep sending the previous user's token.
      */
+    /*
+     * PERF-CACHE-M1 (t_c0eaa6f2): the session read is module state and
+     * per-session, so both events must drop it before re-reading.
+     *
+     * The progress summary is NOT invalidated here on AUTH_CHANGED_EVENT
+     * (QA-1 on 492f9c1e): `notifyAuthChanged()` already invalidates it BEFORE
+     * dispatching, and every mounted `useAuth` (one per card's QuizStats)
+     * bumping `summaryEpoch` a second time would discard the summary read that
+     * this same dispatch just started via the sibling `useProgressSummary`
+     * listener — every progress bar would end up with a null summary and the
+     * card fan-out would issue one request per card instead of one.
+     *
+     * `focus` is different: it is how a sign-out in ANOTHER tab shows up and
+     * no `notifyAuthChanged()` call is dispatched here, so the summary cache
+     * must be dropped at this seam.
+     */
     const onAuthChanged = () => {
       invalidateDbToken();
-      /*
-       * PERF-CACHE-M1 (t_5f03a8f7 / t_c0eaa6f2): the progress summary and the
-       * session read are module state and per-session. An auth-changed event
-       * here also arrives via `focus`, which is how a sign-out in ANOTHER tab
-       * shows up — so this is the only seam that covers a cross-tab identity
-       * change. Both caches must die here, before the re-read.
-       */
+      invalidateAuthSession();
+      refresh();
+    };
+    const onFocus = () => {
+      invalidateDbToken();
       invalidateAuthSession();
       invalidateProgressSummary();
       /*
@@ -176,11 +190,11 @@ export function useAuth(): UseAuthReturn {
       });
     };
     window.addEventListener(AUTH_CHANGED_EVENT, onAuthChanged);
-    window.addEventListener("focus", onAuthChanged);
+    window.addEventListener("focus", onFocus);
     return () => {
       cancelled = true;
       window.removeEventListener(AUTH_CHANGED_EVENT, onAuthChanged);
-      window.removeEventListener("focus", onAuthChanged);
+      window.removeEventListener("focus", onFocus);
     };
   }, [refresh]);
 
