@@ -140,8 +140,14 @@ export default async function LearnLandingPage() {
   let catalogueError: unknown = null;
 
   try {
-    const catalog = await getCatalogForUserV2(userId);
-    const org = await getCatalogOrg();
+    // PERF-L2 (t_c54f6999): the user catalogue and the org tree are independent
+    // reads — run them concurrently. This render runs on every build and on
+    // every hourly ISR revalidation, so a serial pair of round trips is paid
+    // twice over for no ordering benefit.
+    const [catalog, org] = await Promise.all([
+      getCatalogForUserV2(userId),
+      getCatalogOrg(),
+    ]);
 
     courses = toLearnHubCards(catalog.courses, {
       // Prerendered guest projection: per-lesson slugs never ship from here.

@@ -32,9 +32,20 @@ export default function SeriesProgress({
     [lessonSlugs, merge.lessons],
   );
 
+  // PERF-M2 (t_c54f6999): the loading state renders the FULL ProgressIndicator
+  // at 0%, not a bare 6px pulse bar. The prerendered HTML (loading on first
+  // paint) and the hydrated render are then the same height, so the strip
+  // cannot grow the card after hydration and shift the rows below it.
   if (isLoading && done === 0) {
     return (
-      <div className="w-full h-1.5 rounded-full bg-gray-100 dark:bg-[var(--surface-sunken)] animate-pulse" />
+      <div aria-hidden className="animate-pulse opacity-70">
+        <ProgressIndicator
+          current={0}
+          total={lessonSlugs.length}
+          label={`0 of ${lessonSlugs.length} complete`}
+          showPercent={showPercent}
+        />
+      </div>
     );
   }
 
