@@ -304,6 +304,14 @@ REVOKE EXECUTE ON FUNCTION public.is_admin() FROM PUBLIC;
 -- this exposes nothing.
 GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated, anonymous;
 
+-- PERFORMANCE (t_61fbf171): is_admin() is SECURITY DEFINER + SET search_path, so
+-- the planner cannot inline it and, on a policy that is OR'd with an own-row
+-- predicate, it is re-evaluated per row (measured 3126.9 ms vs 24.2 ms over
+-- 200k rows, ~130x). Every policy below therefore calls it as
+-- `(SELECT public.is_admin())`, which Postgres hoists into an InitPlan — one
+-- evaluation per statement instead of one per row (Supabase's documented
+-- `auth_rls_initplan` lint). Keep the wrapper on any new is_admin() policy.
+
 -- ═════════════════════════════════════════════════════════════════════
 -- 4. Policies — the 34 policies over 14 tables ported by name from live
 --    Supabase, plus the 3 Neon-only admin SELECT policies in §4b.
@@ -417,58 +425,58 @@ ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "user_roles_select_own" ON public.user_roles;
 CREATE POLICY "user_roles_select_own"
   ON public.user_roles FOR SELECT
-  USING (auth.uid() = user_id OR public.is_admin());
+  USING (auth.uid() = user_id OR (SELECT public.is_admin()));
 
 DROP POLICY IF EXISTS "user_roles_admin_write" ON public.user_roles;
 CREATE POLICY "user_roles_admin_write"
   ON public.user_roles FOR ALL
-  USING (public.is_admin())
-  WITH CHECK (public.is_admin());
+  USING ((SELECT public.is_admin()))
+  WITH CHECK ((SELECT public.is_admin()));
 
 -- ── courses (008) ────────────────────────────────────────────────────
 ALTER TABLE public.courses ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "courses_select_live_or_admin" ON public.courses;
 CREATE POLICY "courses_select_live_or_admin"
   ON public.courses FOR SELECT
-  USING (status = 'live' OR public.is_admin());
+  USING (status = 'live' OR (SELECT public.is_admin()));
 
 DROP POLICY IF EXISTS "courses_admin_write" ON public.courses;
 CREATE POLICY "courses_admin_write"
   ON public.courses FOR ALL
-  USING (public.is_admin())
-  WITH CHECK (public.is_admin());
+  USING ((SELECT public.is_admin()))
+  WITH CHECK ((SELECT public.is_admin()));
 
 -- ── user_entitlements (008) ──────────────────────────────────────────
 ALTER TABLE public.user_entitlements ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "entitlements_select_own_or_admin" ON public.user_entitlements;
 CREATE POLICY "entitlements_select_own_or_admin"
   ON public.user_entitlements FOR SELECT
-  USING (auth.uid() = user_id OR public.is_admin());
+  USING (auth.uid() = user_id OR (SELECT public.is_admin()));
 
 DROP POLICY IF EXISTS "entitlements_admin_write" ON public.user_entitlements;
 CREATE POLICY "entitlements_admin_write"
   ON public.user_entitlements FOR ALL
-  USING (public.is_admin())
-  WITH CHECK (public.is_admin());
+  USING ((SELECT public.is_admin()))
+  WITH CHECK ((SELECT public.is_admin()));
 
 -- ── subscriptions (008) — read-only this build (ADR-204) ─────────────
 ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "subscriptions_select_own_or_admin" ON public.subscriptions;
 CREATE POLICY "subscriptions_select_own_or_admin"
   ON public.subscriptions FOR SELECT
-  USING (auth.uid() = user_id OR public.is_admin());
+  USING (auth.uid() = user_id OR (SELECT public.is_admin()));
 
 -- ── admin_audit_log (008) — admin read + admin insert, never update/delete
 ALTER TABLE public.admin_audit_log ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "audit_select_admin" ON public.admin_audit_log;
 CREATE POLICY "audit_select_admin"
   ON public.admin_audit_log FOR SELECT
-  USING (public.is_admin());
+  USING ((SELECT public.is_admin()));
 
 DROP POLICY IF EXISTS "audit_insert_admin" ON public.admin_audit_log;
 CREATE POLICY "audit_insert_admin"
   ON public.admin_audit_log FOR INSERT
-  WITH CHECK (public.is_admin());
+  WITH CHECK ((SELECT public.is_admin()));
 
 -- ── catalog_sections (009) ───────────────────────────────────────────
 ALTER TABLE public.catalog_sections ENABLE ROW LEVEL SECURITY;
@@ -479,8 +487,8 @@ CREATE POLICY "sections_select_public"
 DROP POLICY IF EXISTS "sections_admin_write" ON public.catalog_sections;
 CREATE POLICY "sections_admin_write"
   ON public.catalog_sections FOR ALL
-  USING (public.is_admin())
-  WITH CHECK (public.is_admin());
+  USING ((SELECT public.is_admin()))
+  WITH CHECK ((SELECT public.is_admin()));
 
 -- ── catalog_groups (009) ─────────────────────────────────────────────
 ALTER TABLE public.catalog_groups ENABLE ROW LEVEL SECURITY;
@@ -491,8 +499,8 @@ CREATE POLICY "groups_select_public"
 DROP POLICY IF EXISTS "groups_admin_write" ON public.catalog_groups;
 CREATE POLICY "groups_admin_write"
   ON public.catalog_groups FOR ALL
-  USING (public.is_admin())
-  WITH CHECK (public.is_admin());
+  USING ((SELECT public.is_admin()))
+  WITH CHECK ((SELECT public.is_admin()));
 
 -- ── course_prerequisites (009) ───────────────────────────────────────
 ALTER TABLE public.course_prerequisites ENABLE ROW LEVEL SECURITY;
@@ -503,8 +511,8 @@ CREATE POLICY "prereqs_select_public"
 DROP POLICY IF EXISTS "prereqs_admin_write" ON public.course_prerequisites;
 CREATE POLICY "prereqs_admin_write"
   ON public.course_prerequisites FOR ALL
-  USING (public.is_admin())
-  WITH CHECK (public.is_admin());
+  USING ((SELECT public.is_admin()))
+  WITH CHECK ((SELECT public.is_admin()));
 
 -- ── completion_events (009, made server-write-only by 012) ───────────
 ALTER TABLE public.completion_events ENABLE ROW LEVEL SECURITY;
@@ -512,7 +520,7 @@ ALTER TABLE public.completion_events ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "completion_events_select_own" ON public.completion_events;
 CREATE POLICY "completion_events_select_own"
   ON public.completion_events FOR SELECT
-  USING (auth.uid() = user_id OR public.is_admin());
+  USING (auth.uid() = user_id OR (SELECT public.is_admin()));
 
 -- Ported from 012_completion_events_server_write_only.sql. completion_events is
 -- SERVER-WRITE-ONLY: the columns a client could forge — event_type
@@ -552,7 +560,7 @@ CREATE POLICY "completion_events deny client insert"
 --    answered 200. These 3 SELECT-only policies give the admin read paths what
 --    every other admin surface in §4 already has (public.is_admin()).
 --
---    SELECT only, TO authenticated, USING (public.is_admin()). No write
+--    SELECT only, TO authenticated, USING ((SELECT public.is_admin())). No write
 --    capability is added: privileged writes still go through the deny-client
 --    guards and the direct-SQL helpers in src/lib/db/services (owner role).
 --    These are NOT Supabase-origin policies — they are the 3 of the 37 that
@@ -567,7 +575,7 @@ DROP POLICY IF EXISTS "user_profiles_admin_select" ON public.user_profiles;
 CREATE POLICY "user_profiles_admin_select"
   ON public.user_profiles FOR SELECT
   TO authenticated
-  USING (public.is_admin());
+  USING ((SELECT public.is_admin()));
 
 -- lesson_completion — /api/admin/analytics aggregates completions per course
 ALTER TABLE public.lesson_completion ENABLE ROW LEVEL SECURITY;
@@ -575,7 +583,7 @@ DROP POLICY IF EXISTS "lesson_completion_admin_select" ON public.lesson_completi
 CREATE POLICY "lesson_completion_admin_select"
   ON public.lesson_completion FOR SELECT
   TO authenticated
-  USING (public.is_admin());
+  USING ((SELECT public.is_admin()));
 
 -- read_progress — same analytics aggregate, reads per content slug
 ALTER TABLE public.read_progress ENABLE ROW LEVEL SECURITY;
@@ -583,7 +591,7 @@ DROP POLICY IF EXISTS "read_progress_admin_select" ON public.read_progress;
 CREATE POLICY "read_progress_admin_select"
   ON public.read_progress FOR SELECT
   TO authenticated
-  USING (public.is_admin());
+  USING ((SELECT public.is_admin()));
 
 -- ── "user" — RLS ON with ZERO policies by design (do NOT add a policy) ──
 -- Not ported from Supabase (auth.users is a different object there and was
