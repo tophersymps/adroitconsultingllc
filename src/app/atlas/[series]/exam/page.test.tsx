@@ -80,7 +80,7 @@ vi.mock("@/components/Progress/ExamWidget", () => ({ default: () => <div /> }));
 vi.mock("@/components/Progress/ExamLocked", () => ({ default: () => <div /> }));
 vi.mock("@/components/Progress/GuestCTA", () => ({ default: () => <div /> }));
 
-import Page from "./page";
+import Page, { generateMetadata } from "./page";
 import { DbTokenUnavailableError } from "@/lib/db/degraded-client";
 
 const seriesInfo = (slug: string, name: string) => ({
@@ -137,5 +137,39 @@ describe("/atlas/[series]/exam degraded existence gate (F-2)", () => {
 
     await expect(render("ai-adoption")).rejects.toThrow("NEXT_NOT_FOUND");
     expect(mocks.getCourseRowBySlug).not.toHaveBeenCalled();
+  });
+});
+
+describe("/atlas/[series]/exam generateMetadata stealth gate (CWE-200)", () => {
+  it("does not name a stealth series in metadata (404 head)", async () => {
+    mocks.getSeriesBySlug.mockReturnValue(
+      seriesInfo(
+        "salesforce-data-architect",
+        "Platform Data Architect Certification",
+      ),
+    );
+
+    const meta = (await generateMetadata({
+      params: Promise.resolve({ series: "salesforce-data-architect" }),
+    })) as Record<string, unknown>;
+
+    expect(String(meta.title)).not.toContain("Platform Data Architect");
+    expect(String(meta.description ?? "")).not.toContain(
+      "Platform Data Architect",
+    );
+    expect(meta.noindex).toBe(true);
+  });
+
+  it("still names a publicly launched series", async () => {
+    mocks.getSeriesBySlug.mockReturnValue(
+      seriesInfo("omni-studio-cert", "OmniStudio Developer Certification"),
+    );
+
+    const meta = (await generateMetadata({
+      params: Promise.resolve({ series: "omni-studio-cert" }),
+    })) as Record<string, unknown>;
+
+    expect(String(meta.title)).toContain("Certification prep exam");
+    expect(meta.noindex).toBeUndefined();
   });
 });

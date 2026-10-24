@@ -33,6 +33,7 @@ import { loadSeriesConstellation, loadExamPassedBySeries } from "@/lib/sky-serve
 import { getSupabaseServerClient } from "@/lib/db/server";
 import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
 import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
+import { mayDiscloseSeriesLive } from "@/lib/atlas-disclosure";
 
 interface Props {
   params: Promise<{ series: string }>;
@@ -60,7 +61,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   // notFound(), so an unpublished ("stealth") series used to publish its name
   // and description in the 404 document head. Only a publicly launched series
   // may appear here.
-  if (!isPubliclyLaunchedSeries(series)) {
+  //
+  // MEDIUM (t_b4c0da5f, CWE-200): the mirror alone is not enough. A series
+  // still listed there but set pending/archived in `courses` 404s on the DB
+  // seam while this head kept naming it. Gate on the two-source rule from
+  // `mayDiscloseSeries`: mirror AND (DB unreadable OR DB live). On a credential
+  // outage `isSeriesDbLive` returns null and we fall back to the mirror, so a
+  // launched series' metadata never regresses to the generic head.
+  // `getCourseRowBySlug` is per-request cached, so the page body's own row read
+  // is shared rather than adding a second round trip.
+  if (!(await mayDiscloseSeriesLive(series))) {
     return buildMetadata({
       title: "Atlas | Adroit Learn",
       description: "Course catalogue for Salesforce and AI practitioners.",

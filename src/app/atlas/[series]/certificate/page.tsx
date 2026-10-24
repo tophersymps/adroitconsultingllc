@@ -131,6 +131,7 @@ export default async function CertificatePage({ params }: Props) {
     return (
       <LockedContentPage
         seriesSlug={series}
+        degraded={degraded}
         view={
           courseRow
             ? buildPaywallView({

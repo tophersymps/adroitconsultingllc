@@ -27,6 +27,7 @@ import { getQuizForLesson } from "@/lib/quiz";
 import { getSupabaseServerClient } from "@/lib/db/server";
 import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
 import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
+import { mayDiscloseSeriesLive } from "@/lib/atlas-disclosure";
 import MDXArticle from "@/components/MDX/MDXArticle";
 import Paywall from "@/components/Catalog/Paywall";
 import { AudioPlayerLazy } from "@/components/BlogPost/AudioPlayerLazy";
@@ -59,7 +60,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   // LOW (t_91a3e30b, CWE-200): generateMetadata runs BEFORE notFound(), so a
   // stealth series' lesson title/excerpt used to leak into the 404 head. Only
   // a publicly launched series may appear here.
-  if (!isPubliclyLaunchedSeries(series)) {
+  //
+  // MEDIUM (t_b4c0da5f, CWE-200): mirror membership is not enough — a series
+  // kept in the mirror but delisted in `courses` (pending/archived) 404s on the
+  // DB seam while this head still named its lesson. Two-source rule via
+  // `mayDiscloseSeries`: mirror AND (DB unreadable OR DB live). `null` from a
+  // credential outage falls back to the mirror (no regression of t_91a3e30b).
+  // `getCourseRowBySlug` is per-request cached, so a paywall-body read is shared.
+  if (!(await mayDiscloseSeriesLive(series))) {
     return buildMetadata({
       title: "Atlas | Adroit Learn",
       description: "Course catalogue for Salesforce and AI practitioners.",
@@ -146,7 +154,7 @@ export default async function LessonPage({ params }: Props) {
       <div className="min-h-screen flex flex-col">
         <Header />
         <main id="main" className="flex-1">
-          <Paywall seriesSlug={series} view={view} />
+          <Paywall seriesSlug={series} view={view} degraded={degraded} />
         </main>
         <Footer />
       </div>

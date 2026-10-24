@@ -30,7 +30,13 @@ import {
   type CapturedRequest,
 } from "@/lib/db/test-support/throttled-auth";
 
-const EMPTY_SUMMARY = { readContent: { blog: [], lesson: [] }, completedLessons: [] };
+// `quizStats` is part of the guest/degraded payload since the /atlas progress
+// fan-out fix (t_22e18719 folded per-quiz aggregates into this route).
+const EMPTY_SUMMARY = {
+  readContent: { blog: [], lesson: [] },
+  completedLessons: [],
+  quizStats: {},
+};
 
 let captured: CapturedRequest[] = [];
 
@@ -59,6 +65,9 @@ describe("GET /api/progress/summary under a token-route 429 (R2-5)", () => {
     expect(res.status).toBe(200);
     expect(res.status).not.toBe(500);
     expect(await res.json()).toEqual(EMPTY_SUMMARY);
+    // Retarget guard (t_09dcebe3): the no-store delta was cut from the pre-R2-5
+    // base, so this path must keep both the 200 guest contract and the header.
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
   });
 
   it("issues no Data API request at all — degraded reads resolve locally", async () => {

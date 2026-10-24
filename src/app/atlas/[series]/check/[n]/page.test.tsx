@@ -78,7 +78,7 @@ vi.mock("@/components/Footer", () => ({ default: () => <footer /> }));
 vi.mock("@/components/Progress/QuizWidget", () => ({ default: () => <div /> }));
 vi.mock("@/components/Progress/GuestCTA", () => ({ default: () => <div /> }));
 
-import Page from "./page";
+import Page, { generateMetadata } from "./page";
 import { DbTokenUnavailableError } from "@/lib/db/degraded-client";
 
 const seriesInfo = (slug: string, name: string) => ({
@@ -146,3 +146,36 @@ describe("/atlas/[series]/check/[n] degraded existence gate (F-2)", () => {
     expect(mocks.getCourseRowBySlug).not.toHaveBeenCalled();
   });
 });
+
+describe(
+  "/atlas/[series]/check/[n] generateMetadata stealth gate (CWE-200)",
+  () => {
+    it("does not name a stealth series or check in metadata (404 head)", async () => {
+      mocks.getSeriesBySlug.mockReturnValue(
+        seriesInfo("ai-adoption", "AI Adoption for Teams"),
+      );
+
+      const meta = (await generateMetadata({
+        params: Promise.resolve({ series: "ai-adoption", n: "1" }),
+      })) as Record<string, unknown>;
+
+      const text = `${String(meta.title)} ${String(meta.description ?? "")}`;
+      expect(text).not.toContain("AI Adoption for Teams");
+      expect(text).not.toContain("SECRET_CHECK_TITLE");
+      expect(meta.noindex).toBe(true);
+    });
+
+    it("still names a publicly launched series", async () => {
+      mocks.getSeriesBySlug.mockReturnValue(
+        seriesInfo("omni-studio-cert", "OmniStudio Developer Certification"),
+      );
+
+      const meta = (await generateMetadata({
+        params: Promise.resolve({ series: "omni-studio-cert", n: "1" }),
+      })) as Record<string, unknown>;
+
+      expect(String(meta.title)).toContain("SECRET_CHECK_TITLE");
+      expect(meta.noindex).toBeUndefined();
+    });
+  },
+);
