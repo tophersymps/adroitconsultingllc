@@ -41,6 +41,7 @@ import {
 } from "@/components/Constellations/chart/figure-catalog";
 import {
   assignFigures,
+  FIGURE_PINS,
   lessonsPerStar,
 } from "@/components/Constellations/chart/figure-assignment";
 
@@ -163,6 +164,13 @@ export interface BuildChartFigureOptions {
   /** The constellation this course draws. Null → a label-only figure. */
   figure?: ConstellationFigure | null;
   examPassed?: boolean;
+  /**
+   * Pin map used when `figure` is not supplied. Defaults to the PUBLISHED map
+   * (`FIGURE_PINS`) — fail closed: a caller that does not opt in can never pin
+   * an unpublished series from a client bundle. Server-side callers that hold
+   * the full registry (the Hubble Field lab) pass `FIGURE_PINS_ALL`.
+   */
+  pins?: Readonly<Record<string, string>>;
 }
 
 /** Build one course's chart figure from production constellation state. */
@@ -179,10 +187,13 @@ export function buildChartFigure(
   /*
    * Callers that hand over a single course (the on-course tracker, tests) get
    * size matching for free rather than having to run the assigner themselves.
+   * The pin map is the published projection unless the caller supplies one.
    */
   const figure =
     options.figure === undefined
-      ? (assignFigures([{ seriesSlug, curriculumLessons }]).get(seriesSlug) ?? null)
+      ? (assignFigures([{ seriesSlug, curriculumLessons }], options.pins ?? FIGURE_PINS).get(
+          seriesSlug,
+        ) ?? null)
       : options.figure;
 
   const base = {
@@ -335,19 +346,29 @@ function distributeEvenly(
  * Figures are assigned across the whole set at once, because no two courses may
  * draw the same constellation — that is a decision about the sky, not about a
  * course, so it cannot be made one course at a time.
+ *
+ * `options.pins` defaults to the PUBLISHED projection (`FIGURE_PINS`), so a
+ * caller with no server data cannot pin an unpublished series. Server-side
+ * callers holding the full registry pass `FIGURE_PINS_ALL`.
  */
-export function buildChartFigures(sky: ProfileSky): ChartFigure[] {
+export function buildChartFigures(
+  sky: ProfileSky,
+  options: { pins?: Readonly<Record<string, string>> } = {},
+): ChartFigure[] {
+  const pins = options.pins ?? FIGURE_PINS;
   const assignments = assignFigures(
     sky.constellations.map((c) => ({
       seriesSlug: c.seriesSlug,
       curriculumLessons: Math.max(c.curriculumLessons ?? 0, c.totalStars),
     })),
+    pins,
   );
 
   return sky.constellations.map((c) =>
     buildChartFigure(c, {
       figure: assignments.get(c.seriesSlug) ?? null,
       examPassed: c.examPassed,
+      pins,
     }),
   );
 }
