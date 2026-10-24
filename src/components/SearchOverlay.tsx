@@ -2,29 +2,56 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { posts } from "@/data/posts";
-import { buildSearchIndex, type SearchResults } from "@/lib/search";
-import { useSearchData } from "@/components/SearchDataProvider";
-
-const EMPTY: SearchResults = { posts: [], series: [], lessons: [], total: 0 };
+import { EMPTY_SEARCH_RESULTS, searchDocs } from "@/lib/search";
+import type {
+  SearchDoc,
+  SearchIndexResponse,
+  SearchResults,
+} from "@/shared/contracts-search";
 
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/* ------------------------------------------------------------------ */
+/*  Search-index transport (ADR-220)                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Module-scoped cache: the index is fetched ONCE per page load, on the first
+ * open, and reused by every later open until the TTL expires. Never fetched
+ * per keystroke (that was option E in the ADR) and never shipped as a prop.
+ */
+let docsCache: { docs: SearchDoc[]; at: number } | null = null;
+const DOCS_TTL_MS = 5 * 60 * 1000; // matches the route's `revalidate = 300`
+
+/** Test hook only — the cache is module-scoped so a second open is free. */
+export function resetSearchDocsCacheForTests(): void {
+  docsCache = null;
+}
+
+async function fetchSearchDocs(signal: AbortSignal): Promise<SearchDoc[]> {
+  const res = await fetch("/api/search", { signal });
+  if (!res.ok) throw new Error(`search index unavailable (${res.status})`);
+  const body = (await res.json()) as Partial<SearchIndexResponse>;
+  return Array.isArray(body?.docs) ? body.docs : [];
+}
+
+/** The cache entry while it is still fresh, else null (refetch). */
+function freshCachedDocs(): SearchDoc[] | null {
+  if (!docsCache) return null;
+  return Date.now() - docsCache.at < DOCS_TTL_MS ? docsCache.docs : null;
+}
+
+type LoadState = "idle" | "loading" | "ready" | "error";
 
 /**
  * B-21 — Client-side site search overlay. Self-contained: renders its own
  * trigger button (a search icon) and, when opened, a full-screen overlay with
  * a live input whose results are grouped by post / series / lesson.
  *
- * Client-side over the static datasets (`posts.ts` + the learn payload from
- * `SearchDataProvider`) — no backend.
- *
- * SECURITY (t_a6b7630b / CWE-200): this component must NEVER import
- * `@/data/learn`. That module carries every stealth (unpublished) series and
- * would be compiled into a client chunk served from every route. The learn
- * arrays arrive already filtered to `isPubliclyLaunchedSeries` and projected
- * to search-only fields, from the server component that renders
- * `SearchDataProvider` (see `src/lib/learn-public.ts`).
+ * ADR-220: the client holds NO learn data. It lazily fetches the already
+ * guest-filtered, body-free document index from `GET /api/search` on first open
+ * and matches locally with `searchDocs` (no network per keystroke).
  *
  * A11y (t_754b2240 / B-21 fixes):
  *  - Focus trap: Tab/Shift+Tab wrap between first & last focusable element
@@ -33,29 +60,57 @@ const FOCUSABLE_SELECTOR =
  *  - Focus restoration: on every close path (Escape, backdrop, result click)
  *    focus returns to the trigger button (WCAG 2.4.3).
  *  - Results region is `role="status"` + `aria-live="polite"` with an
- *    sr-only count line, so result count / no-results is announced (WCAG
- *    4.1.3).
+ *    sr-only status line, so result count / no-results / LOADING / FAILURE are
+ *    announced (WCAG 4.1.3). On failure the overlay stays usable — the input
+ *    and the message remain — never a blank panel.
  */
 export default function SearchOverlay() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  // Seeded from the module cache so a remount within the TTL never refetches.
+  const [docs, setDocs] = useState<SearchDoc[] | null>(freshCachedDocs);
+  const [failed, setFailed] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const hasOpenedRef = useRef(false);
   const router = useRouter();
 
-  // Publicly launched learn content only — filtered on the server before it
-  // crossed into the client graph (t_a6b7630b).
-  const { series, lessons } = useSearchData();
+  // Lazy load on first open. Only async callbacks set state (never the effect
+  // body — `react-hooks/set-state-in-effect`), and an AbortController cancels
+  // an in-flight fetch when the overlay closes or unmounts. A second open finds
+  // `docs` already set (or the module cache fresh) and makes no request.
+  useEffect(() => {
+    if (!open || docs) return;
+    const controller = new AbortController();
+    fetchSearchDocs(controller.signal)
+      .then((next) => {
+        if (controller.signal.aborted) return;
+        docsCache = { docs: next, at: Date.now() };
+        setDocs(next);
+        setFailed(false);
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setFailed(true);
+      });
+    return () => controller.abort();
+  }, [open, docs]);
 
-  const search = useMemo(
-    () => buildSearchIndex(posts, series, lessons),
-    [series, lessons],
-  );
-  const results = useMemo(
-    () => (query.trim() ? search(query) : EMPTY),
-    [query, search],
+  // Derived, never stored: loading = open with no index yet, error = last
+  // attempt failed (a reopen retries).
+  const loadState: LoadState = docs
+    ? "ready"
+    : failed
+      ? "error"
+      : open
+        ? "loading"
+        : "idle";
+
+  const results: SearchResults = useMemo(
+    () =>
+      query.trim() && docs ? searchDocs(docs, query) : EMPTY_SEARCH_RESULTS,
+    [query, docs],
   );
 
   // Auto-focus the input when the overlay opens; keep body scroll locked.
@@ -132,16 +187,19 @@ export default function SearchOverlay() {
     router.push(href);
   }
 
-  const empty =
-    results.total === 0 && query.trim().length > 0;
+  const empty = results.total === 0 && query.trim().length > 0;
 
-  // Announce result status to screen readers as the user types.
+  // Announce load state + result status to screen readers.
   const liveStatus =
-    query.trim().length === 0
-      ? ""
-      : results.total > 0
-        ? `${results.total} result${results.total === 1 ? "" : "s"} for ${query}`
-        : `No results for ${query}`;
+    loadState === "loading"
+      ? "Loading search…"
+      : loadState === "error"
+        ? "Search is unavailable — try again"
+        : query.trim().length === 0
+          ? ""
+          : results.total > 0
+            ? `${results.total} result${results.total === 1 ? "" : "s"} for ${query}`
+            : `No results for ${query}`;
 
   return (
     <>
@@ -220,20 +278,33 @@ export default function SearchOverlay() {
               )}
             </div>
 
-            {/* Results — live region announces result count / no-results */}
+            {/* Results — live region announces load state, count and no-results */}
             <div
               role="status"
               aria-live="polite"
               className="max-h-[52vh] overflow-y-auto p-2"
             >
               <span className="sr-only">{liveStatus}</span>
-              {!query.trim() && (
+
+              {loadState === "loading" && (
+                <p className="px-3 py-6 text-center text-sm text-[var(--ink-muted)]">
+                  Loading search…
+                </p>
+              )}
+
+              {loadState === "error" && (
+                <p className="px-3 py-6 text-center text-sm text-[var(--ink-muted)]">
+                  Search is unavailable — try again.
+                </p>
+              )}
+
+              {loadState === "ready" && !query.trim() && (
                 <p className="px-3 py-6 text-center text-sm text-[var(--ink-muted)]">
                   Type to search across posts, series and lessons.
                 </p>
               )}
 
-              {empty && (
+              {loadState === "ready" && empty && (
                 <p className="px-3 py-6 text-center text-sm text-[var(--ink-muted)]">
                   No results for “{query}”.
                 </p>

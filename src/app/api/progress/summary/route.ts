@@ -113,6 +113,41 @@ export async function GET() {
         .eq("user_id", user.id),
     ]);
 
+    // CWE-778 / CWE-209 (t_601ef414): a PostgREST failure is NOT thrown — it
+    // arrives as `{ data: null, error }` — so ignoring the three `error` fields
+    // rendered a Data API outage (503), an expired JWT (401) or an RLS denial
+    // (403) as a 200 with an empty summary: indistinguishable from "this
+    // learner has no progress", and silent in the logs. Classify each reply:
+    //
+    //  - the R2-5 token-unavailable state (see ./degraded-client) is the guest
+    //    contract and keeps its empty 200, unchanged;
+    //  - any other Data API/RLS failure is a real outage: log the status/code
+    //    (never rows, never the user id — no PII) and answer 503 + no-store so
+    //    monitoring can tell an outage from an empty account.
+    //
+    // Either way the body stays the empty summary: fail closed, no partial
+    // leak from the selects that DID answer.
+    const selectError = [readRes.error, lessonRes.error, quizRes.error].find(Boolean);
+    if (selectError) {
+      if (!isDbTokenUnavailable(selectError)) {
+        // Only the transport-level fields: PostgREST errors can echo a column
+        // *value* in `details`/`message`, so neither is logged (no PII).
+        const { status, code } = selectError as {
+          status?: unknown;
+          code?: unknown;
+        };
+        const context: { status?: number; code?: string } = {};
+        if (typeof status === "number") context.status = status;
+        if (typeof code === "string") context.code = code;
+        console.error("[progress/summary] select failed", context);
+        return NextResponse.json(emptySummary(), {
+          status: 503,
+          headers: NO_STORE_HEADERS,
+        });
+      }
+      return NextResponse.json(emptySummary(), { headers: NO_STORE_HEADERS });
+    }
+
     const readRows = (readRes.data ?? []) as {
       content_type: string;
       content_slug: string;

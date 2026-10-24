@@ -96,6 +96,14 @@ export interface LearnCardSeries {
   description: string;
   /** Tailwind gradient classes for card headers. */
   gradient: string;
+  /**
+   * Short band label ("Salesforce", "Agentic AI", …), resolved SERVER-SIDE from
+   * the single map in `src/lib/learn.ts` (ADR-221). Optional so fixtures and
+   * older producers still typecheck; the card falls back to
+   * `humanizeSeriesSlug(slug)` when absent. Never add a client-side label map
+   * to fill this in — the whole point is that stealth labels leave the bundle.
+   */
+  shortLabel?: string;
   /** Published lesson count — "{n} / {total} lessons" badge. */
   lessonCount: number;
   /** Total (incl. unpublished) lesson count from series.json. */

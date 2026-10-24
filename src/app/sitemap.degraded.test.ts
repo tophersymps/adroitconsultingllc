@@ -23,6 +23,7 @@ import {
   isPubliclyLaunchedSeries,
 } from "@/lib/atlas-launch";
 import { resetAnonymousTokenCacheForTests } from "@/lib/db/anonymous-token";
+import { __resetLearnVisibilityWarningForTests } from "@/lib/learn-visibility";
 import {
   applyThrottledAuthEnv,
   clearThrottledAuthEnv,
@@ -37,6 +38,9 @@ beforeEach(() => {
   applyThrottledAuthEnv();
   captured = [];
   resetAnonymousTokenCacheForTests();
+  // The degradation warning is latched once per process inside the seam
+  // (ADR-217 moved it out of the sitemap); reset the latch per test.
+  __resetLearnVisibilityWarningForTests();
   vi.spyOn(console, "warn").mockImplementation(() => undefined);
 });
 
@@ -87,8 +91,11 @@ describe("sitemap under a token-route 429 (R2-5, AC-11)", () => {
     await sitemap();
 
     const warns = (console.warn as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    // ADR-217: the warning now originates in the learn-visibility seam (the
+    // sitemap owns no query and no fallback any more), so the filter tracks the
+    // seam's tag. The assertion itself is unchanged: exactly one warn.
     const sitemapWarns = warns.filter(
-      (c) => typeof c[0] === "string" && c[0].startsWith("[sitemap]"),
+      (c) => typeof c[0] === "string" && c[0].startsWith("[learn-visibility]"),
     );
     expect(sitemapWarns).toHaveLength(1);
     expect(String(sitemapWarns[0][0])).toContain("static launched-series mirror");

@@ -5,8 +5,6 @@ import { siteConfig, buildMetadata } from "@/lib/seo";
 import { ThemeProvider } from "@/components/Theme/ThemeProvider";
 import AnalyticsInit from "@/components/Analytics/AnalyticsInit";
 import CookieConsent from "@/components/CookieConsent";
-import SearchDataProvider from "@/components/SearchDataProvider";
-import { getPublicSearchData } from "@/lib/learn-public";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -64,15 +62,6 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  /*
-   * Site search data, filtered to PUBLICLY_LAUNCHED_SERIES on the server
-   * (security t_a6b7630b, CWE-200). `Header`/`SearchOverlay` are client
-   * components and cannot call the server helper, so the projected, launched-
-   * only payload crosses the boundary here — the full `@/data/learn` dataset
-   * (8 stealth series) never enters a client chunk.
-   */
-  const searchData = getPublicSearchData();
-
   return (
     <html
       lang="en"
@@ -93,7 +82,7 @@ export default function RootLayout({
           <a href="#main" className="skip-link">
             Skip to content
           </a>
-          <SearchDataProvider value={searchData}>{children}</SearchDataProvider>
+          {children}
         </ThemeProvider>
       </body>
     </html>
