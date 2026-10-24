@@ -13,6 +13,13 @@ import { getSessionUser } from "@/lib/session";
 import { accessSeam } from "@/lib/access";
 import { withAuthCookies } from "@/lib/auth/cookie-jar";
 
+/**
+ * This payload carries identity (id/email/isAdmin). Tell the browser and any
+ * shared intermediary not to store it — defense in depth next to the HttpOnly
+ * session cookie (SEC-L2, CWE-525, t_15a53bb8).
+ */
+const NO_STORE_HEADERS = { "Cache-Control": "private, no-store" };
+
 export function GET(): Promise<Response> {
   // A session read can refresh the SDK cookie; the jar replays it onto this
   // response (the adapter's `cookies().set()` path is dropped in a handler).
@@ -24,7 +31,7 @@ async function handleGet(): Promise<Response> {
     const user = await getSessionUser();
 
     if (!user) {
-      return NextResponse.json({ user: null });
+      return NextResponse.json({ user: null }, { headers: NO_STORE_HEADERS });
     }
 
     // Identity must not depend on the data layer: if the roles read fails
@@ -32,14 +39,17 @@ async function handleGet(): Promise<Response> {
     // CLOSED to isAdmin=false instead of dropping the whole user object.
     const isAdmin = await accessSeam.isAdmin(user.id).catch(() => false);
 
-    return NextResponse.json({
-      user: {
-        id: user.id,
-        email: user.email ?? "",
-        isAdmin,
+    return NextResponse.json(
+      {
+        user: {
+          id: user.id,
+          email: user.email ?? "",
+          isAdmin,
+        },
       },
-    });
+      { headers: NO_STORE_HEADERS },
+    );
   } catch {
-    return NextResponse.json({ user: null });
+    return NextResponse.json({ user: null }, { headers: NO_STORE_HEADERS });
   }
 }

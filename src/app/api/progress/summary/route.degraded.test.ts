@@ -30,7 +30,13 @@ import {
   type CapturedRequest,
 } from "@/lib/db/test-support/throttled-auth";
 
-const EMPTY_SUMMARY = { readContent: { blog: [], lesson: [] }, completedLessons: [] };
+// t_22e18719 added `quizStats` to the payload; the degraded/guest contract
+// carries the same key, zeroed, so the shape stays constant across identities.
+const EMPTY_SUMMARY = {
+  readContent: { blog: [], lesson: [] },
+  completedLessons: [],
+  quizStats: {},
+};
 
 let captured: CapturedRequest[] = [];
 
