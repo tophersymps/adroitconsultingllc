@@ -25,12 +25,25 @@ const { cookiesMock } = vi.hoisted(() => ({ cookiesMock: vi.fn() }));
 
 vi.mock("next/headers", () => ({ cookies: cookiesMock }));
 
-import { getSupabaseServerClient } from "./server";
+import {
+  __resetMintCooldown,
+  getSupabaseAnonymousClient,
+  getSupabaseServerClient,
+} from "./server";
+import { resetAnonymousTokenCacheForTests, anonTokenStats } from "./anonymous-token";
+import {
+  DbTokenUnavailableError,
+  isDbTokenUnavailable,
+} from "./degraded-client";
 
 const AUTH_BASE = "https://auth.test/neondb/auth";
 const DATA_BASE = "https://data.test/neondb/rest/v1";
 const SESSION_JWT = "session.jwt.token";
-const ANON_JWT = "anonymous.jwt.token";
+// A REAL JWT-shaped anonymous token: the anonymous path now PROVES the `role`
+// claim (SEC-R2-5-M1), so the old non-JWT fixture ("anonymous.jwt.token")
+// would legitimately degrade. `anonJwt`/`makeJwt` are hoisted declarations
+// further down this file.
+const ANON_JWT = anonJwt(1);
 
 type Captured = { url: string; headers: Headers };
 
@@ -113,6 +126,12 @@ beforeEach(() => {
   process.env.NEON_DATA_API_URL = DATA_BASE;
   captured = [];
   cookiesMock.mockReset();
+  // The anonymous-role token is cached across requests (R2-5), so each test
+  // starts from an empty cache/suppression window.
+  resetAnonymousTokenCacheForTests();
+  // …and from an empty mint negative cache (t_81b09ba8): an 8 s cooldown that
+  // survived between cases would make a "how many mints" assertion meaningless.
+  __resetMintCooldown();
 });
 
 afterEach(() => {
@@ -227,5 +246,327 @@ describe("Neon session JWT bridge to the Data API client", () => {
     await expect(getSupabaseServerClient()).rejects.toThrow(
       "NEON_AUTH_BASE_URL is required",
     );
+  });
+});
+
+/* -------------------------------------------------------------------------
+ * R2-5 — /token/anonymous 429 must never 5xx a guest surface.
+ *
+ * Pinned regression (triage t_2fdc4d06): "token route returns 429 ⇒ guest data
+ * page still responds 200 with the guest/empty payload".
+ * ---------------------------------------------------------------------- */
+
+/** A JWT-shaped token so the `exp` claim can drive the cache TTL. */
+function makeJwt(payload: Record<string, unknown>): string {
+  const b64 = (obj: unknown) =>
+    Buffer.from(JSON.stringify(obj)).toString("base64url");
+  return `${b64({ alg: "EdDSA" })}.${b64(payload)}.signature`;
+}
+
+/** `exp` = now + hours. */
+function anonJwt(hours = 1, role = "anonymous"): string {
+  const now = Math.floor(Date.now() / 1000);
+  return makeJwt({ iat: now, exp: now + hours * 3600, role, has_sub: true });
+}
+
+/** fetch stub: /token always 401, /token/anonymous answers the given reply. */
+function stubAnonFailure(
+  reply: () => Response,
+  options: { sessionToken?: string | null } = {},
+) {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = requestUrl(input);
+    captured.push({ url, headers: requestHeaders(input, init) });
+    if (url === `${AUTH_BASE}/token`) {
+      return options.sessionToken
+        ? jsonResponse({ token: options.sessionToken })
+        : jsonResponse({ error: "unauthenticated" }, 401);
+    }
+    if (url === `${AUTH_BASE}/token/anonymous`) return reply();
+    if (url.startsWith(DATA_BASE)) return jsonResponse([{ role: "admin" }]);
+    return jsonResponse({ error: "unexpected url " + url }, 500);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+function throttled(retryAfter = 60): Response {
+  return new Response(
+    JSON.stringify({ message: "Too many requests. Please try again later." }),
+    {
+      status: 429,
+      headers: { "content-type": "application/json", "x-retry-after": String(retryAfter) },
+    },
+  );
+}
+
+describe("R2-5: anonymous token unavailable ⇒ classified degrade, never a 500", () => {
+  it("AC-1: 429 on /token/anonymous resolves the client and issues no bare Data API request", async () => {
+    cookiesMock.mockResolvedValue(cookieStore([]));
+    stubAnonFailure(() => throttled(60));
+
+    // The pinned regression: this must RESOLVE, not reject.
+    const client = await getSupabaseServerClient();
+    const { data, error } = (await client
+      .from("courses")
+      .select("*")
+      .eq("series_slug", "omni-studio-cert")) as {
+      data: unknown;
+      error: unknown;
+    };
+
+    expect(data).toBeNull();
+    expect(isDbTokenUnavailable(error)).toBe(true);
+    expect((error as DbTokenUnavailableError).code).toBe("TOKEN_UNAVAILABLE");
+
+    // No Data API request at all — and certainly none without Authorization.
+    const dataRequests = captured.filter((c) => c.url.startsWith(DATA_BASE));
+    expect(dataRequests).toHaveLength(0);
+  });
+
+  it("AC-2: 500, 503, empty token, non-JSON and a throwing fetch all resolve", async () => {
+    const cases: Array<() => Response | Promise<Response>> = [
+      () => jsonResponse({ error: "boom" }, 500),
+      () => jsonResponse({ error: "unavailable" }, 503),
+      () => jsonResponse({ token: "" }),
+      () => new Response("not json", { status: 200 }),
+      () => {
+        throw new TypeError("fetch failed");
+      },
+    ];
+
+    for (const reply of cases) {
+      resetAnonymousTokenCacheForTests();
+      captured = [];
+      cookiesMock.mockResolvedValue(cookieStore([]));
+      stubAnonFailure(() => {
+        const r = reply();
+        return r as Response;
+      });
+
+      const client = await getSupabaseServerClient();
+      const { data, error } = (await client.from("courses").select("*")) as {
+        data: unknown;
+        error: unknown;
+      };
+      expect(data).toBeNull();
+      expect(isDbTokenUnavailable(error)).toBe(true);
+      expect(captured.filter((c) => c.url.startsWith(DATA_BASE))).toHaveLength(0);
+    }
+  });
+
+  it("AC-3/AC-15: one classified warn per failed mint, with no token or cookie material", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    cookiesMock.mockResolvedValue(cookieStore([SESSION_COOKIE]));
+    stubAnonFailure(() => throttled(60), { sessionToken: null });
+
+    await readRole("66666666-6666-6666-6666-666666666666");
+    await readRole("66666666-6666-6666-6666-666666666666");
+
+    const tokenWarns = warn.mock.calls.filter((c) => c[0] === "[db] token unavailable");
+    expect(tokenWarns).toHaveLength(1);
+    const payload = tokenWarns[0]?.[1] as Record<string, unknown>;
+    expect(Object.keys(payload).sort()).toEqual(
+      [
+        "errorClass",
+        "retryAfterSeconds",
+        "status",
+        "suppressedForMs",
+        "timestamp",
+        "tokenPath",
+      ].sort(),
+    );
+    expect(payload.tokenPath).toBe("/token/anonymous");
+    expect(payload.status).toBe(429);
+
+    const serialised = JSON.stringify(warn.mock.calls);
+    expect(serialised).not.toContain(SESSION_COOKIE.value);
+    expect(serialised).not.toContain("Bearer");
+    expect(serialised).not.toContain("Authorization");
+    expect(serialised).not.toContain("Cookie");
+    warn.mockRestore();
+  });
+
+  it("AC-13: five concurrent guest reads share one mint, and a later session request is not answered from it", async () => {
+    const anon = anonJwt(1);
+    cookiesMock.mockResolvedValue(cookieStore([]));
+    const fetchMock = stubFetch({ sessionToken: null, anonymousToken: anon });
+
+    await Promise.all([
+      readRole("77777777-7777-7777-7777-777777777777"),
+      readRole("77777777-7777-7777-7777-777777777777"),
+      readRole("77777777-7777-7777-7777-777777777777"),
+      readRole("77777777-7777-7777-7777-777777777777"),
+      readRole("77777777-7777-7777-7777-777777777777"),
+    ]);
+
+    expect(
+      captured.filter((c) => c.url === `${AUTH_BASE}/token/anonymous`),
+    ).toHaveLength(1);
+
+    // A signed-in request afterwards uses its own session JWT, never the cache.
+    cookiesMock.mockResolvedValue(cookieStore([SESSION_COOKIE]));
+    captured = [];
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = requestUrl(input);
+      captured.push({ url, headers: requestHeaders(input, init) });
+      if (url === `${AUTH_BASE}/token`) return jsonResponse({ token: SESSION_JWT });
+      if (url.startsWith(DATA_BASE)) return jsonResponse([{ role: "admin" }]);
+      return jsonResponse({ error: "unexpected" }, 500);
+    });
+
+    await readRole("88888888-8888-8888-8888-888888888888");
+
+    const dataRequest = captured.find((c) => c.url.startsWith(DATA_BASE));
+    expect(dataRequest?.headers.get("Authorization")).toBe(`Bearer ${SESSION_JWT}`);
+    expect(
+      captured.some((c) => c.url === `${AUTH_BASE}/token/anonymous`),
+    ).toBe(false);
+  });
+
+  it("AC-12: two different session cookies produce two /token calls with their own Cookie header", async () => {
+    const other = { name: "__Secure-neon-auth.session_token", value: "other-session-value" };
+    cookiesMock
+      .mockResolvedValueOnce(cookieStore([SESSION_COOKIE]))
+      .mockResolvedValueOnce(cookieStore([other]));
+    let n = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = requestUrl(input);
+      captured.push({ url, headers: requestHeaders(input, init) });
+      if (url === `${AUTH_BASE}/token`) {
+        n += 1;
+        return jsonResponse({ token: `session-${n}.jwt.token` });
+      }
+      if (url.startsWith(DATA_BASE)) return jsonResponse([]);
+      return jsonResponse({}, 401);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await readRole("99999999-9999-9999-9999-999999999999");
+    await readRole("99999999-9999-9999-9999-999999999999");
+
+    const tokenCalls = captured.filter((c) => c.url === `${AUTH_BASE}/token`);
+    expect(tokenCalls).toHaveLength(2);
+    expect(tokenCalls[0]?.headers.get("Cookie")).toContain(SESSION_COOKIE.value);
+    expect(tokenCalls[1]?.headers.get("Cookie")).toContain(other.value);
+    expect(tokenCalls[1]?.headers.get("Cookie")).not.toContain(
+      SESSION_COOKIE.value,
+    );
+
+    const auths = captured
+      .filter((c) => c.url.startsWith(DATA_BASE))
+      .map((c) => c.headers.get("Authorization"));
+    expect(auths).toEqual(["Bearer session-1.jwt.token", "Bearer session-2.jwt.token"]);
+  });
+
+  it("AC-14: no Data API request without an Authorization header, in any failure state", async () => {
+    cookiesMock.mockResolvedValue(cookieStore([]));
+    stubAnonFailure(() => throttled(60));
+
+    const client = await getSupabaseServerClient();
+    await client.from("courses").select("*");
+    await client.from("catalog_sections").select("*").order("sort_order");
+
+    expect(
+      captured.filter(
+        (c) => c.url.startsWith(DATA_BASE) && !c.headers.get("Authorization"),
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("getSupabaseAnonymousClient resolves (does not throw) when there is no anonymous token", async () => {
+    cookiesMock.mockResolvedValue(cookieStore([]));
+    stubAnonFailure(() => throttled(60));
+
+    const client = await getSupabaseAnonymousClient();
+    const { data, error } = (await client.from("courses").select("*")) as {
+      data: unknown;
+      error: unknown;
+    };
+    expect(data).toBeNull();
+    expect(isDbTokenUnavailable(error)).toBe(true);
+  });
+});
+
+/* -------------------------------------------------------------------------
+ * SEC-R2-5-M1 / SEC-R2-5-L1 — the process-wide anonymous token must have a
+ * PROVEN scope, and must be minted without any caller identity attached.
+ *
+ * The old assertion only ran when the payload decoded AND carried a string
+ * `role`, so a role-less JWT (e.g. a user token with a `sub`) or any opaque
+ * string was accepted and then cached for the whole instance. Both are now
+ * `malformed` ⇒ degraded client, no Data API request, nothing cached.
+ * ---------------------------------------------------------------------- */
+
+describe("SEC-R2-5-M1: the anonymous token's scope is proven, not assumed", () => {
+  /** A JWT-shaped payload with a user `sub` and NO `role` claim. */
+  function rolelessJwt(): string {
+    const now = Math.floor(Date.now() / 1000);
+    return makeJwt({
+      sub: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      iat: now,
+      exp: now + 3600,
+    });
+  }
+
+  it("rejects a role-less JWT: degraded client, no Data API request, nothing cached", async () => {
+    cookiesMock.mockResolvedValue(cookieStore([]));
+    stubAnonFailure(() => jsonResponse({ token: rolelessJwt() }));
+
+    const client = await getSupabaseServerClient();
+    const { data, error } = (await client.from("courses").select("*")) as {
+      data: unknown;
+      error: unknown;
+    };
+
+    expect(data).toBeNull();
+    expect(isDbTokenUnavailable(error)).toBe(true);
+    expect(captured.filter((c) => c.url.startsWith(DATA_BASE))).toHaveLength(0);
+    // Never entered the process-wide cache.
+    expect(anonTokenStats.mints).toBe(0);
+  });
+
+  it("rejects an opaque non-JWT token the same way", async () => {
+    cookiesMock.mockResolvedValue(cookieStore([]));
+    stubAnonFailure(() => jsonResponse({ token: "opaque-token-not-a-jwt" }));
+
+    const client = await getSupabaseServerClient();
+    const { data, error } = (await client.from("courses").select("*")) as {
+      data: unknown;
+      error: unknown;
+    };
+
+    expect(data).toBeNull();
+    expect(isDbTokenUnavailable(error)).toBe(true);
+    expect(captured.filter((c) => c.url.startsWith(DATA_BASE))).toHaveLength(0);
+    expect(anonTokenStats.mints).toBe(0);
+  });
+
+  it("never forwards the caller's session cookie to /token/anonymous", async () => {
+    const shared = anonJwt(1);
+    cookiesMock.mockResolvedValue(cookieStore([SESSION_COOKIE]));
+    stubAnonFailure(() => jsonResponse({ token: shared }), {
+      sessionToken: null,
+    });
+
+    await readRole("cccccccc-cccc-cccc-cccc-cccccccccccc");
+
+    // The session mint still needs the cookie (it *is* the caller identity).
+    const sessionCall = captured.find((c) => c.url === `${AUTH_BASE}/token`);
+    expect(sessionCall?.headers.get("Cookie")).toContain(
+      `${SESSION_COOKIE.name}=${SESSION_COOKIE.value}`,
+    );
+
+    // The shared, identity-free mint must carry no identity at all.
+    const anonCall = captured.find(
+      (c) => c.url === `${AUTH_BASE}/token/anonymous`,
+    );
+    expect(anonCall).toBeDefined();
+    expect(anonCall?.headers.get("Cookie")).toBeNull();
+
+    // ...and the valid anonymous token is still accepted and used.
+    const dataRequest = captured.find((c) => c.url.startsWith(DATA_BASE));
+    expect(dataRequest?.headers.get("Authorization")).toBe(`Bearer ${shared}`);
+    expect(anonTokenStats.mints).toBe(1);
   });
 });

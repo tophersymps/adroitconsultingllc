@@ -12,6 +12,7 @@ import {
   createAccessSeam,
   decideCourseAccessFromInput,
   effectiveAccessState,
+  isGuestVisibleCourse,
   type PlatformDataLoader,
 } from "@/lib/access";
 import type {
@@ -715,3 +716,79 @@ describe("PERF-LOW-2: getCatalogForUser.canAccess ⇔ decideCourseAccess granted
   }
 });
 
+
+/*  isGuestVisibleCourse — the guest projection (ADR-218)             */
+/* ------------------------------------------------------------------ */
+
+describe("isGuestVisibleCourse", () => {
+  const MODELS = [
+    "free",
+    "granted",
+    "one-time",
+    "subscription",
+    "sub-or-one-time",
+  ] as const;
+  const STATUSES = ["pending", "live", "archived"] as const;
+
+  it("live + granted → false (stealth: a guest would 404)", () => {
+    expect(
+      isGuestVisibleCourse(course({ status: "live", access_model: "granted" })),
+    ).toBe(false);
+  });
+
+  it("live + any non-granted model → true (free, subscription, one-time, sub-or-one-time)", () => {
+    for (const model of [
+      "free",
+      "subscription",
+      "one-time",
+      "sub-or-one-time",
+    ] as const) {
+      expect(
+        isGuestVisibleCourse(course({ status: "live", access_model: model })),
+      ).toBe(true);
+    }
+  });
+
+  it("pending → false, whatever the access model", () => {
+    for (const model of MODELS) {
+      expect(
+        isGuestVisibleCourse(course({ status: "pending", access_model: model })),
+      ).toBe(false);
+    }
+  });
+
+  it("archived → false, whatever the access model", () => {
+    for (const model of MODELS) {
+      expect(
+        isGuestVisibleCourse(course({ status: "archived", access_model: model })),
+      ).toBe(false);
+    }
+  });
+
+  it("is the guest projection of decideCourseAccessFromInput (parity over the whole matrix)", () => {
+    for (const status of STATUSES) {
+      for (const model of MODELS) {
+        const row = course({ status, access_model: model });
+        const decision = decideCourseAccessFromInput({
+          course: row,
+          isAdmin: false,
+          entitlements: [],
+          subscriptions: [],
+          now: NOW,
+        });
+        // A guest can SEE the series unless the decision hides its existence.
+        // `not-launched` == hidden (404); `granted` / `paywall` == rendered.
+        const visible = decision.kind !== "not-launched";
+        expect({
+          status,
+          model,
+          visible,
+        }).toEqual({
+          status,
+          model,
+          visible: isGuestVisibleCourse(row),
+        });
+      }
+    }
+  });
+});

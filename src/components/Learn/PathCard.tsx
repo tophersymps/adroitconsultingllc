@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { LearnCardSeries } from "@/data/types";
-import { seriesShortLabel } from "@/lib/learn-client";
+import { humanizeSeriesSlug } from "@/lib/learn-client";
 import SeriesProgress from "@/components/Progress/SeriesProgress";
 import QuizStats from "@/components/Progress/QuizStats";
 import DifficultyPill from "./DifficultyPill";
@@ -44,7 +44,8 @@ export default function PathCard({ series, gate, loginNext }: PathCardProps) {
           </div>
         )}
         <span className="absolute bottom-3.5 left-5 bg-white/20 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-bold text-white uppercase tracking-[0.06em] z-10">
-          {seriesShortLabel(series.slug)}
+          {/* ADR-221: server-resolved label; humanize only as a fallback. */}
+          {series.shortLabel ?? humanizeSeriesSlug(series.slug)}
         </span>
         {/* Learn v2 profile (ADR-208): track Level N pill + difficulty. */}
         {series.level != null ? (

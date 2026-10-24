@@ -11,14 +11,75 @@
  */
 import { NextResponse } from "next/server";
 import { accessSeam, getAccessUserId } from "@/lib/access";
+import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
 import { getSupabaseServerClient } from "@/lib/db/server";
 import type { SubscriptionRow } from "@/shared/contracts-course-catalog";
+
+/**
+ * Minimum gap between two `[admin-gate] degraded-deny` lines. A sustained
+ * token-route lockout hits this branch on every admin request; logging each one
+ * would flood the log without adding a signal, so the line is emitted at most
+ * once per window while an aggregate hit counter keeps climbing.
+ */
+export const DEGRADED_ADMIN_DENY_LOG_INTERVAL_MS = 60_000;
+
+const DEGRADED_ADMIN_DENY_TAG = "[admin-gate] degraded-deny";
+
+let lastDegradedAdminDenyLogAt: number | null = null;
+let degradedAdminDenyHits = 0;
+
+/**
+ * Emit the throttled server-side signal for a degraded admin deny.
+ *
+ * Deliberately carries NO user id, token, token path, or error message: the
+ * whole point of the CWE-755 degrade is that the deny is uniform, so the signal
+ * must not become the side channel (PII / CWE-209) the response refuses to be.
+ * Returns whether this call actually emitted (false = throttled).
+ */
+export function signalDegradedAdminDeny(now: number = Date.now()): boolean {
+  degradedAdminDenyHits += 1;
+  if (
+    lastDegradedAdminDenyLogAt !== null &&
+    now - lastDegradedAdminDenyLogAt < DEGRADED_ADMIN_DENY_LOG_INTERVAL_MS
+  ) {
+    return false;
+  }
+  lastDegradedAdminDenyLogAt = now;
+  console.warn(
+    `${DEGRADED_ADMIN_DENY_TAG} reason=token-unavailable code=TOKEN_UNAVAILABLE hits=${degradedAdminDenyHits} window_ms=${DEGRADED_ADMIN_DENY_LOG_INTERVAL_MS}`,
+  );
+  return true;
+}
+
+/**
+ * Resolve the role without letting the R2-5 "no Data API token" sentinel escape
+ * the gate (CWE-755). A token-route lockout is an authorization state, not an
+ * outage: every admin surface must answer its uniform deny (403 API / 404 page)
+ * instead of a 5xx that would confirm the route exists. Any OTHER loader error
+ * still propagates — this is not a blanket catch.
+ *
+ * The sentinel branch is the ONLY place the degrade is visible (the deny is
+ * uniform by design), so it raises the throttled `signalDegradedAdminDeny()`
+ * before answering — otherwise a lockout is indistinguishable from ordinary
+ * "not an admin" traffic.
+ */
+async function isAdminOrDeny(userId: string): Promise<boolean> {
+  try {
+    return await accessSeam.isAdmin(userId);
+  } catch (err) {
+    if (isDbTokenUnavailable(err)) {
+      signalDegradedAdminDeny();
+      return false;
+    }
+    throw err;
+  }
+}
 
 /** Resolve the current admin from the session cookie. Non-admin / guest → false. */
 export async function isCurrentUserAdmin(): Promise<boolean> {
   const userId = await getAccessUserId();
   if (!userId) return false;
-  return accessSeam.isAdmin(userId);
+  return isAdminOrDeny(userId);
 }
 
 /** Admin API guard — returns the acting user id when the caller is an admin. */
@@ -28,16 +89,20 @@ export async function requireAdminApi(): Promise<
 > {
   const userId = await getAccessUserId();
   if (!userId) return { ok: false, response: forbidden() };
-  const admin = await accessSeam.isAdmin(userId);
+  const admin = await isAdminOrDeny(userId);
   if (!admin) return { ok: false, response: forbidden() };
   return { ok: true, userId };
 }
 
-/** Admin API guard for pages (layout) — non-admin renders 404 (US-016). */
+/**
+ * Admin API guard for pages (layout) — non-admin renders 404 (US-016).
+ * A token-route lockout maps to null as well, so the caller renders the same
+ * 404 as a plain non-admin instead of a 500.
+ */
 export async function requireAdminPage(): Promise<{ userId: string } | null> {
   const userId = await getAccessUserId();
   if (!userId) return null;
-  const admin = await accessSeam.isAdmin(userId);
+  const admin = await isAdminOrDeny(userId);
   if (!admin) return null;
   return { userId };
 }

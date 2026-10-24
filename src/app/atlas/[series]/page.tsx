@@ -31,6 +31,9 @@ import PrerequisitesSection from "@/components/Learn/PrerequisitesSection";
 import SeriesStarChart from "@/components/Constellations/chart/SeriesStarChart";
 import { loadSeriesConstellation, loadExamPassedBySeries } from "@/lib/sky-server";
 import { getSupabaseServerClient } from "@/lib/db/server";
+import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
+import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
+import { mayDiscloseSeriesLive } from "@/lib/atlas-disclosure";
 
 interface Props {
   params: Promise<{ series: string }>;
@@ -54,6 +57,27 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { series } = await params;
   const s = getSeriesBySlug(series);
   if (!s) return {};
+  // LOW (t_91a3e30b, CWE-200): metadata is generated BEFORE the page's
+  // notFound(), so an unpublished ("stealth") series used to publish its name
+  // and description in the 404 document head. Only a publicly launched series
+  // may appear here.
+  //
+  // MEDIUM (t_b4c0da5f, CWE-200): the mirror alone is not enough. A series
+  // still listed there but set pending/archived in `courses` 404s on the DB
+  // seam while this head kept naming it. Gate on the two-source rule from
+  // `mayDiscloseSeries`: mirror AND (DB unreadable OR DB live). On a credential
+  // outage `isSeriesDbLive` returns null and we fall back to the mirror, so a
+  // launched series' metadata never regresses to the generic head.
+  // `getCourseRowBySlug` is per-request cached, so the page body's own row read
+  // is shared rather than adding a second round trip.
+  if (!(await mayDiscloseSeriesLive(series))) {
+    return buildMetadata({
+      title: "Atlas | Adroit Learn",
+      description: "Course catalogue for Salesforce and AI practitioners.",
+      path: `/atlas/${series}`,
+      noindex: true,
+    });
+  }
   return buildMetadata({
     title: `${s.name} | Adroit Learn`,
     description: s.description,
@@ -70,10 +94,27 @@ export default async function SeriesPage({ params }: Props) {
   // or non-live + non-admin) → 404. The syllabus stays readable on a live course
   // even when the member isn't entitled (US-004) — content-tier links gate via
   // the lesson page seam.
+  //
+  // R2-5: when the Data API token route is rate-limited, the seam cannot answer.
+  // That is NOT "this course does not exist": degrade to the GUEST view of the
+  // live surface (syllabus from static learn data, DB-only chips omitted) rather
+  // than 404/500 — a token-route failure must never destroy a public page.
   const userId = await getAccessUserId();
-  const decision = await accessSeam.decideCourseAccess(userId, series);
-  if (decision.kind === "not-launched") notFound();
-  const courseRow = await getCourseRowBySlug(series);
+  let degraded = false;
+  try {
+    const decision = await accessSeam.decideCourseAccess(userId, series);
+    if (decision.kind === "not-launched") notFound();
+  } catch (err) {
+    if (!isDbTokenUnavailable(err)) throw err;
+    degraded = true;
+  }
+  // F-2 (t_c4eafa3b MEDIUM, CWE-200): the degraded path cannot prove the
+  // series is publicly launched — the static catalogue also carries stealth
+  // slugs — so fail CLOSED on EXISTENCE. An unpublished series 404s during an
+  // outage exactly as the healthy seam does. Availability for the four seeded
+  // live series is unchanged (R2-5).
+  if (degraded && !isPubliclyLaunchedSeries(series)) notFound();
+  const courseRow = degraded ? null : await getCourseRowBySlug(series);
 
   // Learn v2 profile (ADR-208/209/210): the unified CatalogCourse for this
   // series — section/group, difficulty/audience/outcomes/tags, structured
@@ -145,12 +186,21 @@ export default async function SeriesPage({ params }: Props) {
   const supabase = await getSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   const isAuthed = Boolean(user);
-  const completedSlugs = isAuthed
-    ? await getCompletedLessonSlugs(user!.id)
-    : new Set<string>();
-  const examPassed = isAuthed
-    ? (await loadExamPassedBySeries(user!.id, [series])).has(series)
-    : false;
+  // R2-5: the completion loaders run as the caller's role; under a token-route
+  // failure they degrade to "no completions" (the guest shape) instead of 500.
+  let completedSlugs = new Set<string>();
+  let examPassed = false;
+  if (isAuthed) {
+    try {
+      completedSlugs = await getCompletedLessonSlugs(user!.id);
+      examPassed = (await loadExamPassedBySeries(user!.id, [series])).has(series);
+    } catch (err) {
+      if (!isDbTokenUnavailable(err)) throw err;
+      degraded = true;
+      completedSlugs = new Set<string>();
+      examPassed = false;
+    }
+  }
   const constellation = await loadSeriesConstellation({
     seriesSlug: series,
     name: s.name,

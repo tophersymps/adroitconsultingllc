@@ -21,6 +21,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/db/server";
+import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
 import { insertQuizRun, upsertQuizAttempts } from "@/lib/db/service";
 import { getKnowledgeChecks, parseQuizName, resolveQuizByName } from "@/lib/quiz";
 import { areAllChecksPassed } from "@/lib/certificate";
@@ -288,7 +289,12 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json(result);
-  } catch {
+  } catch (err) {
+    // R2-5: this route is answer-key bearing, so it keeps its strictest guest
+    // shape (401) — but a token-route failure must never be a 5xx.
+    if (isDbTokenUnavailable(err)) {
+      return NextResponse.json({ status: "unauthenticated" }, { status: 401 });
+    }
     return NextResponse.json({ status: "error" }, { status: 500 });
   }
 }

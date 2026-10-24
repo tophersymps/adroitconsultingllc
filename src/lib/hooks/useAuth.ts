@@ -15,6 +15,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { invalidateDbToken } from "@/lib/db/token-cache";
+import { invalidateProgressSummary } from "@/lib/hooks/useProgressSummary";
+import { AUTH_CHANGED_EVENT } from "@/lib/auth-events";
 
 export interface AuthUser {
   id: string;
@@ -23,7 +25,12 @@ export interface AuthUser {
   isAdmin: boolean;
 }
 
-export const AUTH_CHANGED_EVENT = "adroit-blog:auth-changed";
+/**
+ * Re-exported for backward compatibility: the constant now lives in
+ * `@/lib/auth-events` so caches can subscribe without importing this hook
+ * module (PERF-CACHE-M1, t_5f03a8f7).
+ */
+export { AUTH_CHANGED_EVENT };
 
 interface UseAuthReturn {
   user: AuthUser | null;
@@ -53,13 +60,26 @@ let sessionStale = false;
 /** Collapses concurrent forced refreshes (an auth-changed event fans out to
  *  every mounted hook) into one network read. */
 let sessionRefresh: Promise<AuthUser | null> | null = null;
+/**
+ * Identity generation (PERF-CACHE-M1, t_c0eaa6f2). `invalidateAuthSession()`
+ * bumps it, so a session read that was already in flight when the identity
+ * changed resolves to `null` instead of being handed to a subscriber — the
+ * same belt-and-braces guard the summary cache uses. Without it, `refresh()`
+ * could cache account A's `/api/auth/session` payload in the middle of B's
+ * sign-in.
+ */
+let sessionEpoch = 0;
 
-async function fetchSessionUser(): Promise<AuthUser | null> {
+async function fetchSessionUser(epoch: number): Promise<AuthUser | null> {
   try {
     const res = await fetch("/api/auth/session", { cache: "no-store" });
     if (!res.ok) return null;
     const data = (await res.json()) as { user: AuthUser | null };
-    return normalizeUser(data.user ?? null);
+    const user = normalizeUser(data.user ?? null);
+    // The identity changed while this read was in flight: this payload belongs
+    // to the previous user (or to a guest). Never hand it to a subscriber.
+    if (epoch !== sessionEpoch) return null;
+    return user;
   } catch {
     return null;
   }
@@ -68,7 +88,7 @@ async function fetchSessionUser(): Promise<AuthUser | null> {
 function readSession(): Promise<AuthUser | null> {
   if (sessionPromise && !sessionStale) return sessionPromise;
   sessionStale = false;
-  sessionPromise = fetchSessionUser();
+  sessionPromise = fetchSessionUser(sessionEpoch);
   return sessionPromise;
 }
 
@@ -76,7 +96,7 @@ function readSession(): Promise<AuthUser | null> {
 function refreshSession(): Promise<AuthUser | null> {
   if (sessionRefresh) return sessionRefresh;
   sessionStale = false;
-  const next = fetchSessionUser();
+  const next = fetchSessionUser(sessionEpoch);
   sessionPromise = next;
   sessionRefresh = next;
   void next.finally(() => {
@@ -87,10 +107,18 @@ function refreshSession(): Promise<AuthUser | null> {
 
 /**
  * Drop the shared session read so the next `useAuth` mount refetches.
- * Call on any identity transition (sign-in, sign-out, account switch).
+ *
+ * Called from `notifyAuthChanged()` and from `useAuth`'s own
+ * auth-changed/focus listener (PERF-CACHE-M1, t_c0eaa6f2). Both are identity
+ * transitions: a cross-account tab chain that only broadcasts an event must
+ * not keep serving the previous session promise to the next mount. Bumping the
+ * epoch also discards a read that is in flight right now.
  */
 export function invalidateAuthSession(): void {
+  sessionEpoch += 1;
   sessionStale = true;
+  sessionPromise = null;
+  sessionRefresh = null;
 }
 
 export function useAuth(): UseAuthReturn {
@@ -98,15 +126,22 @@ export function useAuth(): UseAuthReturn {
   const [isLoading, setIsLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    setUser(await refreshSession());
+    // A read started before an identity transition resolves to `null` by
+    // design; ignore it when a newer transition has already superseded us, so
+    // a stale read can never blank out (or overwrite) the newer user.
+    const epoch = sessionEpoch;
+    const next = await refreshSession();
+    if (epoch !== sessionEpoch) return;
+    setUser(next);
     setIsLoading(false);
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      const epoch = sessionEpoch;
       const next = await readSession();
-      if (cancelled) return;
+      if (cancelled || epoch !== sessionEpoch) return;
       setUser(next);
       setIsLoading(false);
     })();
@@ -118,7 +153,27 @@ export function useAuth(): UseAuthReturn {
      */
     const onAuthChanged = () => {
       invalidateDbToken();
-      refresh();
+      /*
+       * PERF-CACHE-M1 (t_5f03a8f7 / t_c0eaa6f2): the progress summary and the
+       * session read are module state and per-session. An auth-changed event
+       * here also arrives via `focus`, which is how a sign-out in ANOTHER tab
+       * shows up — so this is the only seam that covers a cross-tab identity
+       * change. Both caches must die here, before the re-read.
+       */
+      invalidateAuthSession();
+      invalidateProgressSummary();
+      /*
+       * Defer the re-read to a microtask so every mounted useAuth listener's
+       * synchronous invalidation lands first. Calling refresh() here per
+       * instance would start a read at each intermediate epoch; the later
+       * listeners bump the epoch again, so all but the last read resolve to
+       * null and only one mounted instance updates after a cross-tab change.
+       * After the dispatch settles, the first refresh starts ONE read at the
+       * final epoch and the remaining listeners join it.
+       */
+      queueMicrotask(() => {
+        if (!cancelled) refresh();
+      });
     };
     window.addEventListener(AUTH_CHANGED_EVENT, onAuthChanged);
     window.addEventListener("focus", onAuthChanged);
@@ -135,13 +190,23 @@ export function useAuth(): UseAuthReturn {
 /**
  * Broadcast that auth state changed so useAuth instances re-read.
  *
- * Also drops the cached Data API JWT (SEC-R2-2-M3(b)): every caller of this
- * function is announcing an identity transition (sign-in, sign-out, account
- * switch), and the token cache is module state that survives a client-side
- * `router.refresh()`. Dropping it here covers call sites that forget to.
+ * Also drops the cached Data API JWT (SEC-R2-2-M3(b)) and the cached progress
+ * summary (PERF-CACHE-M1, t_5f03a8f7): every caller of this function is
+ * announcing an identity transition (sign-in, sign-out, account switch), and
+ * both caches are module state that survives a client-side `router.refresh()` /
+ * `router.push()`. Dropping them here covers call sites that forget to.
  */
 export function notifyAuthChanged(): void {
   invalidateDbToken();
+  /*
+   * Both module caches are per-session. Invalidating here (rather than only at
+   * the sign-out/sign-in seams) means no current or future caller can leak the
+   * previous identity — the summary's completedLessons/quizStats, or the
+   * session payload itself — into the next session. Called BEFORE the event is
+   * dispatched so listeners re-read under the new epoch.
+   */
+  invalidateAuthSession();
+  invalidateProgressSummary();
   if (typeof window === "undefined") return;
   try {
     window.dispatchEvent(new CustomEvent(AUTH_CHANGED_EVENT));
