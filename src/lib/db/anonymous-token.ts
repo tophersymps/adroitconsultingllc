@@ -136,14 +136,18 @@ export async function getAnonymousJwtResult(
   anonTokenStats.misses++;
   inFlight = (async (): Promise<AnonTokenResult> => {
     const res = await fetchAnon();
+    // Nothing is ever served past the token's own `exp` (CWE-613, SEC-R2-5-L2):
+    // the hard stop is `exp` itself, capped at 55 min, and NEVER floored above
+    // it. A mint whose `exp` is already gone (capMs <= 0) is unusable — it is
+    // classified as a failed mint so callers degrade instead of presenting a
+    // dead credential from the process-wide cache.
+    const capMs = res.ok ? Math.min(res.expiresAtMs - now, MAX_TTL_MS) : 0;
 
-    if (res.ok) {
-      // The serving deadline is capped at 55 min, then pulled back by the
-      // 5 min safety margin and 0–120 s of jitter (so instances that minted
-      // together do not all refresh together). The hard stop stays at the
-      // token's own `exp` (also capped) — nothing is ever served past it.
-      const capMs = Math.min(res.expiresAtMs - now, MAX_TTL_MS);
-      const expiresAtMs = now + Math.max(capMs, MIN_TTL_MS);
+    if (res.ok && capMs > 0) {
+      const expiresAtMs = now + capMs;
+      // Serve until the refresh point (5 min safety margin, 0–120 s jitter),
+      // floored at MIN_TTL_MS of usefulness but clamped to `exp` — so a token
+      // minted close to its expiry is served only for what it has left.
       const freshUntilMs = Math.min(
         now + Math.max(capMs - SAFETY_MS - jitter(120_000), MIN_TTL_MS),
         expiresAtMs,
@@ -153,13 +157,17 @@ export async function getAnonymousJwtResult(
       return { ok: true, token: entry.token, expiresAtMs: entry.expiresAtMs };
     }
 
+    const failure: AnonTokenFailure = res.ok
+      ? { ok: false, errorClass: "malformed" }
+      : res;
+
     // Failed mint → classify, suppress, and fall back to a still-valid token.
     anonTokenStats.failures++;
-    lastFailure = res;
-    if (res.status === 429) anonTokenStats.throttled++;
+    lastFailure = failure;
+    if (failure.status === 429) anonTokenStats.throttled++;
 
     const wait =
-      clamp(res.retryAfterSeconds ?? 10, MIN_SUPPRESS_MS / 1000, MAX_SUPPRESS_MS / 1000) *
+      clamp(failure.retryAfterSeconds ?? 10, MIN_SUPPRESS_MS / 1000, MAX_SUPPRESS_MS / 1000) *
         1000 +
       jitter(5_000);
     suppressedUntil = now + wait;
@@ -168,9 +176,9 @@ export async function getAnonymousJwtResult(
     // Emitted once per failed mint, not once per request.
     console.warn("[db] token unavailable", {
       tokenPath: "/token/anonymous",
-      status: res.status ?? null,
-      errorClass: res.errorClass ?? "http",
-      retryAfterSeconds: res.retryAfterSeconds ?? null,
+      status: failure.status ?? null,
+      errorClass: failure.errorClass ?? "http",
+      retryAfterSeconds: failure.retryAfterSeconds ?? null,
       suppressedForMs: wait,
       timestamp: new Date(now).toISOString(),
     });
@@ -179,7 +187,7 @@ export async function getAnonymousJwtResult(
       anonTokenStats.servedStale++;
       return { ok: true, token: entry.token, expiresAtMs: entry.expiresAtMs };
     }
-    return res;
+    return failure;
   })().finally(() => {
     inFlight = null;
   });
