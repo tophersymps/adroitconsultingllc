@@ -56,3 +56,30 @@ const PUBLICLY_LAUNCHED = new Set<string>(PUBLICLY_LAUNCHED_SERIES);
 export function isPubliclyLaunchedSeries(slug: string): boolean {
   return PUBLICLY_LAUNCHED.has(slug);
 }
+
+/**
+ * DISCLOSURE predicate (t_b4c0da5f, CWE-200). A series slug may be named on a
+ * public surface **iff** it is in the static launch mirror AND the DB does not
+ * say it is delisted:
+ *
+ *   mayDiscloseSeries(slug, dbLive)
+ *
+ * `dbLive` is the tri-state read of `courses.status`:
+ *   - `true`  → the row says `live` in the DB;
+ *   - `false` → the row exists and is `pending` / `archived` (delisted), or no
+ *               row exists at all (stealth);
+ *   - `null`  → the DB could not be read (credential outage) — degrade to the
+ *               static mirror alone, exactly as the routes do on `unavailable`.
+ *
+ * The mirror alone is not enough on the healthy path: a series can stay in the
+ * mirror after ops delists it in the DB, and the 404 head used to keep naming
+ * it. The DB alone is not enough during an outage. This predicate is the single
+ * choke point so page metadata, sitemap and the blog funnel cannot drift.
+ */
+export function mayDiscloseSeries(
+  slug: string,
+  dbLive: boolean | null,
+): boolean {
+  if (!isPubliclyLaunchedSeries(slug)) return false;
+  return dbLive === null || dbLive;
+}

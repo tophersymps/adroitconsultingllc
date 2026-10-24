@@ -20,6 +20,58 @@ Tests: 2 new cases in each existing suite (`exam/page.test.tsx`, `check/[n]/page
 - **Scope:** this is a stacked branch on `fix/atlas-jwt-bridge-main-reconcile-t_3b6d832e` (PR #381) and is not merged into it, so the signed-in-500 fix is not delayed.
 
 **Known Issues** - None new. The static-mirror trade-off documented in `src/lib/atlas-launch.ts` still applies: add a slug to `PUBLICLY_LAUNCHED_SERIES` in the PR that seeds its live `courses` row, or its exam/check metadata stays generic during an outage.
+### Blog funnel + atlas metadata stop naming series the launch mirror does not allow (t_b4c0da5f, MEDIUM, CWE-200)
+
+**What** -
+(1) **Blog funnel (`src/lib/funnel.ts`).** `CATEGORY_FUNNEL["Project Management"]` mapped to `hermes-consultant`, a series that is **not** in the static launch mirror (`agentic-ai`, `ai-at-work`, `omni-studio-cert`, `salesforce-architect`). 21 published posts carry that category, and `KeepLearning` (server component in the footer of every public post) rendered the series' real name + description plus a `Go to {name}` link to `/atlas/hermes-consultant`, which 404s for guests — 21 crawlable pages naming an unpublished course. The mapping is **removed** (no live series matches "Project Management"; per the file's own docstring a category without an entry renders no pitch card — it was deliberately not re-pointed at an unrelated course). The gate itself lives in `resolveRecommendedSeries()`: it now returns `undefined` when `!isPubliclyLaunchedSeries(rec.seriesSlug)`, so a stale or future admin-written mapping cannot publish a stealth series either.
+(2) **Atlas document heads (`src/app/atlas/[series]/page.tsx`, `src/app/atlas/[series]/[slug]/page.tsx`).** `generateMetadata` ran before the DB seam's `notFound()` and gated on the static mirror alone. Direction that broke: a series still in the mirror but set `pending`/`archived` in `courses` 404s on the seam while the 404 head kept naming the series and its lesson. Both heads now apply the two-source rule — mirror **AND** (DB unreadable **OR** `courses.status='live'`) — and fall through to the existing generic `noindex` metadata otherwise. A credential outage (t_91a3e30b) still falls back to the mirror decision, so a launched series' real metadata never regresses.
+(3) **Single choke point.** New `mayDiscloseSeries(slug, dbLive)` in `src/lib/atlas-launch.ts` (pure predicate; `PUBLICLY_LAUNCHED_SERIES` and its parity test unchanged) plus `src/lib/atlas-disclosure.ts` — `isSeriesDbLive()` maps the `courses` row to `true`/`false`/`null` (outage) with `getCourseRowBySlug`, which is React-`cache()`d per request so the page body shares the read and no extra query is added; `mayDiscloseSeriesLive()` short-circuits stealth slugs without touching the DB at all.
+
+Tests: `src/lib/atlas-launch.test.ts` (+4 — truth table for `mayDiscloseSeries`), new `src/lib/atlas-disclosure.test.ts` (5 — live/pending/archived/absent-row/outage/propagation), `src/lib/funnel.test.ts` (+5 — no `Project Management` entry, every mapping points at a launched series, injected stealth mapping yields `undefined`), new `src/app/atlas/[series]/page.metadata.test.tsx` and `src/app/atlas/[series]/[slug]/page.metadata.test.tsx` (4 each — launched+live names the series, delisted falls back to the generic noindex head, forced outage keeps real metadata, stealth never names anything and never reads the DB).
+
+**Why** - Surfaced while verifying the sitemap fail-closed fix (t_2cc94bb7 / t_0194c233): the same doctrine (a slug may be named publicly **iff** the mirror allows it and the DB does not contradict it) was violated on two always-on surfaces, so no outage was needed to disclose an unpublished course. Both are crawlable, session-free disclosures (CWE-200), and the blog funnel was the widest one — 21 pages.
+
+**Verified** -
+- **Rendered blog post (live `next dev`, no DB needed):** `/field-notes/kickoff-alignment-consulting-delivery-2026` (Project Management) → **200**, `hermes-consultant` count **0**, stealth-name count (`hermes|ai-adoption|ai-power-user|sf-omni`) **0**, the `aria-label="Keep learning"` section renders with **no** pitch card. Positive control: `/field-notes/salesforce-sandbox-environment-strategy-2026` still links only `/atlas/salesforce-architect`.
+- **Forced 429 harness (stub answering 429 to every request, `NEON_AUTH_BASE_URL`/`NEON_DATA_API_URL` pointed at it, `next dev -p 3228`):** `/atlas/agentic-ai` → **200** `<title>Agentic AI Implementation Path | Adroit Learn</title>` (`index, follow`); `/atlas/agentic-ai/what-is-an-agent` → **200** with the real lesson title; `/atlas/hermes-consultant` and `/atlas/hermes-consultant/what-an-agent-implementation-consultant-does` → **404** with the generic Atlas title and `noindex`, **0** occurrences of the series/lesson name. Server log confirms the outage was real (`[db] token unavailable { tokenPath: '/token/anonymous', status: 429 }`).
+- `npx vitest run src/lib src/app/atlas "src/app/sitemap*"` → **67 files / 711 tests passed**; full suite `npx vitest run` → **148 files / 1250 tests passed**; `npx tsc --noEmit` exit 0; `npx eslint` clean on all touched files.
+
+**Known Issues** - (1) The "mirror-listed series set `pending` in the DB" branch is covered by unit tests with a stubbed `courses` row, not by the live harness — the local environment has no reachable database, so the healthy-path DB read could not be exercised end-to-end. (2) `src/app/atlas/[series]/certificate`, `exam`, `check/[n]` and `preview` heads still gate on the mirror alone (t_dc472f8f scope); they can adopt `mayDiscloseSeriesLive()` the same way if a delisted-series head there is rated in scope. (3) `src/app/sitemap.ts` was intentionally not touched (t_466b3b10 owns it) — it already enforces the equivalent healthy-path intersection.
+### SEO-M2: the empty-`/atlas` build guard arms off the Neon catalogue env, not the retired Supabase keys (t_4b1c9124)
+
+**What** - `isProdCatalogueBuild()` in `src/app/atlas/page.tsx` armed the "refuse to publish an empty
+Atlas hub" guard off `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` — the legacy Supabase
+credentials, which the app no longer reads the catalogue through (R2-2 moved it to the Neon Data API).
+A new `neonCatalogueConfigured()` helper now arms the guard off the catalogue's actual data layer:
+`NEXT_PUBLIC_NEON_DATA_API_URL` (the value exported to every build environment and to the browser
+client) or the server-only `NEON_DATA_API_URL`. `ATLAS_BUILD_GUARD=0` and the "read failed → warn,
+don't throw" branch are unchanged. Test coverage in `src/app/atlas/page.test.tsx` is re-pointed at
+the Neon keys (the env-absent case now deletes them), and three cases were added: the guard is armed on
+a Neon-configured production build with **no** Supabase keys at all, `ATLAS_BUILD_GUARD=0` disarms that
+same build, and a server-only `NEON_DATA_API_URL` export alone still arms it. `vitest.setup.ts`'s inert
+`NEXT_PUBLIC_SUPABASE_*` stubs are retired and replaced by a single `NEXT_PUBLIC_NEON_DATA_API_URL`
+placeholder (nothing under `src/` reads a Supabase env var any more).
+
+**Why** - The three Supabase keys sit on the Vercel project only as the Tier 2 rollback bridge
+(`docs/ROLLBACK-auth-migration.md` §4.3) and are scheduled for removal on 2026-11-22. The moment they
+went, `isProdCatalogueBuild()` would have returned `false`, so a production build whose Neon catalogue
+read silently resolved to 0 visible courses would have published an **empty, CDN-cached `/atlas`**
+(`s-maxage=31536000`) instead of failing the build.
+
+**Verified** - `npx vitest run src/app/atlas/page.test.tsx` 16/16; restoring the pre-change
+`page.tsx` fails 5 of those tests (RED, incl. both new "arms off Neon" cases), so the coverage is real
+rather than passing by accident. Full suite `npx vitest run` 139 files / 1202 tests passed,
+`npx tsc --noEmit` clean, `npx eslint` clean on the three touched files.
+
+**Known Issues** - (1) The legacy maintenance scripts `scripts/build-audio.js`,
+`scripts/provision-learn-v2-completion.js` and `scripts/truncate-audio-sources.js` still read
+`NEXT_PUBLIC_SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` against the paused Supabase project; they are
+not part of the app's `src/` build and were out of scope here, but they will not work once the project
+is deleted. (2) Arming accepts either Neon endpoint var, so a build that exports only
+`NEXT_PUBLIC_NEON_DATA_API_URL` while the server read is misconfigured still counts as "armed" — that
+is intentional (the read failure then lands in the warn branch), but it means a green parse of the env
+is not proof the catalogue is reachable. (3) The Do-not in the card holds: no Vercel env var was
+touched — the three Supabase keys stay until 2026-11-22.
 ### Fix: duplicate verification emails are now impossible per request (t_9690dda0)
 
 **What** - Investigated the reported "one signup → two verification emails ~1s apart". The duplicate sender is NOT the signup path: `src/app/api/auth/login` issues exactly one `signUp.email`, which maps to exactly one upstream `POST /sign-up/email` and one Resend send. Verified live against production: a single signup POST produced exactly one email; two concurrent signups for the same address produced one 200 + one 400 and exactly one email; two routes were involved only when the client also called `POST /api/auth/resend-confirmation`. The provider-side evidence is decisive — the paired emails carry DIFFERENT verification tokens, i.e. two separate send operations, not one operation double-sending. The remaining writer of a second send is the resend route (a second click / retry after a signup), so this commit closes the abuse surface on both sides:
