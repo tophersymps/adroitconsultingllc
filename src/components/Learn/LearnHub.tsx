@@ -101,10 +101,24 @@ export default function LearnHub({
         onQueryChange={setQuery}
       />
 
-      <ContinueLearning />
+      {/*
+        The shelf's start strip names the first published track. `courses` is
+        the UNFILTERED prop (not `visible`), so typing in the search box or
+        tapping a chip cannot rename the strip. The fallback anchor points at
+        the first rendered section, or at the empty state when there is none
+        (DB-unreachable path) — see ContinueLearning's Variant A copy.
+      */}
+      <ContinueLearning
+        firstTrack={
+          courses[0] ? { slug: courses[0].slug, name: courses[0].name } : undefined
+        }
+        browseHref={
+          presentSections[0] ? `#section-${presentSections[0].slug}` : "#atlas-catalogue"
+        }
+      />
 
       {visible.length === 0 ? (
-        <div className="mt-9">
+        <div id="atlas-catalogue" className="mt-9">
           <EmptyState />
         </div>
       ) : (
@@ -133,7 +147,11 @@ export default function LearnHub({
           const sectionCount = sectionCards.length;
 
           return (
-            <section key={section.slug} className="mt-9">
+            <section
+              key={section.slug}
+              id={`section-${section.slug}`}
+              className="mt-9 scroll-mt-24"
+            >
               <div className="flex items-center gap-3 mb-4">
                 <span className="w-[3px] h-4 rounded-sm bg-[var(--accent)]" aria-hidden />
                 <h2 className="font-mono text-[12px] font-bold text-[var(--ink-faint)] uppercase tracking-[0.1em]">
