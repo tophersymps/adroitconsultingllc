@@ -2,14 +2,14 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
 
-// Stub Supabase env vars so importing lib/supabase/* in tests doesn't throw
-// at module load (server.ts/client.ts guard on missing keys). Individual tests
-// that actually talk to Supabase mock the client — these are inert placeholders.
-if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://stub.supabase.co";
-}
-if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "stub-anon-key";
+// Stub the Neon Data API endpoint so a test that imports the browser/server db
+// client, or a page whose build guard arms off the catalogue's data layer, has
+// a configured environment by default. Individual tests that actually talk to
+// the Data API mock the client — this is an inert placeholder. The retired
+// NEXT_PUBLIC_SUPABASE_* stubs are gone with R2-2 (t_4b1c9124).
+if (!process.env.NEXT_PUBLIC_NEON_DATA_API_URL) {
+  process.env.NEXT_PUBLIC_NEON_DATA_API_URL =
+    "https://stub.apirest.example/neondb/rest/v1";
 }
 
 // jsdom does not implement matchMedia; the ThemeProvider depends on it.

@@ -8,10 +8,30 @@
  * Data comes from existing `lesson_completion` (distinct slug count + latest
  * completed_at) joined to the content taxonomy in src/data/learn.ts. No new
  * tables. Contract: src/shared/contracts-account.ts (brainiac, t_cde0e74a).
+ *
+ * PERF (PERF-LOW-2, t_10a6b284 / review of #371):
+ *  - Identity comes from `getSessionUser()` — the canonical resolver — instead
+ *    of `supabase.auth.getUser()`. `getSessionUser()` decides "no session
+ *    cookie ⇒ guest" from `next/headers` alone, so a guest hub view costs ZERO
+ *    DB reads and ZERO auth-backend round trips (this route fires on every
+ *    /atlas visit, whose HTML is otherwise ○ Static).
+ *  - The access gate was one `accessSeam.decideCourseAccess` per series (each
+ *    re-reading role + entitlements + subscriptions, and the loaders are not
+ *    `cache()`d) — up to ~36 serial DB round trips per signed-in view. It is
+ *    now ONE `getCatalogForUser` call (courses + role + entitlements +
+ *    subscriptions) whose `canAccess` flag is decided in memory per series.
+ *
+ * Budget for a signed-in view: 4 seam reads + 1 `lesson_completion` read = 5
+ * DB reads, independent of the number of series. Guests: 0.
+ *
+ * `canAccess` from the seam is exactly "the decision is granted|admin-preview":
+ * admin → true for every row (admin-preview), otherwise live + a granting
+ * entitlement/subscription. See the equivalence test in src/lib/access.test.ts.
  */
 import { NextResponse } from "next/server";
 import { getAllSeries, getLessonsForSeries } from "@/lib/learn";
 import { getSupabaseServerClient } from "@/lib/db/server";
+import { getSessionUser } from "@/lib/session";
 import { accessSeam } from "@/lib/access";
 import type { ContinueLearningItem } from "@/shared/contracts-account";
 
@@ -22,10 +42,10 @@ interface CompletionRow {
 
 export async function GET() {
   try {
-    const supabase = await getSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // Guest fast path: no session cookie ⇒ guest, decided before any client
+    // (data or auth) is constructed. Also the fail-safe for a broken auth
+    // backend — reads degrade to the guest payload rather than throwing.
+    const user = await getSessionUser();
     if (!user) {
       return NextResponse.json({ items: [] });
     }
@@ -34,14 +54,14 @@ export async function GET() {
 
     // Access seam gate (US-006): only surface in-progress series the user can
     // actually read. not-launched/paywall → excluded from Continue Learning.
+    // One seam read for the whole hub, then the per-series decision is pure.
+    const catalog = await accessSeam.getCatalogForUser(user.id);
     const accessible = new Set<string>();
-    for (const s of series) {
-      const decision = await accessSeam.decideCourseAccess(user.id, s.slug);
-      if (decision.kind === "granted" || decision.kind === "admin-preview") {
-        accessible.add(s.slug);
-      }
+    for (const entry of catalog.entries) {
+      if (entry.canAccess) accessible.add(entry.course.series_slug);
     }
 
+    const supabase = await getSupabaseServerClient();
     const { data } = await supabase
       .from("lesson_completion")
       .select("lesson_slug, completed_at")
