@@ -25,35 +25,43 @@ export interface AssignableCourse {
 /**
  * Courses pinned to a specific constellation, overriding size matching.
  *
- * Pinning is the **single source of truth** for "which constellation a course
- * draws," and it is exclusive: a pinned figure is claimed and no other course
- * can take it. This is what makes the on-course tracker at `/atlas/[series]`
- * and the whole-sky profile always agree on a course's constellation — before
- * pins, the course page ran an *isolated* size-match (`buildChartFigure` on one
- * course) that ignored the rest of the sky, so a course could quietly draw a
- * figure the profile had already given to a different course. With every real
- * course pinned, both surfaces resolve to the same figure.
+ * **This map is the PUBLISHED projection, not the editorial registry.** It
+ * ships in a client chunk (`/atlas/[series]` and `/profile` both draw charts in
+ * the browser), so it may only name series the site already names publicly —
+ * exactly the four in `PUBLICLY_LAUNCHED_SERIES`. The full twelve-course
+ * registry lives in `figure-pins.server.ts` (`FIGURE_PINS_ALL`, behind
+ * `import "server-only"`); `chart.test.ts` asserts this map deep-equals
+ * `publicPins()`, so a stealth pin cannot be added here and a launch cannot
+ * forget its pin. Doctrine (t_af115dd1 §1): a client chunk is a published
+ * artifact; a per-request RSC payload of an env-gated noindex non-prod route is
+ * not.
  *
- * Each course is defined by exactly one constellation, and that constellation is
- * not used by anything else (`assignFigures` enforces the claim). This is the
- * editorial contract: a course owns its constellation. Adding a new course means
- * pinning it to an unused constellation (Daily Planet picks); the guard test in
- * `chart.test.ts` fails CI if a real course goes unpinned or two courses share a
- * pin.
+ * For the published series, pinning is the **single source of truth** for
+ * "which constellation a course draws," and it is exclusive: a pinned figure is
+ * claimed and no other course can take it. This is what makes the on-course
+ * tracker at `/atlas/[series]` and the whole-sky profile always agree on a
+ * published course's constellation — before pins, the course page ran an
+ * *isolated* size-match (`buildChartFigure` on one course) that ignored the
+ * rest of the sky, so a course could quietly draw a figure the profile had
+ * already given to a different course. With the published courses pinned, both
+ * surfaces resolve to the same figure.
+ *
+ * **Unpublished series have no public figure contract.** They are not in this
+ * map at all, so they resolve by size match until they launch — which means a
+ * non-public series rendered outside the lab (an admin viewing a pending
+ * `/atlas/[series]`, a tester's own `/profile`) may size-match to a different
+ * constellation than it will own once launched, and its course page and profile
+ * may disagree with each other. That is the pre-Phase-4 behaviour, restored
+ * deliberately and only for non-public series (accepted residual, t_af115dd1
+ * §2 / CHANGELOG). Public series are unaffected: pins are applied before size
+ * matching. Server-side callers that need the full contract (the lab, the
+ * constellation pool, tests) pass `FIGURE_PINS_ALL` through the `pins` seam.
  */
 export const FIGURE_PINS: Readonly<Record<string, string>> = {
   "salesforce-architect": "Centaurus",
   "agentic-ai": "Cetus",
   "omni-studio-cert": "Hydra",
   "ai-at-work": "Virgo",
-  "ai-power-user": "Taurus",
-  "ai-adoption": "Auriga",
-  "hermes-consultant": "Hercules",
-  "hermes-consultant-intermediate": "Draco",
-  "hermes-consultant-advanced": "Eridanus",
-  "salesforce-sharing-visibility-architect": "Scorpius",
-  "salesforce-data-architect": "Ophiuchus",
-  "sf-omni-consultant": "Gemini",
 };
 
 /** Deterministic processing order: biggest course first, then by slug. */

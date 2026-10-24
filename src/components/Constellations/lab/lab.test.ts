@@ -2,13 +2,7 @@
  * lab.test.ts — pure fixtures / model tests for the Hubble Field lab.
  */
 import { describe, expect, it } from "vitest";
-import {
-  LAB_COURSES,
-  labAsterismFor,
-  labFigure,
-  labFigures,
-  labProfileSky,
-} from "./field-fixtures";
+import { LAB_COURSES, labProfileSky } from "./field-fixtures";
 import {
   SKY_MIN,
   SKY_SPAN,
@@ -23,53 +17,27 @@ describe("field-fixtures", () => {
     expect(new Set(LAB_COURSES.map((c) => c.seriesSlug)).size).toBe(7);
   });
 
-  it("resolves real asterisms for Orion and Cassiopeia", () => {
-    expect(labAsterismFor("salesforce-architect")?.name).toBe("Orion");
-    expect(labAsterismFor("agentic-ai")?.name).toBe("Cassiopeia");
-  });
-
-  it("authors lab asterisms for the five unauthored courses", () => {
-    for (const slug of [
-      "omni-studio-cert",
-      "hermes-consultant",
-      "hermes-consultant-intermediate",
-      "hermes-consultant-advanced",
-      "ai-at-work",
-    ]) {
-      expect(labAsterismFor(slug)).not.toBeNull();
-    }
-  });
-
-  it("builds figures with stars for every course", () => {
-    const figures = labFigures();
-    expect(figures).toHaveLength(7);
-    for (const fig of figures) {
-      expect(fig.stars.length).toBeGreaterThan(0);
-    }
-    const orion = labFigure(LAB_COURSES[0]!);
-    expect(orion.figureName).toBe("Orion");
-    expect(orion.complete).toBe(true);
-  });
-
-  it("tags lesson / check / exam roles and lights the exam only when complete", () => {
-    const orion = labFigure(LAB_COURSES[0]!);
-    const roles = new Set(orion.stars.map((s) => s.role));
-    expect(roles.has("lesson")).toBe(true);
-    expect(roles.has("check")).toBe(true);
-    expect(roles.has("exam")).toBe(true);
-    const exam = orion.stars.find((s) => s.role === "exam");
-    expect(exam?.lit).toBe(true);
-
-    const unfinished = labFigure(LAB_COURSES[4]!); // Delphinus, 4/10
-    expect(unfinished.complete).toBe(false);
-    expect(unfinished.stars.find((s) => s.role === "exam")?.lit).toBe(false);
-  });
-
   it("builds a synthetic ProfileSky without network", () => {
     const sky = labProfileSky();
     expect(sky.constellations).toHaveLength(7);
     expect(sky.isGuest).toBe(false);
     expect(sky.stats.rank?.id).toBe("explorer");
+  });
+
+  /*
+   * The slug-keyed asterism table (`model/asterism-data.ts`) and the
+   * `labFigure` / `labAsterismFor` path were removed in t_5fdeb918: nothing in
+   * production consumed them, and they were the only way the stealth asterisms
+   * reached a client chunk. The chart sizes figures from the curriculum via
+   * `figure-catalog.ts`, so the fixtures only need to supply progress.
+   */
+  it("carries per-lesson progress for every course", () => {
+    for (const c of labProfileSky().constellations) {
+      expect(c.stars).toHaveLength(c.totalStars);
+      expect(c.stars.filter((s) => s.lit)).toHaveLength(c.litStars);
+      expect(c.complete).toBe(c.litStars >= c.totalStars);
+      expect(c.curriculumLessons).toBeGreaterThanOrEqual(c.totalStars);
+    }
   });
 });
 

@@ -236,7 +236,7 @@ export default function CourseProfileDialog({
                 <input
                   value={track}
                   onChange={(e) => setTrack(e.target.value)}
-                  placeholder="hermes-consultant"
+                  placeholder="agentic-ai"
                   className="mt-1 w-full rounded-md border px-2 py-1.5 text-[13px] bg-transparent"
                   style={{ borderColor: "var(--admin-table-border)" }}
                 />
