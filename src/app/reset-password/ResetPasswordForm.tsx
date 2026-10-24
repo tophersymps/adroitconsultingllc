@@ -18,6 +18,7 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { notifyAuthChanged } from "@/lib/hooks/useAuth";
+import { invalidateProgressSummary } from "@/lib/hooks/useProgressSummary";
 
 export default function ResetPasswordForm({ token }: { token: string }) {
   const [password, setPassword] = useState("");
@@ -112,6 +113,10 @@ export default function ResetPasswordForm({ token }: { token: string }) {
           return;
         }
 
+        // Identity changed: the progress summary is per-session, so a password
+        // change must not leave the previous session's payload cached
+        // (PERF-P1, t_e786efe2).
+        invalidateProgressSummary();
         notifyAuthChanged();
         setSuccess(true);
       } catch {

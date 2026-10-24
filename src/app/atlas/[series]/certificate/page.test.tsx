@@ -113,6 +113,7 @@ vi.mock("@/components/Constellations/CertificateCelebration", () => ({
 }));
 
 import Page from "./page";
+import { DEGRADED_PAYWALL_MESSAGE } from "@/components/Catalog/Paywall";
 import { DbTokenUnavailableError } from "@/lib/db/degraded-client";
 
 const series = (over: Record<string, unknown> = {}) => ({
@@ -207,5 +208,56 @@ describe("/atlas/[series]/certificate — exam-less series (B-07 / D2)", () => {
     await expect(
       Page({ params: Promise.resolve({ series: "ai-adoption" }) }),
     ).rejects.toThrow("NEXT_NOT_FOUND");
+  });
+});
+
+describe("/atlas/[series]/certificate — degraded paywall announces itself (A11Y-M1, t_8d1638a7)", () => {
+  const renderCert = async () => {
+    const { default: R } = await import("react-dom/server");
+    const result = await Page({ params: Promise.resolve({ series: "agentic-ai" }) });
+    return R.renderToString(result as never);
+  };
+
+  it("renders a polite role=status region with the degraded copy when the token path fails", async () => {
+    mocks.getSeriesBySlug.mockReturnValue(series());
+    mocks.getCertExam.mockReturnValue(null);
+    mocks.getLessonsForSeries.mockReturnValue([{ slug: "l1", title: "L1", number: 1 }]);
+    mocks.getAccessUserId.mockResolvedValue("u1");
+    mocks.decideCourseAccess.mockRejectedValue(
+      new DbTokenUnavailableError("/token/anonymous"),
+    );
+
+    const html = await renderCert();
+
+    expect(html).toMatch(/role="status"/);
+    expect(html).toMatch(/aria-live="polite"/);
+    expect(html).toContain(DEGRADED_PAYWALL_MESSAGE);
+    // The paywall/lock UI stays — the status is additive, not a replacement.
+    expect(html).toContain("Members-only content");
+    // No internals in user-facing copy.
+    expect(html).not.toMatch(/token\/anonymous|DbTokenUnavailableError|429/);
+    // Exactly one main landmark.
+    expect(html.match(/<main id="main"/g) ?? []).toHaveLength(1);
+    // Never read the row it cannot read, never 404 a live course.
+    expect(mocks.getCourseRowBySlug).not.toHaveBeenCalled();
+  });
+
+  it("renders NO status region on an ordinary locked (non-degraded) paywall", async () => {
+    mocks.getSeriesBySlug.mockReturnValue(series());
+    mocks.getCertExam.mockReturnValue(null);
+    mocks.getLessonsForSeries.mockReturnValue([{ slug: "l1", title: "L1", number: 1 }]);
+    mocks.getAccessUserId.mockResolvedValue(null);
+    mocks.decideCourseAccess.mockResolvedValue({ kind: "paywall" });
+    mocks.getCourseRowBySlug.mockResolvedValue({
+      slug: "agentic-ai",
+      access_model: "subscription",
+      price_cents: 4900,
+    });
+
+    const html = await renderCert();
+
+    expect(html).toContain("Members-only content");
+    expect(html).not.toMatch(/role="status"/);
+    expect(html).not.toContain(DEGRADED_PAYWALL_MESSAGE);
   });
 });
