@@ -31,12 +31,35 @@ function seededLiveSeriesSlugs(): string[] {
   );
 }
 
+/** series_slug → seeded `access_model` from migration 008. */
+function seededAccessModels(): Map<string, string> {
+  const sql = readFileSync(SEED_PATH, "utf8");
+  const insert = sql.slice(sql.indexOf("insert into public.courses"));
+  const body = insert.slice(0, insert.indexOf(";"));
+  const rows = [...body.matchAll(
+    /\(\s*'([a-z0-9-]+)',\s*'[^']*',\s*'(pending|live|archived)',\s*'([a-z-]+)'/g,
+  )];
+  return new Map(rows.map((m) => [m[1], m[3]]));
+}
+
 describe("atlas-launch mirror", () => {
   it("matches the live `courses` rows seeded by migration 008", () => {
     const seeded = seededLiveSeriesSlugs().sort();
     // Guard against a regex that silently matched nothing.
     expect(seeded.length).toBeGreaterThan(0);
     expect([...PUBLICLY_LAUNCHED_SERIES].sort()).toEqual(seeded);
+  });
+
+  it("never names a stealth (access_model = 'granted') series", () => {
+    // ADR-219: this mirror is the FAIL-CLOSED fallback every public surface
+    // falls back to on a DB/token failure. A `granted` row in the mirror would
+    // publish a stealth course's existence during an outage — the exact
+    // disclosure this card exists to prevent.
+    const models = seededAccessModels();
+    for (const slug of PUBLICLY_LAUNCHED_SERIES) {
+      expect(models.has(slug)).toBe(true);
+      expect(models.get(slug)).not.toBe("granted");
+    }
   });
 
   it("treats the four seeded series as launched", () => {
