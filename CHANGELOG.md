@@ -2,6 +2,41 @@
 
 All notable changes to the Adroit Consulting Blog project will be documented in this file.
 
+### SEO-M2: the empty-`/atlas` build guard arms off the Neon catalogue env, not the retired Supabase keys (t_4b1c9124)
+
+**What** - `isProdCatalogueBuild()` in `src/app/atlas/page.tsx` armed the "refuse to publish an empty
+Atlas hub" guard off `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` — the legacy Supabase
+credentials, which the app no longer reads the catalogue through (R2-2 moved it to the Neon Data API).
+A new `neonCatalogueConfigured()` helper now arms the guard off the catalogue's actual data layer:
+`NEXT_PUBLIC_NEON_DATA_API_URL` (the value exported to every build environment and to the browser
+client) or the server-only `NEON_DATA_API_URL`. `ATLAS_BUILD_GUARD=0` and the "read failed → warn,
+don't throw" branch are unchanged. Test coverage in `src/app/atlas/page.test.tsx` is re-pointed at
+the Neon keys (the env-absent case now deletes them), and three cases were added: the guard is armed on
+a Neon-configured production build with **no** Supabase keys at all, `ATLAS_BUILD_GUARD=0` disarms that
+same build, and a server-only `NEON_DATA_API_URL` export alone still arms it. `vitest.setup.ts`'s inert
+`NEXT_PUBLIC_SUPABASE_*` stubs are retired and replaced by a single `NEXT_PUBLIC_NEON_DATA_API_URL`
+placeholder (nothing under `src/` reads a Supabase env var any more).
+
+**Why** - The three Supabase keys sit on the Vercel project only as the Tier 2 rollback bridge
+(`docs/ROLLBACK-auth-migration.md` §4.3) and are scheduled for removal on 2026-11-22. The moment they
+went, `isProdCatalogueBuild()` would have returned `false`, so a production build whose Neon catalogue
+read silently resolved to 0 visible courses would have published an **empty, CDN-cached `/atlas`**
+(`s-maxage=31536000`) instead of failing the build.
+
+**Verified** - `npx vitest run src/app/atlas/page.test.tsx` 16/16; restoring the pre-change
+`page.tsx` fails 5 of those tests (RED, incl. both new "arms off Neon" cases), so the coverage is real
+rather than passing by accident. Full suite `npx vitest run` 139 files / 1202 tests passed,
+`npx tsc --noEmit` clean, `npx eslint` clean on the three touched files.
+
+**Known Issues** - (1) The legacy maintenance scripts `scripts/build-audio.js`,
+`scripts/provision-learn-v2-completion.js` and `scripts/truncate-audio-sources.js` still read
+`NEXT_PUBLIC_SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` against the paused Supabase project; they are
+not part of the app's `src/` build and were out of scope here, but they will not work once the project
+is deleted. (2) Arming accepts either Neon endpoint var, so a build that exports only
+`NEXT_PUBLIC_NEON_DATA_API_URL` while the server read is misconfigured still counts as "armed" — that
+is intentional (the read failure then lands in the warn branch), but it means a green parse of the env
+is not proof the catalogue is reachable. (3) The Do-not in the card holds: no Vercel env var was
+touched — the three Supabase keys stay until 2026-11-22.
 ### Fix: duplicate verification emails are now impossible per request (t_9690dda0)
 
 **What** - Investigated the reported "one signup → two verification emails ~1s apart". The duplicate sender is NOT the signup path: `src/app/api/auth/login` issues exactly one `signUp.email`, which maps to exactly one upstream `POST /sign-up/email` and one Resend send. Verified live against production: a single signup POST produced exactly one email; two concurrent signups for the same address produced one 200 + one 400 and exactly one email; two routes were involved only when the client also called `POST /api/auth/resend-confirmation`. The provider-side evidence is decisive — the paired emails carry DIFFERENT verification tokens, i.e. two separate send operations, not one operation double-sending. The remaining writer of a second send is the resend route (a second click / retry after a signup), so this commit closes the abuse surface on both sides:
