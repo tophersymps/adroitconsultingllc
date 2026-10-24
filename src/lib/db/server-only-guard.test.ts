@@ -40,6 +40,16 @@ const PRIVILEGED = [
   // stealth). Server-only so a client import fails the build instead of
   // shipping the unpublished catalogue to the browser.
   "src/lib/learn-public.ts",
+  // t_5fdeb918 (decision t_af115dd1 D1): the FULL course→constellation
+  // registry. It names all twelve authored slugs, so it must never be compiled
+  // into a client chunk — the shipped `FIGURE_PINS` is the four-series
+  // published projection.
+  "src/components/Constellations/chart/figure-pins.server.ts",
+  // t_5fdeb918 (decision t_af115dd1 D3): the Hubble Field lab fixtures name
+  // seven real series, three of them unpublished. `ALLOW_HUBBLE_LAB` gates the
+  // route, not the artifact, so the data is server-only and crosses to the
+  // client as a per-request prop payload from a force-dynamic page.
+  "src/components/Constellations/lab/field-fixtures.ts",
 ];
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -79,5 +89,26 @@ describe("server-only build-time guards (SEC-R2-2-M2)", () => {
     // material, but they do not open SQL connections — keep that distinction,
     // so the DATABASE_URL reader list stays service.ts + users.ts only.
     expect(readers.sort()).toEqual([...DATABASE_URL_READERS].sort());
+  });
+});
+
+/**
+ * t_5fdeb918 (decision t_af115dd1 D4) — the slug-keyed asterism table is data
+ * that names unpublished series, and it used to reach a client chunk
+ * transitively through `lab/field-fixtures.ts`. It has no production consumer
+ * (the WebGL studies were removed in the Phase 5 cleanup), so the cheapest
+ * durable guard is a source guard: no non-test module may import it. If a 3D
+ * view returns, load it behind `import "server-only"` and pass the data as
+ * props — do not re-add a direct import.
+ */
+describe("model/asterism-data is not client-safe (t_5fdeb918)", () => {
+  const IMPORT_RE = /from\s+["'][^"']*model\/asterism-data["']|require\(\s*["'][^"']*model\/asterism-data["']\s*\)/;
+
+  it("has no importer outside its own module and tests", () => {
+    const importers = walk(SRC)
+      .map((f) => relative(process.cwd(), f).split(sep).join("/"))
+      .filter((f) => f !== "src/components/Constellations/model/asterism-data.ts")
+      .filter((f) => IMPORT_RE.test(readFileSync(join(process.cwd(), f), "utf8")));
+    expect(importers).toEqual([]);
   });
 });

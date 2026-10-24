@@ -16,19 +16,34 @@
  * What that buys: the seven courses sit at deliberately uneven completion, so
  * every visual state — untouched, part-way, complete, exam-passed — is on
  * screen at once, which no real account reliably shows.
+ *
+ * The fixtures and the full pin registry are PROPS, not imports
+ * (t_af115dd1 / t_5fdeb918): `field-fixtures.ts` and `figure-pins.server.ts`
+ * are server-only, because a fixture/registry naming unpublished series must
+ * never be compiled into a client chunk. The page passes them per request.
  */
 "use client";
 
 import { useMemo, useState } from "react";
+import type { ProfileSky } from "@/shared/contracts-constellations";
 import { buildChartFigures } from "@/lib/chart";
 import { StarChart } from "../chart/StarChart";
-import { labProfileSky } from "./field-fixtures";
 
-export function HubbleFieldLab() {
+export interface HubbleFieldLabProps {
+  /** The synthetic lab sky, computed server-side. */
+  sky: ProfileSky;
+  /** The full pin registry (`FIGURE_PINS_ALL`), computed server-side. */
+  pins: Readonly<Record<string, string>>;
+}
+
+export function HubbleFieldLab({ sky, pins }: HubbleFieldLabProps) {
   const [focusSlug, setFocusSlug] = useState<string | null>(
     "salesforce-architect",
   );
-  const figures = useMemo(() => buildChartFigures(labProfileSky()), []);
+  const figures = useMemo(
+    () => buildChartFigures(sky, { pins }),
+    [sky, pins],
+  );
 
   return (
     <div
