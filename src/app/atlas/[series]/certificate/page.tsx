@@ -33,6 +33,7 @@ import { getSeriesBySlug } from "@/lib/learn";
 import { buildMetadata } from "@/lib/seo";
 import { getSupabaseServerClient } from "@/lib/db/server";
 import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
+import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
 import {
   buildCertificateEligibility,
   certificateCompletionDate,
@@ -72,6 +73,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { series } = await params;
   const s = getSeriesBySlug(series);
   if (!s) return {};
+  // LOW (t_91a3e30b, CWE-200): generateMetadata runs BEFORE notFound(), so a
+  // stealth series used to name itself in the 404 document head.
+  if (!isPubliclyLaunchedSeries(series)) {
+    return buildMetadata({
+      title: "Completion Record | Adroit Learn",
+      description: "Course completion records for Adroit Learn courses.",
+      path: `/atlas/${series}/certificate`,
+      noindex: true,
+    });
+  }
   const hasExam = getCertExam(series) !== null;
   return buildMetadata({
     title: hasExam
@@ -108,6 +119,11 @@ export default async function CertificatePage({ params }: Props) {
     degraded = true;
   }
   if (decision?.kind === "not-launched") notFound();
+  // F-2 (t_c4eafa3b MEDIUM, CWE-200): the degraded path cannot prove the series
+  // is publicly launched, so fail CLOSED on EXISTENCE — an unpublished series
+  // 404s under an outage exactly as the healthy seam does (R2-5 availability
+  // for the seeded live series is unchanged).
+  if (degraded && !isPubliclyLaunchedSeries(series)) notFound();
   if (degraded || decision?.kind === "paywall") {
     const lessons = getLessonsForSeries(series);
     const courseRow = degraded ? null : await getCourseRowBySlug(series);
