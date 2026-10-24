@@ -1,22 +1,16 @@
 /**
  * Client-safe Learn helpers — no Node-only imports (no fs/path), safe to
  * import from client components. Pure functions only.
+ *
+ * ADR-221: the slug → short-label MAP no longer lives here. It is server-side
+ * data (`seriesShortLabel` in `src/lib/learn.ts`) projected onto the card as
+ * `LearnCardSeries.shortLabel`, so a stealth series' human name can never be
+ * compiled into a client chunk (S4). This module keeps only the pure
+ * humanizer used as the card's fallback when a course has no authored label.
  */
 
-/** Short display label for a series (band tag pill). */
-export function seriesShortLabel(slug: string): string {
-  const map: Record<string, string> = {
-    "salesforce-architect": "Salesforce",
-    "agentic-ai": "Agentic AI",
-    "omni-studio-cert": "OmniStudio",
-    "ai-at-work": "AI at Work",
-    "ai-power-user": "AI Power User",
-    "ai-adoption": "AI Adoption",
-    "salesforce-sharing-visibility-architect": "Sharing & Visibility",
-    "salesforce-data-architect": "Data Architect",
-    "sf-omni-consultant": "OmniStudio Consultant",
-  };
-  if (map[slug]) return map[slug];
+/** Humanize a series slug: `omni-studio-cert` → `Omni Studio Cert`. */
+export function humanizeSeriesSlug(slug: string): string {
   return slug
     .split(/[-_]/)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
