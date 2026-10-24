@@ -23,7 +23,7 @@ const { cookiesMock, redirectMock } = vi.hoisted(() => ({
 vi.mock("next/headers", () => ({ cookies: cookiesMock }));
 vi.mock("next/navigation", () => ({ redirect: redirectMock }));
 
-import SettingsPage from "./page";
+import SettingsPage, { metadata } from "./page";
 import { resetAnonymousTokenCacheForTests } from "@/lib/db/anonymous-token";
 import {
   applyThrottledAuthEnv,
@@ -61,6 +61,14 @@ describe("/settings under a token-route 429 (R2-5)", () => {
     );
     expect(redirectMock).toHaveBeenCalledWith("/login?next=/settings");
     expect(redirectMock).toHaveBeenCalledTimes(1);
+  });
+
+  // lara t_e653885e F2 (SEO/a11y MEDIUM): /settings is account-only, absent
+  // from the sitemap and normally only reachable through a redirect, so it must
+  // never be indexed. Fails on `origin/main` (buildMetadata defaulted to
+  // index:true).
+  it("declares noindex — /settings is an account-only route", () => {
+    expect(metadata.robots).toMatchObject({ index: false, follow: false });
   });
 
   it("issues no Data API request for the guest render", async () => {

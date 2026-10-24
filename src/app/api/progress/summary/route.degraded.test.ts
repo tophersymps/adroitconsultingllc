@@ -30,8 +30,8 @@ import {
   type CapturedRequest,
 } from "@/lib/db/test-support/throttled-auth";
 
-// `quizStats` is part of the guest/degraded payload since the /atlas progress
-// fan-out fix (t_22e18719 folded per-quiz aggregates into this route).
+// t_22e18719 added `quizStats` to the payload; the degraded/guest contract
+// carries the same key, zeroed, so the shape stays constant across identities.
 const EMPTY_SUMMARY = {
   readContent: { blog: [], lesson: [] },
   completedLessons: [],

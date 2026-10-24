@@ -18,6 +18,7 @@
  * what it says.
  */
 import { vi } from "vitest";
+import { __resetMintCooldown } from "../server";
 
 export const AUTH_BASE = "https://auth.test/neondb/auth";
 export const DATA_BASE = "https://data.test/neondb/rest/v1";
@@ -62,6 +63,10 @@ export function installThrottledAuth(
 ): CapturedRequest[] {
   const captured: CapturedRequest[] = [];
   const sessionUser = options.sessionUser ?? null;
+  // The mint negative cache (t_81b09ba8) is module scope: without this, case 2
+  // of a suite would skip the token route entirely and its request-count
+  // assertions would silently stop meaning what they say.
+  __resetMintCooldown();
 
   vi.stubGlobal(
     "fetch",
