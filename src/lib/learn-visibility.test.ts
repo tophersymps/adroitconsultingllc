@@ -207,3 +207,124 @@ describe("seam — FAIL CLOSED on failure", () => {
     expect(await isLearnVisibilityDegraded()).toBe(false);
   });
 });
+
+/*
+ * Q1 of t_466b3b10, ported from PR #386's
+ * `src/app/sitemap.healthy.test.ts` ("sitemap on the HEALTHY path (DB read
+ * succeeds)") into the seam that now owns the rule (t_a774c0d2).
+ *
+ * Publication requires BOTH authorities: `slug ∈ PUBLICLY_LAUNCHED_SERIES`
+ * AND (DB unreadable OR row live + non-stealth). The healthy path used to
+ * return the raw DB-derived set, so a `courses` row flipped live at runtime
+ * (`/admin`, no seed migration) was advertised from the sitemap, the search
+ * index and the funnel while its own metadata said `noindex`.
+ */
+describe("seam — healthy path intersects the DB set with the static mirror", () => {
+  type WarnMock = { mock: { calls: unknown[][] } };
+
+  function learnVisibilityWarns(): string[] {
+    return (console.warn as unknown as WarnMock).mock.calls
+      .map((c) => c[0])
+      .filter(
+        (m): m is string =>
+          typeof m === "string" && m.startsWith("[learn-visibility]"),
+      );
+  }
+
+  it("publishes only DB-live ∩ static-launch-mirror, and warns once about drift", async () => {
+    // `hermes-consultant` is a real content series that is NOT in the static
+    // launch mirror. `live` + `free` proves ACCESS, so only the DISCLOSURE
+    // authority (the mirror) can drop it — exactly the runtime-flip drift the
+    // `/admin` course surface can create.
+    anonymousClientMock.mockResolvedValue(
+      clientReturning({
+        data: [
+          row("agentic-ai", "live", "free"),
+          row("hermes-consultant", "live", "free"),
+        ],
+        error: null,
+      }),
+    );
+
+    const slugs = await getGuestVisibleSeriesSlugs();
+
+    // DB proves access AND mirror proves disclosure → published.
+    expect(slugs.has("agentic-ai")).toBe(true);
+    // In the DB but not in the mirror → NOT published, on any surface.
+    expect(slugs.has("hermes-consultant")).toBe(false);
+    expect(await isLearnVisibilityDegraded()).toBe(false);
+
+    const series = await getGuestVisibleSeries();
+    expect(series.map((s) => s.slug)).toEqual(["agentic-ai"]);
+    const cards = await getGuestVisibleCardSeries();
+    expect(cards.some((c) => c.slug === "hermes-consultant")).toBe(false);
+    const docs = await getGuestSearchDocs();
+    expect(
+      docs.some((d) => d.href.includes("/atlas/hermes-consultant")),
+    ).toBe(false);
+
+    // Drift stays visible: exactly one warn naming the offending slug.
+    const warns = learnVisibilityWarns();
+    expect(warns).toHaveLength(1);
+    expect(warns[0]).toContain("absent from the static launch mirror");
+    expect(warns[0]).toContain("hermes-consultant");
+    expect(warns[0]).not.toContain("agentic-ai");
+  });
+
+  it("mirror members the DB did not report live are not published (DB still governs access)", async () => {
+    expect(PUBLICLY_LAUNCHED_SERIES).toContain("ai-at-work");
+    anonymousClientMock.mockResolvedValue(
+      clientReturning({
+        data: [row("agentic-ai", "live", "free")],
+        error: null,
+      }),
+    );
+
+    const slugs = await getGuestVisibleSeriesSlugs();
+
+    expect([...slugs]).toEqual(["agentic-ai"]);
+    // A mirror member with no live row (or a pending/archived row) is out.
+    expect(slugs.has("ai-at-work")).toBe(false);
+    expect(slugs.has("salesforce-architect")).toBe(false);
+  });
+
+  it("does not warn when the live set is entirely inside the mirror", async () => {
+    anonymousClientMock.mockResolvedValue(
+      clientReturning({
+        data: [row("agentic-ai", "live", "free"), row("ai-at-work", "live", "free")],
+        error: null,
+      }),
+    );
+
+    const slugs = await getGuestVisibleSeriesSlugs();
+
+    expect([...slugs].sort()).toEqual(["agentic-ai", "ai-at-work"]);
+    expect(learnVisibilityWarns()).toHaveLength(0);
+  });
+
+  it("stealth rows never reach the mirror check (access is decided first)", async () => {
+    // live + granted is stealth: dropped by `isGuestVisibleCourse`, so it must
+    // not be reported as mirror drift either.
+    anonymousClientMock.mockResolvedValue(
+      clientReturning({
+        data: [row("salesforce-architect", "live", "free"), row("hermes-consultant", "live", "granted")],
+        error: null,
+      }),
+    );
+
+    expect([...(await getGuestVisibleSeriesSlugs())]).toEqual([
+      "salesforce-architect",
+    ]);
+    expect(learnVisibilityWarns()).toHaveLength(0);
+  });
+
+  it("publishes nothing when the DB reports no live rows", async () => {
+    anonymousClientMock.mockResolvedValue(
+      clientReturning({ data: [], error: null }),
+    );
+
+    expect((await getGuestVisibleSeriesSlugs()).size).toBe(0);
+    expect(await isLearnVisibilityDegraded()).toBe(false);
+    expect(learnVisibilityWarns()).toHaveLength(0);
+  });
+});
