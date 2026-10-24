@@ -1,0 +1,43 @@
+name: Request owner review
+
+# WHY THIS EXISTS (2026-10-24)
+# `.github/CODEOWNERS` is on main and validates clean (`codeowners/errors` -> []),
+# but PRs #403 and #404 were opened 1.5h AFTER it landed and still had NO reviewer
+# requested. A review request that silently does not fire is exactly how work goes
+# green-but-unreviewed and gets reported as done when nothing shipped.
+#
+# So this workflow requests the review explicitly instead of trusting the implicit
+# behaviour. It is version-controlled, visible in the PR checks, and deterministic.
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  request-owner-review:
+    # If the owner opened the PR, there is nobody to request. Never fail the run.
+    if: github.event.pull_request.user.login != 'tophersymps'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request review from the repo owner
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          # A 201 means requested. A 422 usually means it is already requested,
+          # which is not a failure. Anything else is worth seeing, but must never
+          # block CI, because a review request is not a build condition.
+          out=$(gh api -X POST "repos/$REPO/pulls/$PR/requested_reviewers" \
+                  -f 'reviewers[]=tophersymps' 2>&1)
+          rc=$?
+          if [ $rc -eq 0 ]; then
+            echo "Requested review from @tophersymps on PR #$PR"
+          else
+            echo "Could not request review (already requested, or owner is the author): $out"
+          fi
+          exit 0
